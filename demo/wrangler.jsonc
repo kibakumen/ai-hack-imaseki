@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "ai-hack-sekiari",
+  "compatibility_date": "2026-09-15",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "ai-hack-sekiari" }],
+  // database_id は wrangler d1 create のあとで埋める（本人の Cloudflare ログイン後）
+  "d1_databases": [{ "binding": "DB", "database_name": "ai-hack-sekiari", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }]
+}
