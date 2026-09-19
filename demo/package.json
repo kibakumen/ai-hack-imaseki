@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "db:local": "wrangler d1 migrations apply ai-hack-sekiari --local",
+    "db:remote": "wrangler d1 migrations apply ai-hack-sekiari --remote"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.20.6",

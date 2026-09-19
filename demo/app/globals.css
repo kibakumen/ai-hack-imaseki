@@ -12,11 +12,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* デモは明るい配色だけ（OS がダークモードでも文字色を明るい背景に合わせる）。ダーク対応は DEBT.md に記録 */
+:root {
+  color-scheme: light;
 }
 
 body {
