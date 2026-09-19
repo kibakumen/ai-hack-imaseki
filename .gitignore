@@ -1,0 +1,5 @@
+# /dev の一時ファイル（ゲートの出力・差分・着手記録）
+.dev/
+node_modules/
+.env
+.env.*
