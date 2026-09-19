@@ -1,0 +1,111 @@
+{
+  "kind": "audit",
+  "rubric": "requirements@1",
+  "model": "sonnet",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "OrcaRouter の無料プラン（Hacker）で Firewall・Guardrails が使えるかを「未確認」と書いているが、この文書が入力として挙げている 03_チームのCloudflare案.md の裏取りで同日中に「使える」と確認済みであり、古い情報を引き写している。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 66,
+          "quote": "OrcaRouter の無料プラン（Hacker）で Firewall・Guardrails が使えるかは未確認（01_要件）。承認の流れは作らないので承認待ちの機能は要らなくなった。出力の検査（基準13）に Guardrails を使うか自前で検査するかは設計の段で決める（AI判断）"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/03_チームのCloudflare案.md",
+          "line": 105,
+          "quote": "| 11a | OrcaRouter の無料（Hacker）で Firewall・Guardrails | 正しい（使える） | https://www.orcarouter.ai/pricing ・ https://docs.orcarouter.ai/security/compliance/observe-vs-enforce | \"Every plan runs behind the same guardrails and agent firewall.\"。⚠️ Hacker は \"a single-user workspace\"（チーム席は Team プラン 月$49） |"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "line 66 を「Firewall・Guardrails は Hacker（無料）プランでも使える（03_チームのCloudflare案.md の裏取り 11a・確度: 確実）」に更新する。承認待ち（11b）はモデルが返したツール呼び出しには掛けられない点だけ未解決として残し、承認フローを作らない本文書の決定と矛盾しないことを明記する。評価基準にセキュリティがあるため、Guardrails が使えるという事実を設計の段へ正しく渡すこと自体に価値がある。"
+    },
+    {
+      "id": "F2",
+      "type": "improvement",
+      "severity": "low",
+      "claim": "iPhone の Web Push（ホーム画面追加が必要）を「未検証」としているが、同じ 03_チームのCloudflare案.md の裏取りで WebKit 公式ブログにより確認済みになっている。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 48,
+          "quote": "iPhone はホーム画面に追加したときだけ受け取れる見込み（未検証）。デモ機を Android にするか、iPhone でホーム画面追加を確かめるかは設計の段で決める（AI判断）"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/03_チームのCloudflare案.md",
+          "line": 104,
+          "quote": "| 10 | iPhone の Web Push の条件 | 正しい | https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/ | \"A web app that has been added to the Home Screen can request permission\"。許可は \"in response to direct user interaction\" のときだけ |"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "「一般則としては確認済み（03 の裏取り 10）。このデモで実機がどこまで安定して動くかは未検証」のように、確認済みの部分と未検証の部分を分けて書く。デモ機選定を設計の段へ回す判断自体は変えなくてよい。"
+    },
+    {
+      "id": "F3",
+      "type": "improvement",
+      "severity": "low",
+      "claim": "基準3の「残席0」操作（店主の明示操作）と基準8の「残席0で自分で止まる」（配信制御の自動条件）が、同じ値の変化を指しているのか別のUI要素なのかが1文で判別できない。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 35,
+          "quote": "3. **即停止**: 店主が「残席0」の操作をしたら、進行中の配信がその場で止まること（本人選択）"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 43,
+          "quote": "8. **段階配信**: 配信は段階的に波を広げ（第1波→反応が無ければ第2波…）、配信総数に上限があり、残席0で自分で止まること（本人選択）。各波の人数・待ち時間・上限の値は要件の段で決める（AI判断）"
+        }
+      ],
+      "confidence": "推測",
+      "fix": "要件の段で、「残席0」が基準1の空席数入力欄に0を入れる操作なのか、専用の停止ボタンなのか（たたき台にある「残席0ボタン」）を1つに決めて明記する。"
+    },
+    {
+      "id": "F4",
+      "type": "improvement",
+      "severity": "low",
+      "claim": "目的節の説明バレットは「痛みの名指し」を2つ（空席のまま時間が過ぎる／店主はPCの前にいない）挙げているが、1文の目的文自体が明示的に述べている痛みは1つだけで、もう一方は制約（スマホ完結）として暗に含まれているだけ。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 19,
+          "quote": "空席が出た時間帯の飲食店の店主が、手元のスマホから短い操作で、近くにいて嗜好の合う客へ特典つきの「今なら空いています」を届けられるようにして、席が空いたまま時間が過ぎる痛みを解く。"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 22,
+          "quote": "「席が空いたまま時間が過ぎる」「店主は PC の前にいない」という痛みの名指しは、本人の原文には無く、たたき台の記述（「店主は PC の前にいません」「10秒で打てる UI」）から設計者が補った（AI判断）"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "line 22 の書き方を「痛み（席が空いたまま時間が過ぎる）と制約（店主はPCの前にいない＝スマホ完結が要る）」のように分けて書く。採点上の実害は無いが、痛みと制約を同列に並べると次の段で「痛みが2つある」と誤読されうる。"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "明確さ",
+      "score": 4,
+      "reason": "受け入れ基準のほとんどは1通りにしか読めず、決めていない数値は明示的に「要件の段で決める」と切り分けられているが、F3の「残席0」の指す対象など一部に解釈の余地が残る"
+    },
+    {
+      "axis": "痛みの名指し",
+      "score": 5,
+      "reason": "目的文1文で「誰（店主）・どの場面（空席が出た時間帯）・どの痛み（空席のまま時間が過ぎる）」が言えている（F4は説明バレットの書き方の粗さで、目的文自体の採点には影響しない）"
+    }
+  ],
+  "unbroken": [
+    "受け入れ基準（1〜17）と「やらないこと」を全項目突き合わせたが、重複・矛盾は無かった",
+    "受け入れ基準の番号は1〜17まで欠番・重複なく通っている",
+    "「AI判断」マーカーの実数（20件）はゲート結果の申告（20件）と一致した",
+    "01_要件.md・02_題材と注文.md の決定事項（本人発案／本人選択）は、intent.md の対応する受け入れ基準に過不足なく反映されている（探したが「意図の受け入れ基準に対応しない要件」「やらないことへのはみ出し」は見つからなかった）"
+  ],
+  "questions_for_human": [],
+  "target": "intent",
+  "target_sha256": "8e26d56bae5497ab28162bc399a959e80d7202657e81ce0f8b5ee4bd963d6ff5",
+  "cycle": 2,
+  "exchange": 1,
+  "recorded_at": "2026-09-19T05:36:49.350Z"
+}

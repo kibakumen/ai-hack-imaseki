@@ -1,0 +1,191 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 65,
+          "quote": "原文と裏取りの置き場は 03_チームのCloudflare案.md"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 66,
+          "quote": "OrcaRouter の無料プラン（Hacker）で Firewall・Guardrails が使えるかは未確認（01_要件）"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/03_チームのCloudflare案.md",
+          "line": 105,
+          "quote": "| 11a | OrcaRouter の無料（Hacker）で Firewall・Guardrails | 正しい（使える） |"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/03_チームのCloudflare案.md",
+          "line": 83,
+          "quote": "調査したのは AI（進行役が委譲した調査役）。各行の一次情報の URL と原文の引用は調査役が取ったもので、進行役は URL の再確認をしていない。"
+        }
+      ],
+      "note": "意図の文書は65行目で裏取りの置き場として03を挙げておきながら、66行目では古い01_要件の「未確認」を引いており、同じ文書の中で食い違っているので指摘は妥当。ただし修正案の「確度: 確実」は言い過ぎで、03の83行目のとおり照合したのはAIの調査役で進行役はURLを再確認していないため、「AIの調査役が公式文書と照合（未再確認）」と書くか実物を当て直すべき。重さについては、この節は「この文書では決めない」申し送りで、どの受け入れ基準もこの記述に依存していないため、medium より low が相応。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 48,
+          "quote": "iPhone はホーム画面に追加したときだけ受け取れる見込み（未検証）"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/03_チームのCloudflare案.md",
+          "line": 104,
+          "quote": "| 10 | iPhone の Web Push の条件 | 正しい | https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/ | \"A web app that has been added to the Home Screen can request permission\"。許可は \"in response to direct user interaction\" のときだけ |"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/02_題材と注文.md",
+          "line": 103,
+          "quote": "**通知の経路は Web プッシュ**（iPhone はホーム画面に追加したときだけ受け取れる見込み・未検証）"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/03_チームのCloudflare案.md",
+          "line": 114,
+          "quote": "iPhone は「ホーム画面に追加 → ボタンを押して許可」の導線がデモに要る"
+        }
+      ],
+      "note": "03の10番で公式文書の引用つきで「正しい」とされているのに、意図の文書は02の103行目（本人選択の記録）の「未検証」をそのまま写しており、指摘は妥当。ただし引用文 \"can request permission\" が裏付けるのは「ホーム画面に追加すれば許可を求められる」までで、「追加したときだけ」という限定は引用の範囲外なので、確認済みと書く範囲はそこまでにとどめる。直すのは意図の文書側だけにし（本人選択の記録は書き換えない）、許可は利用者が直接操作したときだけという条件（03の114行目）も添えると設計の段で役に立つ。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 35,
+          "quote": "3. **即停止**: 店主が「残席0」の操作をしたら、進行中の配信がその場で止まること（本人選択）"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 43,
+          "quote": "配信総数に上限があり、残席0で自分で止まること（本人選択）"
+        }
+      ],
+      "note": "基準3は「残席0」を店主の操作として、基準8は配信が「自分で止まる」条件として書いており、同じ出来事なのか別物なのか読み分けられないので指摘は妥当。ただし修正案（入力欄に0を入れるか専用ボタンかを決める）は表面の問題にとどまる。本当の食い違いは、人手を介さずに満席を知る手段が文書のどこにも無いことで、見落としの1件目に書いた。"
+    },
+    {
+      "finding": "F4",
+      "verdict": "DISAGREE_EVIDENCE",
+      "evidence": [
+        {
+          "path": ".claude/skills/dev/rubrics/requirements.md",
+          "line": 39,
+          "quote": "| 痛みの名指し | 誰が困っているかが書かれていない | 誰かは書いてあるが、どの場面の痛みかが曖昧 | 誰の・どの場面の・どの痛みかが1文で言えている |"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 19,
+          "quote": "空席が出た時間帯の飲食店の店主が、手元のスマホから短い操作で、近くにいて嗜好の合う客へ特典つきの「今なら空いています」を届けられるようにして、席が空いたまま時間が過ぎる痛みを解く。"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 22,
+          "quote": "という痛みの名指しは、本人の原文には無く、たたき台の記述（「店主は PC の前にいません」「10秒で打てる UI」）から設計者が補った（AI判断）"
+        }
+      ],
+      "note": "22行目は、目的文（19行目）のうちAIが補った部分を示す帰属の注記で、その役目は正しく果たしている。物差しの「痛みの名指し」は「誰の・どの場面の・どの痛み」をまとめて指すので、店主がPCの前にいないという場面の要素（19行目の「手元のスマホから」に対応）をこの見出しの下に置くのは物差しの定義どおり。次の段が読む目的文には痛みが1つしか無く（監査役も認めている）、「痛みが2つある」と誤読されるという主張には根拠が無い。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "（矛盾）目的の節は自律の中身を「満席での停止を人手なしで行う」とし、効果の数字の候補も「人が手を入れた割合 0」としている。ところが、やらないことには「空席数の自動更新」が入っており、文書にある停止の手段は店主の手による「残席0」の操作（基準3）だけになる。つまり満席を人手なしで知る仕組みが文書のどこにも無く、手で止める操作は「手を入れた割合 0」とも両立しない。たたき台では自動の経路はPOS連携で（seats_available の自動更新）、「手動でも」止められるというのはその補助だった。POS を除いた今は、自動停止の根拠が抜け落ちている。要件の段では次のどちらかを選ぶ必要がある。1つ目は、来店（特典の使用）を数えて残席を自動で減らす案で、この場合、除外した「空席数の自動更新」（POS 由来）とは別物だと明記する。2つ目は、止めるのは手動だと認め、自律の見せ場を「波の拡大と配信上限での自動停止」に言い直す案。評価項目の自律性に直結する。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 24,
+          "quote": "店主が空席数と特典を入れて出したあと、届ける相手の選定・配信の波の拡大・満席での停止を人手なしで行うところ"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 35,
+          "quote": "店主が「残席0」の操作をしたら、進行中の配信がその場で止まること"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 70,
+          "quote": "人が手を入れた割合（承認なしなので 0）"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 75,
+          "quote": "空席数の自動更新、オファーの出どころ（手動／自動）と作成者の記録"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/02_題材と注文.md",
+          "line": 27,
+          "quote": "POS連携時はここが自動更新される"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/02_題材と注文.md",
+          "line": 59,
+          "quote": "手動でも「残席0」ボタンで即停止できるようにします。"
+        }
+      ]
+    },
+    {
+      "claim": "（曖昧）基準8の「反応が無ければ第2波」の「反応」が何を指すのか定まっていない（通知の開封か、来店か、特典の使用か）。要件の段へ回す項目として挙げられているのは「各波の人数・待ち時間・上限の値」だけで、「反応」の定義はそこに入っていない。次の波を出す条件そのものなので、何を数えるかで合否が変わる。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 43,
+          "quote": "配信は段階的に波を広げ（第1波→反応が無ければ第2波…）"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 43,
+          "quote": "各波の人数・待ち時間・上限の値は要件の段で決める（AI判断）"
+        }
+      ]
+    },
+    {
+      "claim": "（曖昧）基準13の「LLM の出力が検査に落ちたら定型文へ切り替えて配信を続ける」が、LLM を使う2箇所（基準14がいう基準9と12）のどちらに掛かるのか書かれていない。入口（嗜好の構造化）には「定型文へ切り替える」「配信を続ける」がそのまま当てはまらないため、入口の出力が検査に落ちたときの振る舞いが決まらない。評価項目の信頼性・堅牢性に関わる。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 47,
+          "quote": "LLM がそれを構造化して絞り込みに使えること（本人選択）"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 54,
+          "quote": "LLM の出力が検査に落ちたら、承認を待たずに定型文へ切り替えて配信を続けること（本人選択）"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 56,
+          "quote": "上の2箇所（基準9・12）の LLM 呼び出しは、どちらも OrcaRouter を経由すること（本人選択）"
+        }
+      ]
+    },
+    {
+      "claim": "（数え違い）監査役は「崩せなかったこと」の欄で「AI判断」の印を実数20件とし、ゲートの申告と一致したとしているが、この20件には13行目の凡例（印の意味の説明）が含まれている。帰属の印として実際に付いているのは19件（21・22・36・37×2・41・43・48・49・54・61・66・70・75・78〜82行目）。13行目は承認のときに本人が件数で確かめると定めているので、ゲートが20件と申告しているなら、本人に見せる件数が1件ずれる（ゲートの結果ファイルそのものは読んでいない）。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "line": 13,
+          "quote": "「（AI判断）」は元の文書に無く、設計者または進行役が推測で埋めたもの（後で覆されうる。承認のときに本人が件数ごと確認する）"
+        }
+      ]
+    }
+  ],
+  "score_objections": [
+    {
+      "axis": "明確さ",
+      "reason": "監査役が付けた理由「一部に解釈の余地が残る」は、物差しの3点の説明「一部の語に解釈の余地がある」とほぼ同じ文言で、4点を付ける根拠になっていない。そのうえ見落としの2件目（「反応」の定義が無い）と3件目（基準13がどちらのLLM呼び出しに掛かるか）も解釈が割れる語で、1件目は自律の中心の主張が文書内の手段と食い違っている。3点が相応。"
+    }
+  ],
+  "target": "intent",
+  "cycle": 2,
+  "exchange": 1,
+  "recorded_at": "2026-09-19T05:41:26.307Z"
+}

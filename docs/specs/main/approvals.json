@@ -1,5 +1,10 @@
 {
-  "intent": null,
+  "intent": {
+    "approved_at": "2026-09-19T06:00:12.436Z",
+    "via": "awaiting-approval",
+    "ticket_issued_at": "2026-09-19T06:00:06.703Z",
+    "sha256": "e057faf82a49545d4f288399332fbacfc3237711082b0e7b7e4a077564a82b56"
+  },
   "requirements": null,
   "design": null,
   "tasks": null,
