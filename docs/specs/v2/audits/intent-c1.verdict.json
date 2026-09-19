@@ -1,0 +1,79 @@
+{
+  "kind": "verdict",
+  "target": "intent",
+  "target_sha256": "1be679ac08cf5f2c699b06a3c98f33741bed7adf8ac391387af667e95208bb3f",
+  "cycle": 1,
+  "mode": "light",
+  "must_fix": [],
+  "human_decision": [
+    "F2"
+  ],
+  "recorded_only": [],
+  "dropped": [
+    "F1"
+  ],
+  "carry_over": [
+    {
+      "claim": "チーム案（05）の絞り込みにある「直近に提示済み」のハード除外が、受け入れ基準にも「やらないこと」にも無い。チーム案の他の要素（Workers AI・ジオフェンス通知・今ブースト・店頭 POP／QR・教師データの記録・状態を持たない時間枠の判定）は採否が全部書かれているのに、判定ロジックの中でこれだけ採否が記録されていない。監査役は『受け入れ基準と「やらないこと」の対応はほぼ過不足なく一致していた』（unbroken 1件目）と判定したが、これは取りこぼしている。",
+      "evidence": [
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/05_チームのv2設計.md",
+          "line": 161,
+          "quote": "/ 直近に提示済み\"] -->|\"約25件\"| F3"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 89,
+          "quote": "21. **決定論の絞り込み**: 地理（探す範囲）・受付時間・アレルギー・予算・人数による絞り込みは、モデルの推論を使わず、同じ入力なら毎回同じ結果を出すこと（本人選択）"
+        }
+      ]
+    },
+    {
+      "claim": "本人の判断を待っている項目が3件、「本人が決めること（この文書では決めない）」節の外に散っている。同節には「効果を示す数字」1件しか無い。とくに深刻なのは、v1 で本人選択だった Web プッシュを外す判断（36行・130行）が AI判断のまま「やらないこと」の中に置かれていること——v1 の本人の決定を覆す提案が、本人の判断を集める節に載っていない。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 130,
+          "quote": "v1 の本人選択「Web プッシュで実機に届ける」を外すことになるので、本人に確かめる"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 36,
+          "quote": "pull 型からの読み（AI判断・本人に要確認）"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 138,
+          "quote": "チーム案は初回から記録するよう勧めているが、v1 の本人選択を覆すかは本人が決める"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 126,
+          "quote": "- **効果を示す数字**（01_要件の未決事項。v1 から引き継ぐ）"
+        }
+      ]
+    },
+    {
+      "claim": "受け入れ基準39件の全部を「提出までに必ず動いているもの」と宣言していて、落とす順番も最小集合も無い。提出は 2026-09-22 15:00（遅れたら審査対象外）で今日は 09-20、しかもコードは demo とは別の場所に1から書く前提。39件にはログイン・見える範囲の制御・同時の受け取りの排他・自動テスト・連打の抑止まで入っている。物差し（requirements@1）の欠陥の型の外なので監査役が見なかったのは筋が通るが、承認のときに本人が最初に知るべき事実なので上げる。直し方は文書の欠陥の修正ではなく本人の優先順位の決定（何を落とすか）。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 46,
+          "quote": "提出版（2026-09-22 15:00 までに出す GitHub の public リポジトリと、Cloudflare 上で動いている版）と、最終日（9/23 の会場）で必ず動いているもの。"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 113,
+          "quote": "37. コードは `demo/` とは別の新しいフォルダに1から書くこと（v2 の依頼「割と1から作り始めて」・本人発案）"
+        },
+        {
+          "path": "vault/knowledge/projects/ai-hack-2026/01_要件.md",
+          "line": 11,
+          "quote": "**9/22(火・休日) 15:00** | **最終提出の締切**（Google フォーム）。**遅れた場合は審査の対象外**"
+        }
+      ]
+    }
+  ],
+  "status": "human",
+  "recorded_at": "2026-09-19T22:06:43.106Z"
+}

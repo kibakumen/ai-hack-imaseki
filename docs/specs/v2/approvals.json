@@ -1,0 +1,13 @@
+{
+  "intent": {
+    "approved_at": "2026-09-19T22:47:05.476Z",
+    "via": "awaiting-approval",
+    "ticket_issued_at": "2026-09-19T22:46:59.141Z",
+    "sha256": "fea6a532ad3c0d9f520c0d4faab54269be607623a38dd279e254724f26191917"
+  },
+  "requirements": null,
+  "design": null,
+  "tasks": null,
+  "acceptance_sha256": {},
+  "task_approvals": {}
+}
