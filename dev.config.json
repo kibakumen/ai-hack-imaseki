@@ -2,9 +2,28 @@
   "name": "ai-hack",
   "_comment": "gate は設計の段で進行役が埋める。コマンドは配列で書くとシェルを通さずに実行される（例: [\"pnpm\",\"vitest\",\"run\"]）。書ける場所の方針はスキル側に固定されており、このファイルには書けない（2026-09-16）",
   "gate": {
-    "typecheck": [],
-    "lint": [],
-    "test": []
+    "typecheck": [
+      "pnpm",
+      "exec",
+      "tsc",
+      "--noEmit",
+      "-p",
+      "tsconfig.json"
+    ],
+    "lint": [
+      "pnpm",
+      "--dir",
+      "web",
+      "exec",
+      "eslint",
+      "."
+    ],
+    "test": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run"
+    ]
   },
   "doc_review": "light",
   "_comment_doc_review": "文書の段は監査と反論を1往復で判定し、残った指摘は本人が判断する（2026-09-19 本人選択）。実装の段は従来どおり"
