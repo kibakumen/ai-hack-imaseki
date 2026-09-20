@@ -5,7 +5,12 @@
     "ticket_issued_at": "2026-09-20T07:57:47.999Z",
     "sha256": "e17e9f2f8d02024b8572ee7c191d72802cb64d707adb5b8f058ca3a9d4a0cabb"
   },
-  "requirements": null,
+  "requirements": {
+    "approved_at": "2026-09-20T10:55:22.704Z",
+    "via": "awaiting-approval",
+    "ticket_issued_at": "2026-09-20T10:55:14.539Z",
+    "sha256": "a6ccb076a1c89ef71c749560ac0e7bd162126cebd862a4095d4f9b1fc8b9e565"
+  },
   "design": null,
   "tasks": null,
   "acceptance_sha256": {},
