@@ -3,3 +3,8 @@
 node_modules/
 .env
 .env.*
+.dev.vars
+*.local
+
+# 速成版（2026-09-20 に追跡から外した。種データの鍵が平文で入っていたため。手元には残っている）
+sprint/
