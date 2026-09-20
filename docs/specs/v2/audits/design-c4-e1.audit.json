@@ -1,0 +1,230 @@
+{
+  "kind": "audit",
+  "rubric": "design@1",
+  "model": "sonnet",
+  "share": "A",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "断りの次の一手を決める判断関数 `domain/receiveRefusal.nextStep` を UI 部品 `RefusalNotice` が直接呼んでおり、「判断は全部 domain に置き、画面の部品は自分では判断しない」という設計の芯そのもの、および依存の向きの表（部品は domain の『型と決まった文』しか読めない）の両方に反する。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 22,
+          "quote": "判断は全部、副作用の無い関数（`web/lib/domain/`）に置く。...画面の部品は、サーバーが返した「表示の種類」をそのまま描くだけで、自分では判断しない"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 197,
+          "quote": "`components`・`app` の画面 | `lib/schemas` は**型（`import type`）と、`schemas/limits.ts` の値だけ**・`lib/domain`（表示の種類の型と決まった文）・`lib/client` | `lib/repo`・`lib/usecases`・`lib/adapters`・`lib/http`・`lib/schemas` の zod の定義（値として）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 343,
+          "quote": "`RefusalNotice` は `refusal` と `home` を受け取って、`domain/texts` の文と `domain/receiveRefusal.nextStep` の一手を描くだけ（自分では判断しない。「概要」の芯の1）。"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 604,
+          "quote": "実現する場所 | `domain/receiveRefusal`（`nextStep`）・`domain/texts`・`components/customer/RefusalNotice`・`ResultList`・`CustomerApp`"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "`nextStep` は理由の分類（`classify`）と同じくサーバー側（`usecases/receiveOffer`）で計算し、応答の `home`（表示の種類）へ「次の一手」を含めて渡す。部品は依存の向きの表どおり型と決まった文だけを読み、判断関数を import しない形に直す。もし『pure function を isomorphic に両側で共有する』のが意図なら、依存の向きの表の但し書きにその例外（`nextStep` は判断ではなく表示の分岐と見なす）を明記し、rubricの原則との整合を取る。",
+      "share": "A",
+      "source_id": "F1"
+    },
+    {
+      "id": "F2",
+      "type": "improvement",
+      "severity": "low",
+      "claim": "ブラウザへ渡ってよい値のうち、運営の連絡先メールアドレスは置き場所と配布経路（Worker の秘密→`adapters/env.ts`→`GET /api/auth/contact`）が明記されているのに、VAPID の公開鍵と Turnstile のサイトキーは『公開してよい値としてブラウザへ渡る』とだけ書かれ、どこに置き（`web/wrangler.jsonc` の `vars` か、専用の入口か）・どのファイルが読むかが書かれていない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 121,
+          "quote": "ブラウザへ渡るのは VAPID の公開鍵・Turnstile のサイトキー（公開してよい値）・運営の連絡先のメールアドレス（基準 14.17）だけ"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 122,
+          "quote": "名前は `ADMIN_CONTACT_EMAIL`。本番は `wrangler secret put`、手元は `web/.dev.vars`...読むのは `adapters/env.ts` だけで、ログインの画面へは入口 `GET /api/auth/contact`【最終日】が返す"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "VAPID公開鍵とTurnstileサイトキーの置き場所（例: `web/wrangler.jsonc` の `vars`）と、それを読む唯一のファイルをメールアドレスの行と同じ粒度で明記する。",
+      "share": "A",
+      "source_id": "F2"
+    },
+    {
+      "id": "F3",
+      "type": "improvement",
+      "severity": "low",
+      "claim": "取得のたびに人数を必ず再入力させる設計で、S1の7歩目のように直前と同じ人数を打ち直す余計な1手が生じる",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 327,
+          "quote": "取得の画面 | 場所の欄（いつも出ている。空なら現在地。「駅名や住所」）・人数・その回のジャンルと予算（登録の値が入っている）・「今入れる店を探す」"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 382,
+          "quote": "取得の画面でジャンルを「和食」に変え（その回だけ）、人数2を入れて探す → 和食の店を受け取る"
+        },
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 149,
+          "quote": "人数の初めの値は置かない（AI判断。`intent.md` の基準4が「取得のたびに入れる」としており、前回の人数が残ると S2 のような人数の変化を見落とす）"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "直前の取得から短時間以内の再取得だけ人数の初期値を前回値にする折衷案を検討する余地がある（S2の人数変化の見落とし防止とS1の余計な手数の両立）。要件は満たせているため必須の修正ではない",
+      "share": "C",
+      "source_id": "F1"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "単純さ",
+      "score": 3,
+      "reason": "TS/SQL二重実装(残り・受け取れる状態)と5部品構成のRefusalNoticeなど、必要な複雑さだが削れる余地も残る(判定記録で承知済み)"
+    },
+    {
+      "axis": "変更しやすさ",
+      "score": 4,
+      "reason": "ports/adapters・domain/usecases/repo の分離は概ね一貫しているが、F1 の境界の破れがあるぶん、断りの規則を変える変更が層を横断しうる"
+    },
+    {
+      "axis": "撤退しやすさ",
+      "score": 4,
+      "reason": "外部サービスはadapters配下の1ファイルずつに閉じ、ports.tsの型のみをusecasesが知る"
+    },
+    {
+      "axis": "慣習どおりか",
+      "score": 4,
+      "reason": "Next.js App Router・OpenNext・Zod・Vitest など慣習的な選択が多く、独自のやり方（自前セッション・自前ポーリング）には根拠と選ばなかった案が書かれている"
+    },
+    {
+      "axis": "検査しやすさ",
+      "score": 4,
+      "reason": "368基準のほぼ全項目に検査方法・段・実現場所が割り当てられ、外部サービスはすべて偽物に差し替えて段1で検査できる。F1 は検査を妨げないが、境界を守る構造検査（lintの境界）がこの1点をすり抜けている"
+    },
+    {
+      "axis": "通り抜け",
+      "score": 5,
+      "reason": "S1〜S6全ての主な利用シーンで、各歩の主語と次の1歩を支える画面・基準がdesign.mdに明示され、歩き通せた"
+    },
+    {
+      "axis": "状況の変化への強さ",
+      "score": 5,
+      "reason": "intent.mdに書かれた状況の変化（気が変わる・人数増減・遅延・期限ぎりぎり到着・店による取消・緊急停止・満席・許可書不備）の全パターンにRefusalNotice・確保の担保原則・期限切れ完了済み許可などの明示対応があり、損をして詰む経路が見つからなかった"
+    },
+    {
+      "axis": "判断のしやすさと手数",
+      "score": 4,
+      "reason": "取得結果の判断材料は十分だが、F1のとおり人数の再入力が小さな余計な手数として残る"
+    }
+  ],
+  "unbroken": [
+    "dev.config.json の gate コマンドが空欄なのは欠陥ではない——設計書の技術構成には3コマンドが明記されており、SKILL.md（156行）どおり『設計の段が承認されたら進行役が写す』が正しい手順で、設計者・設計書の責務ではない",
+    "直下の .gitignore の実物（.dev/・node_modules/・.env・.env.*・.dev.vars・*.local・sprint/、計10行）は設計書が主張する行番号・内容と完全に一致し、秘密の行に先頭/途中の`/`が無く web/ の下にも効くという主張も gitignore の書式どおり正しい",
+    "OrcaRouter・Google Geocoding・Stripe・Turnstile・Web Push はいずれも `lib/ports.ts` の型と `lib/adapters/` の1ファイルに閉じ、段1の受け入れ検査で偽物に差し替えられる設計になっており、外部APIに直結して検査を置けない箇所は見当たらなかった",
+    "第3周の監査で指摘された『構成図とdependency表の矛盾（旧F1）』『TS/SQLの二重実装（旧F2）』は、いずれも判定記録で証拠つきで退けられているか承知のうえの二重実装として突き合わせ検査つきで残されており、独自に崩す新しい証拠は見つからなかった",
+    "秘密鍵（ORCAROUTER_API_KEY・GOOGLE_MAPS_API_KEY・STRIPE_SECRET_KEY・VAPID_PRIVATE_KEY・TURNSTILE_SECRET_KEY・ADMIN_CONTACT_EMAIL）はすべてWorkerの秘密として計画され、コミット対象のファイル（wrangler.jsonc等）には値も名前も置かれない設計になっている",
+    "要件1〜34・368基準の全数が、design.mdの「要件ごとの検査の割り当て」表に検査の置き場所を持つ(手作業で全基準番号を列挙し突き合わせ済み)",
+    "intent.mdの「やらないこと」に列挙された部品(段階配信・入口のAI・Workers AI・客のログイン・請求・POS連携等)が、design.mdの構成図・ファイル構成のどこにも現れない",
+    "第3〜6周の回答で確定した『確保は予約として担保される』『公開中の変更は既存確保に影響しない』の原則が、残りの数え方・公開中の変更の節に正しく反映されている",
+    "第3周で修正された受け取りの断り(RefusalNotice)が、結果一覧と期限切れ表示の両方の入口を1つの部品・1つの理由分類(domain/receiveRefusal)で塞いでいる",
+    "S1〜S6の全歩で主語不明・支える行の欠落は見つからなかった",
+    "Turnstileが読み込めない端末での客の登録の行き止まりは、design.md自身が『承知のうえの穴』として明記済みで、新規の抜けではない",
+    "店の一覧にコード検索欄が無い点は、要件の段で規模的に破綻しないことが検討済み",
+    "取得結果に決定に要る情報（距離・予算幅・理由・何名まで・クーポン）は揃っており『決められない』型には当たらない"
+  ],
+  "shares": [
+    "A",
+    "B",
+    "C"
+  ],
+  "scores_by_share": {
+    "A": [
+      {
+        "axis": "単純さ",
+        "score": 4,
+        "reason": "34要件・368基準の規模に対し層は妥当だが、F1 のように同じ判断（受け取りの断り）が classify(サーバー)/nextStep(部品) の2か所に分かれており、削れる余地が残る"
+      },
+      {
+        "axis": "変更しやすさ",
+        "score": 4,
+        "reason": "ports/adapters・domain/usecases/repo の分離は概ね一貫しているが、F1 の境界の破れがあるぶん、断りの規則を変える変更が層を横断しうる"
+      },
+      {
+        "axis": "撤退しやすさ",
+        "score": 5,
+        "reason": "外部サービスはすべて1ファイルの差し替え口に閉じており、「撤退しやすさ」節で差し替え時に触るファイルが明示されている"
+      },
+      {
+        "axis": "慣習どおりか",
+        "score": 4,
+        "reason": "Next.js App Router・OpenNext・Zod・Vitest など慣習的な選択が多く、独自のやり方（自前セッション・自前ポーリング）には根拠と選ばなかった案が書かれている"
+      },
+      {
+        "axis": "検査しやすさ",
+        "score": 4,
+        "reason": "368基準のほぼ全項目に検査方法・段・実現場所が割り当てられ、外部サービスはすべて偽物に差し替えて段1で検査できる。F1 は検査を妨げないが、境界を守る構造検査（lintの境界）がこの1点をすり抜けている"
+      }
+    ],
+    "B": [
+      {
+        "axis": "単純さ",
+        "score": 3,
+        "reason": "TS/SQL二重実装(残り・受け取れる状態)と5部品構成のRefusalNoticeなど、必要な複雑さだが削れる余地も残る(判定記録で承知済み)"
+      },
+      {
+        "axis": "変更しやすさ",
+        "score": 4,
+        "reason": "domain/usecases/repo/adaptersの層をlintのno-restricted-importsで強制し、波及は境界内に収まる"
+      },
+      {
+        "axis": "撤退しやすさ",
+        "score": 4,
+        "reason": "外部サービスはadapters配下の1ファイルずつに閉じ、ports.tsの型のみをusecasesが知る"
+      },
+      {
+        "axis": "慣習どおりか",
+        "score": 4,
+        "reason": "Next.js/Cloudflare/OpenNextは典型構成。自前セッション・自前usePollingなど独自箇所は理由が明記されている"
+      },
+      {
+        "axis": "検査しやすさ",
+        "score": 5,
+        "reason": "requirements.mdの368基準全数を検査割り当て表と突き合わせ、抜けが1件も無いことを確認した"
+      }
+    ],
+    "C": [
+      {
+        "axis": "通り抜け",
+        "score": 5,
+        "reason": "S1〜S6全ての主な利用シーンで、各歩の主語と次の1歩を支える画面・基準がdesign.mdに明示され、歩き通せた"
+      },
+      {
+        "axis": "状況の変化への強さ",
+        "score": 5,
+        "reason": "intent.mdに書かれた状況の変化（気が変わる・人数増減・遅延・期限ぎりぎり到着・店による取消・緊急停止・満席・許可書不備）の全パターンにRefusalNotice・確保の担保原則・期限切れ完了済み許可などの明示対応があり、損をして詰む経路が見つからなかった"
+      },
+      {
+        "axis": "判断のしやすさと手数",
+        "score": 4,
+        "reason": "取得結果の判断材料は十分だが、F1のとおり人数の再入力が小さな余計な手数として残る"
+      }
+    ]
+  },
+  "questions_for_human": [],
+  "target": "design",
+  "target_sha256": "a284f79f74c323ec9aebe67f80a06a300f612e6edda0dd89dcb360202eda07c7",
+  "cycle": 4,
+  "exchange": 1,
+  "recorded_at": "2026-09-20T13:32:19.599Z"
+}

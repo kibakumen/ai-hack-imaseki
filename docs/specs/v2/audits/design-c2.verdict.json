@@ -1,0 +1,81 @@
+{
+  "kind": "verdict",
+  "target": "design",
+  "target_sha256": "e9c651e27eacfa3173c0a0d2d95ad09f25fcea6ae613c4be12768907bb716deb",
+  "cycle": 2,
+  "mode": "light",
+  "must_fix": [
+    "F1"
+  ],
+  "human_decision": [
+    "F2",
+    "F3",
+    "F4"
+  ],
+  "recorded_only": [],
+  "dropped": [],
+  "carry_over": [
+    {
+      "claim": "運営の連絡先のメールアドレス（基準 14.17）の置き場所が、設計書の中で両立しない。『Worker の設定の変数に置き、リポジトリには入れない』とあるが、Worker の設定の変数（`vars`）の置き場である `wrangler.jsonc` は web/ 直下の追跡対象のファイルで、秘密（`wrangler secret put`）の一覧にもこの値は入っていない。実行者はどちらに書いてもこの行のどちらかを破る。しかも秘密情報の走査（基準 34.6）が見るのは『メールアドレスの入った種データ』なので、wrangler.jsonc に書かれても鳴らず、破れが黙って通る。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 477,
+          "quote": "| 運営の連絡先のメールアドレス（基準 14.17） | Worker の設定の変数に置き、リポジトリには入れない |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 119,
+          "quote": "- **鍵の置き場**: `ORCAROUTER_API_KEY`・`GOOGLE_MAPS_API_KEY`・`STRIPE_SECRET_KEY`・`VAPID_PRIVATE_KEY`・`TURNSTILE_SECRET_KEY` は Worker の秘密（`wrangler secret put`）。"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 178,
+          "quote": "   └─ wrangler.jsonc・open-next.config.ts・next.config.ts・eslint.config.mjs・.dev.vars.example・.gitignore（ビルドの生成物の行。実行者が書く）"
+        }
+      ]
+    },
+    {
+      "claim": "提出の前提である『GitHub の public リポジトリを作って push する』が、誰の手にも割り当てられていない。基準 34.8 の検査は『提出の前に進行役が確かめる』だけで、実現する場所が `web/wrangler.jsonc`（GitHub とは無関係のファイル）になっている。設計書の『本人の手が要るもの』の節は Cloudflare・Google・Stripe・運営のアカウント・.gitignore を並べているのに GitHub が無く、HANDOFF.md はリポジトリが未作成であることを明記している。過去のコミットの古い鍵の扱い（未決）がこの push に直結するので、置き去りにすると提出の当日に未決のまま突き当たる。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 621,
+          "quote": "| 34.2・34.8 | 公開先の URL が応答することと、GitHub のリポジトリが public であることを、提出の前に進行役が確かめる | 段3 | `web/wrangler.jsonc` |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 496,
+          "quote": "- **提出の前に決めること**: 過去のコミットに残っている速成版の古い鍵の扱い（未決。案は「秘密情報と個人データの扱い」の「提出の前にやること」）。Turnstile を置く入口と時期は、設計者の案のままでよければ何もしなくてよい"
+        },
+        {
+          "path": "docs/HANDOFF.md",
+          "line": 45,
+          "quote": "| GitHub | **リポジトリ未作成**。提出は public なので、作る前に秘密情報の有無を確かめる |"
+        }
+      ]
+    },
+    {
+      "claim": "人かどうかの確かめ（Turnstile）の部品が読み込めない端末では、客の登録が完了できない——利用シーン S1 の2歩目で先へ進めなくなる。サーバーは『確かめそのものが取れないときも断る』と決めており、画面の側は送るボタンを押せるままにして『ページを読み込み直して、もう一度お試しください』と出すだけなので、読み込みを妨げているもの（拡張・回線）が変わらない限り同じ断りが返り続ける。検査（d02・「断られた客と店が行き止まりにならない」）も、文が出ることと入力が残ることしか見ておらず、登録を最後まで終えられるかは見ていない。設計者は『確かめが取れないときは通す』案を意識して却下しているので誤りではなく、提出版の客の登録という最初の1歩を塞ぐ形でよいかの判断が本人に上がっていない点が抜けている。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 316,
+          "quote": "通らなかったとき・部品が読み込めなかったときは、入れた内容を消さずに「人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください」と出す。送るボタンは押せるままにしておく（部品が読み込めない端末で、理由が分からないまま行き止まりにしない）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 111,
+          "quote": "確かめが「人でない」を返したときも、確かめそのものが取れないとき（失敗・3秒返らない。値は AI判断）も、断る"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 636,
+          "quote": "| 断られた客と店が行き止まりにならない | 同 部品: 3つのフォームに確かめの部品が在る／断られた時に決まった文が出て、入れた内容が残る／送り直すと新しい値を取る／部品が読み込めなくても送るボタンが押せる | 段1 | `components/ui/HumanCheck`・`domain/texts` |"
+        }
+      ]
+    }
+  ],
+  "status": "stalled",
+  "recorded_at": "2026-09-20T12:17:27.963Z"
+}

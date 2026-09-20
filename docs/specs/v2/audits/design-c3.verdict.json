@@ -1,0 +1,51 @@
+{
+  "kind": "verdict",
+  "target": "design",
+  "target_sha256": "cbaa302e9603ec1411bff0cf1a71dcf71d569bdfbe8093fa66073a17612c8a49",
+  "cycle": 3,
+  "mode": "light",
+  "must_fix": [],
+  "human_decision": [
+    "F3"
+  ],
+  "recorded_only": [
+    "F2"
+  ],
+  "dropped": [
+    "F1"
+  ],
+  "carry_over": [
+    {
+      "claim": "同じ「受け取れない理由を示す」の欠落が、期限切れの表示からの『同じ人数で受け取り直す』にもある。監査の指摘（F3）とその直し方は結果の画面と `components/customer/ResultList` に限られているが、受け取り直しの押下も基準 8.6 の同じ道を通り、押した瞬間に受け取れなくなっている場面は利用シーンに実際に書かれている（S5 の11歩目＝戻った残りを別の客が先に取っている）。画面の取り直しは10秒ごとなので古い画面が正常に存在し、押してから断られる。設計には、受け取り直しが断られたときに `ExpiredView` が何を出すかが無い（11.5〜11.9 の部品の検査にも無い）。直すなら結果の画面と期限切れの表示の両方に同じ表示を置く必要がある。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 303,
+          "quote": "受け取れる状態なら「同じ人数で受け取り直す」、そうでなければ「探し直す」（基準 11.5〜11.9）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 582,
+          "quote": "受け取れる状態かつ人数が「何名まで」以下なら受け取り直し、そうでなければ探し直す／店が完了済みにすると完了済みの表示 | 段1 | `domain/customerHome`・`components/customer/ExpiredView`"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 108,
+          "quote": "状態の変化は10秒ごとの取り直しで映す（値は AI判断）"
+        },
+        {
+          "path": "docs/specs/v2/intent.md",
+          "line": 207,
+          "quote": "戻った残りはもう別の客が受け取っていて、2人掛けの2卓はどちらも行き先が決まっている"
+        },
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 351,
+          "quote": "客の画面は期限切れの表示に、同じ人数でそのまま受け取り直す操作を出す（AI判断）こと［段1］"
+        }
+      ]
+    }
+  ],
+  "status": "human",
+  "recorded_at": "2026-09-20T12:46:15.645Z"
+}

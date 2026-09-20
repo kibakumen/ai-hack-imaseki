@@ -1,0 +1,180 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 185,
+          "quote": "| `lib/domain` | 自分だけ | ほかの全部（D1 の型も、`Date.now()` も、`crypto` も直接は使わない） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 171,
+          "quote": "│  ├─ ports.ts                        差し替え口の型（AiSelector・Geocoder・PushSender・CardRegistrar・FileStore・HumanCheck・Logger・Clock・Rng）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 110,
+          "quote": "パスワードは Web Crypto の PBKDF2-SHA256 と店ごとの塩で、元に戻せない形にする（基準 14.4）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 561,
+          "quote": "14.1・14.2・14.3・14.4・14.9 | `r14-login-scope.test.ts` 入口: ... | 段1 | `usecases/login`・`domain/password`・`http/cookies` |"
+        }
+      ],
+      "note": "自分で全文を当たったところ、指摘の枠組み（domain/token・domain/password が crypto を使う）は推論だが、その下にある穴は実在する——ハッシュ計算（token_hash の SHA-256・パスワードの PBKDF2）を置ける場所が設計のどこにも無い。domain は crypto 禁止（185行）、ports.ts に Hasher の口が無く（171行）、adapters の一覧（172行）にもハッシュ用の1ファイルが無く、usecases は adapters を読めない（188行）。乱数だけは Rng の口があるのに、ハッシュだけ帰り場所が無い。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 191,
+          "quote": "| `components`・`app` の画面・`lib/client` | `lib/schemas`（型）・`lib/domain`（表示の種類の型と決まった文）・`lib/client` | `lib/repo`・`lib/usecases`・`lib/adapters`・`lib/http` |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 206,
+          "quote": "| 形と範囲の数字 | `schemas/limits.ts` | 全部の入口と、部品の入力欄の属性 |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 168,
+          "quote": "│  ├─ schemas/                        zod。limits.ts が形と範囲の数字のただ1つの置き場"
+        }
+      ],
+      "note": "前半（部品は schemas から『型』しか読めないのに、入力欄の属性という実行時の値を limits.ts から読ませる）は実物で確認でき、lint の no-restricted-imports に落とす段で必ず当たるので指摘は残す。ただし後半の『値の正本が domain か schemas か定まっていない』は反証できる——168行が limits.ts を『形と範囲の数字のただ1つの置き場』と明記しており、186行の『lib/domain の定数』はジャンルの一覧（511行の `domain/genres`）のような別種の定数で成り立つ。直しは前半だけで足り、重さは medium より軽くてよい。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 127,
+          "quote": "- **外からの書き込みの要求**は、`Origin` が自分のものであることを入口（`defineRoute`）で確かめる（Cookie で見分ける以上、他のサイトからの要求を断る必要がある）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 173,
+          "quote": "│  ├─ http/                           defineRoute.ts（入力の検査・見分け・Origin・人かどうかの確かめ・連打の抑止）・guards.ts・cookies.ts"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 635,
+          "quote": "| 人かどうかの確かめが、3つの入口を守る | `d02-human-check.test.tsx` 入口: ... | 段1 | `http/defineRoute`・`lib/ports.ts`（`HumanCheck`）・`adapters/turnstile` |"
+        }
+      ],
+      "note": "design.md 全体を `Origin` で走査すると当たるのは127行と173行の2箇所だけで、要件の検査の割り当て（508〜625行）にも補助表（631〜638行）にも Origin の行は無い。requirements.md を Origin/CSRF/SameSite/クロスサイトで走査しても0件なので、別の基準の検査が肩代わりしている可能性も潰した＝この決めは誰も検査していない。"
+    },
+    {
+      "finding": "F4",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/HANDOFF.md",
+          "line": 47,
+          "quote": "⚠️ **提出前に必ず確認（2026-09-20 に一部対処）**: 速成版 `sprint/` は種データの店の鍵と運営の鍵の既定値が平文で入っていたので、コミット `5f659cd` で git の追跡から外し、手元の速成版は鍵を環境変数（`SEED_KEY_<店>`・`ADMIN_KEY`）から読む形に直した。"
+        },
+        {
+          "path": "docs/HANDOFF.md",
+          "line": 44,
+          "quote": "| OrcaRouter | ワークスペースは本人が保有。クレジット3000円。API キーは Worker の秘密（`ORCAROUTER_API_KEY`）として登録済み。"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 131,
+          "quote": "**`docs/HANDOFF.md` の47行目に、古い鍵の文字列が残っている**（設計者が実物で確認）。鍵の形の文字列ではないので走査には掛からない。実行者が骨組みのタスクで、鍵の文字列を消して今の事実（追跡から外した・環境変数へ移した）に書き直す"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 452,
+          "quote": "過去のコミットに残る古い鍵の扱い（未決・本人）。`docs/HANDOFF.md` の47行目の鍵の文字列（実行者が消す）。どちらも「提出の前にやること」"
+        }
+      ],
+      "note": "HANDOFF.md を鍵・key・パスワード・seed で走査すると当たるのは44行と47行だけで、どちらにも鍵の値は無い。47行は既に『追跡から外した・環境変数へ移した』という今の事実そのもので、実行者への指示（消して書き直す）は空振りになる。⚠️ 設計と HANDOFF は同日更新のため、設計者が読んだ時点の版が違った恐れは残るが（git 履歴は道具が無く未確認）、いま承認にかかっている設計書が現物と合わない指示を持っている事実は変わらない。重さは medium より軽くてよく、直しは『この項目を落とす』の1つに定まる。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "運営の連絡先のメールアドレス（基準 14.17）の置き場所が、設計書の中で両立しない。『Worker の設定の変数に置き、リポジトリには入れない』とあるが、Worker の設定の変数（`vars`）の置き場である `wrangler.jsonc` は web/ 直下の追跡対象のファイルで、秘密（`wrangler secret put`）の一覧にもこの値は入っていない。実行者はどちらに書いてもこの行のどちらかを破る。しかも秘密情報の走査（基準 34.6）が見るのは『メールアドレスの入った種データ』なので、wrangler.jsonc に書かれても鳴らず、破れが黙って通る。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 477,
+          "quote": "| 運営の連絡先のメールアドレス（基準 14.17） | Worker の設定の変数に置き、リポジトリには入れない |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 119,
+          "quote": "- **鍵の置き場**: `ORCAROUTER_API_KEY`・`GOOGLE_MAPS_API_KEY`・`STRIPE_SECRET_KEY`・`VAPID_PRIVATE_KEY`・`TURNSTILE_SECRET_KEY` は Worker の秘密（`wrangler secret put`）。"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 178,
+          "quote": "   └─ wrangler.jsonc・open-next.config.ts・next.config.ts・eslint.config.mjs・.dev.vars.example・.gitignore（ビルドの生成物の行。実行者が書く）"
+        }
+      ]
+    },
+    {
+      "claim": "提出の前提である『GitHub の public リポジトリを作って push する』が、誰の手にも割り当てられていない。基準 34.8 の検査は『提出の前に進行役が確かめる』だけで、実現する場所が `web/wrangler.jsonc`（GitHub とは無関係のファイル）になっている。設計書の『本人の手が要るもの』の節は Cloudflare・Google・Stripe・運営のアカウント・.gitignore を並べているのに GitHub が無く、HANDOFF.md はリポジトリが未作成であることを明記している。過去のコミットの古い鍵の扱い（未決）がこの push に直結するので、置き去りにすると提出の当日に未決のまま突き当たる。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 621,
+          "quote": "| 34.2・34.8 | 公開先の URL が応答することと、GitHub のリポジトリが public であることを、提出の前に進行役が確かめる | 段3 | `web/wrangler.jsonc` |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 496,
+          "quote": "- **提出の前に決めること**: 過去のコミットに残っている速成版の古い鍵の扱い（未決。案は「秘密情報と個人データの扱い」の「提出の前にやること」）。Turnstile を置く入口と時期は、設計者の案のままでよければ何もしなくてよい"
+        },
+        {
+          "path": "docs/HANDOFF.md",
+          "line": 45,
+          "quote": "| GitHub | **リポジトリ未作成**。提出は public なので、作る前に秘密情報の有無を確かめる |"
+        }
+      ]
+    },
+    {
+      "claim": "人かどうかの確かめ（Turnstile）の部品が読み込めない端末では、客の登録が完了できない——利用シーン S1 の2歩目で先へ進めなくなる。サーバーは『確かめそのものが取れないときも断る』と決めており、画面の側は送るボタンを押せるままにして『ページを読み込み直して、もう一度お試しください』と出すだけなので、読み込みを妨げているもの（拡張・回線）が変わらない限り同じ断りが返り続ける。検査（d02・「断られた客と店が行き止まりにならない」）も、文が出ることと入力が残ることしか見ておらず、登録を最後まで終えられるかは見ていない。設計者は『確かめが取れないときは通す』案を意識して却下しているので誤りではなく、提出版の客の登録という最初の1歩を塞ぐ形でよいかの判断が本人に上がっていない点が抜けている。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 316,
+          "quote": "通らなかったとき・部品が読み込めなかったときは、入れた内容を消さずに「人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください」と出す。送るボタンは押せるままにしておく（部品が読み込めない端末で、理由が分からないまま行き止まりにしない）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 111,
+          "quote": "確かめが「人でない」を返したときも、確かめそのものが取れないとき（失敗・3秒返らない。値は AI判断）も、断る"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 636,
+          "quote": "| 断られた客と店が行き止まりにならない | 同 部品: 3つのフォームに確かめの部品が在る／断られた時に決まった文が出て、入れた内容が残る／送り直すと新しい値を取る／部品が読み込めなくても送るボタンが押せる | 段1 | `components/ui/HumanCheck`・`domain/texts` |"
+        }
+      ]
+    }
+  ],
+  "score_objections": [
+    {
+      "axis": "通り抜け",
+      "reason": "5点（どの利用シーンも1歩ずつ決まったまま最後まで歩ける）は、Turnstile を入れた今の版では過大。S1 の2歩目（客の登録）は、確かめの部品が読み込めない端末では何度押しても断られ、次の手が『読み込み直す』しかない（design.md:316・111）。歩き直しは intent.md の【変化】だけでなく、設計が新しく足した断りの道も含むべきで、そこが未踏なら4が妥当。"
+    },
+    {
+      "axis": "検査しやすさ",
+      "reason": "4点の理由に Origin（F3）と境界の矛盾（F1）が挙がっているのは妥当だが、要件の基準368件の検査の割り当ては自分でも数え直して過不足が無いことを確認した（要件1〜34の番号が連番で揃い、合計が368と一致）。減点の根拠は『要件の網羅性』ではなく『設計が自分に課した決めの検査の欠落』の側だけにあると、理由を絞った方が次の周回で直す場所を誤らない。"
+    }
+  ],
+  "target": "design",
+  "cycle": 2,
+  "exchange": 1,
+  "recorded_at": "2026-09-20T12:17:27.910Z"
+}

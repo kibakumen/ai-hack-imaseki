@@ -1,0 +1,164 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "dev.config.json",
+          "line": 5,
+          "quote": "\"typecheck\": [],"
+        },
+        {
+          "path": "dev.config.json",
+          "line": 7,
+          "quote": "\"test\": []"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 97,
+          "quote": "| テスト | `[\"pnpm\",\"exec\",\"vitest\",\"run\"]` |"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "line": 31,
+          "quote": ".filter((name) => (Array.isArray(gate[name]) ? gate[name].length : gate[name]))"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "line": 97,
+          "quote": ": [`ゲート通過（タスク ${taskId}）`, ...header, ...notes].join(\"\\n\");"
+        }
+      ],
+      "note": "実物を自分で開いて確認した——空配列の3本は走らせる対象から除外され（31行目の filter）、注意文は通過の報告に添えられるだけで終了コードは errors だけで決まる（100行目 `return errors.length ? 1 : 0`）＝ゲートは黙って通る。補足2点（どちらも直す手順に効く）: ①`dev.config.json` は役割を問わず書けない場所（`lib/config.mjs` の INFRA_DENY 24行目）なので、書き込むのは進行役の手 ②同ファイルは検査の土台の指紋（`git.mjs` の sentinelHashes 76行目）なので、`record.mjs start` の後に書き換えると「検査の土台が着手時から変わっています」で落ちる＝着手前に書くこと。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 259,
+          "quote": "| `components`・`app` の画面 | `lib/schemas` は**型（`import type`）と、`schemas/limits.ts` の値だけ**・`lib/domain`（表示の種類の型と決まった文）・`lib/client` |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 261,
+          "quote": "lint の `no-restricted-imports` には、部品と画面から `lib/schemas` への値の import を `limits` だけ許す形で入れる"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 102,
+          "quote": "lint には、フォルダの境界（下の「ファイル構成の計画」の向き）を `no-restricted-imports` で入れる"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 271,
+          "quote": "| 絞り込み・点数・徒歩の分数 | `domain/filter.ts`・`domain/score.ts`・`domain/geo.ts` |"
+        }
+      ],
+      "note": "設計の中を自分で一通り当たった——lint の記述は102行目の「フォルダの境界」1本と、261行目の `lib/schemas` だけをファイル単位まで絞った1本で、`lib/domain` を `texts.ts`＋型に絞る記述はどこにも無い。構造の検査の表（785〜798行）と要件ごとの割り当ての表にも、部品・画面が `domain/filter`・`score`・`selection`・`customerHome` 等を import していないことを見る行は1行も無く（在るのは `crypto`〔794行〕・`refusal.kind`〔795行〕・`console`〔788行〕の3種）、フォルダ単位の許可のままでは判断関数の直 import が通る。反証は見つからなかったので指摘は残す。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 391,
+          "quote": "確保中の表示 | **コード（大きく）**・店名・住所・人数・期限の時刻・クーポン・ホームページ・「人数を変える」・通報ボタン・「ほかの店を探す」"
+        },
+        {
+          "path": "docs/specs/v2/intent.md",
+          "line": 139,
+          "quote": "- **どこで**: 駅前の人混みの中。片手でスマホを持っている"
+        },
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 466,
+          "quote": "9. 店が住所を保存した時、システムは地図のサービスでその住所を位置へ直し、店の位置として保存する（AI判断）こと［段1］"
+        },
+        {
+          "path": "docs/specs/v2/intent.md",
+          "line": 408,
+          "quote": "## やらないこと"
+        }
+      ],
+      "note": "設計・要件・意図の3つを自分で当てた——`地図`の語は設計の中に7箇所あるがすべて住所を座標へ直す側（Geocoding）で、客が道順を開く手段は1つも無い。「やらないこと」の一覧（意図 408〜432行）にも地図・道順を外す行は無く、要件 15.9 で緯度経度が保存されているのも確認できたので、任意の改善として妥当。2点だけ補足: ①取得の結果のカード（設計 390行）には住所そのものが出ない（出るのは徒歩分数とホームページ）ので、指摘の「住所の文字とホームページだけ」は確保中の表示に当たる記述 ②採点の「判断のしやすさと手数」の理由が `F1の地図リンクの欠如` と書いているが、結合後の番号ではこの指摘（F3）を指す——本人に見せるときは番号を読み替えること。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "毎タスクのゲートが受け入れ検査の全部を走らせる設計になっていて、最後のタスクまで全タスクのゲートが不合格になる（ゲートの対象をタスクごとに絞る手立てが設計に無い）。受け入れ検査はタスク表の承認時に全部揃っていないと改ざん扱いで落ちるため、後から足して回避することもできない。設計者は同じ理屈を速成版の鍵の処置では使っている（192行目「実装の段のゲートが回るたびに赤になる」）のに、受け入れ検査には当てていない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 100,
+          "quote": "直下の `vitest.config.ts` は、`web/**/*.test.{ts,tsx}`（実行者が足す単体テスト）と `tests/acceptance/v2/**/*.test.{ts,tsx}`（受け入れ検査）の両方を走らせる"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 653,
+          "quote": "検査のファイルは `tests/acceptance/v2/`（タスク分割の段で設計者が書く）。"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "line": 25,
+          "quote": "const result = spawnSync(cmd, args, { cwd: repo, shell, encoding: \"utf8\" });"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "line": 47,
+          "quote": "...Object.keys(current).filter((rel) => !(rel in approved)).map((rel) => `タスク表の承認後に受け入れ検査が足されています（改ざん）: ${rel}`),"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/SKILL.md",
+          "line": 26,
+          "quote": "**周回の上限を守る。** ゲートの差し戻しは1段あたり3回"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 192,
+          "quote": "処置を提出の直前まで待つ（それまで実装の段のゲートが回るたびに赤になる）"
+        }
+      ]
+    },
+    {
+      "claim": "ブラウザ側が実行時に要る2つの公開値——VAPID の公開鍵と Turnstile のサイトキー——の置き場所と、画面までの経路が設計に無い。画面と部品は `lib/adapters`（`env.ts`）を読めないと決まっており、運営の連絡先メールでは同じ問題に気づいて入口 `GET /api/auth/contact` を足しているのに、この2つには入口も `vars` の記述も `NEXT_PUBLIC_*` の記述も1つも無い（`NEXT_PUBLIC` の語は設計書に0件）。このままでは実行者が経路を自分で決めるしかなく、部品から `adapters/env.ts` を読む形＝依存の向きの破れに倒れやすい。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 177,
+          "quote": "ブラウザへ渡るのは VAPID の公開鍵・Turnstile のサイトキー（公開してよい値）・運営の連絡先のメールアドレス（基準 14.17）だけ"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 179,
+          "quote": "読むのは `adapters/env.ts` だけで、ログインの画面へは入口 `GET /api/auth/contact`【最終日】が返す（画面は `lib/adapters` を読めないため）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 286,
+          "quote": "登録の入口 | `POST /api/register/customer`・`POST /api/register/store`・`POST /api/auth/login`・`POST /api/auth/logout`・【最終日】`GET /api/auth/contact`（運営の連絡先のメールアドレスを返すだけ。基準 14.17）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 259,
+          "quote": "| `components`・`app` の画面 | … | `lib/repo`・`lib/usecases`・`lib/adapters`・`lib/http`・`lib/schemas` の zod の定義（値として） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 133,
+          "quote": "秘密ではないので `web/wrangler.jsonc` の `vars` に書く"
+        }
+      ]
+    }
+  ],
+  "score_objections": [],
+  "target": "design",
+  "cycle": 5,
+  "exchange": 1,
+  "recorded_at": "2026-09-20T16:15:06.927Z"
+}

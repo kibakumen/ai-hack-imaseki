@@ -1,0 +1,139 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 85,
+          "quote": "| lint | `[\"pnpm\",\"--dir\",\"web\",\"exec\",\"eslint\",\".\"]` |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 167,
+          "quote": "└─ wrangler.jsonc・open-next.config.ts・next.config.ts・eslint.config.mjs・.dev.vars.example"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 144,
+          "quote": "├─ tests/acceptance/v2/                 受け入れ検査（設計者の持ち場。タスク分割の段で書く）"
+        }
+      ],
+      "note": "自分で当たって確かめた——eslint の設定は `web/` の下にしか置かれず（167行目）、受け入れ検査は `web/` の外（144行目）なので、ゲートの lint だけが型検査・テストと対象がずれているのは事実（ただし重さは medium より低いと見る: lint に載せた唯一の役目は `web/` 内の依存の向きの強制〔91行目〕で、tests/ には強制すべき境界が無く、落ちるのは書式の検査だけ）。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 118,
+          "quote": "**ログ**に、要求の本文・電話番号・呼び名・メールアドレス・客の識別子を出さない。出すのは出来事の名前と内部の番号だけ"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 574,
+          "quote": "記録のどの列にも電話番号と呼び名が無い"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 576,
+          "quote": "全部の入口の応答を走査し、客の電話番号が出るのは本人のホームと、受け取られた店のホームだけ"
+        }
+      ],
+      "note": "設計の 468〜596行目の割り当て表を自分で1行ずつ当たったが、ログの中身を見る行は無く、近い3つ（記録の列＝27系・応答＝28系・git 追跡ファイル＝34.6）はどれも Workers の実行時のログを覆っていないので、指摘は成り立つ（重さは low 相当と見る: `requirements.md` を「ログ」で検索しても該当の基準は1つも無く、これは要件ではなく設計者が自分に課した方針）。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 300,
+          "quote": "| 確保中の表示 | **コード（大きく）**・店名・住所・人数・期限の時刻・クーポン・ホームページ・「人数を変える」・通報ボタン・「ほかの店を探す」・いちばん下に「確保を取り消す」 | 取得の画面（取り消したあと）／最近行った店 |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 305,
+          "quote": "確保中の確保を持ったまま「ほかの店を探す」から取得した結果では、受け取りのボタンは選べない形で出て、「今の確保を取り消すと受け取れます」と確保中の表示へ戻る入口が出る（基準 8.10）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 298,
+          "quote": "| 取得の画面 | 場所の欄（いつも出ている。空なら現在地。「駅名や住所」）・人数・その回のジャンルと予算（登録の値が入っている）・「今入れる店を探す」 | 結果／最近行った店／【最終日】登録の確認と消去・過去の受け取り |"
+        },
+        {
+          "path": "docs/specs/v2/intent.md",
+          "line": 210,
+          "quote": "5人組の確保は人数5のまま担保されていて、引き下げの影響を受けない"
+        }
+      ],
+      "note": "300行目の行ける先の列を自分で読むと、落ちているのは「結果（受け取りは選べない状態）」だけでなく、同じ列の注記「取り消したあと」も——「ほかの店を探す」は取り消さずに取得の画面へ行く経路なので、直すときは2か所（振る舞い自体は305行目に書かれており、表の列の取りこぼし＝重さ low で妥当）。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "秘密情報の置き所の計画が、誰も書けないファイルに依っている——基準 34.6 の段2 の構造検査は「`.gitignore` にそれらの行がある」ことを確かめ、実現する場所も直下の `.gitignore` と名指ししているが、今の直下の `.gitignore` は5行だけで `.dev.vars`・`*.local` の行が無く、しかも直下の `.gitignore` は /dev のどの役割（設計者・実行者・図解役）も書けない場所に入っている。Bash で書き換えても着手時の指紋と突き合わせるゲートで落ちる。設計の「本人の手が要るもの」（461〜466行目）にもこの行は挙がっていないので、`web/.dev.vars` を git の対象外にする手当てを誰がいつ行うのかが計画に無い（実行者が書ける `web/.gitignore` で代替はできるが、設計はそう書いていない）。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 594,
+          "quote": "| 34.6 | `structure.test.ts` 構造: git が追跡しているファイルを走査し、鍵の形の文字列（Stripe・Google・秘密鍵の見出しなど）・`.dev.vars`・`*.local`・電話番号やメールアドレスの入った種データ・営業許可書のファイルが無い。`.gitignore` にそれらの行がある | 段2 | `.gitignore`・`web/.dev.vars.example` |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 114,
+          "quote": "手元は `web/.dev.vars`（git の対象外）。リポジトリには値の無い `web/.dev.vars.example` だけを置く"
+        },
+        {
+          "path": ".gitignore",
+          "line": 5,
+          "quote": ".env.*"
+        },
+        {
+          "path": "~/.claude/skills/dev/scripts/lib/config.mjs",
+          "line": 27,
+          "quote": "\".gitignore\","
+        },
+        {
+          "path": "~/vault/knowledge/models/development/sdd/02_dev最小版_構造.md",
+          "line": 59,
+          "quote": "役割を問わず `.git/**`・`.gitignore`・`.gitattributes`・`.claude/**`・`dev.config.json`・`.dev/**` を**書けない場所**に追加。さらに**着手時にこれらの指紋を控え、ゲートで突き合わせる**"
+        }
+      ]
+    },
+    {
+      "claim": "基準 34.6 の走査は、実装を1行も書かないうちから落ちる土台の上に置かれている——速成版（`sprint/`）の種データに店の鍵と運営の鍵が平文で入ったまま git に追跡されており（`.gitignore` に `sprint/` の行は無い）、「git が追跡しているファイルを走査して鍵の形の文字列が無い」という段2 の構造検査は実装の段のゲートが回るたびに赤になる。設計はこの平文の鍵を知っていながら（122行目）、処置を「提出の前に進行役が本人に確かめる」と段3 の時点へ置いており、段2 の検査をそれまでどうするか（走査から `sprint/` を外して検査の意味を薄めるのか、先に `sprint/` を追跡から外すのか）を決めていない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 122,
+          "quote": "**提出の前にやること**: 速成版（`sprint/`）には種データの店の鍵と運営の鍵の既定値が平文で入っている（`docs/HANDOFF.md`）。秘密情報の走査（基準 34.6）はリポジトリ全体に掛かるので、`sprint/` を git の追跡から外すか鍵を消すかを、提出の前に進行役が本人に確かめる"
+        },
+        {
+          "path": "sprint/scripts/seed.mjs",
+          "line": 12,
+          "quote": "    id: \"st-maru\", key: \"maru-2026\", name: \"炭火酒場 まる\", genre: \"居酒屋\", price: 3500,"
+        },
+        {
+          "path": "sprint/lib/db.ts",
+          "line": 27,
+          "quote": "export const adminOk = (key: string) => key === (process.env.ADMIN_KEY ?? \"unei2026\");"
+        },
+        {
+          "path": ".gitignore",
+          "line": 2,
+          "quote": ".dev/"
+        }
+      ]
+    }
+  ],
+  "score_objections": [],
+  "target": "design",
+  "cycle": 1,
+  "exchange": 1,
+  "recorded_at": "2026-09-20T11:38:58.702Z"
+}

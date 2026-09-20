@@ -1,0 +1,75 @@
+{
+  "kind": "verdict",
+  "target": "design",
+  "target_sha256": "8954615a3c93356e25433faffc0ebf639f45f5cb595b043897626775998428cc",
+  "cycle": 1,
+  "mode": "light",
+  "must_fix": [],
+  "human_decision": [
+    "F1",
+    "F2"
+  ],
+  "recorded_only": [
+    "F3"
+  ],
+  "dropped": [],
+  "carry_over": [
+    {
+      "claim": "秘密情報の置き所の計画が、誰も書けないファイルに依っている——基準 34.6 の段2 の構造検査は「`.gitignore` にそれらの行がある」ことを確かめ、実現する場所も直下の `.gitignore` と名指ししているが、今の直下の `.gitignore` は5行だけで `.dev.vars`・`*.local` の行が無く、しかも直下の `.gitignore` は /dev のどの役割（設計者・実行者・図解役）も書けない場所に入っている。Bash で書き換えても着手時の指紋と突き合わせるゲートで落ちる。設計の「本人の手が要るもの」（461〜466行目）にもこの行は挙がっていないので、`web/.dev.vars` を git の対象外にする手当てを誰がいつ行うのかが計画に無い（実行者が書ける `web/.gitignore` で代替はできるが、設計はそう書いていない）。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 594,
+          "quote": "| 34.6 | `structure.test.ts` 構造: git が追跡しているファイルを走査し、鍵の形の文字列（Stripe・Google・秘密鍵の見出しなど）・`.dev.vars`・`*.local`・電話番号やメールアドレスの入った種データ・営業許可書のファイルが無い。`.gitignore` にそれらの行がある | 段2 | `.gitignore`・`web/.dev.vars.example` |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 114,
+          "quote": "手元は `web/.dev.vars`（git の対象外）。リポジトリには値の無い `web/.dev.vars.example` だけを置く"
+        },
+        {
+          "path": ".gitignore",
+          "line": 5,
+          "quote": ".env.*"
+        },
+        {
+          "path": "~/.claude/skills/dev/scripts/lib/config.mjs",
+          "line": 27,
+          "quote": "\".gitignore\","
+        },
+        {
+          "path": "~/vault/knowledge/models/development/sdd/02_dev最小版_構造.md",
+          "line": 59,
+          "quote": "役割を問わず `.git/**`・`.gitignore`・`.gitattributes`・`.claude/**`・`dev.config.json`・`.dev/**` を**書けない場所**に追加。さらに**着手時にこれらの指紋を控え、ゲートで突き合わせる**"
+        }
+      ]
+    },
+    {
+      "claim": "基準 34.6 の走査は、実装を1行も書かないうちから落ちる土台の上に置かれている——速成版（`sprint/`）の種データに店の鍵と運営の鍵が平文で入ったまま git に追跡されており（`.gitignore` に `sprint/` の行は無い）、「git が追跡しているファイルを走査して鍵の形の文字列が無い」という段2 の構造検査は実装の段のゲートが回るたびに赤になる。設計はこの平文の鍵を知っていながら（122行目）、処置を「提出の前に進行役が本人に確かめる」と段3 の時点へ置いており、段2 の検査をそれまでどうするか（走査から `sprint/` を外して検査の意味を薄めるのか、先に `sprint/` を追跡から外すのか）を決めていない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 122,
+          "quote": "**提出の前にやること**: 速成版（`sprint/`）には種データの店の鍵と運営の鍵の既定値が平文で入っている（`docs/HANDOFF.md`）。秘密情報の走査（基準 34.6）はリポジトリ全体に掛かるので、`sprint/` を git の追跡から外すか鍵を消すかを、提出の前に進行役が本人に確かめる"
+        },
+        {
+          "path": "sprint/scripts/seed.mjs",
+          "line": 12,
+          "quote": "    id: \"st-maru\", key: \"maru-2026\", name: \"炭火酒場 まる\", genre: \"居酒屋\", price: 3500,"
+        },
+        {
+          "path": "sprint/lib/db.ts",
+          "line": 27,
+          "quote": "export const adminOk = (key: string) => key === (process.env.ADMIN_KEY ?? \"unei2026\");"
+        },
+        {
+          "path": ".gitignore",
+          "line": 2,
+          "quote": ".dev/"
+        }
+      ]
+    }
+  ],
+  "status": "human",
+  "recorded_at": "2026-09-20T11:38:58.740Z"
+}

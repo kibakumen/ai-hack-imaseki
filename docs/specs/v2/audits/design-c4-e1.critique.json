@@ -1,0 +1,136 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "DISAGREE_EVIDENCE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 172,
+          "quote": "domain/  判断（副作用なし・時計も乱数も引数で受け取る）。receiveRefusal.ts が「受け取りが断られた理由（閉じた5種）」と「理由ごとの次の一手」のただ1つの置き場"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 197,
+          "quote": "`lib/schemas` は**型（`import type`）と、`schemas/limits.ts` の値だけ**・`lib/domain`（表示の種類の型と決まった文）・`lib/client` | `lib/repo`・`lib/usecases`・`lib/adapters`・`lib/http`・`lib/schemas` の zod の定義（値として）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 212,
+          "quote": "`usecases/receiveOffer`（受け取り・受け取り直しの両方）が理由を返し、**断りを描く部品はただ1つ `components/customer/RefusalNotice`**"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/rubrics/design.md",
+          "line": 15,
+          "quote": "境界の破れ | ファイル構成の計画 | 2つの部品が同じ責務を持つ／脳に置くと決めた判断が見た目の側にある"
+        }
+      ],
+      "note": "指摘が挙げた2つの根拠がどちらも実物の文に無い——芯の1が求めるのは「判断を `web/lib/domain/` に置く」ことで `nextStep` はそこに在り（172行が「ただ1つの置き場」と明記）、依存の向きの表の制限語「だけ」は `lib/schemas` の節にしか付いておらず、部品の「読んではいけないもの」の欄に `lib/domain` は無い。物差しの「境界の破れ」の例は判断が見た目の側に在ることを指すが、判断の実体は domain にあり部品は呼ぶだけ（212行は参照する側として部品を意図的に名指し）。残るのは表の括弧書き（表示の種類の型と決まった文）が純粋な表示の分岐関数まで言い表していない語の粗さだけで、1行の但し書きで足りる——medium の欠陥ではない。なお指摘の主たる直し（`nextStep` をサーバーへ移す）を採ると応答のスキーマ・手続き・部品の3か所が動き、提出2日前の変更としては費用の方が大きい。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 121,
+          "quote": "ブラウザへ渡るのは VAPID の公開鍵・Turnstile のサイトキー（公開してよい値）・運営の連絡先のメールアドレス（基準 14.17）だけ"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 122,
+          "quote": "読むのは `adapters/env.ts` だけで、ログインの画面へは入口 `GET /api/auth/contact`【最終日】が返す（画面は `lib/adapters` を読めないため）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 224,
+          "quote": "登録の入口 | `POST /api/register/customer`・`POST /api/register/store`・`POST /api/auth/login`・`POST /api/auth/logout`・【最終日】`GET /api/auth/contact`（運営の連絡先のメールアドレスを返すだけ。基準 14.17）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 702,
+          "quote": "Turnstile の確かめの URL と秘密鍵の名前が `adapters/turnstile.ts`（と `adapters/env.ts`）にだけ在る"
+        }
+      ],
+      "note": "自分で全文を走査して確かめた——`NEXT_PUBLIC` は設計書に1度も出ず、`vars` が出るのはメールアドレスを「vars に書かない」と断る文脈だけで、VAPID の公開鍵と Turnstile のサイトキーには変数名も置き場も読む側も無い。さらに **重さは low では過小**: 依存の向きの表（197行）が部品から `lib/adapters` を禁じているので、メールアドレスで `GET /api/auth/contact` を新設した理由（122行）がそのままこの2つにも当たるのに、入口の一覧（224行）に対応する入口が無い——実行者はブラウザへ届ける経路そのものを自分で発明することになる（ビルド時の埋め込みか新しい入口か）。構造の検査（702行）も秘密鍵の側しか留めていない。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "DISAGREE_EVIDENCE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 149,
+          "quote": "人数の初めの値は置かない（AI判断。`intent.md` の基準4が「取得のたびに入れる」としており、前回の人数が残ると S2 のような人数の変化を見落とす）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 8,
+          "quote": "入力は、承認済みの `intent.md`・`requirements.md`（34要件・368基準）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 460,
+          "quote": "要件の文は、この段では書き換えない。"
+        },
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 139,
+          "quote": "13. 取得の画面は、好みのジャンルと予算の上限の初めの値として、客の登録の値を入れておくこと［段1］"
+        },
+        {
+          "path": "docs/specs/v2/intent.md",
+          "line": 265,
+          "quote": "4. 【提出版】**人数**: 客が取得のたびに、何人で行くかを入れられること（v2 メモ・本人発案）"
+        }
+      ],
+      "note": "人数を打ち直す1手は実在するが、それは設計の選択ではなく**承認済みの要件が明文で禁じた結果**——要件は好みと予算だけ初めの値を入れると決め（139行）、人数は「初めの値を置かない」と理由つきで決めている（149行）。指摘の折衷案（直前の取得なら前回値を入れる）を設計が採ると承認済みの要件に反し、しかも設計の段は要件の文を直さない（460行）。見直したいなら要件の段の議題で、そのとき失うもの（S2 の人数の変化の見落とし）は149行に既に書かれている。設計の段の欠陥としては成立しない。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "受け取りの断りで、設計が自分に課した倒し方——「読み直しても5種のどれにも当たらないときは『満席になった』として返す」——に検査の置き場所が無い。受け入れ検査の 8.6 の行は「場面に合った1つで返る」5種だけを見ており、同時の操作で読み直した時点では受け取れる状態に戻っていた場合の倒し方は、どの行にも、設計の決めの検査の表にも無い（この場面は D1 をそのまま走らせる手続きの検査では作れないので、差し込み口が要る）。重さは low。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 236,
+          "quote": "読み直しても5種のどれにも当たらないとき（同時の操作で、読み直した時点ではもう受け取れる状態に戻っていた場合など）は「満席になった」として返す（AI判断・最も起こりやすい理由に倒す）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 603,
+          "quote": "理由が閉じた5種のうち場面に合った1つで返り（「何名まで」超のときはその時点の値つき）、応答にその時点のホームの状態が載る"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 706,
+          "quote": "受け取りの断りを描く部品が1つだけ（構造） | `structure.test.ts` 構造: `web/components` と `web/app` のソースで、`refusal.kind`（断りの理由の識別子）を読むのが `components/customer/RefusalNotice.tsx` だけ"
+        }
+      ]
+    }
+  ],
+  "score_objections": [
+    {
+      "axis": "単純さ",
+      "reason": "結合後の理由にある「5部品構成のRefusalNotice」は実物の誤読。338行の「作りは5つ」は設計の決め5つ（一覧を取り直さない／型のついた理由／次の一手／新しい状態で作り直す／同じ部品を通す）で、部品は1つしか無く、1つだけであることを706行の構造の検査が留めている。残る根拠は TS/SQL の二重実装だけで、それは前の周で「記録だけ」に落ちた承知のうえの重複。3 は低すぎ、分担Aの 4 が実物に合う。"
+    },
+    {
+      "axis": "判断のしやすさと手数",
+      "reason": "4 に下げた唯一の根拠が人数の再入力（記録では F1 と書かれているが実体は F3）で、それは承認済みの要件 149行が理由つきで決めた形。指摘が消えるなら、この軸を 5 から下げる根拠は記録に残っていない。"
+    },
+    {
+      "axis": "検査しやすさ",
+      "reason": "4 の理由が「F1 が lint の境界をすり抜けている」に依っており、F1 が消えると根拠が空になる。4 を保つなら、理由は上の見落とし（断りの倒し方に検査の置き場所が無い）へ差し替えるべき。"
+    },
+    {
+      "axis": "変更しやすさ",
+      "reason": "結合後の理由が「F1 の境界の破れ」に依っている。F1 が消えれば、分担Bの理由（層を lint で強制し波及は境界内に収まる）だけが残る——点は 4 のままでも、理由の書き換えが要る。"
+    }
+  ],
+  "target": "design",
+  "cycle": 4,
+  "exchange": 1,
+  "recorded_at": "2026-09-20T15:10:51.738Z"
+}

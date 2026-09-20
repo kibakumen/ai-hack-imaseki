@@ -1,0 +1,85 @@
+{
+  "kind": "verdict",
+  "target": "design",
+  "target_sha256": "2fd1a2a33eab9f2dbd4c7347a2c843c538c083311a058298804e08baa2aa0608",
+  "cycle": 5,
+  "mode": "light",
+  "must_fix": [],
+  "human_decision": [
+    "F1",
+    "F2"
+  ],
+  "recorded_only": [
+    "F3"
+  ],
+  "dropped": [],
+  "carry_over": [
+    {
+      "claim": "毎タスクのゲートが受け入れ検査の全部を走らせる設計になっていて、最後のタスクまで全タスクのゲートが不合格になる（ゲートの対象をタスクごとに絞る手立てが設計に無い）。受け入れ検査はタスク表の承認時に全部揃っていないと改ざん扱いで落ちるため、後から足して回避することもできない。設計者は同じ理屈を速成版の鍵の処置では使っている（192行目「実装の段のゲートが回るたびに赤になる」）のに、受け入れ検査には当てていない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 100,
+          "quote": "直下の `vitest.config.ts` は、`web/**/*.test.{ts,tsx}`（実行者が足す単体テスト）と `tests/acceptance/v2/**/*.test.{ts,tsx}`（受け入れ検査）の両方を走らせる"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 653,
+          "quote": "検査のファイルは `tests/acceptance/v2/`（タスク分割の段で設計者が書く）。"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "line": 25,
+          "quote": "const result = spawnSync(cmd, args, { cwd: repo, shell, encoding: \"utf8\" });"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "line": 47,
+          "quote": "...Object.keys(current).filter((rel) => !(rel in approved)).map((rel) => `タスク表の承認後に受け入れ検査が足されています（改ざん）: ${rel}`),"
+        },
+        {
+          "path": "/home/kibaku/.claude/skills/dev/SKILL.md",
+          "line": 26,
+          "quote": "**周回の上限を守る。** ゲートの差し戻しは1段あたり3回"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 192,
+          "quote": "処置を提出の直前まで待つ（それまで実装の段のゲートが回るたびに赤になる）"
+        }
+      ]
+    },
+    {
+      "claim": "ブラウザ側が実行時に要る2つの公開値——VAPID の公開鍵と Turnstile のサイトキー——の置き場所と、画面までの経路が設計に無い。画面と部品は `lib/adapters`（`env.ts`）を読めないと決まっており、運営の連絡先メールでは同じ問題に気づいて入口 `GET /api/auth/contact` を足しているのに、この2つには入口も `vars` の記述も `NEXT_PUBLIC_*` の記述も1つも無い（`NEXT_PUBLIC` の語は設計書に0件）。このままでは実行者が経路を自分で決めるしかなく、部品から `adapters/env.ts` を読む形＝依存の向きの破れに倒れやすい。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 177,
+          "quote": "ブラウザへ渡るのは VAPID の公開鍵・Turnstile のサイトキー（公開してよい値）・運営の連絡先のメールアドレス（基準 14.17）だけ"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 179,
+          "quote": "読むのは `adapters/env.ts` だけで、ログインの画面へは入口 `GET /api/auth/contact`【最終日】が返す（画面は `lib/adapters` を読めないため）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 286,
+          "quote": "登録の入口 | `POST /api/register/customer`・`POST /api/register/store`・`POST /api/auth/login`・`POST /api/auth/logout`・【最終日】`GET /api/auth/contact`（運営の連絡先のメールアドレスを返すだけ。基準 14.17）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 259,
+          "quote": "| `components`・`app` の画面 | … | `lib/repo`・`lib/usecases`・`lib/adapters`・`lib/http`・`lib/schemas` の zod の定義（値として） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 133,
+          "quote": "秘密ではないので `web/wrangler.jsonc` の `vars` に書く"
+        }
+      ]
+    }
+  ],
+  "status": "human",
+  "recorded_at": "2026-09-20T16:15:06.975Z"
+}

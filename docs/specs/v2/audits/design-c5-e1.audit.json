@@ -1,0 +1,247 @@
+{
+  "kind": "audit",
+  "rubric": "design@1",
+  "model": "sonnet",
+  "share": "A",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "design.md はゲートの3つのコマンドを確定させたが、実物の dev.config.json は typecheck/lint/test が全部空配列のままで、今の実装ゲートは何も検査せずに黙って通過する。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 91,
+          "quote": "リポジトリの直下で実行する前提（進行役が本人に確かめてから `dev.config.json` へ写す）。"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 95,
+          "quote": "| 型検査 | `[\"pnpm\",\"exec\",\"tsc\",\"--noEmit\",\"-p\",\"tsconfig.json\"]` |"
+        },
+        {
+          "path": "dev.config.json",
+          "line": 5,
+          "quote": "\"typecheck\": [],"
+        },
+        {
+          "path": "dev.config.json",
+          "line": 6,
+          "quote": "\"lint\": [],"
+        },
+        {
+          "path": "dev.config.json",
+          "line": 7,
+          "quote": "\"test\": []"
+        },
+        {
+          "path": ".claude/skills/dev/scripts/gate-code.mjs",
+          "line": 84,
+          "quote": "const notes = Object.values(config.gate).some((c) => (Array.isArray(c) ? c.length : c))\n    ? []\n    : [\"dev.config.json の gate にコマンドが1つもありません（型・lint・テストは検査していない）\"];"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "実装タスクに着手する前に、design.md の「ゲートの3つのコマンド」の表の3つの配列を dev.config.json の gate へそのまま書き込む。gate-code.mjs は空配列の gate を errors ではなく notes（警告止まり）として扱い、そのまま `errors.length === 0` でゲート通過にしてしまう仕組みなので、書き忘れると型検査・lint・テストを1つも走らせずに全タスクが通過してしまう。書き込み後、1タスク分ゲートを走らせて `実行したコマンド:` の行が3つとも出ることを確認する。",
+      "share": "A",
+      "source_id": "F1"
+    },
+    {
+      "id": "F2",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "「画面の部品は判断しない」という設計の芯（概要の1）を守るための依存の向きの表で、lib/schemas は「型と limits.ts の値だけ」への制限とその lint 実装（no-restricted-imports）が明記されているのに、lib/domain については同じ粒度の制限（表示の種類の型と決まった文だけ）を実際に強制する lint ルールも構造の検査も設計に書かれていない。domain には filter・score・selection・customerHome・storeHome・reservation・remaining・until などの判断関数も同じフォルダに置かれているため、依存の向きの表の記述だけでは、部品が domain の判断関数をそのまま import して自分で判断してしまうことをどの検査も検出できない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 259,
+          "quote": "| `components`・`app` の画面 | `lib/schemas` は**型（`import type`）と、`schemas/limits.ts` の値だけ**・`lib/domain`（表示の種類の型と決まった文）・`lib/client` | `lib/repo`・`lib/usecases`・`lib/adapters`・`lib/http`・`lib/schemas` の zod の定義（値として） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 261,
+          "quote": "lint の `no-restricted-imports` には、部品と画面から `lib/schemas` への値の import を `limits` だけ許す形で入れる（ほかは `import type` だけ）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 795,
+          "quote": "| 受け取りの断りを描く部品が1つだけ（構造） | `structure.test.ts` 構造: ... `refusal.kind`（断りの理由の識別子）を読むのが `components/customer/RefusalNotice.tsx` だけ／... | 段2 |"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "依存の向きの表の lib/domain の行（または注）に、lib/schemas と同じ形で「components・app・lib/client が import してよい domain のファイルは domain/texts.ts と型定義だけ」と明記し、no-restricted-imports に domain/filter・domain/score・domain/selection・domain/customerHome・domain/storeHome・domain/reservation・domain/remaining・domain/until 等（判断関数を持つファイル）からの値 import を components/app/client から禁止するルールを追加する。加えて structure.test.ts に、components・app のソースがこれらのファイルを import していないことを見る行を1つ足す。",
+      "share": "A",
+      "source_id": "F2"
+    },
+    {
+      "id": "F3",
+      "type": "improvement",
+      "severity": "low",
+      "claim": "確保中の表示・取得の結果に、店へ向かうための地図（道順）を開く手段が無く、住所の文字とホームページの URL だけしか出ない。ペルソナ田中さんは駅前の人混みを片手のスマホで歩きながら店を探す設定なのに、実際に店へ向かう段でこの助けが無い。",
+      "evidence": [
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 139,
+          "quote": "- **どこで**: 駅前の人混みの中。片手でスマホを持っている"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "line": 161,
+          "quote": "8. 店に着き、確保中の表示（コード・店名・人数・期限・クーポン）を店員に見せる。"
+        },
+        {
+          "path": "src/product/ai-hack/docs/specs/v2/design.md",
+          "line": 391,
+          "quote": "確保中の表示 | **コード（大きく）**・店名・住所・人数・期限の時刻・クーポン・ホームページ・「人数を変える」・通報ボタン・「ほかの店を探す」・いちばん下に「確保を取り消す」"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "確保中の表示（と、望むなら取得の結果のカード）の住所の隣に「地図で開く」（`https://www.google.com/maps/search/?api=1&query=<lat>,<lng>` 等）へのリンクを足す。店の緯度経度は既に地図のサービスで保存済み（要件15.9）なので、コードの追加は最小で済む。要件のどの基準も破っていないので任意の改善",
+      "share": "C",
+      "source_id": "F1"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "単純さ",
+      "score": 4,
+      "reason": "34要件・368基準に対して層は最小限だが、残りの数の TS/SQL 二重実装や OrcaRouter 3点セットの追記など、正当な理由つきで残した『削れないが増えている』部分が複数ある"
+    },
+    {
+      "axis": "変更しやすさ",
+      "score": 4,
+      "reason": "ports/adapters で外部サービスの変更は1ファイルに閉じる設計だが、F2 のとおり『画面は判断しない』境界の一部が lint/構造検査で強制されておらず、その一点は将来の変更で波及しうる"
+    },
+    {
+      "axis": "撤退しやすさ",
+      "score": 5,
+      "reason": "外のサービス・載せ方・D1・取り直し方式のすべてに、差し替える場所を1か所ずつ具体的に「撤退しやすさ」の節で明記している"
+    },
+    {
+      "axis": "慣習どおりか",
+      "score": 4,
+      "reason": "Next.js/Cloudflareの慣習に沿うが、自前セッション・自前ポーリング・pnpmワークスペースの根の置き方など独自のやり方が複数ある。いずれも比べた案の表で理由が明記されている"
+    },
+    {
+      "axis": "検査しやすさ",
+      "score": 4,
+      "reason": "368基準のほぼ全部に段1〜5のどこかで検査の置き場所があるが、F1（現状 dev.config.json が空でゲートが何も検査しない）と F2（domain の判断関数が部品に漏れることを検出する検査が無い）の2つの穴がある"
+    },
+    {
+      "axis": "通り抜け",
+      "score": 5,
+      "reason": "S1〜S6の全歩を歩き、各歩の主語（客・店・運営）と次の一歩を支える画面・入口が design.md の「画面と入口」節と「利用シーンを画面の上で歩く」節に明記されており、行き止まりは見つからなかった"
+    },
+    {
+      "axis": "状況の変化への強さ",
+      "score": 5,
+      "reason": "各シナリオの【変化】（気が変わる・人数が変わる・遅れる・行かない・店に取り消される・満席・許可書が読めない・緊急）を1つずつ歩いたが、どれも次の一手（探し直す・◯名で探し直す・電話・通報・BAN）に繋がり、客や店が損をしたまま止まる筋は見つからなかった。特に受け取り直しの断り（結果画面・期限切れ画面の両方）は第3周の直しで既に統一の部品 `RefusalNotice` に塞がれている（design.md 400〜405行）"
+    },
+    {
+      "axis": "判断のしやすさと手数",
+      "score": 4,
+      "reason": "取得の結果・確保中の表示は店名・徒歩分数・予算・理由・何名まで・クーポンが揃い決めやすいが、F1の地図リンクの欠如が実際に店へ歩く段の手数をわずかに増やしている"
+    }
+  ],
+  "unbroken": [
+    "秘密情報の扱い: ブラウザに渡る値は VAPID公開鍵・Turnstileサイトキー・運営の連絡先メールアドレスの3つだけで、鍵はすべて Worker の秘密（wrangler secret put）か web/.dev.vars（git対象外）に閉じている。ADMIN_CONTACT_EMAIL を wrangler.jsonc の vars に置かない理由・OrcaRouter のスコープ付きキー・Stripe/Google/Turnstile の鍵の置き場所を確認したが、漏れる経路は見つけられなかった",
+    "検査できない構造: OrcaRouter・Google Geocoding・Stripe・Turnstile・Web Push・R2 のすべてが lib/adapters の1ファイルずつと lib/ports.ts の型の後ろに隠れており、段1のテストが偽の実装で置き換えられる形になっている。3点セット（Named Router・受け皿・記録3列）も偽の fetch 応答ヘッダーで段1のテストが書ける設計になっており、外部APIに直結して検査を置けない場所は見つからなかった",
+    "境界の破れ（lib/repo・lib/usecases・lib/adapters間）: usecases が adapters を直接importしない・repo が usecases/adapters を読まない・crypto を呼ぶのが adapters だけ・console を呼ぶのが logger だけ、という他の境界はいずれも structure.test.ts の行と対になっており、破ろうとしたが崩せなかった",
+    "要件1〜34の全受け入れ基準（約370件）が検査の割り当て表に番号単位で存在し、欠落は無い",
+    "requirements.mdが要件段へ持ち越した14項目の設計段への申し送りに、design.mdは全て回答している",
+    "intent.mdの「やらないこと」（段階配信・客のログイン・請求・Workers AI・入口のAI等）に該当する部品はdesign.mdの構成に紛れ込んでいない",
+    "design.mdの新しい帰属記載（Turnstile・OrcaRouter3点セット・構成図の直し）は04_v2の注文.md 19・20・23節の原文と一致し、誤帰属や捏造はない",
+    "要件9.4「完了済みの表示は客が次の確保を作るまで開ける」と設計の3時間の優先順位ルールは、design.md自身の説明（3時間後もリンクから開ける）により矛盾ではないと確認した",
+    "S1: 登録→取得→受け取り→気が変わって取り消し→再取得→来店→完了済み→翌週の再訪、まで主語と次の一歩が途切れず歩けた（design.md 435〜446行）",
+    "S2: 人数の変更・受け入れ人数超えの拒否・期限切れ・期限ぎりぎり到着・行かない・店による取り消し・通知非許可の各分岐が、優先の順の表とRefusalNoticeの規則で解決している（design.md 371〜384行・448〜461行）",
+    "S3: 位置情報拒否→文字入力→0件→人数を割る→友人の別登録、登録の消去の制約（確保中・期限切れ20分以内は消せない）まで歩けた（design.md 463〜471行、520〜531行の持ち越しの扱い）",
+    "S4: 深夜の私物スマホ登録→写真での許可書提出→カード登録→承認待ち→承認、まで途切れなかった（design.md 473〜484行）",
+    "S5（最長・17歩）: 公開→受け取り→残りの調整→個別取り消し→何名まで上げ下げ→期限切れの店判断による完了済み→翌週の再公開まで、店の6つの公開中操作と担保の原則が一貫して噛み合っていた（design.md 485〜504行、325〜354行のデータと状態）",
+    "S6: 承認・許可書が読めないときの人力連絡・通報・BAN・確保取り消しの通知まで、運営の当番の手が明確だった（design.md 506〜518行）",
+    "通知許可を拒否した客・端末が届かない客への代替（確保中の表示の切り替え・10秒取り直し・店からの電話）が全シナリオで用意されている"
+  ],
+  "shares": [
+    "A",
+    "B",
+    "C"
+  ],
+  "scores_by_share": {
+    "A": [
+      {
+        "axis": "単純さ",
+        "score": 4,
+        "reason": "34要件・368基準に対して層は最小限だが、残りの数の TS/SQL 二重実装や OrcaRouter 3点セットの追記など、正当な理由つきで残した『削れないが増えている』部分が複数ある"
+      },
+      {
+        "axis": "変更しやすさ",
+        "score": 4,
+        "reason": "ports/adapters で外部サービスの変更は1ファイルに閉じる設計だが、F2 のとおり『画面は判断しない』境界の一部が lint/構造検査で強制されておらず、その一点は将来の変更で波及しうる"
+      },
+      {
+        "axis": "撤退しやすさ",
+        "score": 5,
+        "reason": "外のサービス・載せ方・D1・取り直し方式のすべてに、差し替える場所を1か所ずつ具体的に「撤退しやすさ」の節で明記している"
+      },
+      {
+        "axis": "慣習どおりか",
+        "score": 4,
+        "reason": "Next.js/Cloudflareの慣習に沿うが、自前セッション・自前ポーリング・pnpmワークスペースの根の置き方など独自のやり方が複数ある。いずれも比べた案の表で理由が明記されている"
+      },
+      {
+        "axis": "検査しやすさ",
+        "score": 4,
+        "reason": "368基準のほぼ全部に段1〜5のどこかで検査の置き場所があるが、F1（現状 dev.config.json が空でゲートが何も検査しない）と F2（domain の判断関数が部品に漏れることを検出する検査が無い）の2つの穴がある"
+      }
+    ],
+    "B": [
+      {
+        "axis": "単純さ",
+        "score": 4,
+        "reason": "要件34件・368基準の量に対し部品数は概ね最小限。自前セッション・PBKDF2実装など増える箇所は理由が明記されている"
+      },
+      {
+        "axis": "変更しやすさ",
+        "score": 5,
+        "reason": "domain/usecases/repo/adapters/ports の境界が依存の向きの表とlintで強制され、変更が層内に閉じる"
+      },
+      {
+        "axis": "撤退しやすさ",
+        "score": 5,
+        "reason": "「撤退しやすさ」節が主要な外部サービス（D1・OpenNext・OrcaRouter・Turnstile等）ごとに差し替え箇所を1か所ずつ明記"
+      },
+      {
+        "axis": "慣習どおりか",
+        "score": 4,
+        "reason": "Next.js App Router・Cloudflare Workers・OpenNextは標準的。自前ログイン等の独自実装には理由が書かれている"
+      },
+      {
+        "axis": "検査しやすさ",
+        "score": 5,
+        "reason": "全368基準に検査方法・検証段・実現場所が個別に割り当てられている"
+      }
+    ],
+    "C": [
+      {
+        "axis": "通り抜け",
+        "score": 5,
+        "reason": "S1〜S6の全歩を歩き、各歩の主語（客・店・運営）と次の一歩を支える画面・入口が design.md の「画面と入口」節と「利用シーンを画面の上で歩く」節に明記されており、行き止まりは見つからなかった"
+      },
+      {
+        "axis": "状況の変化への強さ",
+        "score": 5,
+        "reason": "各シナリオの【変化】（気が変わる・人数が変わる・遅れる・行かない・店に取り消される・満席・許可書が読めない・緊急）を1つずつ歩いたが、どれも次の一手（探し直す・◯名で探し直す・電話・通報・BAN）に繋がり、客や店が損をしたまま止まる筋は見つからなかった。特に受け取り直しの断り（結果画面・期限切れ画面の両方）は第3周の直しで既に統一の部品 `RefusalNotice` に塞がれている（design.md 400〜405行）"
+      },
+      {
+        "axis": "判断のしやすさと手数",
+        "score": 4,
+        "reason": "取得の結果・確保中の表示は店名・徒歩分数・予算・理由・何名まで・クーポンが揃い決めやすいが、F1の地図リンクの欠如が実際に店へ歩く段の手数をわずかに増やしている"
+      }
+    ]
+  },
+  "questions_for_human": [],
+  "target": "design",
+  "target_sha256": "2fd1a2a33eab9f2dbd4c7347a2c843c538c083311a058298804e08baa2aa0608",
+  "cycle": 5,
+  "exchange": 1,
+  "recorded_at": "2026-09-20T16:05:06.374Z"
+}

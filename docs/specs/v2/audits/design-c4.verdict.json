@@ -1,0 +1,40 @@
+{
+  "kind": "verdict",
+  "target": "design",
+  "target_sha256": "a284f79f74c323ec9aebe67f80a06a300f612e6edda0dd89dcb360202eda07c7",
+  "cycle": 4,
+  "mode": "light",
+  "must_fix": [],
+  "human_decision": [],
+  "recorded_only": [
+    "F2"
+  ],
+  "dropped": [
+    "F1",
+    "F3"
+  ],
+  "carry_over": [
+    {
+      "claim": "受け取りの断りで、設計が自分に課した倒し方——「読み直しても5種のどれにも当たらないときは『満席になった』として返す」——に検査の置き場所が無い。受け入れ検査の 8.6 の行は「場面に合った1つで返る」5種だけを見ており、同時の操作で読み直した時点では受け取れる状態に戻っていた場合の倒し方は、どの行にも、設計の決めの検査の表にも無い（この場面は D1 をそのまま走らせる手続きの検査では作れないので、差し込み口が要る）。重さは low。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 236,
+          "quote": "読み直しても5種のどれにも当たらないとき（同時の操作で、読み直した時点ではもう受け取れる状態に戻っていた場合など）は「満席になった」として返す（AI判断・最も起こりやすい理由に倒す）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 603,
+          "quote": "理由が閉じた5種のうち場面に合った1つで返り（「何名まで」超のときはその時点の値つき）、応答にその時点のホームの状態が載る"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 706,
+          "quote": "受け取りの断りを描く部品が1つだけ（構造） | `structure.test.ts` 構造: `web/components` と `web/app` のソースで、`refusal.kind`（断りの理由の識別子）を読むのが `components/customer/RefusalNotice.tsx` だけ"
+        }
+      ]
+    }
+  ],
+  "status": "human",
+  "recorded_at": "2026-09-20T15:11:04.840Z"
+}
