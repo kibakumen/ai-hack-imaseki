@@ -1,0 +1,394 @@
+<title>要件（v2）— 3分で把握する1枚</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1c2128;
+    --muted: #5b6472;
+    --border: #d9dee3;
+    --border-strong: #b9c1ca;
+    --accent: #1d4ed8;
+    --card-bg: #f6f8fa;
+    --head-bg: #eef1f4;
+    --code-bg: #eef1f4;
+    --stage1-bg: #e6f4ea; --stage1-fg: #1e6b34;
+    --stage2-bg: #eaf0fb; --stage2-fg: #1d4ed8;
+    --stage3-bg: #fdf0e6; --stage3-fg: #b45309;
+    --stage4-bg: #f3e8fd; --stage4-fg: #7e22ce;
+    --stage5-bg: #fdecec; --stage5-fg: #b91c1c;
+    --sev-medium-bg: #fff4e0; --sev-medium-fg: #8a5300; --sev-medium-border: #f0a93a;
+    --sev-low-bg: #f0f1f3; --sev-low-fg: #4b5563; --sev-low-border: #b0b6bd;
+    --final-bg: #fdecec; --final-fg: #a3231b;
+    --aijudge-bg: #fff8e1; --aijudge-fg: #8a6100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181d;
+      --fg: #e6e9ed;
+      --muted: #9aa4b1;
+      --border: #333b44;
+      --border-strong: #4a5560;
+      --accent: #7aa2f7;
+      --card-bg: #1c2229;
+      --head-bg: #232a32;
+      --code-bg: #232a32;
+      --stage1-bg: #17301f; --stage1-fg: #7fd99a;
+      --stage2-bg: #1a2740; --stage2-fg: #8fb0f5;
+      --stage3-bg: #3a2712; --stage3-fg: #f0a860;
+      --stage4-bg: #2c1f3a; --stage4-fg: #cf9dfa;
+      --stage5-bg: #3a1c1c; --stage5-fg: #f29a9a;
+      --sev-medium-bg: #3a2c0f; --sev-medium-fg: #f0c060; --sev-medium-border: #a97c1e;
+      --sev-low-bg: #262b31; --sev-low-fg: #b7bfc8; --sev-low-border: #4a5560;
+      --final-bg: #3a1c1c; --final-fg: #f29a9a;
+      --aijudge-bg: #332a0d; --aijudge-fg: #f0cd6a;
+    }
+  }
+  [data-theme="dark"] {
+    --bg: #14181d; --fg: #e6e9ed; --muted: #9aa4b1; --border: #333b44; --border-strong: #4a5560;
+    --accent: #7aa2f7; --card-bg: #1c2229; --head-bg: #232a32; --code-bg: #232a32;
+    --stage1-bg: #17301f; --stage1-fg: #7fd99a;
+    --stage2-bg: #1a2740; --stage2-fg: #8fb0f5;
+    --stage3-bg: #3a2712; --stage3-fg: #f0a860;
+    --stage4-bg: #2c1f3a; --stage4-fg: #cf9dfa;
+    --stage5-bg: #3a1c1c; --stage5-fg: #f29a9a;
+    --sev-medium-bg: #3a2c0f; --sev-medium-fg: #f0c060; --sev-medium-border: #a97c1e;
+    --sev-low-bg: #262b31; --sev-low-fg: #b7bfc8; --sev-low-border: #4a5560;
+    --final-bg: #3a1c1c; --final-fg: #f29a9a;
+    --aijudge-bg: #332a0d; --aijudge-fg: #f0cd6a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    margin: 0;
+    padding: 20px 22px 60px;
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 14.5px;
+    line-height: 1.65;
+    max-width: 1080px;
+  }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  h2 { font-size: 15.5px; margin: 32px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--border-strong); }
+  h3 { font-size: 13.5px; margin: 16px 0 6px; color: var(--muted); }
+  p { margin: 6px 0; }
+  .meta {
+    color: var(--muted);
+    font-size: 12.5px;
+    margin: 0 0 18px;
+    border-left: 3px solid var(--border-strong);
+    padding-left: 10px;
+  }
+  .meta div { margin: 2px 0; }
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 8px 0 14px;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; white-space: nowrap; }
+  table.wrap-cells td, table.wrap-cells th { white-space: normal; }
+  th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--head-bg); position: sticky; top: 0; font-weight: 600; }
+  tbody tr:hover { background: var(--head-bg); }
+  .num { text-align: center; font-variant-numeric: tabular-nums; }
+  .chip {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    margin: 1px 2px 1px 0;
+    white-space: nowrap;
+  }
+  .st1 { background: var(--stage1-bg); color: var(--stage1-fg); }
+  .st2 { background: var(--stage2-bg); color: var(--stage2-fg); }
+  .st3 { background: var(--stage3-bg); color: var(--stage3-fg); }
+  .st4 { background: var(--stage4-bg); color: var(--stage4-fg); }
+  .st5 { background: var(--stage5-bg); color: var(--stage5-fg); }
+  .dim { color: var(--muted); }
+  .final-tag {
+    display: inline-block;
+    background: var(--final-bg);
+    color: var(--final-fg);
+    border-radius: 4px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 4px;
+  }
+  .badge-f {
+    display: inline-block;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border: 1px solid;
+  }
+  .badge-medium { background: var(--sev-medium-bg); color: var(--sev-medium-fg); border-color: var(--sev-medium-border); }
+  .badge-low { background: var(--sev-low-bg); color: var(--sev-low-fg); border-color: var(--sev-low-border); }
+  .legend {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0 16px;
+    font-size: 12.5px;
+  }
+  .legend div { margin: 2px 0; }
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12.5px;
+  }
+  .finding-card {
+    border: 1px solid var(--border);
+    border-left-width: 5px;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    background: var(--card-bg);
+  }
+  .finding-card.medium { border-left-color: var(--sev-medium-border); }
+  .finding-card.low { border-left-color: var(--sev-low-border); }
+  .finding-card h4 { margin: 0 0 6px; font-size: 14px; }
+  .finding-card .evidence {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 6px 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--border);
+  }
+  .finding-card .evidence div { margin: 3px 0; }
+  .finding-card .fix { margin-top: 6px; }
+  ul.unbroken { margin: 6px 0; padding-left: 20px; }
+  ul.unbroken li { margin: 6px 0; }
+  .scorebar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 8px 0 14px;
+  }
+  .scorebox {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: var(--card-bg);
+    min-width: 150px;
+    font-size: 12px;
+  }
+  .scorebox .axis { font-weight: 700; font-size: 12.5px; }
+  .scorebox .score { font-size: 15px; font-weight: 700; color: var(--accent); }
+  .note {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 8px 0;
+  }
+  footer {
+    margin-top: 30px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+</style>
+
+<h1>要件（v2） — 3分で把握する1枚</h1>
+<div class="meta">
+  <div>対象: <code>docs/specs/v2/requirements.md</code>（要件の段の第7周まで反映済み・「要件の段の最後の直し」と本文に明記）</div>
+  <div>前の段: <code>docs/specs/v2/intent.md</code></div>
+  <div>監査記録: <code>docs/specs/v2/audits/requirements-c8-e1.audit.json</code>（cycle 8 / exchange 1・この版のあとの新しい指摘。まだ本文に反映されていない）</div>
+  <div>この1枚に書いているのは、上の2ファイルに書かれていることだけ。評価・良し悪しの判断は加えていない。</div>
+</div>
+
+<h2>① 要件 → 受け入れ基準の木（要件ごとの基準の数と検証の段の内訳）</h2>
+<div class="legend">
+  <div><span class="chip st1">段1</span> 決定論の検査（単体テスト・API のアサーション・状態のテスト）。システムが自分で決める打ち切りの時間もここ</div>
+  <div><span class="chip st2">段2</span> スキーマ・lint・設定ファイルの検査（入口のスキーマの有無・依存の名前・秘密情報の走査）</div>
+  <div><span class="chip st3">段3</span> デプロイ先・外部サービス（OrcaRouter・ブラウザの位置取得）を通さないと分からないもの。外部の応答時間を含む時間の基準もここ</div>
+  <div><span class="chip st4">段4</span> モデルによる判定でしか合否を出せないもの（AI が書いた理由の文の中身）</div>
+  <div><span class="chip st5">段5</span> 本人が目で見て決めるもの（見た目・スマホでの操作・明暗・README で他のメンバーが動かせるか）</div>
+  <div><span class="final-tag">最終日</span> 印の無い基準はすべて【提出版】。この印がある要件は9/23の会場まで回してよい</div>
+</div>
+<div class="table-scroll">
+<table class="wrap-cells">
+<thead><tr>
+  <th>要件</th><th>目的（原文）</th><th class="num">基準数</th><th>段の内訳</th><th>この監査で出た指摘</th>
+</tr></thead>
+<tbody>
+<tr><td>1. 客の登録と嗜好の構造化（入口の AI）</td><td>客として、呼び名・電話番号・嗜好を一度だけ入れて登録したい</td><td class="num">10</td><td><span class="chip st1">段1×10</span></td><td><span class="badge-f badge-low">登録の条件当てはめの字面（F2）</span></td></tr>
+<tr><td>2. 客の見分け方と、本人確認の範囲</td><td>客として、ログインの手間なく前の登録を使い回したい</td><td class="num">7</td><td><span class="chip st1">段1×7</span></td><td class="dim">無し</td></tr>
+<tr><td>3. 取得の入力（現在地・人数・駅名）</td><td>客として、今いる場所と人数を入れて、その場で入れる店を探したい</td><td class="num">8</td><td><span class="chip st1">段1×7</span><span class="chip st2">段2×1</span></td><td class="dim">無し</td></tr>
+<tr><td>4. 取得の結果（最大5件・おすすめ・0件）</td><td>客として、取得を1回押すだけで、今入れる店と理由が並んで返ってきてほしい</td><td class="num">11</td><td><span class="chip st1">段1×10</span><span class="chip st3">段3×1</span></td><td class="dim">無し</td></tr>
+<tr><td>5. 決定論の絞り込み</td><td>本人として、届く店の選別を毎回同じ結果にしたい</td><td class="num">14</td><td><span class="chip st1">段1×14</span></td><td class="dim">無し</td></tr>
+<tr><td>6. 決定論の点数づけと上位10件</td><td>本人として、AI に渡す前に安い処理で候補を絞りたい</td><td class="num">8</td><td><span class="chip st1">段1×8</span></td><td><span class="badge-f badge-medium">店のジャンルの多重度未定義（F1）</span></td></tr>
+<tr><td>7. AI の選定と理由（出口の AI）</td><td>客として、なぜその店なのかが1文で分かってほしい</td><td class="num">11</td><td><span class="chip st1">段1×10</span><span class="chip st4">段4×1</span></td><td class="dim">無し</td></tr>
+<tr><td>8. 受け取りとコード</td><td>客として、選んだオファーをその場で自分のものにしたい</td><td class="num">9</td><td><span class="chip st1">段1×9</span></td><td class="dim">無し</td></tr>
+<tr><td>9. 店の登録と運営の承認</td><td>店として、自分でアカウントを作って使い始めたい</td><td class="num">9</td><td><span class="chip st1">段1×9</span></td><td><span class="badge-f badge-low">登録の条件当てはめの字面（F2）</span></td></tr>
+<tr><td>10. 店と運営のログインと、見える範囲</td><td>店として、自分の店の情報と客の連絡先を他人に見られたくない</td><td class="num">8</td><td><span class="chip st1">段1×8</span></td><td class="dim">無し</td></tr>
+<tr><td>11. 店の情報と提供メニュー</td><td>店として、住所・ホームページ・提供メニューを自分で直したい</td><td class="num">10</td><td><span class="chip st1">段1×10</span></td><td><span class="badge-f badge-medium">店のジャンルの多重度未定義（F1）</span></td></tr>
+<tr><td>12. オファー（3つまで・単位・受付時間）</td><td>店として、受け入れられる人数と特典と時間を前もって置いておきたい</td><td class="num">11</td><td><span class="chip st1">段1×11</span></td><td class="dim">無し</td></tr>
+<tr><td>13. 残りの数と公開の停止</td><td>店として、受け入れた数だけ残りが減り、出したくないときは止めたい</td><td class="num">10</td><td><span class="chip st1">段1×10</span></td><td class="dim">無し</td></tr>
+<tr><td>14. 受け取った客の確認と、使用済みにする</td><td>店として、来た客が誰のどのオファーかをコードで見分け、使用済みにしたい</td><td class="num">6</td><td><span class="chip st1">段1×6</span></td><td class="dim">無し</td></tr>
+<tr><td>15. 外部クーポン<span class="final-tag">最終日</span></td><td>店として、食べログなどのクーポン番号も客に渡したい</td><td class="num">4</td><td><span class="chip st1">段1×4</span></td><td class="dim">無し</td></tr>
+<tr><td>16. 店の実績</td><td>店として、オファーごとに出た・取られた・使われたが1画面で分かってほしい</td><td class="num">5</td><td><span class="chip st1">段1×5</span></td><td class="dim">無し</td></tr>
+<tr><td>17. 運営の管理画面</td><td>運営として、登録した店と公開の状況とメニューを見たい</td><td class="num">6</td><td><span class="chip st1">段1×6</span></td><td class="dim">無し</td></tr>
+<tr><td>18. 提示と選択の記録（次のフェーズへ渡す）</td><td>本人として、誰に何位で見せて何が選ばれたかを残したい</td><td class="num">6</td><td><span class="chip st1">段1×6</span></td><td class="dim">無し</td></tr>
+<tr><td>19. 客の個人データの扱い</td><td>客として、電話番号が必要な相手にしか見えないでいてほしい</td><td class="num">7</td><td><span class="chip st1">段1×7</span></td><td class="dim">無し</td></tr>
+<tr><td>20. 入力の検査</td><td>本人として、外から入る値を全部検査してから使いたい</td><td class="num">5</td><td><span class="chip st1">段1×3</span><span class="chip st2">段2×2</span></td><td class="dim">無し</td></tr>
+<tr><td>21. 連打の抑止<span class="final-tag">最終日</span></td><td>本人として、連打で AI の費用が膨らむのを防ぎたい</td><td class="num">4</td><td><span class="chip st1">段1×4</span></td><td class="dim">無し</td></tr>
+<tr><td>22. 自動テスト</td><td>本人として、中核の振る舞いを自動で確かめたい</td><td class="num">3</td><td><span class="chip st1">段1×3</span></td><td class="dim">無し</td></tr>
+<tr><td>23. 画面の前提（スマホ・明暗）</td><td>客として、手元のスマホのブラウザでそのまま使いたい</td><td class="num">4</td><td><span class="chip st5">段5×4</span></td><td class="dim">無し</td></tr>
+<tr><td>24. 効果を示す数字の記録</td><td>本人として、審査員に見せる数字を後から選べるようにしたい</td><td class="num">4</td><td><span class="chip st1">段1×4</span></td><td class="dim">無し</td></tr>
+<tr><td>25. 構成と提出の条件</td><td>本人として、大会の必須条件と本人の注文した構成を満たして提出したい</td><td class="num">8</td><td><span class="chip st1">段1×1</span><span class="chip st2">段2×4</span><span class="chip st3">段3×2</span><span class="chip st5">段5×1</span></td><td class="dim">無し</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">合計: 25要件・188基準（段1×172／段2×7／段3×3／段4×1／段5×5）。「最終日」の印が付くのは要件15・21のみ（他は基準単位の印。例: 要件8の基準8.9・要件19の基準19.4〜19.7・要件23の基準23.3）。</p>
+
+<h2>② 意図の受け入れ基準との対応</h2>
+<p class="note">intent.md の受け入れ基準1〜40、「本人が決めること」、聞き取り後の本人の判断・回答、監査からの持ち越しの全項目が、この文書のどの要件に対応するか。文書末尾の対応表をそのまま写した。</p>
+<div class="table-scroll">
+<table class="wrap-cells">
+<thead><tr><th>intent.md の基準</th><th>この文書の要件</th></tr></thead>
+<tbody>
+<tr><td>1 登録</td><td>要件1（1.1・1.2）・要件2</td></tr>
+<tr><td>2 嗜好の構造化（入口の AI）</td><td>要件1（1.3〜1.10）</td></tr>
+<tr><td>3 位置</td><td>要件3（3.1・3.2・3.5〜3.8）・要件5（5.1）</td></tr>
+<tr><td>4 人数</td><td>要件3（3.3・3.4）</td></tr>
+<tr><td>5 取得</td><td>要件4</td></tr>
+<tr><td>6 受け取り</td><td>要件8</td></tr>
+<tr><td>7 登録と承認</td><td>要件9</td></tr>
+<tr><td>8 店の編集画面</td><td>要件11</td></tr>
+<tr><td>9 オファー3つ</td><td>要件12</td></tr>
+<tr><td>10 残りの数</td><td>要件13（13.10 を含む）・要件5（5.6）</td></tr>
+<tr><td>11 出す・出さない</td><td>要件5（5.2〜5.5・5.12〜5.14）・要件12（12.8・12.9）・要件11（11.2）</td></tr>
+<tr><td>12 公開の停止</td><td>要件13（13.6・13.7）</td></tr>
+<tr><td>13 外部クーポン</td><td>要件15</td></tr>
+<tr><td>14 受け取った客の確認</td><td>要件14（14.1）</td></tr>
+<tr><td>15 使用済みにする</td><td>要件14（14.2〜14.6）</td></tr>
+<tr><td>16 実績</td><td>要件16</td></tr>
+<tr><td>17 店の一覧</td><td>要件17（17.1・17.2）</td></tr>
+<tr><td>18 公開中の店</td><td>要件17（17.3・17.4）</td></tr>
+<tr><td>19 提供メニュー</td><td>要件17（17.5）・要件11（11.3〜11.5）</td></tr>
+<tr><td>20 承認</td><td>要件17（17.6）・要件9（9.4・9.5）</td></tr>
+<tr><td>21 決定論の絞り込み</td><td>要件5</td></tr>
+<tr><td>22 点数と上位10件</td><td>要件6</td></tr>
+<tr><td>23 AI の選定</td><td>要件7（7.1・7.2・7.4・7.10・7.11）</td></tr>
+<tr><td>24 AI が失敗したら</td><td>要件7（7.3・7.5〜7.9）</td></tr>
+<tr><td>25 OrcaRouter</td><td>要件25（25.3・25.8）・要件1（1.4）</td></tr>
+<tr><td>26 AI に渡さないもの</td><td>要件19（19.3）</td></tr>
+<tr><td>27 提示と選択の記録</td><td>要件18</td></tr>
+<tr><td>28 ログイン</td><td>要件10（10.1〜10.3・10.6〜10.8）</td></tr>
+<tr><td>29 見える範囲</td><td>要件10（10.4・10.5）・要件2（2.3・2.4）</td></tr>
+<tr><td>30 電話番号の扱い</td><td>要件19（19.1・19.2・19.4〜19.6）</td></tr>
+<tr><td>31 同時の受け取り</td><td>要件8（8.2・8.5）</td></tr>
+<tr><td>32 入力の検査</td><td>要件20</td></tr>
+<tr><td>33 連打の抑止</td><td>要件21</td></tr>
+<tr><td>34 自動テスト</td><td>要件22</td></tr>
+<tr><td>35 明暗の両対応</td><td>要件23（23.3）</td></tr>
+<tr><td>36 スマホ</td><td>要件23（23.1・23.2・23.4）</td></tr>
+<tr><td>37 構成</td><td>要件25（25.1・25.2）</td></tr>
+<tr><td>38 別のフォルダ</td><td>要件25（25.4）</td></tr>
+<tr><td>39 秘密情報と個人データ</td><td>要件25（25.5）</td></tr>
+<tr><td>40 README</td><td>要件25（25.6・25.7）</td></tr>
+<tr><td>本人が決めること: 効果を示す数字</td><td>要件24</td></tr>
+<tr><td>本人の判断（5節）: 5件以下も許す・0件の表示</td><td>要件4（4.2〜4.4）・要件7（7.5〜7.7）</td></tr>
+<tr><td>本人の判断（5節）: 客の本人確認は8桁のコード</td><td>要件2・要件8（8.1・8.2）・要件14（14.2）</td></tr>
+<tr><td>本人の判断（5節）: 同じ店のオファーは全部見せ最良を「おすすめ」</td><td>要件4（4.5・4.8）</td></tr>
+<tr><td>本人の回答（6節）: おすすめは人数の合うオファーのうち店の並びの先頭</td><td>要件4（4.8）・要件12（12.11）</td></tr>
+<tr><td>本人の回答（6節）: 人数に合わないオファーも受け取れない状態で見せる</td><td>要件4（4.6・4.7）・要件8（8.4）・要件5（5.6 の補足）</td></tr>
+<tr><td>本人の回答（6節）: 駅名での指定を提出版へ前倒し</td><td>要件3（3.5・3.6）</td></tr>
+<tr><td>本人の回答（6節）: 探す範囲は直線800 m に固定</td><td>要件5（5.1）</td></tr>
+<tr><td>本人の回答（7節）: 人数の合うオファーが1つも無い店は結果に出さない</td><td>要件5（5.11）・要件4（4.4・4.6 の補足）</td></tr>
+<tr><td>本人の回答（7節）: 登録を消しても取得の記録の識別子と起点は残す</td><td>要件19（19.7）・要件18（18.6）</td></tr>
+<tr><td>本人の回答（8節）: 残りは受付時間が始まる日ごとに登録した個数へ戻す</td><td>要件13（13.10・13.5）・要件12（12.5）</td></tr>
+<tr><td>監査からの持ち越し: 受け取り済みのコードの有効性</td><td>要件8（8.7・8.8）・要件14（14.5）</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">対応が無いもの: intent.md の「やらないこと」に入る業務（客への通知・段階配信・SMSによる本人確認・店が決めた1つの番号を全員に見せる形・運営が招待する形・AIの選定を後から足す形・Workers AI・受け取りへの店の承認・POS連携とセルフオーダー機との連携・フェーズ2の来店予測・ネイティブアプリ・常時の位置追跡・ジオフェンス通知と「今ブースト」・オンライン決済・実店舗での運用の開始・記事と提出フォーム・役割分担）は、この文書に対応する要件を置いていない（原文どおり、意図してやらないため）。</p>
+
+<h2>③ 「AI判断」の値の一覧（数字・形式を伴うもの・承認のときに確認する対象）</h2>
+<p class="note">この文書で「AI判断」の印が付く箇所は非常に多いが、そのうち数値・字数・形式など後で覆されうる具体的な値を伴うものだけをここに集めた。値を持たない設計判断（AI判断・印つき）は各要件の補足にある。</p>
+<div class="table-scroll">
+<table>
+<thead><tr><th>基準</th><th>値</th><th>何の値か</th></tr></thead>
+<tbody>
+<tr><td>1.2</td><td>呼び名1〜20字／電話番号10桁か11桁</td><td>客の呼び名・電話番号の検査範囲</td></tr>
+<tr><td>1.5</td><td>予算0以上の整数か未指定／要約60字以内</td><td>入口のAIの構造化結果の検査範囲</td></tr>
+<tr><td>1.7</td><td>10秒</td><td>入口のAI呼び出しの打ち切り</td></tr>
+<tr><td>2.7</td><td>128ビット以上・22字以上</td><td>客の識別子の強度</td></tr>
+<tr><td>3.3</td><td>1〜10人</td><td>取得の人数の範囲</td></tr>
+<tr><td>3.8</td><td>1.5秒</td><td>現在地取得の打ち切り</td></tr>
+<tr><td>4.11</td><td>8秒</td><td>取得全体の応答時間の上限</td></tr>
+<tr><td>5.1</td><td>800 m（徒歩10分・分速80 m）</td><td>探す範囲（値の固定は本人選択）</td></tr>
+<tr><td>7.4</td><td>1文・60字以内・改行なし</td><td>出口のAIの理由の文の形</td></tr>
+<tr><td>7.6</td><td>6秒</td><td>出口のAI呼び出しの打ち切り</td></tr>
+<tr><td>8.2</td><td>8桁の数字（発行済み全体で重複しない）</td><td>コードの発行範囲</td></tr>
+<tr><td>8.8</td><td>受け取りから2時間後</td><td>コードの有効期限の一方</td></tr>
+<tr><td>9.7</td><td>8字以上128字以内</td><td>合言葉の字数</td></tr>
+<tr><td>9.8</td><td>@を1つだけ・前後1字以上</td><td>メールアドレスの形式</td></tr>
+<tr><td>11.7</td><td>北緯20〜46度・東経122〜154度</td><td>位置（緯度経度）の範囲</td></tr>
+<tr><td>11.9</td><td>店名1〜50字／住所200字以内</td><td>店の項目の字数</td></tr>
+<tr><td>11.10</td><td>0〜100,000円</td><td>値段の範囲</td></tr>
+<tr><td>12.3</td><td>選択肢2・4・6名、または1〜10の自由入力</td><td>単位の1組の人数</td></tr>
+<tr><td>12.4</td><td>1〜20</td><td>単位の組の個数</td></tr>
+<tr><td>15.1</td><td>1字以上50字以内</td><td>外部クーポン番号の字数</td></tr>
+<tr><td>20.5</td><td>2000字</td><td>嗜好の自然文の上限</td></tr>
+<tr><td>21.1</td><td>1分間に5回</td><td>取得の連打の抑止</td></tr>
+<tr><td>21.2</td><td>1時間に10回</td><td>登録の連打の抑止</td></tr>
+<tr><td>21.3</td><td>失敗10回続いたら15分ロック</td><td>ログイン失敗の抑止</td></tr>
+<tr><td>23.1</td><td>375px</td><td>スマホ画面幅の前提</td></tr>
+<tr><td>23.2</td><td>1024px以上</td><td>運営の管理画面のPC幅の前提</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>④ 監査の指摘（この監査回・まだ本文に反映されていない）</h2>
+<div class="scorebar">
+  <div class="scorebox"><div class="axis">明確さ</div><div class="score">4</div><div>店のジャンルの多重度（F1）のように解釈の余地が残る語がある</div></div>
+  <div class="scorebox"><div class="axis">完全性</div><div class="score">5</div><div>7周にわたり失敗時・境界・空の入力・同時実行・0件などが埋められ、新しい抜けを見つけられなかった</div></div>
+  <div class="scorebox"><div class="axis">一貫性</div><div class="score">4</div><div>客側「ジャンルの一覧」と店側「ジャンル」の表記の非対称（F1）のような小さな揺れが残る</div></div>
+  <div class="scorebox"><div class="axis">検査しやすさ</div><div class="score">4</div><div>基準6.3は多重度の未定義により段1のまま一意に検査を書けない</div></div>
+  <div class="scorebox"><div class="axis">意図への忠実さ</div><div class="score">5</div><div>対応表でintent.mdの基準1〜40・本人が決めることの全項目が要件に対応しており、過不足を見つけられなかった</div></div>
+</div>
+
+<div class="finding-card medium">
+  <h4>店の「ジャンル」が単数か複数かが定義されておらず、点数計算を一意に検査できない（F1・重さ: medium）</h4>
+  <div class="evidence">
+    <div>requirements.md:213 「ジャンル点は、客のジャンルの一覧に店のジャンルが在れば40点、一覧が空なら20点、一覧が空でなく当たらなければ0点（配分は AI判断）であること」</div>
+    <div>requirements.md:345 「店は、店名・住所・ホームページの URL・ジャンル・1人あたりの目安の値段・位置（緯度と経度）を登録・編集できる（ジャンルと1人あたりの目安の値段を店に持たせるのは AI判断）こと」</div>
+    <div>requirements.md:72 「システムは OrcaRouter 経由の AI でそれをジャンルの一覧・1人あたりの予算の上限・アレルギーの一覧・嗜好の要約の4項目（項目は AI判断）に分けること」</div>
+  </div>
+  <div>確度: 高確率</div>
+  <div class="fix">直し方（監査記録の記載）: 要件11の基準11.1（または補足）に、店のジャンルが単一選択か複数選択かを明記する。複数を許すなら基準6.3を「店のジャンルのいずれかが客のジャンルの一覧に在れば」のように書き直し、判定規則（いずれか一致／全部一致）も決める。単一なら「1つだけ選ぶ」と明記するだけでよい。客側のジャンル・アレルギーには一貫して「一覧」と書いており（1.4・1.5）、店側だけ「一覧」の語が付いていない非対称が曖昧の元になっている、とのこと。</div>
+</div>
+
+<div class="finding-card low">
+  <h4>登録の基準1.1・9.1が無条件に「作る」と書かれ、直後の検査失敗系の基準との適用順が字面上ぶつかる（F2・重さ: low）</h4>
+  <div class="evidence">
+    <div>requirements.md:69 「客が呼び名・電話番号・嗜好の自然文を登録の入口へ送信した時、システムは客の識別子を求めずに客の登録を1件作ること」</div>
+    <div>requirements.md:70 「呼び名が1字以上20字以内でない場合、または電話番号が数字10桁か11桁でない場合、システムは登録を保存せず入力の誤りを示すこと」</div>
+    <div>requirements.md:298 「店が店名・メールアドレス・合言葉を登録の入口へ送信した時、システムはログインを求めずに店のアカウントを作って承認待ちにすること」</div>
+  </div>
+  <div>確度: 推測</div>
+  <div class="fix">直し方（監査記録の記載）: 基準1.1に「基準1.2・1.6・1.7の検査を通った場合」という条件を、基準9.1にも「基準9.6〜9.9の検査を通った場合」を足す。要件2（客の入口）で同型の字面矛盾を第7周で実際に直しており、同じ配慮を及ぼすと一貫する。ただし他の多くの要件（11.1と11.2/11.6/11.7/11.9/11.10など）も同型の書き方を採っており、文書全体の書式上の慣習だとすれば直す価値は低い、と重さを low にした理由が添えられている。</div>
+</div>
+
+<h2>⑤ 崩せなかった点（監査記録の unbroken）</h2>
+<ul class="unbroken">
+  <li>残りの数え方（要件13の基準13.10が正本、13.1〜13.5・13.9がその特殊化）の数式の整合性は、13.4／13.5と13.10で実際に計算して確かめたが崩せなかった</li>
+  <li>受け取りの基準8.6が基準8.4より先に当たるという適用順は、店が公開停止・残り0・オファー削除・承認取消のいずれの場合とも矛盾なく説明できており崩せなかった</li>
+  <li>候補の定義（要件5の基準5.12〜5.14）と受け取りの拒否（8.4）・運営の「公開中」（17.4）・自動テストの対象（22.1）が同じ参照先（11.2・12.8・12.9）を指しているかを4箇所すべて突き合わせたが、ずれを見つけられなかった</li>
+  <li>客の入口・登録の入口・店の入口の範囲定義（要件2・9・10）を突き合わせ、客の登録／店の登録／重複メール確認のいずれについても「識別子もログインも持たずに送れるのに、他の基準でそれが禁止される」という第7周以前と同型の行き止まりを探したが見つからなかった</li>
+  <li>8桁コードの使い回し禁止（8.2）・受け取り直しでの残り不変（13.9）・期限切れ後の再取得での残り減算（要件8補足）の3つの整合性を数値例で確かめたが矛盾を見つけられなかった</li>
+</ul>
+
+<footer>
+  生成: dev-illustrator（可観測性向け図解役） / 一次データ: requirements.md（sha256 44d37bd1... と監査記録が一致）・intent.md・requirements-c8-e1.audit.json / この1枚に本人の承認・却下は含まれない
+</footer>
