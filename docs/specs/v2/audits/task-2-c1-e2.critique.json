@@ -1,0 +1,174 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 18,
+          "quote": "if (p.startsWith(\":\")) params[p.slice(1)] = decodeURIComponent(v);"
+        },
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 30,
+          "quote": "if (name) out[name] = decodeURIComponent(value);"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 86,
+          "quote": "return Object.fromEntries((await req.formData()).entries());"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 90,
+          "quote": "try {\n    return JSON.parse(text);\n  } catch {\n    return {};\n  }"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 25,
+          "quote": "fetch: async (req: Request): Promise<Response> => {"
+        },
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 868,
+          "quote": "**目的:** 本人として、外から入る値を全部検査してから使いたい。それにより、壊れた値でシステムが落ちず、審査の軸のセキュリティと堅牢性に応えられる"
+        }
+      ],
+      "note": "3箇所の引用は実ファイルと一致し、JSON.parse だけが try/catch というのも実物どおり。createApp.fetch にも上位にも包む try/catch は無く、壊れた % 列で decodeURIComponent が URIError を投げれば 500 になる（補足: 今は ROUTE_DEFINITIONS が空〔web/lib/http/routes.ts:6〕なので `:id` の区間も客の Cookie 読みもまだ通らない＝潜在。ただし壊れる側のコードはタスク2の持ち物で、後続タスクが入口を足した瞬間に発火する）。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 29,
+          "quote": "return (await res.json()) as T;"
+        },
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 4,
+          "quote": "import type { AppConfig } from \"../ports\";"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 65,
+          "quote": "_要件: 29.1, 29.2, 29.4_"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 427,
+          "quote": "`client/api.ts` は応答を `schemas/error.ts` で検査し、**断りを例外にせず、型のついた値として呼び出し元へ返す**"
+        },
+        {
+          "path": "tests/acceptance/v2/structure.test.ts",
+          "line": 227,
+          "quote": "expect(read(apiFile)).toMatch(/\\.safeParse\\(|\\.parse\\(/);"
+        }
+      ],
+      "note": "実ファイルを自分で読んで確認した——api.ts の import は型1本だけで zod も schemas も一度も現れず、応答は `as T` のキャストのみ。タスク2が 29.4 を自分の要件に掲げているので不一致は成立する。ただし指摘の2点は直す必要がある: ①「今この検査が落ちる」ではない——structure.test.ts の29.4は `describeTask(\"25\", ...)`（196行目）の中で、タスク25に着手するまで飛ばされる ②修正で `schemas/error.ts` を import する道は塞がっている——タスク2自身が書いた eslint.config.mjs:133 と structure.test.ts:242 が `lib/client` から値として読める schemas を `limits` だけに限っているので、api.ts の中に局所の zod スキーマを置く形しか通らない（zod 本体の import は禁じられていない）。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "DISAGREE_EVIDENCE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 349,
+          "quote": "`limit_reached`（15.7 のおすすめメニュー6件目・16.2 のクーポン4つ目）"
+        },
+        {
+          "path": "web/lib/domain/inputRefusal.ts",
+          "line": 33,
+          "quote": "/** 応答の `error.fields[].reason`。zod の落ちを直すのは http/defineRoute.ts、規則の断りは各 usecases が直接返す。 */"
+        },
+        {
+          "path": "tests/acceptance/v2/r15-store-profile.test.ts",
+          "line": 67,
+          "quote": "expect([\"limit_reached\", \"invalid_input\"]).toContain(six.json.error.kind);"
+        },
+        {
+          "path": "tests/acceptance/v2/r15-store-profile.test.ts",
+          "line": 68,
+          "quote": "if (six.json.error.kind === \"invalid_input\") expect(six.json.error.fields).toContainEqual({ name: \"menus\", reason: \"too_many\" });"
+        },
+        {
+          "path": "tests/acceptance/v2/r15-store-profile.ui.test.tsx",
+          "line": 65,
+          "quote": "response = invalidInput([{ name: \"menus\", reason: \"too_many\" }]);"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 80,
+          "quote": "- [ ] 5. 店の情報と住所の位置直し: `GET/PUT /api/store/profile`・`adapters/geocoding`・`usecases/saveStoreProfile`・`schemas/store`・`components/store/ProfileForm`"
+        }
+      ],
+      "note": "核の主張3つが一次データで崩れる。①too_many は死んだ語にならない——設計書349行目は 15.7 のメニュー6件目を `kind: limit_reached`（手続きが規則で返す断り）に割り当てており、指摘自身が引いた inputRefusal.ts:33 が「規則の断りは各 usecases が直接返す」と明記している。②タスク5の受け入れ検査は壊れた振る舞いを前提にしない——r15 の67行目が `limit_reached` を許し、too_many の期待は `kind === \"invalid_input\"` の場合だけの条件つき。UI側（r15-store-profile.ui.test.tsx:65）は自作の応答で too_many を通すので文も到達する。③検査ファイルの持ち主はタスク7ではなくタスク5（tasks.md:80-82）。残る小さな筋（指摘を残す重さは無いと判断した）: array 分岐は設計書351行目の string／number の2分類には無い拡張で、texts.ts:38-39 の too_short/too_long の文は「字」なので、後続タスクが配列の件数を zod の `.max()` で検査すると「…は1〜5字で入れてください」になる。直す場所はそのスキーマを書くタスクであって、タスク2の完結の可否ではない。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "セッションの Cookie の寿命が設計書の14日ではなく30日になっている。設計書には 30日 という数が1箇所も無く（`docs/specs/v2` 全体を検索して0件）、逆に14日が2箇所で明記されている。今は表の expires_at を書く側（タスク4のログイン）が未実装なので害は出ていないが、後続タスクがこの定数を expires_at の計算に読むと、設計の14日が黙って30日に化ける。",
+      "evidence": [
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 11,
+          "quote": "export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * DAY_SECONDS;"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 362,
+          "quote": "| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は14日（AI判断） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 598,
+          "quote": "| 1 | 店のホームを開く（セッションは14日。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |"
+        }
+      ]
+    },
+    {
+      "claim": "見分けの断り（401・403）・Origin の断り（403）・入口が無いとき（404）が、いずれも `kind: \"invalid_input\"` を `fields` 無しで返している。設計書349行目は invalid_input を「形・範囲。`fields` 必須」と定めており、受け入れ検査 r29 も invalid_input なら fields が1件以上あることを同じ約束として書いている。結果、セッション切れや役割違いの利用者に、画面の部品は texts.ts の invalid_input の文「入れた内容を確かめてください。」を出すことになる（入れた内容は関係ない）。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 118,
+          "quote": "return jsonResponse(403, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 126,
+          "quote": "if (!customerId) return jsonResponse(401, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 33,
+          "quote": "return new Response(JSON.stringify({ ok: false, error: { kind: \"invalid_input\" } }), { status: 404, headers: { \"content-type\": \"application/json\" } });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 349,
+          "quote": "`invalid_input`（形・範囲。`fields` 必須）"
+        },
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 43,
+          "quote": "if (b.label !== \"JSON でない\" && res.json.error.kind === \"invalid_input\") expect(res.json.error.fields.length, label).toBeGreaterThan(0);"
+        },
+        {
+          "path": "web/lib/domain/texts.ts",
+          "line": 11,
+          "quote": "invalid_input: () => \"入れた内容を確かめてください。\","
+        }
+      ]
+    }
+  ],
+  "score_objections": [],
+  "target": "task-2",
+  "cycle": 1,
+  "exchange": 2,
+  "recorded_at": "2026-09-21T07:28:33.311Z"
+}

@@ -1,0 +1,178 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 33,
+          "quote": "  if (new Date(row.expires_at as string).getTime() <= deps.clock.now().getTime()) return null;"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 19,
+          "quote": "/** セッションの Cookie を SHA-256 にして探す。無い・でたらめ・期限切れなら null（401 の元）。 */"
+        }
+      ],
+      "note": "引用は実物と1字違わず、NaN <= now が常に false になるのも JS の仕様どおりで、自分で経路を追っても倒す枝が無い（row.expires_at が null のときだけは new Date(null)=0 で偶然フェイルクローズする——壊れた文字列だけが素通りするので、なお気づきにくい）。すぐ上の doc コメント自身が「期限切れなら null」と契約を書いており、コードがその契約を満たしていない。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 171,
+          "quote": "    const result = await config.handler({ input, params, req, deps, ctx });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 910,
+          "quote": "| ログに個人データを出さない（振る舞い） | `d01-log-privacy.test.ts` 手続きと入口: ... | 段1 | `adapters/logger`・`lib/ports.ts`（`Logger` の項目の型）・`http/defineRoute`（例外を捕まえる所） |"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 189,
+          "quote": "  - 新しい機能は無い。ここまでのタスクで漏れた入口・応答・境界を直して、横断の検査（`r29`・`r28`・`r14` の25のブロック・`r02` の25のブロック・`d03`・`d01`・`structure.test.ts` の25のブロック）を通す"
+        },
+        {
+          "path": "tests/acceptance/v2/d01-log-privacy.test.ts",
+          "line": 8,
+          "quote": "describeTask(\"25\", \"ログに個人データを出さない\", () => {"
+        }
+      ],
+      "note": "事実の4点（design.md が defineRoute を「例外を捕まえる所」と名指す／handle に try/catch が1つも無い／app.ts にも受け皿が無い／d01 の担当は task25）を全部自分で確かめ、どれも崩せなかった。ただし try/catch を今入れるのは task25 の仕事（tasks.md 189行・テスト自身が describeTask(\"25\")）なので、task2 で実行可能な処置は fix の後半——『前のタスクから次のタスクへ』欄（tasks.md 51行が実行者の記入欄と明記）に受け皿の不在を書き送ることだけ。この指摘は『今すぐ包め』ではなく『引き継ぎを書け』として残すべき。加えて d01 のテストは 35行目で目印の呼び名を含む例外を投げるので、受け皿が無ければ task25 で必ず赤になる＝先送りしても消えない。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 105,
+          "quote": "  } catch {\n    return {};\n  }"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 155,
+          "quote": "    if (config.input) {"
+        },
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 38,
+          "quote": "        expect(res.json?.ok, label).toBe(false);"
+        },
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 43,
+          "quote": "        if (b.label !== \"JSON でない\" && res.json.error.kind === \"invalid_input\") expect(res.json.error.fields.length, label).toBeGreaterThan(0);"
+        }
+      ],
+      "note": "妥当。ただし監査役の行番号は1つずれている（引用の実体は102-104行ではなく103-104行、multipart 側は91行ではなく90-92行）ので、本人が行を頼りに開くときは注意。むしろ指摘は監査役が書いたより強い——①スキーマが無い入口（155行の if を通らない）でも壊れた JSON が {} として素通りする ②r29 の38行は『本文のある入口の全部』で ok:false を要求しており、全項目が任意の入口が1つできた時点で task25 の受け入れ検査が落ちる。fix（UNREADABLE_BODY に揃える）を当てても43行の除外は if のスキップなので既存の検査は壊れない、という監査役の見立ても自分で読んで確認した。重さは low より上（本人判断に回す価値がある）と見る。"
+    },
+    {
+      "finding": "F4",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 11,
+          "quote": "export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * DAY_SECONDS;"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 362,
+          "quote": "| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は14日（AI判断） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 143,
+          "quote": "| 客の識別子は、サーバーが Set-Cookie する Cookie（`HttpOnly`・`Secure`・`SameSite=Lax`・400日。日数は AI判断）に置く"
+        }
+      ],
+      "note": "docs/specs/v2 全体を自分で grep して『30日』が0件、『14日』が2件（362・598行）であることを確認した。すぐ上の行の客の Cookie（400日）は設計書143行に出典があるのに、セッションの30日だけ出典が無い＝根拠のない数が1つ混じっている。セッションの Cookie の Max-Age 自体は設計書が明示していないが、仕様に在る唯一の数が14日なので、揃える以外の選択肢が見当たらない（直し方は一意）。"
+    },
+    {
+      "finding": "F5",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 139,
+          "quote": "      if (!customerId) return jsonResponse(401, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 349,
+          "quote": "`invalid_input`（形・範囲。`fields` 必須）"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 41,
+          "quote": "見分けの断りは 401（客・未ログイン）／403（役割違い・Origin）。"
+        },
+        {
+          "path": "tests/acceptance/v2/d03-origin-check.test.ts",
+          "line": 31,
+          "quote": "        expect(json?.ok, `${r.method} ${path}（${label}）`).toBe(false);"
+        }
+      ],
+      "note": "実装が『fields 必須』と定義された語を fields 無しで4箇所に使っているのは実物で確認した（defineRoute 131・139・143・144行と app.ts 46行——監査役は144行の役割違いを挙げ落としているので5箇所）。ただし反対側の事実も拾えた: 設計書は見分けの断りの本文を1箇所も定めていない（tasks.md 41行と design.md 465行は状態コードだけ）のに、design.md 352行は『それ以外の断りは全部この形』と書き、350行の reason は入力の項目名を前提にしている＝設計書自体が矛盾しており、直し方が一意に決まらない。だから『直す』ではなく本人判断へ回すのが正しい置き場所。なお受け入れ検査はどちらでも通る（d03 は ok:false だけ・r29 は 404 を 37行で continue する）ので、テストを頼りに放置すると黙って残る。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "lint の境界（タスク2の担当と明記されている設定）が、設計書が明文で許した `import type` の抜け穴を閉じてしまっている。uiBoundary が使っているのは基底の `no-restricted-imports` で、このルールは型だけの import を区別する `allowTypeImports` を持たない（それは `@typescript-eslint/no-restricted-imports` の追加オプション・確度: 高確率）。design.md 916行は components・app・lib/client からの `lib/domain` の import を『`domain/texts` への import か `import type` のどちらか』まで許し、922行は『`inputRefusal` の語は部品と `lib/client` が `import type` で使う』と明記しているので、タスク3で `components/ui/InputRefusal.tsx` が `import type { InputRefusalKind } from \"../../lib/domain/inputRefusal\"` を書いた瞬間に lint のゲート（`pnpm --dir web exec eslint .`）が赤になる。今は部品が1つも無いので通っているだけ。structure.test.ts は147行で文字列 `no-restricted-imports` の在ることしか見ないので、この食い違いを捕まえない。",
+      "evidence": [
+        {
+          "path": "web/eslint.config.mjs",
+          "line": 128,
+          "quote": "            group: [\"**/domain/**\", \"!**/domain/texts\"],"
+        },
+        {
+          "path": "web/eslint.config.mjs",
+          "line": 119,
+          "quote": "      \"no-restricted-imports\": ["
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 916,
+          "quote": "`web/components`・`web/app`・`web/lib/client` のソースの `lib/domain` からの import が、`domain/texts` への import か `import type` のどちらか（… `inputRefusal` の語は部品と `lib/client` が `import type` で使う・第6周の直し）"
+        },
+        {
+          "path": "tests/acceptance/v2/structure.test.ts",
+          "line": 147,
+          "quote": "    expect(eslint).toMatch(/no-restricted-imports/);"
+        }
+      ]
+    },
+    {
+      "claim": "見分けのフェイルオープンがもう1つある（F1 と同じ型）。役割が store のセッションで `storeId` が無いとき、403 で断らずに空文字へ黙って倒して手続きへ通す。guards.ts 34行が `store_id` の NULL を null にして返し、defineRoute 145行が `session.storeId ?? \"\"` で空文字に置き換えるので、ctx.auth は \"store\" のまま storeId だけが実在しない値になる。後続タスクの手続きはこの storeId を WHERE に使うので、断りではなく『0件の店のホーム』が返る形になる。tasks.md 41行は役割違いを403で断ると定めており、『店として通すが店が無い』は定められた2つの結果のどちらでもない。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 145,
+          "quote": "      ctx = config.auth === \"store\" ? { auth: \"store\", accountId: session.accountId, storeId: session.storeId ?? \"\" } : { auth: \"admin\", accountId: session.accountId };"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 34,
+          "quote": "  return { accountId: row.account_id as string, role: row.role as \"store\" | \"admin\", storeId: (row.store_id as string | null) ?? null };"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 41,
+          "quote": "見分けの断りは 401（客・未ログイン）／403（役割違い・Origin）。"
+        }
+      ]
+    }
+  ],
+  "score_objections": [],
+  "target": "task-2",
+  "cycle": 2,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T08:02:40.631Z"
+}

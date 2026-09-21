@@ -1,0 +1,87 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 596,
+          "quote": "if (p.startsWith(\":\")) params[p.slice(1)] = decodeURIComponent(v);"
+        },
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 652,
+          "quote": "if (name) out[name] = decodeURIComponent(value);"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 747,
+          "quote": "return Object.fromEntries((await req.formData()).entries());"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 602,
+          "quote": "fetch: async (req: Request): Promise<Response> => {\n    const url = new URL(req.url);\n    for (const route of ROUTE_DEFINITIONS) {\n      if (route.method !== req.method) continue;\n      const params = matchPath(route.path, url.pathname);\n      if (!params) continue;\n      return route.handle(req, deps, params);"
+        }
+      ],
+      "note": "diff を通しで読んだが、matchPath の decodeURIComponent・parseCookies の decodeURIComponent・parseBody の req.formData() のいずれも try/catch が無く、createApp.fetch もこれらを包んでいない。直後の JSON.parse だけ catch している非対称も実物どおりで、要件29の目的（壊れた値でシステムが落ちず）に反する未処理例外の経路が実在する。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 301,
+          "quote": "return (await res.json()) as T;"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 427,
+          "quote": "`client/api.ts` は応答を `schemas/error.ts` で検査し、**断りを例外にせず、型のついた値として呼び出し元へ返す**"
+        },
+        {
+          "path": "tests/acceptance/v2/structure.test.ts",
+          "line": 227,
+          "quote": "expect(read(apiFile)).toMatch(/\\.safeParse\\(|\\.parse\\(/);"
+        }
+      ],
+      "note": "client/api.ts の apiCall は zod のスキーマ検査を一切呼んでおらず（`.safeParse(`／`.parse(` が0件）、structure.test.ts の29.4のブロックは現状のコードに対して機械的に失敗する。設計書・タスク表の担当要件（29.4）とも一致しており、タスク2自身の範囲内の欠陥。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "defineRoute.ts の reasonFromIssue（タスク2でこの段に書かれた）は、zod の配列（origin:\"array\"）の too_small/too_big を too_short/too_long にマップしているが、これは設計書「zod の落ちを語へ直すのは…型が文字列か数かで分ける」が明記する2分類（string／number）に無い拡張で、texts.ts の too_short/too_long の文言は「字で入れてください」（文字数専用）としか書かれていない。件数の上限には別に too_many という語が用意されており、後続タスク7の受け入れ検査 r15-store-profile.test.ts の15.6・15.7はまさに配列（menus）の6件目の超過で `{ name: \"menus\", reason: \"too_many\" }` を要求している。今の reasonFromIssue のまま配列を zod の `.max()` で検査する形にすると、reason は \"too_long\" になり、画面には「おすすめメニューは1〜5字で入れてください」のような文字数の文が出て、テストの期待にも合わない。tasks.md の担当割り当て上、この関数はタスク2の範囲で書かれているため、タスク2の段階での欠陥として扱える。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 723,
+          "quote": "case \"too_small\":\n      return issue.origin === \"string\" || issue.origin === \"array\" ? \"too_short\" : \"out_of_range\";\n    case \"too_big\":\n      return issue.origin === \"string\" || issue.origin === \"array\" ? \"too_long\" : \"out_of_range\";"
+        },
+        {
+          "path": "web/lib/domain/texts.ts",
+          "line": 496,
+          "quote": "too_short: (ctx) => `${str(ctx.field, \"この項目\")}は${str(ctx.min, \"\")}〜${str(ctx.max, \"\")}字で入れてください。`,\n  too_long: (ctx) => `${str(ctx.field, \"この項目\")}は${str(ctx.min, \"\")}〜${str(ctx.max, \"\")}字で入れてください。`,"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 351,
+          "quote": "**zod の落ちを語へ直すのは `http/defineRoute.ts` の1か所**（`too_small` → `too_short`／`out_of_range`、`too_big` → `too_long`／`out_of_range`、`invalid_type` → `required`／`not_integer`、`invalid_string` → `bad_format`、`invalid_enum_value` → `not_allowed`。型が文字列か数かで分ける）。"
+        },
+        {
+          "path": "tests/acceptance/v2/r15-store-profile.test.ts",
+          "line": 68,
+          "quote": "if (six.json.error.kind === \"invalid_input\") expect(six.json.error.fields).toContainEqual({ name: \"menus\", reason: \"too_many\" });"
+        }
+      ]
+    }
+  ],
+  "score_objections": [],
+  "target": "task-2",
+  "cycle": 1,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T07:14:13.635Z"
+}

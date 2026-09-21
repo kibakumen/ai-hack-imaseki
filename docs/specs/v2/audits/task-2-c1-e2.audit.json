@@ -1,0 +1,153 @@
+{
+  "kind": "audit",
+  "rubric": "impl@1",
+  "model": "sonnet",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "high",
+      "claim": "URL のパス区間・Cookie ヘッダー・multipart 本文が壊れていると decodeURIComponent / req.formData() の例外を誰も捕まえず、要件29『壊れた値でシステムが落ちず』に反してクラッシュする。JSON.parse だけは catch しているのに、他の3箇所は無防備で、同じ関数群の中で入力の壊れ方への扱いが一貫していない。",
+      "evidence": [
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 18,
+          "quote": "if (p.startsWith(\":\")) params[p.slice(1)] = decodeURIComponent(v);"
+        },
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 30,
+          "quote": "if (name) out[name] = decodeURIComponent(value);"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 86,
+          "quote": "return Object.fromEntries((await req.formData()).entries());"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "matchPath の decodeURIComponent、parseCookies の decodeURIComponent、parseBody の req.formData() を、直後の JSON.parse と同じ形で try/catch に包む。matchPath は壊れていれば null を返して 404 に落とす、parseCookies はその1エントリを黙って読み飛ばす（結果 Cookie 無し＝401 の元）、parseBody の formData 失敗は invalid_input（400）へ倒す。あるいは defineRoute.handle 全体を1つの try/catch で包み、未捕捉の例外は一律 invalid_input の 400 に倒す方が一貫性が高い。"
+    },
+    {
+      "id": "F2",
+      "type": "defect",
+      "severity": "high",
+      "claim": "タスク2は基準29.4（画面はAPIの応答をスキーマで検査してから表示に使う）を自分の担当要件として掲げているのに、この段で書き切った `client/api.ts` の `apiCall` は応答を一切スキーマ検査せず `(await res.json()) as T` で型キャストするだけで返している。設計書はこのファイルについて繰り返し「応答を zod で検査する」と明記しており、この段で作った `schemas/error.ts` もその検査に使われるはずだが、`client/api.ts` からは一度も import・使用されていない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 65,
+          "quote": "_要件: 29.1, 29.2, 29.4_"
+        },
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 876,
+          "quote": "4. 画面は、API の応答をスキーマで検査してから表示に使うこと［段2］"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 283,
+          "quote": "└─ client/                         api.ts（画面が fetch を呼ぶただ1つの場所。応答を zod で検査し、断りは例外にせず型のついた値で返す。getPublicConfig() が公開値を1回取ってメモリに持つ）"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 427,
+          "quote": "`client/api.ts` は応答を `schemas/error.ts` で検査し、**断りを例外にせず、型のついた値として呼び出し元へ返す**"
+        },
+        {
+          "path": "tests/acceptance/v2/structure.test.ts",
+          "line": 227,
+          "quote": "expect(read(apiFile)).toMatch(/\\.safeParse\\(|\\.parse\\(/);"
+        },
+        {
+          "path": ".dev/runs/v2/task-2.diff",
+          "line": 300,
+          "quote": "return (await res.json()) as T;"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "`client/api.ts` に zod のスキーマ検査を足す。少なくとも `ok:false` の断りの形は `schemas/error.ts` の `inputRefusalResponseSchema`（またはそれに準ずる局所スキーマ）で `safeParse` し、成功時の型は呼び出し側が渡すスキーマで検査してから返す形にする。現状のままでは `tests/acceptance/v2/structure.test.ts` の29.4のブロックが構造的に落ちる。"
+    },
+    {
+      "id": "F3",
+      "type": "defect",
+      "severity": "high",
+      "claim": "defineRoute.ts の reasonFromIssue は zod の配列（origin: \"array\"）の too_small/too_big を too_short/too_long にマップしている。しかし設計書351行目が明記する変換表は『型が文字列か数かで分ける』という2分類（string／number）だけで array には触れておらず、texts.ts の too_short/too_long の文言も文字数専用（『〜字で入れてください』）。design.md自身は15.7の店情報フォーム（menus）の上限超過を too_many（『おすすめメニューは5件までです』）と明記し、domain/inputRefusal.ts の FIELD_REASONS にも too_many が独立した語として定義され、texts.ts にも too_many 専用の件数文言（『〜件までです』）が別に存在する。にもかかわらず reasonFromIssue の実装は array を string と同じ分岐へ合流させており、配列の上限超過を zod の `.max()` で検査する形にすると reason は too_short/too_long になり、too_many もその文言も一度も到達しない死んだ語になる。後続タスク7の受け入れ検査 r15-store-profile.test.ts は menus の6件目超過で reason: \"too_many\" を明示的に要求しており、このままではその検査が壊れた振る舞いを前提にすることになる。この関数・語彙定義はいずれもタスク2自身の担当ファイル（lib/http/defineRoute・domain/inputRefusal・domain/texts）に含まれ、設計書が持つ閉じた語彙と自己矛盾したままタスク2が完結している。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 62,
+          "quote": "case \"too_small\":\n      return issue.origin === \"string\" || issue.origin === \"array\" ? \"too_short\" : \"out_of_range\";\n    case \"too_big\":\n      return issue.origin === \"string\" || issue.origin === \"array\" ? \"too_long\" : \"out_of_range\";"
+        },
+        {
+          "path": "web/lib/domain/texts.ts",
+          "line": 38,
+          "quote": "too_short: (ctx) => `${str(ctx.field, \"この項目\")}は${str(ctx.min, \"\")}〜${str(ctx.max, \"\")}字で入れてください。`,\n  too_long: (ctx) => `${str(ctx.field, \"この項目\")}は${str(ctx.min, \"\")}〜${str(ctx.max, \"\")}字で入れてください。`,"
+        },
+        {
+          "path": "web/lib/domain/texts.ts",
+          "line": 44,
+          "quote": "too_many: (ctx) => `${str(ctx.field, \"この項目\")}は${str(ctx.max, \"\")}件までです。`,"
+        },
+        {
+          "path": "web/lib/domain/inputRefusal.ts",
+          "line": 34,
+          "quote": "/** 応答の `error.fields[].reason`。zod の落ちを直すのは http/defineRoute.ts、規則の断りは各 usecases が直接返す。 */"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 351,
+          "quote": "**zod の落ちを語へ直すのは `http/defineRoute.ts` の1か所**（`too_small` → `too_short`／`out_of_range`、`too_big` → `too_long`／`out_of_range`、`invalid_type` → `required`／`not_integer`、`invalid_string` → `bad_format`、`invalid_enum_value` → `not_allowed`。型が文字列か数かで分ける）。"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 445,
+          "quote": "`menus` too_many（15.7・文「おすすめメニューは5件までです」）"
+        },
+        {
+          "path": "tests/acceptance/v2/r15-store-profile.test.ts",
+          "line": 68,
+          "quote": "if (six.json.error.kind === \"invalid_input\") expect(six.json.error.fields).toContainEqual({ name: \"menus\", reason: \"too_many\" });"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "reasonFromIssue の too_small／too_big のケースで origin===\"array\" を string と分けて扱い、too_big → too_many を返すようにする（too_small の場合の配列は設計書に語が無いため、担当タスクに確認するか required／別語を検討する）。texts.ts の too_many は既に用意済みなので、defineRoute.ts 側だけの修正で足りる。"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "読みやすさ",
+      "score": 4,
+      "reason": "ファイルごとの冒頭コメントが設計書の節へ紐づけて役割を説明し、関数名（checkOrigin・identifyCustomer・parseCookies 等）だけで振る舞いが読める。defineRoute.ts の reasonFromIssue の switch だけやや読み解きが要る。"
+    },
+    {
+      "axis": "単純さ",
+      "score": 4,
+      "reason": "eslint.config.mjs の境界設定は7つの boundary オブジェクトで長いが、設計書「依存の向き」の表と一対一に対応しており、要件に対して過剰な抽象化ではない。ports.ts・adapters・http の分割も設計どおりの最小構成。"
+    },
+    {
+      "axis": "本人が説明できるか",
+      "score": 3,
+      "reason": "PBKDF2/base64url のビット操作（token.ts）や zod issue.code のマッピング（defineRoute.ts）、CSRF の Origin 判定の根拠はコメントで丁寧に説明されているが、初見でこの3箇所を自分の言葉で説明するには技術的な予習が要る。reasonFromIssue の array 分岐が設計書351行目の表にすら無い独自拡張である点は、本人がその場で意図を説明できるか怪しい。"
+    }
+  ],
+  "unbroken": [
+    "境界外の変更を探したが、変更ファイルはすべてタスク2の列挙（lib/ports.ts・adapters/{env,webcrypto,logger}・lib/http/{defineRoute,cookies,guards,app}・schemas/{error,limits}・domain/{inputRefusal,texts,genres,token,code,password}・client/api）に収まっていた。eslint.config.mjs の変更はタスク2の説明文『lint の境界の設定』に明記があり、新設の lib/http/routes.ts も app.ts が直接参照する支援ファイルで lib/http/ の内側に収まる。",
+    "秘密情報の露出を探したが、adapters/env.ts は公開してよい4値（turnstileSiteKey・vapidPublicKey・contactEmail・orcarouterModel）だけを取り出しており、ORCAROUTER_API_KEY 等の秘密の名前をコードに直書きしていない。",
+    "verifyHuman と checkOrigin は例外を握りつぶさず、失敗はすべて断り（403/400/401）へ倒しており、『失敗を成功として返す』型の握りつぶしは見つからなかった。",
+    "guards.ts の SQL はすべて .bind() によるパラメータ化クエリで、文字列結合によるインジェクションの経路は見つからなかった。",
+    "eslint.config.mjs の `uiBoundary` は `lib/client` を `components`・`app` と同じ扱いにし、`lib/schemas` から値として読めるのを `schemas/limits` だけに絞っている。design.md 300行目の依存の向きの表は `lib/client` が `lib/schemas` を値として広く読めると書いており一見矛盾するが、実際にこの境界を検査する `tests/acceptance/v2/structure.test.ts`（234〜244行目）は現在の実装と同じ制限（`schemas/limits` だけ）を要求しており、採点対象である受け入れ検査と実装は一致している。したがって design.md 300行目とその他の記述の食い違いは設計書側の内部矛盾であり、この段の実装が壊した箇所ではないと判断した",
+    "domain/inputRefusal.ts の INPUT_REFUSAL_KINDS・FIELD_REASONS 自体は要件29の補足表・d05-input-refusal.test.ts の期待する語彙と1件残らず一致しており、語彙の列挙そのものに決め打ちや取りこぼしは見つからなかった（reasonFromIssue の変換ロジック側の不整合は F3 として別途指摘した）",
+    "lib/adapters/webcrypto.ts が乱数・SHA-256・PBKDF2 のために crypto を呼ぶ唯一の場所になっており、lib/domain（token.ts・code.ts・password.ts）はいずれも crypto を直接呼ばず、渡された値だけを扱う純粋関数のままだった"
+  ],
+  "questions_for_human": [
+    "壊れた URL のパス区間（例: `/api/store/reservations/%/cancel`）や壊れた Cookie ヘッダーが来たとき、今の実装は具体的にどう振る舞うか。落ちないと言えるか？",
+    "client/api.ts の apiCall が応答をスキーマ検査せず `as T` でキャストしている点について、なぜこの段で入れなかったかを説明できますか？",
+    "reasonFromIssue が origin===\"array\" を string と同じ分岐（too_short/too_long）に合流させた理由と、texts.ts に用意済みの too_many がどこからも呼ばれない設計になっている点をどう説明しますか？"
+  ],
+  "target": "task-2",
+  "target_sha256": "e89b4d1ae1767379e40242d7ed836ad9cc422b28f82d1924c3aed70e5320ead1",
+  "cycle": 1,
+  "exchange": 2,
+  "recorded_at": "2026-09-21T07:20:33.037Z"
+}

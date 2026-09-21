@@ -1,0 +1,222 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 33,
+          "quote": "  if (new Date(row.expires_at as string).getTime() <= deps.clock.now().getTime()) return null;"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 19,
+          "quote": "/** セッションの Cookie を SHA-256 にして探す。無い・でたらめ・期限切れなら null（401 の元）。 */"
+        }
+      ],
+      "note": "自分で経路を追い直して崩せなかった——expires_at がパース不能な文字列だと getTime() は NaN で、NaN <= now は常に false なので 33 行の期限切れ判定が発火せず、19 行の doc が書いた契約（期限切れなら null）と逆へ倒れる。null の場合だけ new Date(null)=0 で偶然閉じる、という非対称も同じ行から読める。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 171,
+          "quote": "    const result = await config.handler({ input, params, req, deps, ctx });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 910,
+          "quote": "| ログに個人データを出さない（振る舞い） | ... | 段1 | `adapters/logger`・`lib/ports.ts`（`Logger` の項目の型）・`http/defineRoute`（例外を捕まえる所） |"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 42,
+          "quote": "`selection.ts` の `validateSelection(text, allowedIds)`・`fallbackResult(rankedIds)`"
+        }
+      ],
+      "note": "defineRoute.ts を全行読んだが try/catch は verifyHuman（119行）だけで、handler・identifyCustomer・identifySession を包む受け皿は無い＝設計書910行の名指しと食い違う（主張は妥当）。ただし fix 文の根拠のうち「d01 の35行の例外で必ず赤くなる」は成立しない見込み——AI の失敗は fallbackResult の倒れた取得の経路で吸う設計で（tasks.md 42行）、d01 の41行の壊れた JSON は parseBody が {} に倒すので例外にならない。引き継ぎ欄へ書くという処置自体は妥当なので指摘は残す。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 105,
+          "quote": "  } catch {\n    return {};\n  }"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 90,
+          "quote": "      return Object.fromEntries((await req.formData()).entries());\n    } catch {\n      return UNREADABLE_BODY;"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 155,
+          "quote": "    if (config.input) {"
+        }
+      ],
+      "note": "実物で確認——multipart は UNREADABLE_BODY へ、JSON だけ黙って {} へ倒す非対称は 90 行と 105 行に在り、155 行の分岐によりスキーマの無い入口では {} が素通りする。ただし今すぐ受け入れ検査が赤くなるわけではない（r29 は 21 行で本文を持たない入口を除外し、43 行で「JSON でない」のときだけ fields の件数を問わない）ので、重さは「壊れた本文の扱いを揃える」一貫性の側。"
+    },
+    {
+      "finding": "F4",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 11,
+          "quote": "export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * DAY_SECONDS;"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 362,
+          "quote": "| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は14日（AI判断） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 598,
+          "quote": "| 1 | 店のホームを開く（セッションは14日。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |"
+        }
+      ],
+      "note": "自分で docs/specs/v2 を grep し、仕様側に「30日」が0件・「14日」が2件（362・598行）であることを確認した。すぐ上の行の客の Cookie（400日）は設計書143行・tasks.md 40行に出典があるのに、セッションの30日だけ出典が無い＝仕様に在る唯一の数へ揃える以外の選択肢が見当たらない（直し方は一意）。"
+    },
+    {
+      "finding": "F5",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 143,
+          "quote": "      if (!session) return jsonResponse(401, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 46,
+          "quote": "    return new Response(JSON.stringify({ ok: false, error: { kind: \"invalid_input\" } }), { status: 404, headers: { \"content-type\": \"application/json\" } });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 349,
+          "quote": "`invalid_input`（形・範囲。`fields` 必須）"
+        },
+        {
+          "path": "tests/acceptance/v2/r01-customer-register.ui.test.tsx",
+          "line": 27,
+          "quote": "\"GET /api/customer/home\": () => ({ status: 401, json: { ok: false, error: { kind: \"unauthorized\" } } })"
+        },
+        {
+          "path": "tests/acceptance/v2/_fakes.ts",
+          "line": 552,
+          "quote": "    if (!handler) return new Response(JSON.stringify({ ok: false, error: { kind: \"not_found\" } }), { status: 404, headers: { \"content-type\": \"application/json\" } });"
+        }
+      ],
+      "note": "4か所とも実物で確認（131・139・143・144行と app.ts 46行）。反論材料を探したが逆に補強された——受け入れ検査側の偽物が 401 に unauthorized・404 に not_found を使っており、invalid_input は見分けの断りの語として想定されていない。同時に、その2語は INPUT_REFUSAL_KINDS（domain/inputRefusal.ts 6〜30行）に無く、足すと d05 のタスク2のブロックが全 kind の文を要求するため texts.ts も連動する＝『直し方が一意でない』という audit の注記も正しい。"
+    },
+    {
+      "finding": "F6",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/eslint.config.mjs",
+          "line": 128,
+          "quote": "            group: [\"**/domain/**\", \"!**/domain/texts\"],"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 916,
+          "quote": "`lib/domain` からの import が、`domain/texts` への import か `import type` のどちらか（… `inputRefusal` の語は部品と `lib/client` が `import type` で使う・第6周の直し）"
+        },
+        {
+          "path": "tests/acceptance/v2/structure.test.ts",
+          "line": 30,
+          "quote": "/** `import ... from \"…\"`（値の import）だけを拾う。`import type` は除く */"
+        },
+        {
+          "path": "node_modules/.pnpm/eslint@9.39.5/node_modules/eslint/lib/rules/no-restricted-imports.js",
+          "line": 113,
+          "quote": "\t\t\t\t\tallowTypeImports: {"
+        },
+        {
+          "path": "node_modules/.pnpm/eslint@9.39.5/node_modules/eslint/lib/rules/no-restricted-imports.js",
+          "line": 551,
+          "quote": "\t\t\t\tgroup.allowTypeImports &&"
+        }
+      ],
+      "note": "欠陥そのものは残る（現 config は allowTypeImports を指定していないので型だけの import も報告され、structure.test.ts 30行が明示的に許す import type と衝突する）。ただし claim の理由付けの中核は一次データで反証された——ESLint 本体 9.39.5 の no-restricted-imports は patterns 側に allowTypeImports を持つ（113行・551行）。したがって fix は「@typescript-eslint 版へ切り替える」ではなく「既存の core ルールの該当 group に allowTypeImports: true を足す」で足りる。プラグイン版への切り替えは不要な作り替えなので、fix をこちらへ差し替えること。"
+    },
+    {
+      "finding": "F7",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 145,
+          "quote": "      ctx = config.auth === \"store\" ? { auth: \"store\", accountId: session.accountId, storeId: session.storeId ?? \"\" } : { auth: \"admin\", accountId: session.accountId };"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 8,
+          "quote": "export type SessionIdentity = { accountId: string; role: \"store\" | \"admin\"; storeId: string | null };"
+        },
+        {
+          "path": "web/migrations/0001_init.sql",
+          "line": 8,
+          "quote": "  store_id TEXT,"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 41,
+          "quote": "見分けの断りは 401（客・未ログイン）／403（役割違い・Origin）。"
+        }
+      ],
+      "note": "実物で確認して崩せなかった。対照も自分で取った——coupons.store_id（42行）・offers.store_id（51行）は NOT NULL なのに accounts.store_id（8行）だけ制約が無く、guards.ts 8行の型もこの状態を想定している。空文字で通すと後続の WHERE store_id = '' がどの行にも当たらず「静かに0件」になるので、403 で断る方が fail-loud。実際に起こりうるかがタスク4以降に依るという audit の留保も妥当。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "schemas/error.ts の errorSchema の形が、受け入れ検査 r29 の使い方と食い違っている。r29 は応答の本文まるごと（{ ok:false, error:{ kind, fields? } }）を errorSchema.safeParse に渡すが、実装の errorSchema は内側の error だけの形（kind 必須）なので、kind が欠けて safeParse が必ず失敗する＝タスク25 で r29 の当該行が全ルートで赤くなる。封筒の形は inputRefusalResponseSchema として別に在るが、grep しても誰も import していない（error.ts 自身の20行だけ）＝検査が呼ぶ名前と実装が付けた名前が入れ違っている。受け入れ検査は改ざんできないので、直せるのはタスク2が持つ schemas/error.ts の側だけ。監査役2体とも前サイクルの反論役も挙げていない。",
+      "evidence": [
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 20,
+          "quote": "    const { errorSchema } = await loadWeb(\"lib/schemas/error\");"
+        },
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 39,
+          "quote": "        expect(errorSchema.safeParse(res.json).success, `${label}: ${res.text}`).toBe(true);"
+        },
+        {
+          "path": "web/lib/schemas/error.ts",
+          "line": 12,
+          "quote": "export const errorSchema = z.object({\n  kind: z.enum(INPUT_REFUSAL_KINDS),\n  fields: z.array(fieldErrorSchema).optional(),\n});"
+        },
+        {
+          "path": "web/lib/schemas/error.ts",
+          "line": 18,
+          "quote": "/** 400/409 `{ ok:false, error:{ kind, fields? } }` の全体。 */\nexport const inputRefusalResponseSchema = z.object({"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 41,
+          "quote": "入力の断りは 400/409 `{ ok:false, error:{ kind, fields?:[{ name, reason }] } }`（`schemas/error.ts` の `errorSchema`・語は `domain/inputRefusal.ts` の `INPUT_REFUSAL_KINDS`・`FIELD_REASONS`）"
+        }
+      ]
+    }
+  ],
+  "score_objections": [
+    {
+      "axis": "本人が説明できるか",
+      "reason": "3→2 の引き下げ理由に挙がった4点のうち「ESLint ルールの型非対応」は一次データで反証された（core 9.39.5 が patterns に allowTypeImports を持つ・F6 の判定参照）。残る3点（NaN の扱い・JSON の catch の黙殺・?? \"\" の空文字倒し）はいずれも実在するので低い側の評価は妥当だが、根拠が1つ落ちるので 2 ではなく 3 が妥当。"
+    }
+  ],
+  "target": "task-2",
+  "cycle": 2,
+  "exchange": 2,
+  "recorded_at": "2026-09-21T08:15:25.610Z"
+}

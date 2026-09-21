@@ -1,0 +1,267 @@
+{
+  "kind": "audit",
+  "rubric": "impl@1",
+  "model": "sonnet",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "セッションの有効期限が壊れた（パース不能な）値のとき、identifySession は『期限切れではない』側へフェイルオープンする。new Date(壊れた文字列).getTime() は NaN になり、NaN <= now は JS では常に false なので期限切れ判定が発火せず、セッションを有効として扱う。",
+      "evidence": [
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 33,
+          "quote": "if (new Date(row.expires_at as string).getTime() <= deps.clock.now().getTime()) return null;"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 19,
+          "quote": "/** セッションの Cookie を SHA-256 にして探す。無い・でたらめ・期限切れなら null（401 の元）。 */"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "getTime() の結果を変数へ取り、Number.isFinite で壊れた日付を明示的に検出して null（=期限切れ扱い）へ倒す。すぐ上の doc コメント自身が『期限切れなら null』と契約を書いており、コードがその契約を満たしていない。",
+      "rebuttal": "反論役も自分で経路を追い、崩せなかった（AGREE）。row.expires_at が null のときは new Date(null)=0 で偶然フェイルクローズするため、壊れた文字列のケースだけが素通りする点が反論役の追加確認で補強された。"
+    },
+    {
+      "id": "F2",
+      "type": "improvement",
+      "severity": "medium",
+      "claim": "design.md は defineRoute を『例外を捕まえる所』と名指ししているが、defineRoute.handle は config.handler(...) や identifyCustomer/identifySession の呼び出しをどこも try/catch していない。usecases が例外を投げると未捕捉のまま伝播する。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 171,
+          "quote": "const result = await config.handler({ input, params, req, deps, ctx });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 910,
+          "quote": "| ログに個人データを出さない（振る舞い） | ... | 段1 | `adapters/logger`・`lib/ports.ts`（`Logger` の項目の型）・`http/defineRoute`（例外を捕まえる所） |"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 189,
+          "quote": "  - 新しい機能は無い。ここまでのタスクで漏れた入口・応答・境界を直して、横断の検査（`r29`・`r28`・`r14` の25のブロック・`r02` の25のブロック・`d03`・`d01`・`structure.test.ts` の25のブロック）を通す"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 49,
+          "quote": "### 前のタスクから次のタスクへ"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 51,
+          "quote": "（実行者が、タスクを終えるたびに分かったことを書き足す。設計者は空で渡す）"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "try/catch の実装自体は task25（d01 の担当・tests/acceptance/v2/d01-log-privacy.test.ts が describeTask(\"25\") を名乗る）の仕事であり、task2 でやるべきことは実装ではなく引き継ぎ。tasks.md 49〜51行の『前のタスクから次のタスクへ』欄（現状まだ空）に『defineRoute.handle に例外の受け皿が無い。task25 で try/catch を追加し、deps.logger 経由で個人データを含まない形で記録すること』と書き残す。この欄が空のまま task25 まで進むと、d01 のテストが必ず赤くなる（例外を投げるテストが35行に存在）。",
+      "rebuttal": "反論役が AGREE。ただし『今すぐ包め』ではなく『引き継ぎを書け』が task2 として実行可能な処置だと指摘され、fix をその方向に絞った。"
+    },
+    {
+      "id": "F3",
+      "type": "improvement",
+      "severity": "medium",
+      "claim": "parseBody は multipart の壊れた本文は明示的に UNREADABLE_BODY（→400 bad_format）へ倒すのに、JSON の本文が壊れているときだけ黙って {} に差し替える。スキーマの無い入口（config.input 未指定）ではこの {} がそのまま素通りし、スキーマのある入口でも実際の原因（本文が壊れている）とはずれた reason が返る。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 103,
+          "quote": "    // JSON になっていない本文は「項目が何も無い」として扱い、スキーマの検査に判定を任せる。\n    return JSON.parse(text);"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 90,
+          "quote": "      return Object.fromEntries((await req.formData()).entries());\n    } catch {\n      return UNREADABLE_BODY;"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 155,
+          "quote": "    if (config.input) {"
+        },
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 38,
+          "quote": "        expect(res.json?.ok, label).toBe(false);"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "multipart と同じ扱いに揃え、JSON.parse の catch でも UNREADABLE_BODY を返す。反論役の指摘で severity を medium へ引き上げた——スキーマの無い入口ができた時点で壊れた JSON が検査を一切通らずに素通りする経路が確認でき、r29 の38行『本文のある入口の全部で ok:false』という受け入れ検査の前提を壊しうる。"
+    },
+    {
+      "id": "F4",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "セッションの Cookie の寿命が設計書の14日ではなく30日のままになっている。設計書に『30日』という数字は1箇所も無く、14日が2箇所で明記されている。",
+      "evidence": [
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 11,
+          "quote": "export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * DAY_SECONDS;"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 362,
+          "quote": "| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は14日（AI判断） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 598,
+          "quote": "| 1 | 店のホームを開く（セッションは14日。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 143,
+          "quote": "| 客の識別子は、サーバーが Set-Cookie する Cookie（`HttpOnly`・`Secure`・`SameSite=Lax`・400日。日数は AI判断）に置く"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "SESSION_COOKIE_MAX_AGE_SECONDS を 14 * DAY_SECONDS に直す。",
+      "rebuttal": "反論役が docs/specs/v2 全体を grep して『30日』が0件・『14日』が2件であることを確認し、AGREE。すぐ上の客の Cookie（400日）には設計書143行という出典があるのに、セッションの30日だけ出典が無いことが根拠を補強した。"
+    },
+    {
+      "id": "F5",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "見分けの断り（401・403）・Origin の断り（403）・役割違い（403）・入口が無いとき（404）が、いずれも『fields 必須』と定義された `invalid_input` を fields 無しで返している。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 131,
+          "quote": "return jsonResponse(403, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 139,
+          "quote": "if (!customerId) return jsonResponse(401, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 143,
+          "quote": "if (!session) return jsonResponse(401, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 144,
+          "quote": "if (session.role !== config.auth) return jsonResponse(403, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 46,
+          "quote": "return new Response(JSON.stringify({ ok: false, error: { kind: \"invalid_input\" } }), { status: 404, headers: { \"content-type\": \"application/json\" } });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 349,
+          "quote": "`invalid_input`（形・範囲。`fields` 必須）"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "401・403・404 には fields 無しでも許される別の語を使うか、意味のある fields を添える。反論役の指摘: 設計書自身が見分けの断りの本文形を1箇所も定めておらず（tasks.md 41行・design.md 465行は状態コードのみ）、350行の reason は入力の項目名を前提にしているため設計書側に内部矛盾がある——直し方が一意に決まらないので、コードを直す前に設計書側の記述をどちらに揃えるか本人判断が要る。受け入れ検査（d03・r29）はどちらでも通るため、放置すると黙って残る点に注意。"
+    },
+    {
+      "id": "F6",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "lint の境界（task2 の担当ファイル web/eslint.config.mjs）が、設計書が明文で許した『import type での domain/inputRefusal の import』を閉じてしまっている。uiBoundary が使っているのは ESLint 本体の no-restricted-imports で、このルールは型だけの import（import type）を区別するオプションを持たない（区別できるのは @typescript-eslint/no-restricted-imports の allowTypeImports だけ）。design.md 916行は components・app・lib/client からの lib/domain の import を『domain/texts への import か import type のどちらか』まで許し、『inputRefusal の語は部品と lib/client が import type で使う』と明記しているので、task3 で components/ui/InputRefusal.tsx が `import type { InputRefusalKind } from \"../../lib/domain/inputRefusal\"` を書いた瞬間に lint ゲートが赤くなる。今は該当する部品が1つも無いため通っているだけ。",
+      "evidence": [
+        {
+          "path": "web/eslint.config.mjs",
+          "line": 119,
+          "quote": "\"no-restricted-imports\": ["
+        },
+        {
+          "path": "web/eslint.config.mjs",
+          "line": 128,
+          "quote": "group: [\"**/domain/**\", \"!**/domain/texts\"],"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 916,
+          "quote": "| **部品・画面・`lib/client` が `lib/domain` から値として読むのは `domain/texts.ts` だけ**（第5周の直し・F2） | `structure.test.ts` 構造: ... `lib/domain` からの import が、`domain/texts` への import か `import type` のどちらか（... `inputRefusal` の語は部品と `lib/client` が `import type` で使う・第6周の直し）... |"
+        },
+        {
+          "path": "tests/acceptance/v2/structure.test.ts",
+          "line": 147,
+          "quote": "expect(eslint).toMatch(/no-restricted-imports/);"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "uiBoundary の該当パターンを @typescript-eslint/no-restricted-imports へ切り替え、allowTypeImports: true（または type-only import を除外するオプション）を指定する。structure.test.ts はルール名の文字列在否しか見ないため、切り替えても既存の受け入れ検査は壊れない。反論役が omissions として提出し、自分でも eslint.config.mjs・design.md 916行・structure.test.ts 147行を実物で確認して崩せなかった（新規指摘として追加）。"
+    },
+    {
+      "id": "F7",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "役割は一致する（store）が、そのアカウントに紐づく store_id が無い（NULL）ときに 403 で断らず、空文字へ黙って倒して手続きへ通す。guards.ts が store_id の NULL を null にして返し、defineRoute.ts が session.storeId ?? \"\" で空文字に置き換えるため、ctx.auth は \"store\" のまま storeId だけが実在しない値になる。accounts.store_id はスキーマ上 NOT NULL 制約が無く（他の store_id NOT NULL 列と対照的）、guards.ts の型自体も storeId: string | null と宣言しており、この状態を明示的に想定している。tasks.md は見分けの断りを『401（客・未ログイン）／403（役割違い・Origin）』とだけ定めており、『役割は一致するが紐づく店が無い』は定められた結果のどちらでもない。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 145,
+          "quote": "ctx = config.auth === \"store\" ? { auth: \"store\", accountId: session.accountId, storeId: session.storeId ?? \"\" } : { auth: \"admin\", accountId: session.accountId };"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 8,
+          "quote": "export type SessionIdentity = { accountId: string; role: \"store\" | \"admin\"; storeId: string | null };"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 34,
+          "quote": "return { accountId: row.account_id as string, role: row.role as \"store\" | \"admin\", storeId: (row.store_id as string | null) ?? null };"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 41,
+          "quote": "見分けの断りは 401（客・未ログイン）／403（役割違い・Origin）。"
+        },
+        {
+          "path": "web/migrations/0001_init.sql",
+          "line": 8,
+          "quote": "store_id TEXT,"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "config.auth === \"store\" の分岐で session.storeId が null のとき、空文字へ倒さず 403（invalid_input）で断る。例: if (config.auth === \"store\") { if (!session.storeId) return jsonResponse(403, ...); ctx = { auth: \"store\", accountId: session.accountId, storeId: session.storeId }; }。反論役が omissions として提出し、guards.ts・defineRoute.ts・tasks.md 41行・0001_init.sql の store_id 列定義を自分で確認して崩せなかった（新規指摘として追加）。⚠️ 通常の店の登録フローで role=store の account に store_id が入らないケースが実際に起こり得るかは task4 以降の実装に依存し未検証——本人へ確認する価値がある（questions_for_human 参照）。"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "読みやすさ",
+      "score": 4,
+      "reason": "命名・コメントは一貫して明快だが、defineRoute.handle・reasonFromIssue のような密度の高い分岐は読み解きに時間がかかる。反論役の再検証でも同じ評価。"
+    },
+    {
+      "axis": "単純さ",
+      "score": 4,
+      "reason": "12ファイルにまたがる横断土台としては最小限。過剰な抽象化は見当たらない。"
+    },
+    {
+      "axis": "本人が説明できるか",
+      "score": 2,
+      "reason": "F1・F3・F6・F7 はいずれもコード上の細部（NaN の扱い・catch の黙殺・ESLint ルールの型非対応・null 合体演算子）に埋め込まれた判断で、コメントに明示が無い。反論役の検証で新たに2件（F6・F7）が確認され、本人が初見で気づける点より気づけない点の方が優勢になったため、前回の3から引き下げた。"
+    }
+  ],
+  "unbroken": [
+    "境界外の変更: 変更されたファイルは task2 のタスク文が列挙した一覧＋タスク文が明示する eslint.config.mjs に一致しており、範囲外のファイルへの手出しは見つからなかった。",
+    "秘密情報の直書き: diff 全体を走査したが API キー・秘密鍵の直書きは無い。adapters/env.ts が読むのは設計書が明示的に「公開してよい」とした4値のみ。",
+    "URL パス・Cookie ヘッダーの壊れた percent 符号: decodeSegment（app.ts）と parseCookies（cookies.ts）は両方とも decodeURIComponent の例外を捕まえて安全側に倒しており、robustness.test.ts でも実証済み。",
+    "multipart の壊れた本文: 例外を投げず UNREADABLE_BODY 経由で明示的な 400 bad_format に倒れており、robustness.test.ts で確認できた。",
+    "schemas/limits.ts の数値はすべて requirements.md の該当基準と一致しており、ズレは見つからなかった。",
+    "domain/inputRefusal.ts の INPUT_REFUSAL_KINDS・FIELD_REASONS は要件29の補足表・d05-input-refusal.test.ts が期待する語彙と1件残らず一致し、決め打ちや語の取りこぼしは見つからなかった。",
+    "client/api.ts の zod 検査は特定のテスト入力だけを通す分岐ではなく、あらゆる応答形状に対して一様に適用される一般的な実装だった。",
+    "lib/client が lib/schemas を値として広く読めると書く design.md 300行目と実際の eslint 境界の食い違いは、structure.test.ts が検査する境界とは一致しており、設計書側の内部矛盾であってタスク2の実装が壊した箇所ではない（前サイクルで確認済み・今回も崩せなかった）。"
+  ],
+  "questions_for_human": [
+    "sessions.expires_at が壊れた値だったとき、identifySession はセッションを有効・無効のどちらとして扱いますか？その判定はコードのどの行が担っていますか？",
+    "セッションの Cookie の Max-Age を30日にした理由は何か。設計書の14日とどちらが正しいか説明できるか？",
+    "役割が store のアカウントに store_id が無い（NULL）状態は実際に起こり得ますか？起こり得るなら、今の実装（空文字へ倒して通す）と 403 で断る、どちらがあるべき振る舞いですか？"
+  ],
+  "target": "task-2",
+  "target_sha256": "6e5775a450633c171ed90dd4b5ac44bf105a12618aebe666384f2877de302c27",
+  "cycle": 2,
+  "exchange": 2,
+  "recorded_at": "2026-09-21T08:07:04.921Z"
+}

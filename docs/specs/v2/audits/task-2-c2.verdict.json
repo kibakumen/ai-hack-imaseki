@@ -1,0 +1,53 @@
+{
+  "kind": "verdict",
+  "target": "task-2",
+  "target_sha256": "6e5775a450633c171ed90dd4b5ac44bf105a12618aebe666384f2877de302c27",
+  "cycle": 2,
+  "mode": "full",
+  "must_fix": [],
+  "human_decision": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7"
+  ],
+  "recorded_only": [],
+  "dropped": [],
+  "carry_over": [
+    {
+      "claim": "schemas/error.ts の errorSchema の形が、受け入れ検査 r29 の使い方と食い違っている。r29 は応答の本文まるごと（{ ok:false, error:{ kind, fields? } }）を errorSchema.safeParse に渡すが、実装の errorSchema は内側の error だけの形（kind 必須）なので、kind が欠けて safeParse が必ず失敗する＝タスク25 で r29 の当該行が全ルートで赤くなる。封筒の形は inputRefusalResponseSchema として別に在るが、grep しても誰も import していない（error.ts 自身の20行だけ）＝検査が呼ぶ名前と実装が付けた名前が入れ違っている。受け入れ検査は改ざんできないので、直せるのはタスク2が持つ schemas/error.ts の側だけ。監査役2体とも前サイクルの反論役も挙げていない。",
+      "evidence": [
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 20,
+          "quote": "    const { errorSchema } = await loadWeb(\"lib/schemas/error\");"
+        },
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 39,
+          "quote": "        expect(errorSchema.safeParse(res.json).success, `${label}: ${res.text}`).toBe(true);"
+        },
+        {
+          "path": "web/lib/schemas/error.ts",
+          "line": 12,
+          "quote": "export const errorSchema = z.object({\n  kind: z.enum(INPUT_REFUSAL_KINDS),\n  fields: z.array(fieldErrorSchema).optional(),\n});"
+        },
+        {
+          "path": "web/lib/schemas/error.ts",
+          "line": 18,
+          "quote": "/** 400/409 `{ ok:false, error:{ kind, fields? } }` の全体。 */\nexport const inputRefusalResponseSchema = z.object({"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 41,
+          "quote": "入力の断りは 400/409 `{ ok:false, error:{ kind, fields?:[{ name, reason }] } }`（`schemas/error.ts` の `errorSchema`・語は `domain/inputRefusal.ts` の `INPUT_REFUSAL_KINDS`・`FIELD_REASONS`）"
+        }
+      ]
+    }
+  ],
+  "status": "human",
+  "recorded_at": "2026-09-21T08:15:25.777Z"
+}

@@ -1,0 +1,212 @@
+{
+  "kind": "audit",
+  "rubric": "impl@1",
+  "model": "sonnet",
+  "share": "A",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "セッションの有効期限が壊れた（パース不能な）値のとき、identifySession は『期限切れではない』側へフェイルオープンする。new Date(壊れた文字列).getTime() は NaN になり、NaN <= now は JS では常に false なので、期限切れ判定の if 文が発火せず、そのままセッションを有効として扱ってしまう。",
+      "evidence": [
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 33,
+          "quote": "if (new Date(row.expires_at as string).getTime() <= deps.clock.now().getTime()) return null;"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "getTime() の結果を変数に取り、Number.isFinite で壊れた日付を明示的に検出して null（=期限切れ扱い）へ倒す。例: const expiresAt = new Date(row.expires_at as string).getTime(); if (!Number.isFinite(expiresAt) || expiresAt <= deps.clock.now().getTime()) return null; 外部入力が直接 expires_at を書き換える経路は今の所無いが、認証の可否判定はフェイルクローズ（壊れていたら無効扱い）が原則。",
+      "share": "A",
+      "source_id": "F1"
+    },
+    {
+      "id": "F2",
+      "type": "improvement",
+      "severity": "medium",
+      "claim": "design.md は http/defineRoute を明示的に『例外を捕まえる所』（d01-log-privacy の実現場所の1つ）と名指ししているが、今回の defineRoute.ts の handle は config.handler(...) や identifyCustomer/identifySession の呼び出しをどこも try/catch していない。usecases やアダプタが例外を投げた場合、その場で未捕捉のまま app.fetch まで伝播する。tasks.md ではこの横断チェック（d01 を含む）は task25 の担当に見えるが、defineRoute.ts 自体は task2 の成果物であり、今のままでは『例外を捕まえる場所』としての受け皿が存在しない。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 129,
+          "quote": "handle: async (req, deps, params = {}) => {"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 910,
+          "quote": "| ログに個人データを出さない（振る舞い） | ... | 段1 | `adapters/logger`・`lib/ports.ts`（`Logger` の項目の型）・`http/defineRoute`（例外を捕まえる所） |"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "defineRoute.handle の本体を try/catch で包み、捕まえた例外は deps.logger.log({event, errorKind}) 等（個人データを含まない項目だけ）で記録し、汎用の断り応答を返す。task25 が担当だと意図しているなら、tasks.md の『前のタスクから次のタスクへ』欄にその旨を明記して、task25 まで見落とされないようにする。",
+      "share": "A",
+      "source_id": "F2"
+    },
+    {
+      "id": "F3",
+      "type": "improvement",
+      "severity": "low",
+      "claim": "parseBody は multipart の本文が壊れているときは明示的に UNREADABLE_BODY（→ 400 bad_format）へ倒すのに、JSON の本文が壊れている（JSON.parse が例外を投げる）ときだけ黙って {} に差し替えてスキーマ検査へ丸投げする。全項目が任意（optional）なスキーマの入口があれば、壊れた JSON がバリデーションを一切通らず素通りする可能性があり、あっても『nickname が required』のような、実際の原因（本文が JSON として壊れている）とはずれた reason が返る。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 102,
+          "quote": "    // JSON になっていない本文は「項目が何も無い」として扱い、スキーマの検査に判定を任せる。\n    return JSON.parse(text);"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 91,
+          "quote": "      return Object.fromEntries((await req.formData()).entries());\n    } catch {\n      return UNREADABLE_BODY;"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "multipart と同じ扱いに揃え、JSON.parse の catch でも UNREADABLE_BODY を返す（bad_format で明示的に断る）。既に r29-validation.test.ts が「JSON でない」ケースを fields.length のチェックから意図的に除外しているので、この変更をしても既存の受け入れ検査は壊れない。",
+      "share": "A",
+      "source_id": "F3"
+    },
+    {
+      "id": "F4",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "セッションの Cookie の寿命が設計書の14日ではなく30日のままになっている。前サイクルの反論役の見落とし（carry_over）として記録された論点だが、この差分（F1・F2 の修正のみを反映した最新版）でも未修正。設計書には『30日』という数字が1箇所も無く、14日が2箇所で明記されている。",
+      "evidence": [
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 11,
+          "quote": "export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * DAY_SECONDS;"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 362,
+          "quote": "| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は14日（AI判断） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 598,
+          "quote": "| 1 | 店のホームを開く（セッションは14日。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "SESSION_COOKIE_MAX_AGE_SECONDS を 14 * DAY_SECONDS に直す。まだログイン（タスク4）が expires_at をこの定数から計算していないので実害は出ていないが、後続タスクがそのまま読むと設計の14日が黙って30日に化ける。",
+      "share": "B",
+      "source_id": "F1"
+    },
+    {
+      "id": "F5",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "見分けの断り（401・403）・Origin の断り（403）・入口が無いとき（404）が、いずれも `kind: \"invalid_input\"` を `fields` 無しで返している。設計書は『入力の断りの応答の形——全部の入口で1つ』の節で `invalid_input` を明確に『形・範囲。`fields` 必須』と定義しており、この形は defineRoute.ts 自身（タスク2の担当ファイル）が『ただ1つの場所』として実現するはずのものである。この差分でも前サイクルの carry_over のまま未修正。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 131,
+          "quote": "return jsonResponse(403, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 139,
+          "quote": "if (!customerId) return jsonResponse(401, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 143,
+          "quote": "if (!session) return jsonResponse(401, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 46,
+          "quote": "return new Response(JSON.stringify({ ok: false, error: { kind: \"invalid_input\" } }), { status: 404, headers: { \"content-type\": \"application/json\" } });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 349,
+          "quote": "`invalid_input`（形・範囲。`fields` 必須）"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "401・403・404 には `invalid_input` を使わず fields 無しでも許される別の語（例えば見分け専用の kind、または error を持たず `{ ok:false }` だけ）にするか、これらの応答にも意味のある fields を添える。d03-origin-check.test.ts・r29-validation.test.ts は `ok:false` としか見ていないため、直さなくてもテストは通り続けるが、設計書が明文化した『fields 必須』の契約とは食い違ったままになる。",
+      "share": "B",
+      "source_id": "F2"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "読みやすさ",
+      "score": 4,
+      "reason": "命名・コメントは一貫して明快だが、defineRoute.handle と reasonFromIssue のような密度の高い分岐は読み解きに時間がかかる。"
+    },
+    {
+      "axis": "単純さ",
+      "score": 4,
+      "reason": "12ファイルにまたがる横断土台としては最小限。過剰な抽象化は見当たらない。"
+    },
+    {
+      "axis": "本人が説明できるか",
+      "score": 3,
+      "reason": "F1（NaN のフェイルオープン）・F2（例外の受け皿の不在）・F3（JSON 壊れ時の黙殺）はいずれも、コメントには明示されていない細部の判断で、本人が初見で気づいて説明できるかは怪しい。"
+    }
+  ],
+  "unbroken": [
+    "境界外の変更: 変更されたファイルは task2 のタスク文が列挙した一覧（lib/ports.ts・adapters/{env,webcrypto,logger}・lib/http/{defineRoute,cookies,guards,app,routes}・schemas/{error,limits}・domain/{inputRefusal,texts,genres,token,code,password}・client/api）＋タスク文が明示する eslint.config.mjs（lint の境界）に一致しており、範囲外のファイルへの手出しは見つからなかった。",
+    "秘密情報の直書き: diff 全体を走査したが API キー・秘密鍵の直書きは無い。adapters/env.ts が読むのは設計書が明示的に「公開してよい」とした4値のみ。",
+    "URL パス・Cookie ヘッダーの壊れた percent 符号: decodeSegment（app.ts）と parseCookies（cookies.ts）は両方とも decodeURIComponent の例外を捕まえて安全側（該当ルートに当てない／その1件だけ読み飛ばす）に倒しており、robustness.test.ts でも実証済み。",
+    "multipart の壊れた本文: 例外を投げず UNREADABLE_BODY 経由で明示的な 400 bad_format に倒れており、robustness.test.ts で確認できた。",
+    "schemas/limits.ts の数値（NICKNAME_MIN/MAX=1/20、PHONE_PATTERN=10桁か11桁、CUSTOMER_GENRES_MAX=12、BUDGET_MAX_MIN/MAX=0/100000、TOKEN_BYTES=16）はすべて requirements.md の該当基準（1.2・1.3・1.4・1.7・2.2）と一致しており、ズレは見つからなかった。",
+    "domain/inputRefusal.ts の INPUT_REFUSAL_KINDS・FIELD_REASONS は要件29の補足表・d05-input-refusal.test.ts が期待する語彙と1件残らず一致し、決め打ちや語の取りこぼしは見つからなかった。",
+    "client/api.ts の zod 検査（failureSchema・schema?.safeParse）は特定のテスト入力だけを通す分岐ではなく、あらゆる応答形状に対して一様に適用される一般的な実装だった（受け入れ検査への過剰適合は見つからなかった）。",
+    "lib/client が lib/schemas を値として広く読めると書く design.md 300行目と、実際の eslint 境界（schemas/limits だけ許可）は文面上食い違うが、structure.test.ts が検査する境界は現状の実装と一致しており、これは設計書側の内部矛盾であってタスク2の実装が壊した箇所ではないと判断した（前サイクルの監査で既に確認済みの点を追試し、崩せなかった）。"
+  ],
+  "questions_for_human": [
+    "handler（usecases 側）が例外を投げたとき、今の defineRoute.ts のどこがそれを捕まえて、どんな応答を返しますか？（design.md 910行目は defineRoute を『例外を捕まえる所』と名指ししています）",
+    "sessions.expires_at が壊れた値だったとき、identifySession はセッションを有効・無効のどちらとして扱いますか？その判定はコードのどの行が担っていますか？",
+    "本文が JSON として壊れている POST 要求は、multipart が壊れている場合と違って、なぜ bad_format ではなく『項目が何も無い』として扱われるのですか？",
+    "セッションの Cookie の Max-Age を30日にした理由は何か。設計書の14日とどちらが正しいか説明できるか？",
+    "見分けの断り（401・403）と入口が無いとき（404）で、なぜ `invalid_input`（fields 必須のはずの語）を fields 無しで返す形にしたか説明できるか？"
+  ],
+  "shares": [
+    "A",
+    "B"
+  ],
+  "scores_by_share": {
+    "A": [
+      {
+        "axis": "読みやすさ",
+        "score": 4,
+        "reason": "命名・コメントは一貫して明快だが、defineRoute.handle と reasonFromIssue のような密度の高い分岐は読み解きに時間がかかる。"
+      },
+      {
+        "axis": "単純さ",
+        "score": 4,
+        "reason": "12ファイルにまたがる横断土台としては最小限。過剰な抽象化は見当たらない。"
+      },
+      {
+        "axis": "本人が説明できるか",
+        "score": 3,
+        "reason": "F1（NaN のフェイルオープン）・F2（例外の受け皿の不在）・F3（JSON 壊れ時の黙殺）はいずれも、コメントには明示されていない細部の判断で、本人が初見で気づいて説明できるかは怪しい。"
+      }
+    ],
+    "B": [
+      {
+        "axis": "読みやすさ",
+        "score": 4,
+        "reason": "各ファイル冒頭のコメントが設計書の節に紐づき、関数名（checkOrigin・parseCookies・reasonFromIssue 等）だけで振る舞いが読める。"
+      },
+      {
+        "axis": "単純さ",
+        "score": 4,
+        "reason": "defineRoute・app・cookies・guards の分割は設計書のファイル構成計画と一対一で対応し、要件に対して過剰な抽象化は見られない。"
+      },
+      {
+        "axis": "本人が説明できるか",
+        "score": 3,
+        "reason": "PBKDF2/base64url・zod issue.code のマッピングはコメントで説明されているが初見での技術的予習が要る。加えて F1・F2 のような設計書との数値・契約のズレを本人がその場で説明できるかは疑わしい。"
+      }
+    ]
+  },
+  "target": "task-2",
+  "target_sha256": "6e5775a450633c171ed90dd4b5ac44bf105a12618aebe666384f2877de302c27",
+  "cycle": 2,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T07:53:36.546Z"
+}

@@ -60,7 +60,7 @@ phase: tasks
   - _受け入れ検査: tests/acceptance/v2/structure.test.ts_
   - _担当: AI_
 
-- [ ] 2. 横断の土台: `lib/ports.ts`・`adapters/{env,webcrypto,logger}`・`lib/http/{defineRoute,cookies,guards,app}`・`schemas/{error,limits}`・`domain/{inputRefusal,texts,genres,token,code,password}`・`client/api`
+- [x] 2. 横断の土台: `lib/ports.ts`・`adapters/{env,webcrypto,logger}`・`lib/http/{defineRoute,cookies,guards,app}`・`schemas/{error,limits}`・`domain/{inputRefusal,texts,genres,token,code,password}`・`client/api`
   - 入力の断りの応答の形と語の一覧・決まった文の全部・見分け4種・Origin の確かめ・人かどうかの確かめの枠（差し替え口 `HumanCheck` を呼ぶ所）・ログの出口・lint の境界の設定（`no-restricted-imports`・`no-console`・`no-restricted-globals`）
   - _要件: 29.1, 29.2, 29.4_
   - _受け入れ検査: tests/acceptance/v2/d05-input-refusal.test.ts_

@@ -1,0 +1,75 @@
+{
+  "kind": "verdict",
+  "target": "task-2",
+  "target_sha256": "e89b4d1ae1767379e40242d7ed836ad9cc422b28f82d1924c3aed70e5320ead1",
+  "cycle": 1,
+  "mode": "full",
+  "must_fix": [
+    "F1",
+    "F2"
+  ],
+  "human_decision": [],
+  "recorded_only": [],
+  "dropped": [
+    "F3"
+  ],
+  "carry_over": [
+    {
+      "claim": "セッションの Cookie の寿命が設計書の14日ではなく30日になっている。設計書には 30日 という数が1箇所も無く（`docs/specs/v2` 全体を検索して0件）、逆に14日が2箇所で明記されている。今は表の expires_at を書く側（タスク4のログイン）が未実装なので害は出ていないが、後続タスクがこの定数を expires_at の計算に読むと、設計の14日が黙って30日に化ける。",
+      "evidence": [
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 11,
+          "quote": "export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * DAY_SECONDS;"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 362,
+          "quote": "| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は14日（AI判断） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 598,
+          "quote": "| 1 | 店のホームを開く（セッションは14日。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |"
+        }
+      ]
+    },
+    {
+      "claim": "見分けの断り（401・403）・Origin の断り（403）・入口が無いとき（404）が、いずれも `kind: \"invalid_input\"` を `fields` 無しで返している。設計書349行目は invalid_input を「形・範囲。`fields` 必須」と定めており、受け入れ検査 r29 も invalid_input なら fields が1件以上あることを同じ約束として書いている。結果、セッション切れや役割違いの利用者に、画面の部品は texts.ts の invalid_input の文「入れた内容を確かめてください。」を出すことになる（入れた内容は関係ない）。",
+      "evidence": [
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 118,
+          "quote": "return jsonResponse(403, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 126,
+          "quote": "if (!customerId) return jsonResponse(401, { ok: false, error: { kind: \"invalid_input\" as InputRefusalKind } });"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 33,
+          "quote": "return new Response(JSON.stringify({ ok: false, error: { kind: \"invalid_input\" } }), { status: 404, headers: { \"content-type\": \"application/json\" } });"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 349,
+          "quote": "`invalid_input`（形・範囲。`fields` 必須）"
+        },
+        {
+          "path": "tests/acceptance/v2/r29-validation.test.ts",
+          "line": 43,
+          "quote": "if (b.label !== \"JSON でない\" && res.json.error.kind === \"invalid_input\") expect(res.json.error.fields.length, label).toBeGreaterThan(0);"
+        },
+        {
+          "path": "web/lib/domain/texts.ts",
+          "line": 11,
+          "quote": "invalid_input: () => \"入れた内容を確かめてください。\","
+        }
+      ]
+    }
+  ],
+  "status": "fix",
+  "recorded_at": "2026-09-21T07:28:36.865Z"
+}
