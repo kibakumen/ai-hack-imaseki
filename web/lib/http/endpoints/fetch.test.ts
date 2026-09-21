@@ -169,6 +169,9 @@ describe("取得の入口 POST /api/customer/fetch", () => {
   let cookie: string;
 
   const post = async (body: unknown): Promise<{ status: number; json: Record<string, unknown> }> => {
+    // この検査は同じ客で何度も取得を叩くので、連打の抑止（タスク33・1分5回）に当たらないよう数を毎回消す。
+    // 抑止そのものは r30 と web/lib/http/rateLimits.test.ts が見る。
+    await db.prepare("DELETE FROM rate_counters").run();
     const app = createApp(deps);
     const res = await app.fetch(
       new Request(`${ORIGIN}/api/customer/fetch`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN, cookie }, body: JSON.stringify(body) }),
