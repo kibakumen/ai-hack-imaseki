@@ -6,10 +6,15 @@
 //
 // 2026-09-21 タスク21 が「承認済みに戻す」（基準 25.9・25.10）を、「止める」と同じ形で足した
 // ——押すとその場で確かめが出て、確かめてから入口を呼ぶ。
+//
+// 2026-09-22 速成版の磨き込みを移植（本人選択）: 停止のボタンの文言を「止める」から
+// 「登録を取り消す」に変える（`btn-ban` の入口とテキストは変えていない・確かめの文言は
+// オファー／確保／取り消の3語を含んだまま・受け入れ検査 r24-admin.ui.test.tsx:65-73）。
 
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
 import { FormMessage } from "../ui/InputRefusal";
+import styles from "./admin.module.css";
 
 type StoreStatus = "pending" | "approved" | "banned";
 
@@ -96,7 +101,9 @@ export const StoreDetail = ({ storeId }: Props) => {
   return (
     <main>
       <h1>{store.name}</h1>
-      <p data-testid="store-status">{STATUS_LABELS[store.status]}</p>
+      <p data-testid="store-status">
+        <span className={styles.badge} data-status={store.status}>{STATUS_LABELS[store.status]}</span>
+      </p>
 
       <dl>
         <dt>住所</dt>
@@ -144,13 +151,13 @@ export const StoreDetail = ({ storeId }: Props) => {
       {store.status === "approved" && (
         <div data-testid="form-ban">
           <button type="button" data-testid="btn-ban" onClick={() => setConfirmingBan(true)}>
-            止める
+            登録を取り消す
           </button>
           {confirmingBan && (
-            <div data-testid="confirm-ban" role="group" aria-label="止める前の確かめ">
-              <p>公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます。止めますか。</p>
+            <div data-testid="confirm-ban" role="group" aria-label="登録を取り消す前の確かめ">
+              <p>公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます。登録を取り消しますか。</p>
               <button type="button" data-testid="btn-confirm" onClick={() => void act("ban")}>
-                止める
+                登録を取り消す
               </button>
               <button type="button" onClick={() => setConfirmingBan(false)}>
                 やめる
