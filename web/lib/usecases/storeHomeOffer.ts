@@ -34,6 +34,17 @@ const toOfferView = (
   latestUntil: latestUntilOf(new Date(offer.publishedAt)).toISOString(),
 });
 
+/**
+ * 公開中のオファーのカード1枚ぶん（公開中の変更の応答が使う・要件19・タスク20が足した）。
+ * 公開中が無ければ null。店のホームと**同じ `toOfferView` を通す**ので、カードに出る5項目と
+ * 最長の時刻の作り方は1か所のまま（片方だけ直って黙ってずれない）。
+ */
+export const liveOfferView = async (deps: Deps, storeId: string): Promise<OfferView | null> => {
+  const nowIso = deps.clock.now().toISOString();
+  const [coupons, live] = await Promise.all([listStoreCoupons(deps.db, storeId), findLiveOffer(deps.db, storeId, nowIso)]);
+  return live ? toOfferView(live, coupons) : null;
+};
+
 export const storeHomeOfferPart = async (deps: Deps, storeId: string): Promise<StoreHomeOfferPart> => {
   const now = deps.clock.now();
   const nowIso = now.toISOString();
