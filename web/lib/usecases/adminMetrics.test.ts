@@ -113,9 +113,14 @@ describe("運営の数字（要件33の基準 33.4）", () => {
     ctx.clock.set(T0);
   });
 
-  it("モデル別の表と受け皿の件数の置き場所は在り、中身は空（タスク28 が入れる）", async () => {
+  it("モデル別の表は、この場面の3件（resolved_model は全部 NULL・fallback_level も全部 NULL）を1行にまとめる（タスク28）", async () => {
     const m = await admin.get("/api/admin/metrics");
-    expect(m.json.byModel).toEqual([]);
+    // seedAiCall は resolved_model・fallback_level を常に NULL で入れるので、3件は1つの群（model: null）に落ちる。
+    // 実費の平均は非NULLの2件（0.001・0.003）の平均、所要は3件（800・1200・400）の平均。
+    expect(m.json.byModel).toEqual([
+      { model: null, count: 3, avgCostUsd: 0.002, avgDurationMs: 800, validationFailedRate: 0, fellBackRate: 0 },
+    ]);
+    // fallback_level は全部 NULL（`>= 1` は NULL のため数えない）なので、受け皿の件数は0のまま。
     expect(m.json.fallbackCount).toBe(0);
   });
 

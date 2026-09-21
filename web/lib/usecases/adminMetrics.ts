@@ -11,10 +11,10 @@
 // ⚠️ 応答に客のデータ（電話番号・呼び名）は入れない（基準 27.6・28.2）。ここが読むのは数だけ。
 
 import type { Deps } from "../ports";
-import { aiCallTotals, fetchTotals, reservationTotals } from "../repo/adminMetrics";
+import { aiCallTotals, byModelTotals, byPurposeTotals, fallbackCount as countFallbacks, fetchTotals, reservationTotals } from "../repo/adminMetrics";
 
 /**
- * モデル別の表の1行（第4周の追記・タスク28 が中身を入れる）。
+ * モデル別の表の1行（第4周の追記・タスク28）。
  * `model` が null の行は、実際に答えたモデルが分からない呼び出しをまとめたもの（画面が「不明」と出す）。
  */
 export type AdminMetricsByModelRow = {
@@ -26,12 +26,29 @@ export type AdminMetricsByModelRow = {
   fellBackRate: number;
 };
 
+/**
+ * 用途別の表の1行（2026-09-22・本人の指示「用途別の実費内訳」）。`purpose` は
+ * `select`（店の選定）／`pitch`（紹介文の生成）／`pitch_eval`（紹介文の判定）の3つ
+ * （migrations/0002_ai_call_purpose・`repo/logs.ts` の `AiCallPurpose`）。
+ *
+ * `totalCostUsd` は**合計**——モデル別の `avgCostUsd`（1回あたり）とは役割が違い、
+ * 「その用途にいくら使ったか」を答える。
+ */
+export type AdminMetricsByPurposeRow = {
+  purpose: string;
+  count: number;
+  totalCostUsd: number;
+  avgDurationMs: number;
+};
+
 export type AdminMetrics = {
   ai: { calls: number; avgCostUsd: number; avgDurationMs: number; succeeded: number; failed: number };
   fetch: { count: number; avgDurationMs: number; aiUsed: number; fellBack: number };
   /** `expiredRate` は確保のうち自動で取り消された（期限切れの）割合。0〜1 の小数で返す */
   reservations: { total: number; expiredRate: number };
   byModel: AdminMetricsByModelRow[];
+  /** 用途別の実費内訳（2026-09-22・本人の指示） */
+  byPurpose: AdminMetricsByPurposeRow[];
   /** 受け皿（別のモデル）が答えた呼び出しの数（`ai_calls.fallback_level` ≥ 1） */
   fallbackCount: number;
 };
@@ -41,15 +58,20 @@ const rateOf = (part: number, whole: number): number => (whole > 0 ? part / whol
 
 export const adminMetrics = async (deps: Deps): Promise<AdminMetrics> => {
   const nowIso = deps.clock.now().toISOString();
-  const [ai, fetch, reservations] = await Promise.all([aiCallTotals(deps.db), fetchTotals(deps.db), reservationTotals(deps.db, nowIso)]);
+  const [ai, fetch, reservations, byModel, byPurpose, fallbacks] = await Promise.all([
+    aiCallTotals(deps.db),
+    fetchTotals(deps.db),
+    reservationTotals(deps.db, nowIso),
+    byModelTotals(deps.db),
+    byPurposeTotals(deps.db),
+    countFallbacks(deps.db),
+  ]);
   return {
     ai,
     fetch,
     reservations: { total: reservations.total, expiredRate: rateOf(reservations.expired, reservations.total) },
-    // ⚠️ タスク28（OrcaRouter の3点セット A-2）がここを埋める: `repo/adminMetrics.ts` に
-    //    `resolved_model` で括った集計（`GROUP BY resolved_model`）と `fallback_level >= 1` の件数を足し、
-    //    この2行をその呼び出しに差し替える。応答の形（AdminMetricsByModelRow）は上に用意してある。
-    byModel: [],
-    fallbackCount: 0,
+    byModel,
+    byPurpose,
+    fallbackCount: fallbacks,
   };
 };

@@ -294,6 +294,18 @@
   text-align: right;
 }
 
+/* 桁を揃える（本人の指示）。数字を並べる場所（バーの値・表の数値列・数字の札）にだけ貼る。 */
+.tabularNums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* データが1件も無いときの文（本人の指示: 0 や空の棒を並べない）。 */
+.noData {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
 /* 全体の数字（定義のならび）。素の dt/dd が縦に流れるだけだと読む面になるので、札に割る。 */
 .metricsGrid {
   display: grid;

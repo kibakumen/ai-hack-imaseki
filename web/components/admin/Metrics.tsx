@@ -11,6 +11,10 @@
 // 2026-09-22 速成版（sprint/app/admin の AiMetricsSection）の磨き込みを移植（本人選択）:
 //   モデル別の呼び出し件数・平均実費を、外部ライブラリなしの CSS 幅%の横棒グラフで、
 //   数字の一覧より上（画面の最初のセクション）に出す。表（by-model）はそのまま残す。
+// 2026-09-22: 入口（usecases/adminMetrics）が `byModel`・`fallbackCount` を実際に返すようになった
+// ので、その呼び出しへ繋いだ。併せて本人の指示「用途別（店の選定／紹介文の生成／紹介文の判定）の
+// 実費内訳」に応え、用途別の横棒グラフ（`byPurpose`）を足した。データが1件も無いときは
+// 0 の棒を並べず「まだ呼び出しがありません」と書く（本人の指示）。
 
 import { useEffect, useState } from "react";
 import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
@@ -27,11 +31,20 @@ type ByModelRow = {
   fellBackRate: number;
 };
 
+/** 用途別の1行（2026-09-22）。`purpose` は "select" | "pitch" | "pitch_eval"（下の PURPOSE_LABELS）。 */
+type ByPurposeRow = {
+  purpose: string;
+  count: number;
+  totalCostUsd: number;
+  avgDurationMs: number;
+};
+
 type MetricsResponse = {
   ai: { calls: number; avgCostUsd: number; avgDurationMs: number; succeeded: number; failed: number };
   fetch: { count: number; avgDurationMs: number; aiUsed: number; fellBack: number };
   reservations: { total: number; expiredRate: number };
   byModel: ByModelRow[];
+  byPurpose: ByPurposeRow[];
   fallbackCount: number;
 };
 
@@ -51,6 +64,10 @@ const times = (count: number): string => `${count} 回`;
 
 const MODEL_UNKNOWN_LABEL = "不明";
 const modelLabel = (model: string | null): string => model ?? MODEL_UNKNOWN_LABEL;
+
+/** 用途の語（repo/logs.ts の AiCallPurpose）を日本語の名前へ（本人の指示にある3つの言い方に合わせる）。 */
+const PURPOSE_LABELS: Record<string, string> = { select: "店の選定", pitch: "紹介文の生成", pitch_eval: "紹介文の判定" };
+const purposeLabel = (purpose: string): string => PURPOSE_LABELS[purpose] ?? purpose;
 
 /** 画面に並べる数字（要件33の基準 33.4 が読めることを求めているもの）。 */
 const numbersOf = (data: MetricsResponse): Array<{ label: string; value: string }> => [
@@ -76,10 +93,13 @@ const Bar = ({ label, valueLabel, ratio }: { label: string; valueLabel: string; 
       <div className={styles.barTrack}>
         <div className={styles.barFill} style={{ width: `${width}%` }} />
       </div>
-      <div className={styles.barValue}>{valueLabel}</div>
+      <div className={`${styles.barValue} ${styles.tabularNums}`}>{valueLabel}</div>
     </div>
   );
 };
+
+/** 呼び出しが1件も無いときに出す文（本人の指示: 0 の棒を並べない）。 */
+const NoCallsYet = () => <p className={styles.noData}>まだ呼び出しがありません</p>;
 
 /** モデル別（呼び出し件数・平均実費のグラフ＋詳細の表）。要件33の基準 33.4・タスク28。 */
 const ByModelSection = ({ rows, fallbackCount }: { rows: ByModelRow[]; fallbackCount: number }) => {
@@ -89,9 +109,13 @@ const ByModelSection = ({ rows, fallbackCount }: { rows: ByModelRow[]; fallbackC
   return (
     <section>
       <h2>AI の実費と所要（モデル別）</h2>
-      <p data-testid="fallback-count">受け皿が答えた件数: {fallbackCount}件</p>
+      <p data-testid="fallback-count">
+        受け皿が答えた件数: <span className={styles.tabularNums}>{fallbackCount}</span>件
+      </p>
 
-      {rows.length > 0 && (
+      {rows.length === 0 ? (
+        <NoCallsYet />
+      ) : (
         <>
           <h3>呼び出し件数</h3>
           {rows.map((r) => (
@@ -117,15 +141,59 @@ const ByModelSection = ({ rows, fallbackCount }: { rows: ByModelRow[]; fallbackC
           {rows.map((r) => (
             <tr key={modelLabel(r.model)}>
               <td>{modelLabel(r.model)}</td>
-              <td>{r.count}</td>
-              <td>{usdOrDash(r.avgCostUsd)}</td>
-              <td>{milliseconds(r.avgDurationMs)}</td>
-              <td>{percent(r.validationFailedRate)}</td>
-              <td>{percent(r.fellBackRate)}</td>
+              <td className={styles.tabularNums}>{r.count}</td>
+              <td className={styles.tabularNums}>{usdOrDash(r.avgCostUsd)}</td>
+              <td className={styles.tabularNums}>{milliseconds(r.avgDurationMs)}</td>
+              <td className={styles.tabularNums}>{percent(r.validationFailedRate)}</td>
+              <td className={styles.tabularNums}>{percent(r.fellBackRate)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+    </section>
+  );
+};
+
+/**
+ * 用途別（店の選定／紹介文の生成／紹介文の判定）の実費内訳（2026-09-22・本人の指示）。
+ * 横棒は実費の合計の割合で見せる——「その用途にいくら使ったか」がアピールになる工夫の中身。
+ */
+const ByPurposeSection = ({ rows }: { rows: ByPurposeRow[] }) => {
+  const maxCost = Math.max(0.0001, ...rows.map((r) => r.totalCostUsd));
+
+  return (
+    <section>
+      <h2>AI の実費の内訳（用途別）</h2>
+
+      {rows.length === 0 ? (
+        <NoCallsYet />
+      ) : (
+        <>
+          {rows.map((r) => (
+            <Bar key={r.purpose} label={purposeLabel(r.purpose)} valueLabel={usd(r.totalCostUsd)} ratio={r.totalCostUsd / maxCost} />
+          ))}
+
+          <table className={styles.table} data-testid="by-purpose">
+            <thead>
+              <tr>
+                {["用途", "件数", "実費（合計）", "平均所要"].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.purpose}>
+                  <td>{purposeLabel(r.purpose)}</td>
+                  <td className={styles.tabularNums}>{r.count}</td>
+                  <td className={styles.tabularNums}>{usd(r.totalCostUsd)}</td>
+                  <td className={styles.tabularNums}>{milliseconds(r.avgDurationMs)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </section>
   );
 };
@@ -162,12 +230,15 @@ export const Metrics = () => {
       {data && (
         <>
           <ByModelSection rows={data.byModel} fallbackCount={data.fallbackCount} />
+          {/* 凍結された受け入れ検査（タスク24・28）の偽の応答は `byPurpose` を持たない旧い形——
+              そこでは undefined になるので、無ければ空として扱う（0件と同じ「まだ呼び出しがありません」表示）。 */}
+          <ByPurposeSection rows={data.byPurpose ?? []} />
 
           <dl className={styles.metricsGrid} data-testid="metrics">
             {numbersOf(data).map((row) => (
               <div key={row.label}>
                 <dt>{row.label}</dt>
-                <dd>{row.value}</dd>
+                <dd className={styles.tabularNums}>{row.value}</dd>
               </div>
             ))}
           </dl>
