@@ -1,0 +1,278 @@
+<title>タスク2「横断の土台」— 実装ビュー（cycle2・往復2）</title>
+<style>
+:root{
+  --bg:#fbfaf7; --fg:#1c1b1a; --muted:#6b6560; --card:#ffffff; --border:#e4ddd3;
+  --accent:#8a5a2b; --accent-bg:#f4e9db;
+  --ok:#2e6b3e; --ok-bg:#e8f3e9;
+  --warn:#9a6a00; --warn-bg:#fbf0d9;
+  --bad:#a13d3d; --bad-bg:#fbe9e7;
+  --low:#5a5650; --low-bg:#eeece7;
+  --code-bg:#f2ede4;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#171512; --fg:#ece7df; --muted:#a89f92; --card:#211f1b; --border:#3a352d;
+    --accent:#d3a262; --accent-bg:#332a1c;
+    --ok:#8fd39f; --ok-bg:#1c2e20;
+    --warn:#e0b455; --warn-bg:#332a12;
+    --bad:#e4938a; --bad-bg:#3a2220;
+    --low:#b8b2a7; --low-bg:#2a2721;
+    --code-bg:#26221c;
+  }
+}
+[data-theme="dark"]{
+  --bg:#171512; --fg:#ece7df; --muted:#a89f92; --card:#211f1b; --border:#3a352d;
+  --accent:#d3a262; --accent-bg:#332a1c;
+  --ok:#8fd39f; --ok-bg:#1c2e20;
+  --warn:#e0b455; --warn-bg:#332a12;
+  --bad:#e4938a; --bad-bg:#3a2220;
+  --low:#b8b2a7; --low-bg:#2a2721;
+  --code-bg:#26221c;
+}
+*{box-sizing:border-box;}
+body{
+  background:var(--bg); color:var(--fg);
+  font-family:"Hiragino Sans","Yu Gothic UI",system-ui,-apple-system,sans-serif;
+  line-height:1.75; margin:0; padding:24px 20px 64px;
+  font-size:15px;
+}
+h1{font-size:19px; margin:0 0 6px;}
+h2{font-size:16px; margin:36px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--border);}
+h3{font-size:14px; margin:20px 0 8px; color:var(--accent);}
+.lede{color:var(--muted); font-size:13px; margin:0 0 20px;}
+.badge{
+  display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
+  border:1px solid var(--border); margin-right:6px;
+}
+.badge.ok{background:var(--ok-bg); color:var(--ok); border-color:transparent;}
+.badge.warn{background:var(--warn-bg); color:var(--warn); border-color:transparent;}
+.badge.bad{background:var(--bad-bg); color:var(--bad); border-color:transparent;}
+.badge.low{background:var(--low-bg); color:var(--low); border-color:transparent;}
+.scrollbox{overflow-x:auto; border:1px solid var(--border); border-radius:8px; background:var(--card);}
+table{border-collapse:collapse; width:100%; min-width:560px; font-size:13.5px;}
+th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top;}
+th{background:var(--accent-bg); color:var(--accent); font-weight:600; white-space:nowrap;}
+tr:last-child td{border-bottom:none;}
+td code, .lede code, li code{
+  background:var(--code-bg); padding:1px 5px; border-radius:4px; font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.quote{
+  background:var(--code-bg); border-left:3px solid var(--accent); padding:8px 10px;
+  border-radius:0 6px 6px 0; font-size:12.5px; margin:6px 0;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre-wrap;
+}
+.finding{
+  border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:10px 0;
+  background:var(--card);
+}
+.finding.new{border-color:var(--accent);}
+.finding .head{display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;}
+.finding .file{font-size:12px; color:var(--muted); font-family:ui-monospace,monospace;}
+.finding .claim{margin:6px 0;}
+.finding .fix{color:var(--muted); font-size:13px; margin-top:6px;}
+.finding .fix::before{content:"直し方の案: "; color:var(--fg); font-weight:600;}
+.finding .rebuttal{color:var(--muted); font-size:13px; margin-top:6px;}
+.finding .rebuttal::before{content:"反論役: "; color:var(--fg); font-weight:600;}
+.unbroken-list{margin:0; padding-left:20px;}
+.unbroken-list li{margin:6px 0; font-size:13.5px;}
+.q-list{margin:0; padding-left:20px;}
+.q-list li{margin:8px 0;}
+.gate-line{
+  display:flex; gap:10px; align-items:baseline; padding:6px 0; border-bottom:1px dashed var(--border);
+}
+.gate-line:last-child{border-bottom:none;}
+.gate-cmd{font-family:ui-monospace,monospace; font-size:12.5px; background:var(--code-bg); padding:3px 8px; border-radius:6px;}
+.foot-note{color:var(--muted); font-size:12px; margin-top:6px;}
+.score-cell{font-weight:700;}
+.dir-group{color:var(--muted); font-size:12px;}
+</style>
+
+<h1>タスク2「横断の土台」— 実装ビュー（cycle2・往復2）</h1>
+<p class="lede">対象: <code>web/lib/ports.ts</code>・<code>adapters/{env,webcrypto,logger}</code>・<code>lib/http/{defineRoute,cookies,guards,app,routes}</code>・<code>schemas/{error,limits}</code>・<code>domain/{inputRefusal,texts,genres,token,code,password}</code>・<code>client/api</code>・<code>eslint.config.mjs</code>（21ファイル・+1111/-1行）／監査記録: <code>docs/specs/v2/audits/task-2-c2-e2.audit.json</code>（往復2）</p>
+
+<h2>① このタスクが応える要件と受け入れ検査</h2>
+<div class="scrollbox">
+<table>
+<tr><th>項目</th><th>内容</th></tr>
+<tr><td>要件</td><td>
+  <code>29.1</code> 外から入る値をスキーマで形と範囲を検査してから使う［段2］／
+  <code>29.2</code> 検査に落ちた要求には処理を行わず、どの項目が誤りかを返す［段1］／
+  <code>29.4</code> 画面は API の応答をスキーマで検査してから表示に使う［段2］
+</td></tr>
+<tr><td>受け入れ検査</td><td><code>tests/acceptance/v2/d05-input-refusal.test.ts</code></td></tr>
+<tr><td>タスク文の内容</td><td>入力の断りの応答の形と語の一覧・決まった文の全部・見分け4種・Origin の確かめ・人かどうかの確かめの枠（差し替え口 <code>HumanCheck</code> を呼ぶ所）・ログの出口・lint の境界の設定（<code>no-restricted-imports</code>・<code>no-console</code>・<code>no-restricted-globals</code>）</td></tr>
+</table>
+</div>
+
+<h2>② 差分のファイル別の要約</h2>
+<div class="scrollbox">
+<table>
+<tr><th>ファイル</th><th>種別</th><th>追加</th><th>削除</th></tr>
+<tr><td class="dir-group" colspan="4">lib/ports.ts・eslint.config.mjs</td></tr>
+<tr><td><code>web/eslint.config.mjs</code></td><td><span class="badge">変更</span></td><td>161</td><td>1</td></tr>
+<tr><td><code>web/lib/ports.ts</code></td><td><span class="badge">新規</span></td><td>54</td><td>0</td></tr>
+<tr><td class="dir-group" colspan="4">lib/adapters/</td></tr>
+<tr><td><code>web/lib/adapters/env.ts</code></td><td><span class="badge">新規</span></td><td>15</td><td>0</td></tr>
+<tr><td><code>web/lib/adapters/logger.ts</code></td><td><span class="badge">新規</span></td><td>11</td><td>0</td></tr>
+<tr><td><code>web/lib/adapters/webcrypto.ts</code></td><td><span class="badge">新規</span></td><td>52</td><td>0</td></tr>
+<tr><td class="dir-group" colspan="4">lib/http/</td></tr>
+<tr><td><code>web/lib/http/app.ts</code></td><td><span class="badge">新規</span></td><td>51</td><td>0</td></tr>
+<tr><td><code>web/lib/http/cookies.ts</code></td><td><span class="badge">新規</span></td><td>40</td><td>0</td></tr>
+<tr><td><code>web/lib/http/defineRoute.ts</code></td><td><span class="badge">新規</span></td><td>174</td><td>0</td></tr>
+<tr><td><code>web/lib/http/guards.ts</code></td><td><span class="badge">新規</span></td><td>50</td><td>0</td></tr>
+<tr><td><code>web/lib/http/routes.ts</code></td><td><span class="badge">新規</span></td><td>6</td><td>0</td></tr>
+<tr><td><code>web/lib/http/robustness.test.ts</code></td><td><span class="badge">新規・テスト</span></td><td>73</td><td>0</td></tr>
+<tr><td class="dir-group" colspan="4">lib/schemas/</td></tr>
+<tr><td><code>web/lib/schemas/error.ts</code></td><td><span class="badge">新規</span></td><td>24</td><td>0</td></tr>
+<tr><td><code>web/lib/schemas/limits.ts</code></td><td><span class="badge">新規</span></td><td>14</td><td>0</td></tr>
+<tr><td class="dir-group" colspan="4">lib/domain/</td></tr>
+<tr><td><code>web/lib/domain/code.ts</code></td><td><span class="badge">新規</span></td><td>9</td><td>0</td></tr>
+<tr><td><code>web/lib/domain/genres.ts</code></td><td><span class="badge">新規</span></td><td>17</td><td>0</td></tr>
+<tr><td><code>web/lib/domain/inputRefusal.ts</code></td><td><span class="badge">新規</span></td><td>49</td><td>0</td></tr>
+<tr><td><code>web/lib/domain/password.ts</code></td><td><span class="badge">新規</span></td><td>37</td><td>0</td></tr>
+<tr><td><code>web/lib/domain/texts.ts</code></td><td><span class="badge">新規</span></td><td>82</td><td>0</td></tr>
+<tr><td><code>web/lib/domain/token.ts</code></td><td><span class="badge">新規</span></td><td>26</td><td>0</td></tr>
+<tr><td class="dir-group" colspan="4">lib/client/</td></tr>
+<tr><td><code>web/lib/client/api.ts</code></td><td><span class="badge">新規</span></td><td>90</td><td>0</td></tr>
+<tr><td><code>web/lib/client/api.test.ts</code></td><td><span class="badge">新規・テスト</span></td><td>76</td><td>0</td></tr>
+<tr><td><strong>合計（21ファイル）</strong></td><td></td><td><strong>1111</strong></td><td><strong>1</strong></td></tr>
+</table>
+</div>
+
+<h2>③ ゲートの結果</h2>
+<div class="scrollbox">
+<div style="padding:12px 14px;">
+<p><span class="badge ok">ゲート通過</span></p>
+<div class="gate-line"><span class="badge">型検査</span><span class="gate-cmd">pnpm exec tsc --noEmit -p tsconfig.json</span></div>
+<div class="gate-line"><span class="badge">lint</span><span class="gate-cmd">pnpm --dir web exec eslint .</span></div>
+<div class="gate-line"><span class="badge">テスト</span><span class="gate-cmd">pnpm exec vitest run</span></div>
+</div>
+</div>
+<p class="foot-note">出典: <code>.dev/runs/v2/task-2.gate.txt</code></p>
+
+<h2>④ 監査の指摘を該当ファイル・行の横に</h2>
+<p class="lede">監査記録 <code>docs/specs/v2/audits/task-2-c2-e2.audit.json</code>（cycle2・往復2）。指摘7件（不具合4・改善提案3）。F1〜F5 は往復1から持ち越し（値は据え置き）、<strong>F6・F7 は反論役が新規に見つけた指摘</strong>（枠を強調）。</p>
+
+<h3>web/lib/http/guards.ts</h3>
+<div class="finding">
+  <div class="head"><span class="badge bad">不具合</span><span class="badge">重さ: 中</span><span class="badge">確度: 確実</span><span class="file">行33・F1</span></div>
+  <p class="claim">セッションの有効期限が壊れた（パース不能な）値のとき、<code>identifySession</code> は「期限切れではない」側へフェイルオープンする——<code>new Date(壊れた文字列).getTime()</code> は <code>NaN</code> になり、<code>NaN &lt;= now</code> は常に <code>false</code> なので期限切れ判定が発火せず、そのままセッションを有効として扱ってしまう。</p>
+  <div class="quote">if (new Date(row.expires_at as string).getTime() &lt;= deps.clock.now().getTime()) return null;</div>
+  <div class="quote">web/lib/http/guards.ts:19
+/** セッションの Cookie を SHA-256 にして探す。無い・でたらめ・期限切れなら null（401 の元）。 */</div>
+  <p class="fix">getTime() の結果を変数に取り、Number.isFinite で壊れた日付を明示的に検出して null（=期限切れ扱い）へ倒す。すぐ上の doc コメント自身が「期限切れなら null」と契約を書いており、コードがその契約を満たしていない。</p>
+  <p class="rebuttal">自分で経路を追い、崩せなかった（AGREE）。row.expires_at が null のときは new Date(null)=0 で偶然フェイルクローズするため、壊れた文字列のケースだけが素通りする点が追加確認で補強された。</p>
+</div>
+
+<h3>web/lib/http/defineRoute.ts</h3>
+<div class="finding">
+  <div class="head"><span class="badge warn">改善提案</span><span class="badge">重さ: 中</span><span class="badge">確度: 高確率</span><span class="file">行171・F2</span></div>
+  <p class="claim">設計書は <code>http/defineRoute</code> を「例外を捕まえる所」と名指ししているが、<code>handle</code> は <code>config.handler(...)</code> や <code>identifyCustomer</code>／<code>identifySession</code> の呼び出しをどこも try/catch していない。usecases が例外を投げると未捕捉のまま伝播する。</p>
+  <div class="quote">const result = await config.handler({ input, params, req, deps, ctx });</div>
+  <div class="quote">docs/specs/v2/design.md:910
+| ログに個人データを出さない（振る舞い） | ... | 段1 | `adapters/logger`・`lib/ports.ts`（`Logger` の項目の型）・`http/defineRoute`（例外を捕まえる所） |</div>
+  <p class="fix">try/catch の実装自体はタスク25（d01担当・tests/acceptance/v2/d01-log-privacy.test.ts が describeTask("25") を名乗る）の仕事であり、タスク2でやるべきは実装ではなく引き継ぎ。tasks.md 49〜51行の「前のタスクから次のタスクへ」欄（現状まだ空）に「defineRoute.handle に例外の受け皿が無い。task25 で try/catch を追加し、deps.logger 経由で個人データを含まない形で記録すること」と書き残す。この欄が空のまま task25 まで進むと、d01 のテストが必ず赤くなる。</p>
+  <p class="rebuttal">AGREE。ただし「今すぐ包め」ではなく「引き継ぎを書け」が task2 として実行可能な処置だと指摘され、fix をその方向に絞った。</p>
+</div>
+<div class="finding">
+  <div class="head"><span class="badge low">改善提案</span><span class="badge">重さ: 中</span><span class="badge">確度: 高確率</span><span class="file">行103・F3</span></div>
+  <p class="claim">multipart の壊れた本文は明示的に UNREADABLE_BODY（→400 bad_format）へ倒すのに、JSON の本文が壊れているときだけ黙って <code>{}</code> に差し替える。スキーマの無い入口（config.input 未指定）ではこの <code>{}</code> がそのまま素通りし、スキーマのある入口でも実際の原因（本文が壊れている）とはずれた reason が返る。</p>
+  <div class="quote">// JSON になっていない本文は「項目が何も無い」として扱い、スキーマの検査に判定を任せる。
+return JSON.parse(text);</div>
+  <div class="quote">web/lib/http/defineRoute.ts:90
+return Object.fromEntries((await req.formData()).entries());
+} catch { return UNREADABLE_BODY;</div>
+  <p class="fix">multipart と同じ扱いに揃え、JSON.parse の catch でも UNREADABLE_BODY を返す。反論役の指摘で severity を medium へ引き上げた——スキーマの無い入口ができた時点で壊れた JSON が検査を一切通らずに素通りする経路が確認でき、r29 の38行「本文のある入口の全部で ok:false」という受け入れ検査の前提を壊しうる。</p>
+</div>
+<div class="finding">
+  <div class="head"><span class="badge bad">不具合</span><span class="badge">重さ: 中</span><span class="badge">確度: 確実</span><span class="file">401/403 応答・F5</span></div>
+  <p class="claim">見分けの断り（401・403）・Origin の断り（403）・役割違い（403）・入口が無いとき（404）が、いずれも「fields 必須」と定義された <code>invalid_input</code> を fields 無しで返している。</p>
+  <div class="quote">return jsonResponse(403, { ok: false, error: { kind: "invalid_input" as InputRefusalKind } });
+if (!customerId) return jsonResponse(401, { ok: false, error: { kind: "invalid_input" as InputRefusalKind } });
+if (!session) return jsonResponse(401, { ok: false, error: { kind: "invalid_input" as InputRefusalKind } });
+if (session.role !== config.auth) return jsonResponse(403, { ok: false, error: { kind: "invalid_input" as InputRefusalKind } });</div>
+  <div class="quote">docs/specs/v2/design.md:349
+`invalid_input`（形・範囲。`fields` 必須）</div>
+  <p class="fix">401・403・404 には fields 無しでも許される別の語を使うか、意味のある fields を添える。</p>
+  <p class="rebuttal">設計書自身が見分けの断りの本文形を1箇所も定めておらず（tasks.md 41行・design.md 465行は状態コードのみ）、350行の reason は入力の項目名を前提にしているため設計書側に内部矛盾がある——直し方が一意に決まらないので、コードを直す前に設計書側の記述をどちらに揃えるか本人判断が要る。受け入れ検査（d03・r29）はどちらでも通るため、放置すると黙って残る点に注意。</p>
+</div>
+<div class="finding new">
+  <div class="head"><span class="badge bad">不具合</span><span class="badge">重さ: 中</span><span class="badge">確度: 高確率</span><span class="file">行119・F6・新規</span></div>
+  <p class="claim">lint の境界（task2 の担当ファイル web/eslint.config.mjs）が、設計書が明文で許した「import type での domain/inputRefusal の import」を閉じてしまっている。uiBoundary が使っているのは ESLint 本体の no-restricted-imports で、このルールは型だけの import（import type）を区別するオプションを持たない（区別できるのは @typescript-eslint/no-restricted-imports の allowTypeImports だけ）。design.md 916行は components・app・lib/client からの lib/domain の import を「domain/texts への import か import type のどちらか」まで許し、「inputRefusal の語は部品と lib/client が import type で使う」と明記しているので、task3 で components/ui/InputRefusal.tsx が <code>import type { InputRefusalKind } from "../../lib/domain/inputRefusal"</code> を書いた瞬間に lint ゲートが赤くなる。今は該当する部品が1つも無いため通っているだけ。</p>
+  <div class="quote">"no-restricted-imports": [ … group: ["**/domain/**", "!**/domain/texts"], … ]</div>
+  <div class="quote">docs/specs/v2/design.md:916
+| **部品・画面・`lib/client` が `lib/domain` から値として読むのは `domain/texts.ts` だけ**（第5周の直し・F2） | `structure.test.ts` 構造: ... `lib/domain` からの import が、`domain/texts` への import か `import type` のどちらか（... `inputRefusal` の語は部品と `lib/client` が `import type` で使う・第6周の直し）... |</div>
+  <div class="quote">tests/acceptance/v2/structure.test.ts:147
+expect(eslint).toMatch(/no-restricted-imports/);</div>
+  <p class="fix">uiBoundary の該当パターンを @typescript-eslint/no-restricted-imports へ切り替え、allowTypeImports: true（または type-only import を除外するオプション）を指定する。structure.test.ts はルール名の文字列在否しか見ないため、切り替えても既存の受け入れ検査は壊れない。</p>
+  <p class="rebuttal">反論役が omissions として提出し、自分でも eslint.config.mjs・design.md 916行・structure.test.ts 147行を実物で確認して崩せなかった（新規指摘として追加）。</p>
+</div>
+<div class="finding new">
+  <div class="head"><span class="badge bad">不具合</span><span class="badge">重さ: 中</span><span class="badge">確度: 高確率</span><span class="file">行145・F7・新規</span></div>
+  <p class="claim">役割は一致する（store）が、そのアカウントに紐づく store_id が無い（NULL）ときに 403 で断らず、空文字へ黙って倒して手続きへ通す。guards.ts が store_id の NULL を null にして返し、defineRoute.ts が session.storeId ?? "" で空文字に置き換えるため、ctx.auth は "store" のまま storeId だけが実在しない値になる。accounts.store_id はスキーマ上 NOT NULL 制約が無く、guards.ts の型自体も storeId: string | null と宣言しており、この状態を明示的に想定している。tasks.md は見分けの断りを「401（客・未ログイン）／403（役割違い・Origin）」とだけ定めており、「役割は一致するが紐づく店が無い」は定められた結果のどちらでもない。</p>
+  <div class="quote">ctx = config.auth === "store" ? { auth: "store", accountId: session.accountId, storeId: session.storeId ?? "" } : { auth: "admin", accountId: session.accountId };</div>
+  <div class="quote">web/lib/http/guards.ts:8
+export type SessionIdentity = { accountId: string; role: "store" | "admin"; storeId: string | null };</div>
+  <div class="quote">docs/specs/v2/tasks.md:41
+見分けの断りは 401（客・未ログイン）／403（役割違い・Origin）。</div>
+  <div class="quote">web/migrations/0001_init.sql:8
+store_id TEXT,</div>
+  <p class="fix">config.auth === "store" の分岐で session.storeId が null のとき、空文字へ倒さず 403（invalid_input）で断る。⚠️ 通常の店の登録フローで role=store の account に store_id が入らないケースが実際に起こり得るかは task4 以降の実装に依存し未検証——本人へ確認する価値がある。</p>
+  <p class="rebuttal">反論役が omissions として提出し、guards.ts・defineRoute.ts・tasks.md 41行・0001_init.sql の store_id 列定義を自分で確認して崩せなかった（新規指摘として追加）。</p>
+</div>
+
+<h3>web/lib/http/app.ts</h3>
+<div class="finding">
+  <div class="head"><span class="badge bad">不具合（F5 続き）</span><span class="badge">重さ: 中</span><span class="badge">確度: 確実</span><span class="file">行46</span></div>
+  <p class="claim">入口が無いとき（404）も同様に <code>kind: "invalid_input"</code> を <code>fields</code> 無しで返している。</p>
+  <div class="quote">return new Response(JSON.stringify({ ok: false, error: { kind: "invalid_input" } }), { status: 404, headers: { "content-type": "application/json" } });</div>
+</div>
+
+<h3>web/lib/http/cookies.ts</h3>
+<div class="finding">
+  <div class="head"><span class="badge bad">不具合</span><span class="badge">重さ: 中</span><span class="badge">確度: 確実</span><span class="file">行11・F4</span></div>
+  <p class="claim">セッションの Cookie の寿命が設計書の14日ではなく30日のままになっている。設計書に「30日」という数字は1箇所も無く、14日が2箇所で明記されている。</p>
+  <div class="quote">export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * DAY_SECONDS;</div>
+  <div class="quote">docs/specs/v2/design.md:362
+| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は14日（AI判断） |</div>
+  <div class="quote">docs/specs/v2/design.md:598
+| 1 | 店のホームを開く（セッションは14日。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |</div>
+  <p class="fix">SESSION_COOKIE_MAX_AGE_SECONDS を 14 * DAY_SECONDS に直す。</p>
+  <p class="rebuttal">docs/specs/v2 全体を grep して「30日」が0件・「14日」が2件であることを確認し、AGREE。すぐ上の客の Cookie（400日）には設計書143行という出典があるのに、セッションの30日だけ出典が無いことが根拠を補強した。</p>
+</div>
+
+<h3>崩せなかった点（監査が壊そうとして壊れなかったもの）</h3>
+<ul class="unbroken-list">
+<li>境界外の変更: 変更されたファイルは task2 のタスク文が列挙した一覧＋タスク文が明示する eslint.config.mjs に一致しており、範囲外のファイルへの手出しは見つからなかった。</li>
+<li>秘密情報の直書き: diff 全体を走査したが API キー・秘密鍵の直書きは無い。adapters/env.ts が読むのは設計書が明示的に「公開してよい」とした4値のみ。</li>
+<li>URL パス・Cookie ヘッダーの壊れた percent 符号: decodeSegment（app.ts）と parseCookies（cookies.ts）は両方とも decodeURIComponent の例外を捕まえて安全側に倒しており、robustness.test.ts でも実証済み。</li>
+<li>multipart の壊れた本文: 例外を投げず UNREADABLE_BODY 経由で明示的な 400 bad_format に倒れており、robustness.test.ts で確認できた。</li>
+<li>schemas/limits.ts の数値はすべて requirements.md の該当基準と一致しており、ズレは見つからなかった。</li>
+<li>domain/inputRefusal.ts の INPUT_REFUSAL_KINDS・FIELD_REASONS は要件29の補足表・d05-input-refusal.test.ts が期待する語彙と1件残らず一致し、決め打ちや語の取りこぼしは見つからなかった。</li>
+<li>client/api.ts の zod 検査は特定のテスト入力だけを通す分岐ではなく、あらゆる応答形状に対して一様に適用される一般的な実装だった。</li>
+<li>lib/client が lib/schemas を値として広く読めると書く design.md 300行目と実際の eslint 境界の食い違いは、structure.test.ts が検査する境界とは一致しており、設計書側の内部矛盾であってタスク2の実装が壊した箇所ではない（前サイクルで確認済み・今回も崩せなかった）。</li>
+</ul>
+
+<h2>⑤ 採点と本人への確認質問</h2>
+
+<h3>採点（監査記録の scores をそのまま）</h3>
+<div class="scrollbox">
+<table>
+<tr><th>軸</th><th>点</th><th>理由</th></tr>
+<tr><td>読みやすさ</td><td class="score-cell">4</td><td>命名・コメントは一貫して明快だが、defineRoute.handle・reasonFromIssue のような密度の高い分岐は読み解きに時間がかかる。反論役の再検証でも同じ評価。</td></tr>
+<tr><td>単純さ</td><td class="score-cell">4</td><td>12ファイルにまたがる横断土台としては最小限。過剰な抽象化は見当たらない。</td></tr>
+<tr><td>本人が説明できるか</td><td class="score-cell">2</td><td>F1・F3・F6・F7 はいずれもコード上の細部（NaN の扱い・catch の黙殺・ESLint ルールの型非対応・null 合体演算子）に埋め込まれた判断で、コメントに明示が無い。反論役の検証で新たに2件（F6・F7）が確認され、本人が初見で気づける点より気づけない点の方が優勢になったため、<strong>前回の3から引き下げた</strong>。</td></tr>
+</table>
+</div>
+<p class="foot-note">この監査記録に分担ごとの点（scores_by_share）・利用シーンを歩く監査役（分担C・物差し ux）は含まれていない。往復2は監査役と反論役の突合として実施され、上の点は突合後の結合値。</p>
+
+<h3>本人への確認質問（監査記録の questions_for_human をそのまま）</h3>
+<ul class="q-list">
+<li>sessions.expires_at が壊れた値だったとき、identifySession はセッションを有効・無効のどちらとして扱いますか？その判定はコードのどの行が担っていますか？</li>
+<li>セッションの Cookie の Max-Age を30日にした理由は何か。設計書の14日とどちらが正しいか説明できるか？</li>
+<li>役割が store のアカウントに store_id が無い（NULL）状態は実際に起こり得ますか？起こり得るなら、今の実装（空文字へ倒して通す）と403で断る、どちらがあるべき振る舞いですか？</li>
+</ul>
+<p class="foot-note">往復1にあった「handler が例外を投げたとき」「JSON 壊れ時の扱い」「invalid_input を fields 無しで返す理由」の3問は、F2・F3・F5 の fix 案が固まったことで往復2では questions_for_human から外れた（F5 は依然未解決だが、直し方が一意でない=本人判断が要る点は fix 欄に記載）。</p>
+
+<footer class="foot-note" style="margin-top:32px; border-top:1px solid var(--border); padding-top:10px;">図解役（dev-illustrator） ／ 一次データ: task-2.diff・tasks.md・requirements.md・design.md・task-2-c2-e2.audit.json・task-2.gate.txt</footer>
