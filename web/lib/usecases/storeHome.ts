@@ -10,6 +10,7 @@ import { EMPTY_PUBLISH_PREFILL, missingProfileFields, type ArrivalView, type Off
 import type { Deps } from "../ports";
 import { listCouponsByStore, type CouponRow } from "../repo/coupons";
 import { findStoreHomeRow } from "../repo/stores";
+import { storeHomeOfferPart } from "./storeHomeOffer";
 
 export type StoreHome = {
   id: string;
@@ -34,12 +35,9 @@ export const storeHome = async (deps: Deps, storeId: string): Promise<StoreHome 
   return {
     id: store.id,
     status: store.status,
+    ...(await storeHomeOfferPart(deps, storeId)),
     checklist: { license: store.licenseKey !== null, card: store.cardRegisteredAt !== null },
     missingProfile: missingProfileFields(store),
-    // ⚠️ タスク9: 公開中のオファーを読んで `OfferView` にする（無ければ null のまま）
-    offer: null,
-    // ⚠️ タスク9: `domain/storeHome.publishPrefill({ lastOffer, coupons, now })` の結果に差し替える
-    publishPrefill: EMPTY_PUBLISH_PREFILL,
     coupons,
     // ⚠️ タスク17: 「向かっている客」の行を読んで `ArrivalView[]` にする
     arrivals: [],

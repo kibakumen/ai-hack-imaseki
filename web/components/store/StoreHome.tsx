@@ -11,7 +11,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, isFailure } from "../../lib/client/api";
-import { PublishForm, type PublishCoupon, type PublishPrefill } from "./PublishForm";
+import { PublishForm, type PublishFormCoupon, type PublishFormPrefill } from "./PublishForm";
+import { OfferPanel, type OfferPanelOffer } from "./OfferPanel";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusBanner, type StoreStatusValue } from "./StatusBanner";
 
@@ -21,9 +22,9 @@ export type StoreHomeView = {
   status: StoreStatusValue;
   checklist: { license: boolean; card: boolean };
   missingProfile: string[];
-  offer: { id: string } | null;
-  publishPrefill: PublishPrefill;
-  coupons: PublishCoupon[];
+  offer: OfferPanelOffer | null;
+  publishPrefill: PublishFormPrefill;
+  coupons: PublishFormCoupon[];
 };
 
 export const StoreHome = () => {
@@ -62,7 +63,7 @@ export const StoreHome = () => {
 
       {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={reload} />}
 
-      {/* ⚠️ タスク9: 公開中のオファーのカード（`home.offer`）と、公開を止める操作 */}
+      {home.offer ? <OfferPanel offer={home.offer} onChanged={reload} /> : null}
       {/* ⚠️ タスク17: 「向かっている客」の一覧（`home.arrivals`） */}
 
       <nav>

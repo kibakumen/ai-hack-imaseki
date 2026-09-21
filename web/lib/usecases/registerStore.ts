@@ -27,7 +27,7 @@ export const registerStore = async (deps: Deps, input: StoreRegisterInput): Prom
 
   // 店・アカウント・セッションは1度に書く（途中で落ちて、店だけが残る形を作らない）。
   await deps.db.batch([
-    insertStoreStatement(deps.db, { id: storeId, name: input.name }),
+    insertStoreStatement(deps.db, { id: storeId, name: input.name, createdAtIso: deps.clock.now().toISOString() }),
     insertAccountStatement(deps.db, { id: accountId, email: input.email, role: "store", storeId, passwordHash }),
     insertSessionStatement(deps.db, { tokenHash: session.tokenHash, accountId, expiresAtIso: session.expiresAtIso }),
   ]);

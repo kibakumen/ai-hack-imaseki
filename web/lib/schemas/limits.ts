@@ -84,3 +84,16 @@ export const CARD_SESSION_ID_MAX = 255;
 // 要件24（運営の店の一覧）の基準 24.5
 /** 検索の語の上限（AI判断。店名50字・住所・メールアドレス254字のどれにも当てられる長さ） */
 export const ADMIN_SEARCH_MAX = 254;
+// 要件17（オファーの公開）の基準 17.3・17.4・17.5／要件19（公開中の変更）の基準 19.1・19.2・19.6
+/** 募集する組数（基準 17.3・範囲は AI判断） */
+export const OFFER_CAPACITY_MIN = 1;
+export const OFFER_CAPACITY_MAX = 20;
+/** 何名まで（基準 17.4・範囲は AI判断） */
+export const OFFER_PARTY_MAX_MIN = 1;
+export const OFFER_PARTY_MAX_MAX = 10;
+/** 「何名まで」の用意した選択肢（基準 17.4・AI判断） */
+export const OFFER_PARTY_MAX_CHOICES = [2, 4, 6] as const;
+/** 見せるクーポンは店が持てるクーポンの数まで（要件16の基準 16.2） */
+export const OFFER_COUPONS_MAX = 3;
+/** 「何時まで」の入力の形（時分だけ。解釈の正本は domain/until.ts） */
+export const TIME_OF_DAY_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;

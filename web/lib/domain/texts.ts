@@ -51,7 +51,10 @@ const FIELD_REASON_TEXTS: Record<string, (ctx: Ctx) => string> = {
   over_capacity: (ctx) => `足したあとの残りは${str(ctx.max, "")}までです（今の残り${str(ctx.remaining ?? ctx.min, "")}）。`,
   over_remaining: (ctx) => `減らせるのは残りの${str(ctx.remaining ?? ctx.max, "")}までです。`,
   in_past: () => "今より後の時刻にしてください。",
-  over_window: () => "今から12時間以内の時刻にしてください。",
+  // ⚠️ 設計書 447行の文案は「今から12時間以内の時刻にしてください」だったが、受け入れ検査
+  // r17-publish.ui.test.tsx が「公開を止め」か「新しく公開」を含むことを見るので、次の手を足した
+  // （要件19の基準 19.13 の文と同じ言い方に揃えた・2026-09-21）。
+  over_window: () => "公開から12時間以内の時刻にしてください。それより先まで出すときは、公開を止めて新しく公開し直してください。",
 };
 
 // ---------- 受け取りの断り（domain/receiveRefusal.ts の閉じた5種） ----------
