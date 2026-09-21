@@ -27,3 +27,35 @@ export type OfferView = {
   /** 公開から12時間の時刻。画面が「何時まで」の上限の案内に使う */
   latestUntil: string;
 };
+
+// ---------- 公開中の変更の入力（要件19・タスク20が足した） ----------
+
+/**
+ * 「追加で出す」と「残りの募集を減らす」の入力（基準 19.1・19.4）。範囲は募集する組数と同じ
+ * （同じ数を2度書かないため・正本は schemas/limits.ts）。
+ *
+ * ここで見るのは形と範囲だけ——**足したあとの残りの上限**（基準 19.2）と**残り以下**（基準 19.5）は
+ * その時のオファーの状態で決まるので、手続き（`usecases/changeOffer`）が断る。
+ */
+export const offerCountSchema = z.object({
+  count: z.int().min(OFFER_CAPACITY_MIN).max(OFFER_CAPACITY_MAX),
+});
+
+export type OfferCountInput = z.infer<typeof offerCountSchema>;
+
+/** 「何名まで」の変更（基準 19.6）。公開のときと同じ範囲。 */
+export const offerPartyMaxSchema = z.object({
+  partyMax: z.int().min(OFFER_PARTY_MAX_MIN).max(OFFER_PARTY_MAX_MAX),
+});
+
+export type OfferPartyMaxInput = z.infer<typeof offerPartyMaxSchema>;
+
+/**
+ * 「何時まで」の変更（基準 19.8）。形（"HH:MM"）だけを見る——今より後か・公開した時刻から
+ * 12時間以内かは入力の形では決まらないので、`domain/until.ts` が判断する。
+ */
+export const offerUntilSchema = z.object({
+  until: z.string().regex(TIME_OF_DAY_PATTERN),
+});
+
+export type OfferUntilInput = z.infer<typeof offerUntilSchema>;

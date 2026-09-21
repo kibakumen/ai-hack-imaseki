@@ -181,3 +181,64 @@ export const stopLiveOffer = async (db: Db, storeId: string, nowIso: string): Pr
     .run();
   return changedRows(result) > 0;
 };
+
+// ---------- 公開中の変更（要件19・タスク20が足した） ----------
+
+/**
+ * その店の公開中のオファーだけを当てる WHERE（`?1` 店・`?2` 今）。
+ *
+ * 終わったオファーへの変更を受け付けない（基準 19.12）のは、この条件が1つの UPDATE の中に
+ * 入っているから——読んでから書くまでの隙に「何時まで」を過ぎても、変更は当たらない。
+ */
+const LIVE_OFFER_OF_STORE = `store_id = ?1 AND ${publishingOfferCondition("offers", "?2")}`;
+
+export type OfferChange = { storeId: string; nowIso: string };
+
+/**
+ * 「追加で出す」——募集する組数を増やす（要件19の基準 19.1・19.3）。増やせたら true。
+ *
+ * **足したあとの残りが上限を超えないこと**（基準 19.2）を同じ文の WHERE に入れる。読んでから
+ * 書くまでの隙に別の客が受け取っても、上限を超えて出すことはない。残りが0でも足せる（基準 19.3
+ * ——上限は「足したあとの残り」に掛かっており、今の残りには掛からない）。
+ * `initial_capacity` は動かさない（公開のとき入れた値・基準 17.17）。
+ */
+export const addLiveOfferCapacity = async (db: Db, input: OfferChange & { count: number; remainingMax: number }): Promise<boolean> => {
+  const result = await db
+    .prepare(`UPDATE offers SET capacity = capacity + ?3 WHERE ${LIVE_OFFER_OF_STORE} AND ${remainingExpression("offers", "?2")} + ?3 <= ?4`)
+    .bind(input.storeId, input.nowIso, input.count, input.remainingMax)
+    .run();
+  return changedRows(result) > 0;
+};
+
+/**
+ * 「残りの募集を減らす」——募集する組数を減らす（要件19の基準 19.4）。減らせたら true。
+ *
+ * **残り以下であること**（基準 19.5）を同じ文の WHERE に入れる。これは形だけの用心ではない——
+ * 受け取りと減らすが同時に来たとき、読んでから書く形だと残りが0を下回る（要件18の基準 18.11）。
+ */
+export const reduceLiveOfferCapacity = async (db: Db, input: OfferChange & { count: number }): Promise<boolean> => {
+  const result = await db
+    .prepare(`UPDATE offers SET capacity = capacity - ?3 WHERE ${LIVE_OFFER_OF_STORE} AND ${remainingExpression("offers", "?2")} >= ?3`)
+    .bind(input.storeId, input.nowIso, input.count)
+    .run();
+  return changedRows(result) > 0;
+};
+
+/**
+ * 「何名まで」を変える（要件19の基準 19.6）。変えられたら true。
+ * それ以後の絞り込みと受け取りは、どちらもこの列を見ているので、自動的に変えたあとの値と
+ * 比べることになる（基準 19.7）。確保には触れない（基準 19.10）。
+ */
+export const updateLiveOfferPartyMax = async (db: Db, input: OfferChange & { partyMax: number }): Promise<boolean> => {
+  const result = await db.prepare(`UPDATE offers SET party_max = ?3 WHERE ${LIVE_OFFER_OF_STORE}`).bind(input.storeId, input.nowIso, input.partyMax).run();
+  return changedRows(result) > 0;
+};
+
+/**
+ * 「何時まで」を変える（要件19の基準 19.8）。変えられたら true。
+ * 延ばすことも早めることもできる。時分を時点へ直す判断は `domain/until.ts` が済ませてある。
+ */
+export const updateLiveOfferUntil = async (db: Db, input: OfferChange & { untilAtIso: string }): Promise<boolean> => {
+  const result = await db.prepare(`UPDATE offers SET until_at = ?3 WHERE ${LIVE_OFFER_OF_STORE}`).bind(input.storeId, input.nowIso, input.untilAtIso).run();
+  return changedRows(result) > 0;
+};

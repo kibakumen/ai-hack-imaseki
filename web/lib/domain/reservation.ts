@@ -40,3 +40,27 @@ export const effectiveState = (row: ReservationStateRow, now: Date): EffectiveSt
 /** 期限切れになってから20分以内か（期限ちょうど＋20分は、もう外・基準 11.6 と 20.13 を同じ線で切る）。 */
 export const isWithinExpiredGrace = (row: ReservationStateRow, now: Date): boolean =>
   now.getTime() - row.expiresAt.getTime() < EXPIRED_GRACE_MS;
+
+// ---------- タスク15（客の取り消しと人数の変更・要件10） ----------
+
+/**
+ * 客が取り消せるか（要件10の基準 10.1・10.3）。**確保中の確保だけ**。
+ *
+ * 完了済み・期限切れ・すでに取り消された確保を断るのは、残りがもう1回戻らないようにするため
+ * （要件10の補足）。客の画面が状態の変化を映すのは30秒以内（基準 9.9）なので、期限が切れた直後や
+ * 店が取り消した直後に、古い確保中の表示から取り消しが押されることがある。
+ */
+export const canCancelByCustomer = (row: ReservationStateRow, now: Date): boolean => effectiveState(row, now) === "active";
+
+/**
+ * 人数の変更を受け入れられるか（要件10の基準 10.6・10.7・10.9）。
+ *
+ * 増やす変更だけ「何名まで」以下を求める。**減らす（か同じ）変更は「何名まで」を超えていても通る**
+ * ——確保した人数は担保されている（本人発案）ので、それより少ない人数は受け入れられる（基準 10.9。
+ * 店が「何名まで」を引き下げたあとの場面のためのもの）。
+ *
+ * `partyMax` はその時点のオファーの値で、オファーが終わっていれば終わった時点の値（基準 10.6。
+ * 終わったオファーへの変更は受け付けないので〔基準 19.12〕、列の値がそのまま「終わった時点」になる）。
+ */
+export const canChangeParty = (args: { current: number; next: number; partyMax: number }): boolean =>
+  args.next <= args.current || args.next <= args.partyMax;

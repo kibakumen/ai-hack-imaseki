@@ -257,3 +257,44 @@ export const insertReservationIfReceivable = async (db: Db, input: NewReservatio
     .run();
   return changedRows(result) > 0;
 };
+
+// ---------- 書く（客の取り消しと人数の変更・タスク15） ----------
+
+/** 確保中の確保だけを当てる WHERE（前の状態を文の中に入れる）。`?1` 確保・`?2` 客・`?3` 今。 */
+const ACTIVE_RESERVATION_OF_CUSTOMER = `id = ?1 AND customer_id = ?2 AND status = 'active' AND expires_at > ?3`;
+
+export type ReservationOperation = { reservationId: string; customerId: string; nowIso: string };
+
+/**
+ * 客が自分の確保を取り消す（要件10の基準 10.1・10.2・要件18の基準 18.2）。取り消せたら true。
+ *
+ * **前の状態（確保中で期限より前）を WHERE に入れた1つの UPDATE** なので、読んでから書くまでの隙に
+ * 別の要求が入っても、確保中でない確保の状態を上書きすることはない（基準 10.3）。これは形だけの
+ * 用心ではない——店が取り消した確保（枠を押さえたまま・基準 18.4）を客が取り消した状態で
+ * 上書きすると、店に戻らないはずの残りが1つ戻る。
+ *
+ * `holds_slot` を0にするのは、枠を押さえていないことを列にも残すため（`holdsSlotCondition` は
+ * 客が取り消した確保をそもそも数えないので、残りの計算はどちらでも同じ答えになる）。
+ */
+export const cancelReservationByCustomer = async (db: Db, input: ReservationOperation): Promise<boolean> => {
+  const result = await db
+    .prepare(`UPDATE reservations SET status = 'customer_cancelled', status_at = ?3, holds_slot = 0 WHERE ${ACTIVE_RESERVATION_OF_CUSTOMER}`)
+    .bind(input.reservationId, input.customerId, input.nowIso)
+    .run();
+  return changedRows(result) > 0;
+};
+
+/**
+ * 客が確保の人数を変える（要件10の基準 10.6・10.9）。変えられたら true。
+ *
+ * 変えるのは人数の列だけ——確保・コード・期限・クーポン・状態はそのまま（基準 10.6）。状態が
+ * 変わらないので `status_at` も動かさず、状態の変化の記録（基準 27.4）も足さない。
+ * 「何名まで」との比べ方は `domain/reservation.ts` の `canChangeParty` が持つ（1つの責務は1か所）。
+ */
+export const updateReservationParty = async (db: Db, input: ReservationOperation & { party: number }): Promise<boolean> => {
+  const result = await db
+    .prepare(`UPDATE reservations SET party = ?4 WHERE ${ACTIVE_RESERVATION_OF_CUSTOMER}`)
+    .bind(input.reservationId, input.customerId, input.nowIso, input.party)
+    .run();
+  return changedRows(result) > 0;
+};
