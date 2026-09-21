@@ -9,6 +9,7 @@ import { customerRoutes } from "./endpoints/customer";
 import { customerProfileRoutes } from "./endpoints/customerProfile";
 import { passwordRoutes } from "./endpoints/password";
 import { storeRoutes } from "./endpoints/store";
+import { storeProfileRoutes } from "./endpoints/storeProfile";
 
 export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   ...configRoutes,
@@ -18,4 +19,5 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   ...couponRoutes,
   ...customerProfileRoutes,
   ...passwordRoutes,
+  ...storeProfileRoutes,
 ];
