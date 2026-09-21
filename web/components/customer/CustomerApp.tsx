@@ -7,13 +7,21 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, isFailure } from "../../lib/client/api";
+import { FetchForm, type FetchResult } from "./FetchForm";
 import { RegisterForm } from "./RegisterForm";
+import { ResultList } from "./ResultList";
 
-type CustomerHome = { kind: string };
+/** ホームの応答（`GET /api/customer/home`）。形は検査していないので、在ることに頼らずに読む。 */
+type CustomerHome = { kind: string; profile?: { genres?: string[]; budgetMax?: number | null } };
 type View = { kind: "loading" } | { kind: "register" } | { kind: "home"; home: CustomerHome };
 
 export const CustomerApp = () => {
   const [view, setView] = useState<View>({ kind: "loading" });
+  // 取得の結果と人数は取得の画面の続きとして、入れ物の側が持つ（設計書「客の画面」の結果の行）。
+  // 人数をここに置く理由は FetchForm の party の注（結果の側から入れ替わるのは人数だけ）。
+  const [fetchResult, setFetchResult] = useState<FetchResult | null>(null);
+  // 人数の初めの値は置かない（要件3の補足。前回の人数が残ると人数の変化を見落とす）。
+  const [party, setParty] = useState("");
 
   /** ホームを1回呼んで、出すべき表示を決める（断り＝識別子が無い・受け付けられない → 登録の入力）。 */
   const loadHome = useCallback(async (): Promise<View> => {
@@ -49,12 +57,9 @@ export const CustomerApp = () => {
   return (
     <main>
       {view.home.kind === "fetch" && (
-        // タスク12 が FetchForm（場所・人数・その回の好み）に置き換える。
         <section data-testid="view-fetch">
-          <h2>今入れるお店を探す</h2>
-          <button type="button" data-testid="btn-fetch">
-            今入れる店を探す
-          </button>
+          <FetchForm profile={view.home.profile} party={party} onPartyChange={setParty} onResults={setFetchResult} />
+          {fetchResult !== null && <ResultList items={fetchResult.items} />}
         </section>
       )}
     </main>

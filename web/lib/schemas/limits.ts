@@ -24,6 +24,11 @@ export const PLACE_MAX = 50;
 /** 人数の範囲（基準 3.10・範囲は AI判断） */
 export const PARTY_MIN = 1;
 export const PARTY_MAX = 10;
+/**
+ * ブラウザの現在地の打ち切り（基準 3.8・値は AI判断）。取得の全体の時間（基準 4.13）とは
+ * 切り離してあり、起点が決まってから8秒を数える（要件3の補足）。`client/geolocation.ts` が使う。
+ */
+export const GEOLOCATION_TIMEOUT_MS = 5000;
 
 // 要件12（店の登録）の基準 12.3・12.4・12.5
 export const STORE_NAME_MIN = 1;
