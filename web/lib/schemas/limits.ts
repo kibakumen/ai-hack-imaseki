@@ -42,3 +42,11 @@ export const SESSION_TOKEN_BYTES = 16;
  */
 export const SESSION_MAX_AGE_SECONDS = 25 * 60 * 60;
 export const SESSION_RENEW_WITHIN_SECONDS = 60 * 60;
+
+// 要件16（クーポン）の基準 16.2・16.3
+/** 1つの店が持てるクーポンの数（基準 16.2） */
+export const COUPON_MAX = 3;
+export const COUPON_NAME_MIN = 1;
+export const COUPON_NAME_MAX = 40;
+/** 特記事項は無くてよい（下限は無い）。上限だけを持つ（基準 16.3） */
+export const COUPON_NOTE_MAX = 100;
