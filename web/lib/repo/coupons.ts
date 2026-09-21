@@ -82,3 +82,11 @@ export const isCouponShownByPublishingOffer = async (db: Db, storeId: string, co
     .all();
   return ((result.results ?? []) as Array<Record<string, unknown>>).some((row) => parseCouponIds(row.coupon_ids).includes(couponId));
 };
+
+// ⚠️ 2026-09-21 の並列の実装で、タスク7（店のホームが返すクーポンの一覧）が読みの1本を足した。
+/** その店のクーポンを作った順に。公開のフォームのチェックの並びがこの順になる。 */
+export const listCouponsByStore = async (db: Db, storeId: string): Promise<CouponRow[]> => {
+  const result = await db.prepare(`SELECT id, name, note, created_at FROM coupons WHERE store_id = ?1 ORDER BY created_at, id`).bind(storeId).all();
+  const rows = (result?.results ?? []) as Array<Record<string, unknown>>;
+  return rows.map(toCoupon);
+};

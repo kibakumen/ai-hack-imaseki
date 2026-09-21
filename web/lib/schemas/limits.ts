@@ -74,3 +74,10 @@ export const MENUS_MAX = 5;
 
 /** 地図のサービスの打ち切り（設計書「時間の割り振り」: 地図3秒）。差し替えた時計と AbortSignal の両方で使う */
 export const GEOCODE_TIMEOUT_MS = 3000;
+// 要件13（営業許可書とカード）の基準 13.3
+/** 営業許可書の大きさの上限（10MB・値は AI判断）。ちょうど10MB は通り、1バイト超えると断る */
+export const LICENSE_MAX_BYTES = 10 * 1024 * 1024;
+/** 画面の「◯MB まで」の文と、入力欄の補助に使う表示用の数（正本は上のバイト数） */
+export const LICENSE_MAX_MEGABYTES = 10;
+/** カードの登録の口が返す受け皿の番号の長さの上限（外の値をそのまま持ち歩かないため・AI判断） */
+export const CARD_SESSION_ID_MAX = 255;
