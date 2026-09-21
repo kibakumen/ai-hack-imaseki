@@ -42,3 +42,7 @@ export const SESSION_TOKEN_BYTES = 16;
  */
 export const SESSION_MAX_AGE_SECONDS = 25 * 60 * 60;
 export const SESSION_RENEW_WITHIN_SECONDS = 60 * 60;
+
+// 要件24（運営の店の一覧）の基準 24.5
+/** 検索の語の上限（AI判断。店名50字・住所・メールアドレス254字のどれにも当てられる長さ） */
+export const ADMIN_SEARCH_MAX = 254;
