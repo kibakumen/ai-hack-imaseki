@@ -27,5 +27,13 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(PASSWORD_MAX),
 });
 
+/**
+ * 【最終日】店が決め直す新しいパスワード（要件14の基準 14.15）。範囲は登録と同じ（基準 12.3）。
+ * 今のパスワードは求めない——ここへ来られるのはセッションを持っている店だけで、
+ * 仮のパスワードで入った店は「今のパスワード」を覚えていない（基準 14.14 の場面）。
+ */
+export const changePasswordSchema = z.object({ password: passwordSchema });
+
 export type StoreRegisterInput = z.infer<typeof storeRegisterSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

@@ -6,6 +6,16 @@ import { authRoutes } from "./endpoints/auth";
 import { configRoutes } from "./endpoints/config";
 import { couponRoutes } from "./endpoints/coupons";
 import { customerRoutes } from "./endpoints/customer";
+import { customerProfileRoutes } from "./endpoints/customerProfile";
+import { passwordRoutes } from "./endpoints/password";
 import { storeRoutes } from "./endpoints/store";
 
-export const ROUTE_DEFINITIONS: RouteDefinition[] = [...configRoutes, ...customerRoutes, ...authRoutes, ...storeRoutes, ...couponRoutes];
+export const ROUTE_DEFINITIONS: RouteDefinition[] = [
+  ...configRoutes,
+  ...customerRoutes,
+  ...authRoutes,
+  ...storeRoutes,
+  ...couponRoutes,
+  ...customerProfileRoutes,
+  ...passwordRoutes,
+];

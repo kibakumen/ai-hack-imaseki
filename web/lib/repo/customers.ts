@@ -35,6 +35,17 @@ const parseGenres = (raw: unknown): string[] => {
   }
 };
 
+/**
+ * 登録の4項目を入れ替える（要件1の基準 1.9【最終日】）。消去済みの客は当たらないので、
+ * 何も起きない（呼ぶ側が読み直して、消えていれば null として扱う）。
+ */
+export const updateCustomerProfile = async (db: Db, customerId: string, profile: Omit<NewCustomer, "id" | "tokenHash">): Promise<void> => {
+  await db
+    .prepare(`UPDATE customers SET nickname = ?2, phone = ?3, genres = ?4, budget_max = ?5 WHERE id = ?1 AND deleted_at IS NULL`)
+    .bind(customerId, profile.nickname, profile.phone, profile.genres, profile.budgetMax)
+    .run();
+};
+
 export const findCustomerProfile = async (db: Db, customerId: string): Promise<CustomerProfile | null> => {
   const row = await db.prepare(`SELECT nickname, phone, genres, budget_max FROM customers WHERE id = ?1 AND deleted_at IS NULL`).bind(customerId).first();
   if (!row) return null;

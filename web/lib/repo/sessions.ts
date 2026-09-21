@@ -59,3 +59,11 @@ export const extendSession = async (db: Db, tokenHash: string, expiresAtIso: str
 export const deleteSession = async (db: Db, tokenHash: string): Promise<void> => {
   await db.prepare(`DELETE FROM sessions WHERE token_hash = ?1`).bind(tokenHash).run();
 };
+
+/**
+ * そのアカウントのセッションを全部切る（【最終日】仮のパスワードの発行・要件14の基準 14.12）。
+ * パスワードを取り替えるだけでは、既に開いている画面はそのまま使えてしまう。
+ */
+export const deleteSessionsByAccount = async (db: Db, accountId: string): Promise<void> => {
+  await db.prepare(`DELETE FROM sessions WHERE account_id = ?1`).bind(accountId).run();
+};

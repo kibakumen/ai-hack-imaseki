@@ -50,3 +50,8 @@ export const COUPON_NAME_MIN = 1;
 export const COUPON_NAME_MAX = 40;
 /** 特記事項は無くてよい（下限は無い）。上限だけを持つ（基準 16.3） */
 export const COUPON_NOTE_MAX = 100;
+/**
+ * 【最終日】運営が発行する仮のパスワードの乱数の長さ（要件14の基準 14.11: 16字以上）。
+ * 16バイトを base64url へ直すと22字になり、基準の16字を満たす（値は AI判断）。
+ */
+export const TEMP_PASSWORD_BYTES = 16;

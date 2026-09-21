@@ -20,6 +20,8 @@ export const LoginForm = () => {
   const [password, setPassword] = useState("");
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [siteKey, setSiteKey] = useState<string | null>(null);
+  // 【最終日】パスワードを忘れた店の申し出先（基準 14.17）。設定に無ければ案内を出さない。
+  const [contactEmail, setContactEmail] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const humanRef = useRef<HumanCheckHandle | null>(null);
 
@@ -28,7 +30,9 @@ export const LoginForm = () => {
     void (async () => {
       const config = await getPublicConfig();
       const key = config?.turnstileSiteKey ?? "";
-      if (alive) setSiteKey(key === "" ? null : key);
+      if (!alive) return;
+      setSiteKey(key === "" ? null : key);
+      setContactEmail(config?.contactEmail ?? null);
     })();
     return () => {
       alive = false;
@@ -92,6 +96,14 @@ export const LoginForm = () => {
         ログイン
       </button>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
+
+      {contactEmail !== null && (
+        // パスワードを忘れた店が「誰に・どこへ申し出るのか」を知る唯一の場所（基準 14.17）。
+        // システムは店へメールを送らないので、運営が仮のパスワードを発行して自分のメールで返す。
+        <p>
+          パスワードを忘れた場合は、運営へメールでお知らせください: <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+        </p>
+      )}
     </form>
   );
 };

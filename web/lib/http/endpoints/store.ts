@@ -37,7 +37,8 @@ const storeHomeRoute = defineRoute({
     const home = await storeHome(deps, ctx.storeId);
     // 見分けの直後に店が消えた場合だけ null。店のデータは返さない。
     if (!home) return { status: 401, body: { ok: false, error: { kind: "invalid_input" } } };
-    return { status: 200, body: home };
+    // 【最終日】仮のパスワードで入った店には、新しいパスワードを決めるよう画面が求める（基準 14.14）。
+    return { status: 200, body: { ...home, mustChangePassword: ctx.mustChangePassword } };
   },
 });
 

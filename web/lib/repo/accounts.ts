@@ -54,7 +54,28 @@ export const insertAccount = async (db: Db, account: NewAccount): Promise<void> 
   await insertAccountStatement(db, account).run();
 };
 
-/** 種データの投入をやり直したとき（同じメールアドレス）に、パスワードだけを置き換える。 */
-export const updateAccountPassword = async (db: Db, accountId: string, passwordHash: string): Promise<void> => {
-  await db.prepare(`UPDATE accounts SET password_hash = ?2, must_change_password = 0 WHERE id = ?1`).bind(accountId, passwordHash).run();
+/**
+ * パスワードだけを置き換える。種データの投入のやり直し（同じメールアドレス）と、
+ * 【最終日】仮のパスワードの発行・店が決め直した新しいパスワードが呼ぶ。
+ *
+ * `mustChangePassword` を立てると、次に入った店は新しいパスワードを決めるよう求められる
+ * （要件14の基準 14.14）。決め直したときは false に戻す（基準 14.16）。
+ */
+export const updateAccountPassword = async (db: Db, accountId: string, passwordHash: string, mustChangePassword = false): Promise<void> => {
+  await db
+    .prepare(`UPDATE accounts SET password_hash = ?2, must_change_password = ?3 WHERE id = ?1`)
+    .bind(accountId, passwordHash, mustChangePassword ? 1 : 0)
+    .run();
+};
+
+/**
+ * 店の番号からその店のアカウントを引く（【最終日】仮のパスワードの発行）。
+ * 役割が店のものだけを見る——運営のアカウントは対象にしない（要件14の基準 14.8・14.10 の補足）。
+ */
+export const findAccountByStoreId = async (db: Db, storeId: string): Promise<AccountRow | null> => {
+  const row = await db
+    .prepare(`SELECT id, email, password_hash, role, store_id, must_change_password FROM accounts WHERE store_id = ?1 AND role = 'store'`)
+    .bind(storeId)
+    .first();
+  return toRow(row as Record<string, unknown> | null);
 };

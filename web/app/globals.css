@@ -1,10 +1,39 @@
+/* 色はここに置いた変数だけで指す（要件32の基準 32.3・【最終日】タスク34）。
+   部品（.tsx）は色の値を持たない——構造の検査が、components と app の .tsx に
+   16進の色とユーティリティの色名が無いことを見張る。明るい設定の値を :root に置き、
+   暗い設定は下の分岐で同じ変数を上書きする（名前は変えない）。 */
+
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+
+  --color-background: #ffffff;
+  --color-surface: #f5f5f4;
+  --color-text: #1c1b1a;
+  --color-text-muted: #55534f;
+  --color-border: #d6d3cd;
+  --color-accent: #1f5d9c;
+  --color-accent-text: #ffffff;
+  --color-danger: #a4271b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #16161a;
+    --color-surface: #22222a;
+    --color-text: #eceae6;
+    --color-text-muted: #b2aea7;
+    --color-border: #3c3c46;
+    --color-accent: #8fbcf0;
+    --color-accent-text: #12121a;
+    --color-danger: #ff9d90;
+  }
 }
 
 body {
   margin: 0;
+  background: var(--color-background);
+  color: var(--color-text);
 }
 
 main {
@@ -19,4 +48,36 @@ nav {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+a {
+  color: var(--color-accent);
+}
+
+legend,
+label {
+  color: var(--color-text);
+}
+
+input,
+select,
+textarea {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+fieldset {
+  border: 1px solid var(--color-border);
+}
+
+button {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+/* 入力の断りの文（components/ui/InputRefusal）。背景に対して読める濃さを明暗それぞれで持つ。 */
+.msg {
+  color: var(--color-danger);
 }

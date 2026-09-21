@@ -13,7 +13,8 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type RouteAuthContext =
   | { auth: "public" }
   | { auth: "customer"; customerId: string }
-  | { auth: "store"; accountId: string; storeId: string }
+  /** `mustChangePassword` は【最終日】仮のパスワードで入った店の印（要件14の基準 14.14） */
+  | { auth: "store"; accountId: string; storeId: string; mustChangePassword: boolean }
   | { auth: "admin"; accountId: string };
 
 /** 見分けが済んだあとの文脈。`auth: "customer"` の入口の手続きは customerId だけを受け取る。 */
@@ -170,7 +171,7 @@ export const defineRoute = <TInput, TAuth extends RouteAuth>(config: RouteConfig
         // 役割が店なのに店の番号が無いアカウントは断る（本人選択 2026-09-21）。
         // 空の文字列へ黙って倒すと、どの店にも当たらない問い合わせが「正しく通った」ように見える。
         if (!session.storeId) return jsonResponse(403, { ok: false, error: { kind: "invalid_input" as InputRefusalKind } });
-        ctx = { auth: "store", accountId: session.accountId, storeId: session.storeId };
+        ctx = { auth: "store", accountId: session.accountId, storeId: session.storeId, mustChangePassword: session.mustChangePassword };
       } else {
         ctx = { auth: "admin", accountId: session.accountId };
       }
