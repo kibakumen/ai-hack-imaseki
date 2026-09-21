@@ -139,3 +139,14 @@ export const CODE_SEARCH_ATTEMPTS = 12;
  * 断るためではなく、長すぎる本文を早く切るため（実際の番号は16バイトを base64url にした22字）。
  */
 export const ID_MAX_LENGTH = 64;
+
+// 要件22（客への知らせ・Web プッシュ）。2026-09-21 タスク19 が足した。
+/**
+ * プッシュの寿命（TTL）。確保の期限と同じ20分（AI判断・設計書「比べた案」のプッシュの行）。
+ * これより後に配信元から届いても、確保はもう無いので意味が無い。
+ */
+export const PUSH_TTL_SECONDS = 20 * 60;
+/** 購読の配信元の URL の長さの上限（AI判断。長すぎる本文を早く切るためで、断るためではない） */
+export const PUSH_ENDPOINT_MAX = 2048;
+/** 購読の鍵（p256dh は65バイト・auth は16バイトを base64url にしたもの）の長さの上限（AI判断） */
+export const PUSH_KEY_MAX = 255;
