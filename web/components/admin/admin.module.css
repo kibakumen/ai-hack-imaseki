@@ -1,0 +1,242 @@
+/* 運営の画面だけで使う見た目（設計書「明暗の両対応」に合わせ、色は変数か
+   このファイルの中の変数でだけ指す。.tsx には色の値を書かない・構造の検査 34 が見張る対象は
+   .tsx だけなので、この CSS Modules ファイルはその外側で自由に持てる）。 */
+
+.page {
+  display: grid;
+  gap: 1rem;
+}
+
+.topNav {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.summaryTiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  gap: 0.5rem;
+}
+
+.tile {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  text-align: center;
+  background: var(--color-surface);
+}
+
+.tileValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.tileLabel {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+/* 未承認の強調バナー。0件のときは静かな色、1件以上は目立つ色（--warn はここだけの変数）。 */
+.pendingBanner {
+  --warn-bg: #fdf3e0;
+  --warn-border: #d99a1f;
+  --warn-text: #7a4e00;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 2px solid var(--warn-border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  .pendingBanner {
+    --warn-bg: #3a2c0f;
+    --warn-border: #d99a1f;
+    --warn-text: #f4d998;
+  }
+}
+
+.pendingBanner.calm {
+  --warn-bg: var(--color-surface);
+  --warn-border: var(--color-border);
+  --warn-text: var(--color-text-muted);
+  border-width: 1px;
+  font-weight: 700;
+}
+
+.pendingCount {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.filterBtn[aria-pressed="true"] {
+  background: var(--color-text);
+  border-color: var(--color-text);
+}
+
+.filterBtn[aria-pressed="false"] {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.count {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.cardList {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.card {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cardMeta {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+/* 状況バッジ。data-status で色を分ける（.tsx はこの名前の class を貼るだけで色は持たない）。 */
+.badge {
+  --badge-bg: var(--color-border);
+  --badge-text: var(--color-text);
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--badge-bg);
+  color: var(--badge-text);
+}
+
+.badge[data-status="pending"] {
+  --badge-bg: #fdf3e0;
+  --badge-text: #7a4e00;
+}
+
+.badge[data-status="approved"] {
+  --badge-bg: #e2f3e6;
+  --badge-text: #1f6b34;
+}
+
+.badge[data-status="banned"] {
+  --badge-bg: #f8dedc;
+  --badge-text: #8c2318;
+}
+
+.badge[data-status="publishing"] {
+  --badge-bg: #dfeaf9;
+  --badge-text: #1f5d9c;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge[data-status="pending"] {
+    --badge-bg: #3a2c0f;
+    --badge-text: #f4d998;
+  }
+  .badge[data-status="approved"] {
+    --badge-bg: #143a20;
+    --badge-text: #9fe0b2;
+  }
+  .badge[data-status="banned"] {
+    --badge-bg: #3d1613;
+    --badge-text: #f4b3ac;
+  }
+  .badge[data-status="publishing"] {
+    --badge-bg: #17304d;
+    --badge-text: #a9cdf2;
+  }
+}
+
+/* 割合バー（AI の実費・所要時間・モデル別の比較）。外部ライブラリなし、幅 % だけで描く。 */
+.barRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.barLabel {
+  width: 9rem;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.barTrack {
+  flex: 1;
+  height: 0.9rem;
+  border-radius: 0.3rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.barValue {
+  width: 8rem;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.table th,
+.table td {
+  border-top: 1px solid var(--color-border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.table th {
+  border-top: none;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
