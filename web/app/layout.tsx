@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI セキトリ",
+  title: "AkI席",
   description: "近くのお店の空席を見つけるサービス",
 };
 

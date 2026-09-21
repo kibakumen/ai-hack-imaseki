@@ -8,7 +8,7 @@ export default function HomePage() {
     <main>
       <section className="entry">
         <p className="entry__eyebrow">今から入れるお店だけ</p>
-        <h1 className="entry__title">AI セキトリ</h1>
+        <h1 className="entry__title">AkI席</h1>
         <p className="entry__lead">近くのお店の空席を、今の条件から探します。登録はいりません——場所と人数だけで探せます。</p>
         <nav aria-label="はじめる" className="entry__actions">
           <Link className="entry__primary" href="/me">
