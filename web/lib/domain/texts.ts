@@ -153,6 +153,8 @@ export const ARRIVALS_TEXTS = {
   refused: (state: string): string => ARRIVAL_REFUSED_TEXTS[state] ?? "この確保の状態が変わったため、完了済みにできませんでした。",
   /** 出す行が1件も無いとき（基準 20.18） */
   empty: "向かっている客はいません。",
+} as const;
+
 // ---------- 確保の状態の見出し（要件8の基準 8.11。2026-09-21 タスク30 が足した） ----------
 // 過去の受け取りの見返し（`components/customer/History`）が、確保の状態を客に見せるための文。
 // 語の正本は `domain/reservation.ts`（保存する5つ ＋ 時刻から導く「期限切れ」）で、ここは文だけを持つ
