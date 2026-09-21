@@ -9,9 +9,30 @@
 // `RefusalNotice` を出し、ほかのカードはそのまま残す（基準 8.6・設計書「受け取りが断られたとき」の3。
 // 一覧は取り直さない——古い画面から押せることを前提に、押した瞬間の書き込みだけを本物とする）。
 // 確保中の確保を持ったまま探しているときは、受け取りの操作を選べない形にする（基準 8.10）。
+//
+// ---- 見た目（2026-09-22。速成版 `sprint/app/me/page.tsx` から移した）----
+// 本人の指摘は「何か全体的にオファーカードにワクワク感を感じない・**オファーのプレミアムで
+// 楽しい感じが伝わるデザイン**にしてほしい」「アピール説明の大きさなどが控えめなので**もっと
+// アピールするようなデザイン**に」「**クーポンが小カード**にして見えるように」「**お店の画像**もほしい」。
+// 応えた形は4つ:
+//   1. カードを丸く・影つきの暖色のグラデーションにし、上から順に出す（`rise-in`）
+//   2. 紹介文（`reason`）をカードでいちばん大きい文にし、届いた瞬間に縁で光らせる（`OfferPitch`）
+//   3. クーポンを1枚ずつの小さな札にする
+//   4. 店の雰囲気の面を上に置く（`OfferArt`）
+// 色の値はここに持たない（要件32の基準 32.3）——形と動きだけを class 名で指し、色は
+// `app/globals.css` の変数と `app/me/me.css` が持つ。
 
 import type { ReceiveRefusal } from "./home";
+import { OfferReveal } from "./OfferReveal";
 import { RefusalNotice } from "./RefusalNotice";
+
+/**
+ * 紹介文の出どころ（少しずつ届く入口の `pitch` フレームの `source`）。
+ *   undefined … まだ届いていない（書いている最中。シマーを重ねて待たせる）
+ *   persona   … 人格を持った常連が書いた文が届いた（いちばん強く見せる）
+ *   fallback  … 簡素な文へ倒した（客には失敗として見せない・普通に出す）
+ */
+export type PitchSource = "persona" | "fallback";
 
 /** 結果の1件（応答 `POST /api/customer/fetch` の `items[]`）。手続き側の正本は `usecases/fetchOffers` の
  * `FetchResultItem` で、部品は `lib/usecases` を読めない（依存の向き）ので、画面が要る形をここに置く。 */
@@ -26,6 +47,8 @@ export type ResultItem = {
   partyMax: number;
   coupons: Array<{ name: string; note: string }>;
   storeUrl: string | null;
+  /** 紹介文が届いたか（`FetchForm` が少しずつ届く入口から入れる。無ければ「書いている最中」） */
+  pitchSource?: PitchSource;
 };
 
 type ResultListProps = {
@@ -49,13 +72,55 @@ const yen = (amount: number): string => `${amount.toLocaleString("ja-JP")}円`;
 
 /** 結果が0件のときの次の手（基準 4.4・4.5）。人数・場所・時間の3つを必ず出す。 */
 const EmptyResult = () => (
-  <p data-testid="result-empty">
+  <p className="offer-empty" data-testid="result-empty">
     今の条件で入れるお店は見つかりませんでした。人数を減らすと見つかることがあります。場所を変える・少し時間を置いてもう一度探す、のも試せます。
   </p>
 );
 
+/**
+ * 店の雰囲気の面（第1回の指摘「お店の画像もほしい」）。
+ * ⚠️ **いまは絵柄の地だけ**——応答（`items[]`）に画像の在り処が無く、外から取ってくる入口
+ * （ホームページの meta を読む経路）は入口の側の作りになる。ここは「面が在る」ところまでを作って
+ * おき、画像が入る日にこの部品の中だけを差し替えられるようにする。
+ * 店ごとに地の傾きを変えて、同じ絵が並んで見えないようにする（番号ではなく店の名前から決めるので、
+ * 並びが変わっても同じ店は同じ地になる）。
+ */
+const OfferArt = ({ storeName }: { storeName: string }) => {
+  const tilt = [...storeName].reduce((sum, ch) => sum + ch.codePointAt(0)!, 0) % 4;
+  return (
+    <div aria-hidden className="offer-card__art" data-tilt={tilt}>
+      <span className="offer-card__art-glyph">🍴</span>
+    </div>
+  );
+};
+
+/**
+ * 紹介文（アピール説明）。カードでいちばん大きい文にする。
+ * まだ届いていない間は、空白にせず薄い文と光の帯で「書いている」ことを見せる
+ * （情報量をゼロにせず、期待だけを足す・速成版の `PitchBlock` と同じ考え）。
+ */
+const OfferPitch = ({ reason, source }: { reason: string; source?: PitchSource }) => {
+  if (source === undefined) {
+    return (
+      <div aria-busy="true" className="offer-pitch offer-pitch--pending">
+        <p className="offer-pitch__text">{reason === "" ? "この店のいいところを思い出しています" : reason}</p>
+        <p className="offer-pitch__waiting">
+          <span aria-hidden className="offer-pitch__sparkle">
+            ✨
+          </span>
+          常連が紹介文を書いています…
+        </p>
+        <span aria-hidden className="offer-pitch__shimmer" />
+      </div>
+    );
+  }
+  return <p className={source === "persona" ? "offer-pitch offer-pitch--persona" : "offer-pitch"}>💡 {reason}</p>;
+};
+
 type ResultCardProps = {
   item: ResultItem;
+  /** 上から順に出すための並びの番号（`rise-in` の遅れに使うだけ） */
+  index: number;
   onReceive?: (item: ResultItem) => void;
   /** このカードが断られた1件のときだけ渡る。 */
   refusal?: ReceiveRefusal | null;
@@ -63,37 +128,61 @@ type ResultCardProps = {
   holding?: boolean;
 };
 
-const ResultCard = ({ item, onReceive, refusal = null, onNextStep, holding = false }: ResultCardProps) => (
-  <li className="result-card" data-testid={`result-${item.offerId}`}>
-    <h3>{item.storeName}</h3>
-    <p>
-      徒歩{item.walkMinutes}分 ／ 1人あたり {yen(item.budgetMin)}〜{yen(item.budgetMax)} ／ {refusal?.partyMax ?? item.partyMax}名まで
+const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holding = false }: ResultCardProps) => (
+  <li className="offer-card" data-testid={`result-${item.offerId}`} style={{ animationDelay: `${index * 70}ms` }}>
+    <OfferArt storeName={item.storeName} />
+
+    <p className="offer-card__meta">
+      <span>徒歩{item.walkMinutes}分</span>
+      <span aria-hidden>・</span>
+      <span>
+        1人あたり {yen(item.budgetMin)}〜{yen(item.budgetMax)}
+      </span>
+      <span aria-hidden>・</span>
+      <span>{refusal?.partyMax ?? item.partyMax}名まで</span>
     </p>
-    <p>{item.reason}</p>
-    <p>クーポン</p>
-    <ul className="coupon-list" data-testid="coupon-list">
-      {item.coupons.map((coupon, index) => (
-        <li key={`${coupon.name}-${index}`}>
-          {coupon.name}
-          {coupon.note === "" ? null : `（${coupon.note}）`}
-        </li>
-      ))}
-    </ul>
+
+    <h3 className="offer-card__name">{item.storeName}</h3>
+
+    <OfferPitch reason={item.reason} source={item.pitchSource} />
+
+    <div className="offer-card__coupon-block">
+      <p className="offer-card__coupon-label">クーポン</p>
+      {/* クーポン0個のときは欄を残して中を空にする（基準 4.14）。
+          「案内はありません」の文は**この欄の外**に置く——受け入れ検査が欄そのものの空を見ている。 */}
+      <ul className="offer-coupons" data-testid="coupon-list">
+        {item.coupons.map((coupon, couponIndex) => (
+          <li className="offer-coupon" key={`${coupon.name}-${couponIndex}`}>
+            <span aria-hidden className="offer-coupon__mark">
+              🎟️
+            </span>
+            <span className="offer-coupon__body">
+              <span className="offer-coupon__name">{coupon.name}</span>
+              {coupon.note === "" ? null : <span className="offer-coupon__note">（{coupon.note}）</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {item.coupons.length === 0 ? <p className="offer-card__no-coupon">クーポンの案内はありません（席の確保はできます）</p> : null}
+    </div>
+
+    <button type="button" className="offer-card__cta" data-testid="btn-receive" disabled={holding} onClick={() => onReceive?.(item)}>
+      この店に行く（20分間 席を確保）
+    </button>
+
     {item.storeUrl === null ? null : (
-      <a href={item.storeUrl} target="_blank" rel="noreferrer">
+      <a className="offer-card__link" href={item.storeUrl} target="_blank" rel="noreferrer">
         お店のホームページを見る
       </a>
     )}
-    <button type="button" data-testid="btn-receive" disabled={holding} onClick={() => onReceive?.(item)}>
-      この店に行く（20分間 席を確保）
-    </button>
+
     {refusal === null ? null : <RefusalNotice refusal={refusal} onNextStep={() => onNextStep?.()} />}
   </li>
 );
 
 /** 確保を持ったまま探しているときの案内（基準 8.10）。取り消せば受け取れることと、戻る入口。 */
 const HoldNotice = ({ onBackToReservation }: { onBackToReservation?: () => void }) => (
-  <p data-testid="result-hold-notice">
+  <p className="offer-hold" data-testid="result-hold-notice">
     今の確保を取り消すと受け取れます。
     <button type="button" data-testid="btn-back-to-reservation" onClick={() => onBackToReservation?.()}>
       確保中の表示へ戻る
@@ -102,17 +191,26 @@ const HoldNotice = ({ onBackToReservation }: { onBackToReservation?: () => void 
 );
 
 export const ResultList = ({ items, onReceive, refusal = null, onNextStep, holding = false, onBackToReservation }: ResultListProps) => (
-  <section data-testid="result-list">
-    <h2>今入れるお店</h2>
+  <section className="offer-list" data-testid="result-list">
+    {/* 描かれた時に1回だけ出る宝くじの札（探し直すたびにこの部品ごと作り直されるので、
+        出す・消すの状態を入れ物へ増やさずに済む）。 */}
+    <OfferReveal count={items.length} />
+
+    <h2 className="offer-list__head">
+      今入れるお店
+      {items.length === 0 ? null : <span className="offer-list__count">{items.length}件</span>}
+    </h2>
+
     {holding ? <HoldNotice onBackToReservation={onBackToReservation} /> : null}
     {items.length === 0 ? (
       <EmptyResult />
     ) : (
-      <ul className="result-cards">
-        {items.map((item) => (
+      <ul className="offer-cards">
+        {items.map((item, index) => (
           <ResultCard
             key={item.offerId}
             item={item}
+            index={index}
             onReceive={onReceive}
             refusal={refusal !== null && refusal.offerId === item.offerId ? refusal.body : null}
             onNextStep={onNextStep}

@@ -41,37 +41,65 @@ type ReservationViewProps = {
 };
 
 export const ReservationView = ({ reservation, onSearchMore, onChanged, failure = null, pushPromptDue = false, children = null }: ReservationViewProps) => (
-  <section data-testid="view-active">
+  <section className="claim-view" data-testid="view-active">
     <PushPrompt due={pushPromptDue} />
-    <h2>席を確保しました</h2>
-    <p className="reservation-code" data-testid="reservation-code">
-      {reservation.code}
-    </p>
-    <p>お店でこの番号を見せてください。</p>
-    <h3 data-testid="reservation-store">{reservation.storeName}</h3>
-    <p data-testid="reservation-address">{reservation.storeAddress}</p>
-    <p data-testid="reservation-party">{reservation.party}名</p>
-    <p data-testid="reservation-expires">期限 {timeInJst(reservation.expiresAt)} まで</p>
-    <p>クーポン</p>
-    {/* 受け取った時点の写しをそのまま出す。1つも無ければ中は空（基準 9.13） */}
-    <ul className="coupon-list" data-testid="coupon-list">
-      {reservation.coupons.map((coupon, index) => (
-        <li key={`${coupon.name}-${index}`}>
-          {coupon.name}
-          {coupon.note === "" ? null : `（${coupon.note}）`}
-        </li>
-      ))}
-    </ul>
+
+    {/* 店頭で見せる面。番号をいちばん大きく、そのまわりに店名と期限を置く（基準 9.1・9.2） */}
+    <div className="claim-ticket">
+      <p className="claim-ticket__eyebrow">確保できました</p>
+      <h2 className="claim-ticket__title">席を確保しました</h2>
+      <p className="reservation-code claim-ticket__code" data-testid="reservation-code">
+        {reservation.code}
+      </p>
+      <p className="claim-ticket__hint">お店でこの番号を見せてください。</p>
+      <h3 className="claim-ticket__store" data-testid="reservation-store">
+        {reservation.storeName}
+      </h3>
+      <p className="claim-ticket__address" data-testid="reservation-address">
+        {reservation.storeAddress}
+      </p>
+      <p className="claim-ticket__facts">
+        <span data-testid="reservation-party">{reservation.party}名</span>
+        <span aria-hidden>・</span>
+        <span data-testid="reservation-expires">期限 {timeInJst(reservation.expiresAt)} まで</span>
+      </p>
+    </div>
+
+    <div className="claim-coupons">
+      <p className="claim-coupons__label">クーポン</p>
+      {/* 受け取った時点の写しをそのまま出す。1つも無ければ中は空（基準 9.13）。
+          「案内はありません」の文は**この欄の外**に置く（受け入れ検査が欄そのものの空を見ている）。 */}
+      <ul className="coupon-list offer-coupons" data-testid="coupon-list">
+        {reservation.coupons.map((coupon, index) => (
+          <li className="offer-coupon" key={`${coupon.name}-${index}`}>
+            <span aria-hidden className="offer-coupon__mark">
+              🎟️
+            </span>
+            <span className="offer-coupon__body">
+              <span className="offer-coupon__name">{coupon.name}</span>
+              {coupon.note === "" ? null : <span className="offer-coupon__note">（{coupon.note}）</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {reservation.coupons.length === 0 ? <p className="claim-coupons__none">クーポンの案内はありません。</p> : null}
+    </div>
+
     {reservation.storeUrl === null ? null : (
-      <a href={reservation.storeUrl} target="_blank" rel="noreferrer">
+      <a className="claim-view__link" href={reservation.storeUrl} target="_blank" rel="noreferrer">
         お店のホームページを見る
       </a>
     )}
-    <button type="button" data-testid="btn-search-more" onClick={onSearchMore}>
-      ほかの店を探す
-    </button>
+
     <ReservationActions reservation={reservation} onChanged={onChanged} />
-    {children}
+
+    <div className="claim-view__quiet">
+      <button type="button" data-testid="btn-search-more" onClick={onSearchMore}>
+        ほかの店を探す
+      </button>
+      {children}
+    </div>
+
     <FormMessage failure={failure} fieldNames={["party"]} />
   </section>
 );

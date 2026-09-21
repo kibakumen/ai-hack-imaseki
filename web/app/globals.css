@@ -1,39 +1,91 @@
-/* 色はここに置いた変数だけで指す（要件32の基準 32.3・【最終日】タスク34）。
+/* 見た目の土台（2026-09-22。速成版 `sprint/app/globals.css` と `sprint/app/me/page.tsx` で
+   本人が練り上げたオレンジ基調の視覚言語を v2 へ移した）。
+
+   色はここに置いた変数だけで指す（要件32の基準 32.3・【最終日】タスク34）。
    部品（.tsx）は色の値を持たない——構造の検査が、components と app の .tsx に
    16進の色とユーティリティの色名が無いことを見張る。明るい設定の値を :root に置き、
-   暗い設定は下の分岐で同じ変数を上書きする（名前は変えない）。 */
+   暗い設定は下の分岐で同じ変数を上書きする（名前は変えない）。
+
+   このファイルが持つのは「全画面で同じもの」だけ:
+     1. 色・角丸・影・動きの変数
+     2. 素の要素（見出し・入力欄・ボタン・リンク・表）の既定の見た目
+     3. 画面をまたいで使う動き（@keyframes）
+   画面ごとの形は `app/me/me.css`（客）・`app/store/store.css`（店）・
+   `components/admin/admin.module.css`（運営）が持つ。 */
 
 :root {
   color-scheme: light dark;
-  font-family: system-ui, sans-serif;
+  /* 絵文字の面をはっきり指す——この画面は 🎉 🎟️ 💡 🔍 🍴 に意味を持たせているので、
+     絵文字の面を持たない環境で豆腐（□）に化けると、意味ごと落ちる。 */
+  font-family:
+    system-ui, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
 
-  --color-background: #ffffff;
-  --color-surface: #f5f5f4;
-  --color-text: #1c1b1a;
-  --color-text-muted: #55534f;
-  --color-border: #d6d3cd;
-  --color-accent: #1f5d9c;
+  /* ---- 色（明るい設定）。基調はオレンジ、強調は琥珀 ---- */
+  --color-background: #fffdfa;
+  --color-surface: #fff7ed;
+  --color-text: #1f1a16;
+  --color-text-muted: #6d5f54;
+  --color-border: #ecd9c4;
+  --color-accent: #ea580c;
+  --color-accent-strong: #b8430a;
+  --color-accent-soft: #ffedd5;
   --color-accent-text: #ffffff;
-  --color-danger: #a4271b;
+  --color-danger: #b8281a;
+  /* 紹介文（アピール説明）とクーポンの地。いちばん読ませたい面 */
+  --color-highlight: #fef3c7;
+  --color-highlight-text: #7c4a09;
+  --color-highlight-edge: #f0b429;
+  --color-success: #15803d;
+
+  /* ---- 角丸 ---- */
+  --radius-xs: 0.5rem;
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+  --radius-pill: 999px;
+
+  /* ---- 影（色は文字色・強調色から混ぜて作るので、暗い設定でも破綻しない） ---- */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, var(--color-text) 12%, transparent);
+  --shadow-card: 0 6px 18px color-mix(in srgb, var(--color-accent) 14%, transparent);
+  --shadow-raised: 0 10px 28px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  --shadow-float: 0 16px 40px color-mix(in srgb, var(--color-text) 28%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: #16161a;
-    --color-surface: #22222a;
-    --color-text: #eceae6;
-    --color-text-muted: #b2aea7;
-    --color-border: #3c3c46;
-    --color-accent: #8fbcf0;
-    --color-accent-text: #12121a;
-    --color-danger: #ff9d90;
+    --color-background: #17120e;
+    --color-surface: #241b14;
+    --color-text: #f6ece2;
+    --color-text-muted: #bda995;
+    --color-border: #3d3026;
+    --color-accent: #fb923c;
+    --color-accent-strong: #fdba74;
+    --color-accent-soft: #3b2415;
+    --color-accent-text: #25150a;
+    --color-danger: #ff9d8c;
+    --color-highlight: #3a2a12;
+    --color-highlight-text: #fde3a7;
+    --color-highlight-edge: #a3690f;
+    --color-success: #6ee7a8;
   }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: var(--color-background);
+  /* 上に暖色のにじみを置く。無地の白／黒より「素のHTML」から離れる */
+  background:
+    radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 70%),
+    var(--color-background);
+  background-attachment: fixed;
   color: var(--color-text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 main {
@@ -41,22 +93,116 @@ main {
   gap: 1rem;
   margin: 0 auto;
   max-width: 40rem;
-  padding: 2rem 1rem;
+  padding: 1.5rem 1rem 5rem;
+}
+
+/* 運営の画面は PC 向けで表が横に伸びるので、殻（admin-nav）が在るときだけ広く取る。
+   `app/admin/layout.tsx` を触らずに効かせたいのでここで見分ける。 */
+body:has([data-testid="admin-nav"]) main {
+  max-width: 72rem;
+}
+
+/* ---------- 文字 ---------- */
+
+h1,
+h2,
+h3 {
+  line-height: 1.3;
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.625rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+h3 {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+p {
+  margin: 0;
+}
+
+/* ---------- 行き先 ---------- */
+
+a {
+  color: var(--color-accent);
+  font-weight: 600;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--color-accent-strong);
 }
 
 nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
-a {
-  color: var(--color-accent);
+/* 素のリンクが並ぶだけの案内（入口・運営の殻）は、押せる面に見せる */
+nav > a {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+}
+
+nav > a:hover {
+  background: var(--color-accent-soft);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+}
+
+/* ---------- 入力の面 ---------- */
+
+form {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.375rem;
+  padding: 1.25rem 1.125rem 1.375rem;
+}
+
+form > h2,
+form > h3 {
+  margin-bottom: 0.25rem;
+}
+
+/* 見出しと最初の欄の間、欄と次のラベルの間に息を入れる（ラベルは前の欄から離す） */
+form > label,
+form > fieldset,
+form > legend {
+  margin-top: 0.625rem;
+}
+
+form > label:first-of-type {
+  margin-top: 0.25rem;
 }
 
 legend,
 label {
   color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+legend {
+  padding: 0 0.25rem;
 }
 
 input,
@@ -64,20 +210,415 @@ select,
 textarea {
   background: var(--color-background);
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   color: var(--color-text);
+  font: inherit;
+  padding: 0.6875rem 0.75rem;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+  width: 100%;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-accent);
+  width: auto;
+}
+
+input[type="file"] {
+  padding: 0.5rem;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
+  outline: none;
+}
+
+input::placeholder {
+  color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+}
+
+/* 断りが出ている欄は枠を赤くする（第1回の指摘「未入力欄があることがわかりにくい・枠とかを赤く」）。
+   断りの文（`.msg`）は欄の直下に置かれるので、直後の兄弟で見分けられる＝.tsx を触らずに効く。 */
+input:has(+ .msg),
+select:has(+ .msg),
+textarea:has(+ .msg) {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 18%, transparent);
+}
+
+fieldset:has(+ .msg) {
+  border-color: var(--color-danger);
 }
 
 fieldset {
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem 0.875rem;
 }
+
+/* 並んだチェックの欄（ジャンル）は、丸い札にして横に流す。
+   中の `<label><input type=checkbox>…</label>` の形は .tsx のまま（検査が引いている data-testid も動かさない）。 */
+fieldset:has(input[type="checkbox"]) {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+fieldset:has(input[type="checkbox"]) > legend {
+  flex: 1 0 100%;
+}
+
+fieldset:has(input[type="checkbox"]) > label {
+  align-items: center;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.8125rem;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+fieldset:has(input[type="checkbox"]) > label:has(input:checked) {
+  background: var(--color-accent-soft);
+  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
+  color: var(--color-accent-strong);
+}
+
+/* ---------- 押せるもの ---------- */
 
 button {
   background: var(--color-accent);
   border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
   color: var(--color-accent-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.5625rem 1rem;
+  transition: filter 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
+
+button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  outline: none;
+}
+
+/* 主な操作（送る）は大きく・影を落として、副の操作と段を作る */
+form > button[type="submit"] {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+  font-size: 1.0625rem;
+  margin-top: 0.875rem;
+  padding: 0.9375rem 1rem;
+}
+
+/* ---------- 入口（/）とログインの面（/login） ---------- */
+
+.entry {
+  background: linear-gradient(165deg, color-mix(in srgb, var(--color-accent) 12%, var(--color-background)), var(--color-background));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--color-border));
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 2rem;
+  padding: 2.25rem 1.5rem 2rem;
+  text-align: center;
+}
+
+.entry__eyebrow,
+.auth-head__eyebrow {
+  color: var(--color-accent-strong);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.entry__title {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.entry__lead {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0 auto;
+  max-width: 24rem;
+}
+
+.entry__actions {
+  display: grid;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+}
+
+.entry__primary {
+  background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 50%, var(--color-accent)));
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+  color: var(--color-accent-text);
+  font-size: 1.0625rem;
+  font-weight: 800;
+  padding: 1rem;
+  text-decoration: none;
+}
+
+.entry__primary:hover {
+  color: var(--color-accent-text);
+  filter: brightness(1.06);
+}
+
+.entry__secondary {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  padding: 0.6875rem 1rem;
+  text-decoration: none;
+}
+
+.auth-head {
+  display: grid;
+  gap: 0.125rem;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.auth-head__title {
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.auth-foot {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+/* ---------- 断りの文 ---------- */
 
 /* 入力の断りの文（components/ui/InputRefusal）。背景に対して読める濃さを明暗それぞれで持つ。 */
 .msg {
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-background));
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: var(--radius-xs);
   color: var(--color-danger);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+  padding: 0.375rem 0.625rem;
+}
+
+/* ---------- 表（運営の数字・店の結果） ---------- */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* ---------- 紙吹雪（components/ui/Confetti）---------- */
+
+/* 部品は `components/ui` に在って画面をまたげるので、面もここに置く。
+   1片ごとの左の位置・遅れ・速さは .tsx が inline の style で渡す（色は渡さない）。 */
+.confetti {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+}
+
+.confetti__piece {
+  animation-fill-mode: forwards;
+  animation-name: confetti-fall;
+  animation-timing-function: ease-in;
+  font-size: 1.25rem;
+  line-height: 1;
+  position: absolute;
+  top: 0;
+}
+
+/* ---------- 動き（画面をまたいで使う） ---------- */
+
+/* カードが下からふわっと出る（結果の一覧・向かっている客） */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.875rem) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 当たりが出た時の跳ね（宝くじの演出・確保の紙） */
+@keyframes prize-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-6deg);
+  }
+
+  55% {
+    opacity: 1;
+    transform: scale(1.08) rotate(2deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes prize-fade-out {
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes claim-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+
+  70% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 紙吹雪の1片が落ちて回る */
+@keyframes confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translateY(-1rem) rotate(0deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(18rem) rotate(360deg);
+  }
+}
+
+/* 紹介文が届くまでの光の帯と、届いた瞬間の縁取り */
+@keyframes text-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes sparkle {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes reveal-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-highlight-edge) 0%, transparent);
+    opacity: 0;
+    transform: translateY(0.3rem);
+  }
+
+  35% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-highlight-edge) 55%, transparent);
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-highlight-edge) 0%, transparent);
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 「ここを押せば戻せる」を静かに示す脈 */
+@keyframes attention-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-accent) 0%, transparent);
+  }
+}
+
+/* 入力の誤りを1度だけ揺らして知らせる */
+@keyframes shake-x {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+
+  20%,
+  80% {
+    transform: translateX(2px);
+  }
+
+  30%,
+  50%,
+  70% {
+    transform: translateX(-4px);
+  }
+
+  40%,
+  60% {
+    transform: translateX(4px);
+  }
+}
+
+/* 待っている間ずっと動くものは、動きを減らす設定を尊重する（1回で終わる演出は残す——
+   受け取れたことが伝わらなくなるため。ただし長さは詰める）。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -1,0 +1,666 @@
+/* 客の画面の見た目（2026-09-22。速成版 `sprint/app/me/page.tsx` で本人が練り上げた形を v2 へ移した）。
+
+   本人の指摘（`13_UI指摘の原文.md`）に対して、この面が受け持つのは次の6つ:
+     1. 「何か全体的にオファーカードにワクワク感を感じない・**プレミアムで楽しい感じ**が伝わる
+        デザインに」            → `.offer-card`（暖色のグラデーション・丸み・影・順に出る動き）
+     2. 「アピール説明の大きさなどが控えめなので**もっとアピールするような**デザインに」
+                                → `.offer-pitch`（カードでいちばん大きい文・届いた瞬間に光る）
+     3. 「**クーポンが小カード**にして見えるように」  → `.offer-coupon`（1枚ずつの札）
+     4. 「**お店の画像**もほしい」                    → `.offer-card__art`（いまは絵柄の地だけ）
+     5. 「～件のオファーを受け取りました！みたいな**宝くじを受け取ったような演出**」
+                                → `.offer-reveal`
+     6. 「受け取った瞬間に**ファンファーレみたいなエフェクト**」 → `.claim-celebration`
+
+   色の値はここでも持たない——`app/globals.css` の `--color-*` だけを混ぜて濃淡を作るので、
+   暗い設定へ切り替わるとこの面も一緒に切り替わる（要件32の基準 32.3 の考え方を守る）。
+   `app/me/page.tsx` だけがこのファイルを読む＝客の画面の外には漏れない。 */
+
+/* ---------- 取得の入力 ---------- */
+
+.fetch-form__lead {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  margin-bottom: 0.25rem;
+}
+
+/* 「今入れる店を探す」。この画面でいちばん押させたい面なので、いちばん大きく・いちばん光らせる */
+.fetch-form__go {
+  background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 55%, var(--color-accent)));
+  border-color: transparent;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+  font-size: 1.125rem;
+  letter-spacing: 0.02em;
+  margin-top: 0.875rem;
+  padding: 1rem;
+}
+
+/* こだわり条件は「開いてはいるが、主役ではない」——点線で囲って一段沈める（オプション感） */
+.fetch-options {
+  background: color-mix(in srgb, var(--color-surface) 65%, var(--color-background));
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.375rem;
+  margin-top: 1rem;
+  padding: 0.875rem;
+}
+
+.fetch-options__head {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.fetch-options > label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+}
+
+/* ---------- 結果の一覧 ---------- */
+
+.offer-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.offer-list__head {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.offer-list__count {
+  background: var(--color-accent);
+  border-radius: var(--radius-pill);
+  color: var(--color-accent-text);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.125rem 0.625rem;
+}
+
+.offer-cards {
+  display: grid;
+  gap: 0.875rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.offer-empty {
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  padding: 1rem;
+}
+
+.offer-hold {
+  align-items: center;
+  background: var(--color-highlight);
+  border: 1px solid var(--color-highlight-edge);
+  border-radius: var(--radius-md);
+  color: var(--color-highlight-text);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding: 0.625rem 0.875rem;
+}
+
+.offer-hold > button {
+  font-size: 0.75rem;
+  padding: 0.375rem 0.75rem;
+}
+
+/* ---------- オファーのカード（この画面の主役） ---------- */
+
+.offer-card {
+  animation: rise-in 420ms ease-out both;
+  background: linear-gradient(165deg, var(--color-background) 35%, color-mix(in srgb, var(--color-accent) 12%, var(--color-background)));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.625rem;
+  overflow: hidden;
+  padding: 0.875rem 0.875rem 1rem;
+  position: relative;
+}
+
+/* 上の縁に細い帯を通す（「ただの枠線」から離す） */
+.offer-card::before {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-highlight-edge));
+  content: "";
+  height: 0.25rem;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+/* 店の雰囲気の面。画像が入る日まではオレンジ〜琥珀の地に絵柄を1つ置く */
+.offer-card__art {
+  align-items: center;
+  background: linear-gradient(135deg, var(--color-accent-soft), color-mix(in srgb, var(--color-highlight) 75%, var(--color-background)));
+  border-radius: var(--radius-lg);
+  display: flex;
+  height: 6.5rem;
+  justify-content: center;
+  margin-top: 0.25rem;
+  overflow: hidden;
+}
+
+.offer-card__art[data-tilt="1"] {
+  background: linear-gradient(200deg, var(--color-accent-soft), color-mix(in srgb, var(--color-highlight) 75%, var(--color-background)));
+}
+
+.offer-card__art[data-tilt="2"] {
+  background: linear-gradient(75deg, color-mix(in srgb, var(--color-highlight) 80%, var(--color-background)), var(--color-accent-soft));
+}
+
+.offer-card__art[data-tilt="3"] {
+  background: linear-gradient(300deg, var(--color-accent-soft), color-mix(in srgb, var(--color-accent) 18%, var(--color-background)));
+}
+
+.offer-card__art-glyph {
+  filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--color-text) 20%, transparent));
+  font-size: 2.5rem;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.offer-card__meta {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+  gap: 0.375rem;
+}
+
+.offer-card__name {
+  font-size: 1.1875rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- 紹介文（アピール説明）: カードでいちばん大きい文 ---------- */
+
+.offer-pitch {
+  background: var(--color-highlight);
+  border-radius: var(--radius-md);
+  color: var(--color-highlight-text);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.65;
+  padding: 0.75rem 0.875rem;
+}
+
+/* 人格を持った常連の文が届いた瞬間。ひと回り大きくし、縁を1度だけ光らせる */
+.offer-pitch--persona {
+  animation: reveal-ring 750ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  font-size: 1.0625rem;
+  line-height: 1.7;
+}
+
+/* まだ届いていない間。文は薄く出したまま、光の帯を1本流す（空白にしない） */
+.offer-pitch--pending {
+  overflow: hidden;
+  position: relative;
+}
+
+.offer-pitch__text {
+  color: color-mix(in srgb, var(--color-highlight-text) 50%, transparent);
+  font-weight: 600;
+}
+
+.offer-pitch__waiting {
+  align-items: center;
+  color: color-mix(in srgb, var(--color-highlight-text) 85%, transparent);
+  display: flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 0.25rem;
+  margin-top: 0.375rem;
+}
+
+.offer-pitch__sparkle {
+  animation: sparkle 1.2s ease-in-out infinite;
+  display: inline-block;
+}
+
+.offer-pitch__shimmer {
+  animation: text-shimmer 1.5s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-background) 75%, transparent), transparent);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+/* ---------- クーポンの小カード ---------- */
+
+.offer-card__coupon-block,
+.claim-coupons {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.offer-card__coupon-label,
+.claim-coupons__label {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.offer-coupons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.offer-coupon {
+  align-items: center;
+  background: var(--color-background);
+  border: 1px dashed color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  display: inline-flex;
+  gap: 0.375rem;
+  max-width: 100%;
+  padding: 0.375rem 0.625rem;
+}
+
+.offer-coupon__mark {
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.offer-coupon__body {
+  display: grid;
+  gap: 0.0625rem;
+  min-width: 0;
+}
+
+.offer-coupon__name {
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.offer-coupon__note {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+}
+
+.offer-card__no-coupon,
+.claim-coupons__none {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+/* ---------- 受け取りの操作 ---------- */
+
+.offer-card__cta {
+  background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 45%, var(--color-accent)));
+  border-color: transparent;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+  font-size: 1rem;
+  margin-top: 0.25rem;
+  padding: 0.875rem 1rem;
+}
+
+.offer-card__cta:disabled {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  box-shadow: none;
+  color: var(--color-text-muted);
+}
+
+.offer-card__link {
+  font-size: 0.75rem;
+  justify-self: start;
+}
+
+/* ---------- 断りの文（受け取りが通らなかった1件） ---------- */
+
+.refusal-notice {
+  align-items: center;
+  background: var(--color-highlight);
+  border: 1px solid var(--color-highlight-edge);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+}
+
+.refusal-notice .msg {
+  background: transparent;
+  border: none;
+  color: var(--color-highlight-text);
+  margin: 0;
+  padding: 0;
+}
+
+.refusal-notice > button {
+  font-size: 0.75rem;
+  padding: 0.4375rem 0.75rem;
+}
+
+/* ---------- 宝くじの札（「◯件のオファーを受け取りました！」） ---------- */
+
+.offer-reveal {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1.5rem;
+  pointer-events: none;
+  position: fixed;
+  z-index: 50;
+}
+
+.offer-reveal__card {
+  animation:
+    prize-pop 450ms cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    prize-fade-out 350ms ease-in 1150ms forwards;
+  background: linear-gradient(140deg, var(--color-accent), var(--color-highlight-edge));
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-float);
+  color: var(--color-accent-text);
+  padding: 1.75rem 2rem;
+  text-align: center;
+}
+
+.offer-reveal__mark {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.offer-reveal__count {
+  font-size: 2.25rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  margin-top: 0.375rem;
+}
+
+.offer-reveal__lead {
+  font-size: 0.9375rem;
+  font-weight: 800;
+}
+
+/* ---------- ファンファーレ（受け取れた瞬間の幕） ---------- */
+
+.claim-celebration {
+  align-items: center;
+  background: linear-gradient(180deg, var(--color-accent), var(--color-highlight-edge));
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  overflow: hidden;
+  padding: 1.5rem;
+  position: fixed;
+  z-index: 60;
+}
+
+.claim-celebration__card {
+  animation: claim-pop 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  background: var(--color-background);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-float);
+  display: grid;
+  gap: 0.25rem;
+  max-width: 22rem;
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  width: 100%;
+  z-index: 1;
+}
+
+.claim-celebration__mark {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.claim-celebration__lead {
+  color: var(--color-accent-strong);
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+.claim-celebration__eyebrow {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-top: 0.5rem;
+}
+
+.claim-celebration__code {
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 2.25rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+}
+
+.claim-celebration__store {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.claim-celebration__close {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  margin-top: 0.875rem;
+}
+
+/* ---------- 確保中の表示（店頭で見せる面） ---------- */
+
+.claim-view {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.claim-ticket {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--color-accent) 14%, var(--color-background)), var(--color-background));
+  border: 2px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.25rem;
+  padding: 1.25rem 1.125rem 1.375rem;
+  text-align: center;
+}
+
+.claim-ticket__eyebrow {
+  color: var(--color-accent-strong);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.claim-ticket__title {
+  font-size: 1.125rem;
+}
+
+/* 番号は店頭でいちばん見られる。画面の幅に収まる限り大きく取る */
+.reservation-code.claim-ticket__code {
+  color: var(--color-accent-strong);
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: clamp(2.25rem, 13vw, 3.25rem);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  line-height: 1.15;
+  margin: 0.25rem 0;
+}
+
+.claim-ticket__hint {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.claim-ticket__store {
+  font-size: 1.0625rem;
+  margin-top: 0.5rem;
+}
+
+.claim-ticket__address {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.claim-ticket__facts {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  gap: 0.375rem;
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+
+.claim-view__link {
+  font-size: 0.8125rem;
+  justify-self: start;
+}
+
+/* 副の操作（ほかの店を探す・通報）は控えめにまとめる */
+.claim-view__quiet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.claim-view__quiet > button {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 0.875rem;
+}
+
+/* 確保中の画面では、番号より目立つものを置かない（店頭でまず見るのは番号）。
+   「人数を変える」は主な操作の大きさから一段落とす。 */
+[data-testid="form-party"] > button[type="submit"] {
+  box-shadow: none;
+  font-size: 0.875rem;
+  justify-self: start;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+/* 確保への操作（`ReservationActions`）。「取り消す」は戻せない操作なので、主な操作の
+   オレンジではなく赤寄りの控えめな面にする——押し間違いを誘う見た目にしない。
+   .tsx は触らずに済むよう、部品が既に引いている data-testid で指す。 */
+[data-testid="form-cancel"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+[data-testid="btn-cancel"],
+[data-testid="confirm-cancel"] [data-testid="btn-confirm"] {
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--color-background));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-danger);
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.875rem;
+}
+
+[data-testid="confirm-cancel"] {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+}
+
+[data-testid="confirm-cancel"] > button:last-of-type {
+  background: var(--color-background);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.875rem;
+}
+
+/* ---------- 期限切れ・完了・取り消しの表示 ---------- */
+
+[data-testid="view-expired"],
+[data-testid="view-completed"],
+[data-testid="view-store_cancelled"],
+[data-testid="view-admin_cancelled"] {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.625rem;
+  justify-items: start;
+  padding: 1.25rem 1.125rem;
+}
+
+[data-testid="view-completed"] {
+  border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-border));
+}
+
+[data-testid="view-expired"] .reservation-code {
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+/* ---------- 通知の説明・脇の画面 ---------- */
+
+.push-prompt {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.875rem 1rem;
+}
+
+.push-prompt p {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.push-prompt p:has(> button) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.push-prompt button {
+  font-size: 0.8125rem;
+}
+
+/* 最新の状態を確かめられていないことの知らせ（`stale-notice`）は、断りの赤ではなく静かな注意に */
+[data-testid="stale-notice"].msg {
+  background: var(--color-highlight);
+  border-color: var(--color-highlight-edge);
+  color: var(--color-highlight-text);
+}

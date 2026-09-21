@@ -15,26 +15,44 @@
 
 .summaryTiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.625rem;
 }
 
+/* 数字の札。上の縁に帯を通して「読む面」から「見る面」へ寄せる
+   （第1回の指摘「一つ一つのカードのデザインが簡素で文字量が多いので視覚的にわかりやすく」）。 */
 .tile {
+  background: linear-gradient(165deg, var(--color-background), color-mix(in srgb, var(--color-accent) 8%, var(--color-background)));
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  padding: 0.75rem 0.5rem;
+  position: relative;
   text-align: center;
-  background: var(--color-surface);
+}
+
+.tile::before {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-highlight-edge));
+  content: "";
+  height: 0.1875rem;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
 }
 
 .tileValue {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.625rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
 .tileLabel {
-  font-size: 0.7rem;
   color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 
 /* 未承認の強調バナー。0件のときは静かな色、1件以上は目立つ色（--warn はここだけの変数）。 */
@@ -42,15 +60,37 @@
   --warn-bg: #fdf3e0;
   --warn-border: #d99a1f;
   --warn-text: #7a4e00;
-  display: flex;
+
+  /* 1件以上あるときは静かに脈打たせる（第1回の指摘「承認申請がきていることは重要なことなので
+     もっと強調してほしい」）。0件では `.calm` が付いて脈も止まる。
+     ⚠️ keyframes はこのファイルの中で名乗る——CSS Modules は外のファイルの名前を保証しない。 */
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border: 2px solid var(--warn-border);
-  border-radius: 0.75rem;
-  padding: 0.75rem 1rem;
+  animation: adminPendingPulse 2.4s ease-in-out infinite;
   background: var(--warn-bg);
+  border: 2px solid var(--warn-border);
+  border-radius: var(--radius-md);
   color: var(--warn-text);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+}
+
+@keyframes adminPendingPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn-border) 55%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--warn-border) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pendingBanner {
+    animation: none;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -65,6 +105,8 @@
   --warn-bg: var(--color-surface);
   --warn-border: var(--color-border);
   --warn-text: var(--color-text-muted);
+
+  animation: none;
   border-width: 1px;
   font-weight: 700;
 }
@@ -81,15 +123,23 @@
   gap: 0.4rem;
 }
 
+.filterBtn {
+  border-radius: var(--radius-pill);
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.875rem;
+}
+
 .filterBtn[aria-pressed="true"] {
-  background: var(--color-text);
-  border-color: var(--color-text);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .filterBtn[aria-pressed="false"] {
   background: var(--color-surface);
   border-color: var(--color-border);
-  color: var(--color-text);
+  color: var(--color-text-muted);
+  font-weight: 600;
 }
 
 .toolbar {
@@ -112,38 +162,58 @@
   padding: 0;
 }
 
+/* 店の1枚。左の縁に状況の帯を通し、店名を大きく・付帯情報を小さくして
+   「文字の塊」から「見分けられる面」へ変える。 */
 .card {
-  display: grid;
-  gap: 0.35rem;
+  background: var(--color-background);
   border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  padding: 0.75rem 1rem;
-  background: var(--color-surface);
+  border-left: 0.25rem solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.875rem 1rem;
+}
+
+.card:has(.badge[data-status="pending"]) {
+  border-left-color: var(--color-highlight-edge);
+}
+
+.card:has(.badge[data-status="banned"]) {
+  border-left-color: color-mix(in srgb, var(--color-danger) 70%, var(--color-border));
 }
 
 .cardHead {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   gap: 0.5rem;
 }
 
+.cardHead > strong,
+.cardHead > h3 {
+  font-size: 1.0625rem;
+  font-weight: 800;
+}
+
 .cardMeta {
-  font-size: 0.85rem;
   color: var(--color-text-muted);
+  font-size: 0.8125rem;
 }
 
 /* 状況バッジ。data-status で色を分ける（.tsx はこの名前の class を貼るだけで色は持たない）。 */
 .badge {
   --badge-bg: var(--color-border);
   --badge-text: var(--color-text);
-  display: inline-block;
-  border-radius: 999px;
-  padding: 0.1rem 0.6rem;
-  font-size: 0.7rem;
-  font-weight: 700;
+
   background: var(--badge-bg);
+  border-radius: var(--radius-pill);
   color: var(--badge-text);
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0.1875rem 0.6875rem;
 }
 
 .badge[data-status="pending"] {
@@ -203,17 +273,19 @@
 }
 
 .barTrack {
-  flex: 1;
-  height: 0.9rem;
-  border-radius: 0.3rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  flex: 1;
+  height: 0.9rem;
   overflow: hidden;
 }
 
 .barFill {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-highlight-edge));
+  border-radius: var(--radius-pill);
   height: 100%;
-  background: var(--color-accent);
+  transition: width 240ms ease;
 }
 
 .barValue {
@@ -222,10 +294,40 @@
   text-align: right;
 }
 
+/* 全体の数字（定義のならび）。素の dt/dd が縦に流れるだけだと読む面になるので、札に割る。 */
+.metricsGrid {
+  display: grid;
+  gap: 0.625rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  margin: 0;
+}
+
+.metricsGrid > div {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.6875rem 0.875rem;
+}
+
+.metricsGrid dt {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.metricsGrid dd {
+  font-size: 1.375rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0;
+}
+
 .table {
-  width: 100%;
   border-collapse: collapse;
   font-size: 0.8rem;
+  width: 100%;
 }
 
 .table th,

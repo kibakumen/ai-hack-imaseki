@@ -163,7 +163,7 @@ export const Metrics = () => {
         <>
           <ByModelSection rows={data.byModel} fallbackCount={data.fallbackCount} />
 
-          <dl data-testid="metrics">
+          <dl className={styles.metricsGrid} data-testid="metrics">
             {numbersOf(data).map((row) => (
               <div key={row.label}>
                 <dt>{row.label}</dt>

@@ -14,7 +14,7 @@ import { currentLocation } from "../../lib/client/geolocation";
 import { TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, PARTY_MAX, PARTY_MIN, PLACE_MAX } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
-import type { ResultItem } from "./ResultList";
+import type { PitchSource, ResultItem } from "./ResultList";
 
 const FIELD_NAMES = ["place", "party", "genres", "budgetMax"];
 /**
@@ -45,6 +45,13 @@ export const partyToSend = (raw: string): number | string | undefined => (raw.tr
 
 /** 空欄の予算は「上限なし」（`null`）。登録の予算が未指定の客と同じ扱い。 */
 export const budgetToSend = (raw: string): number | string | null => (raw.trim() === "" ? null : toNumber(raw));
+
+/**
+ * 紹介文が「人格を持った常連の文」か「簡素な文へ倒した形」かを読む（少しずつ届く入口の `pitch` の
+ * `source`）。どちらでも客には紹介文として出すが、届いた瞬間の見せ方を変えるため区別する
+ * （2026-09-22 の見た目の直し・`ResultList` の `OfferPitch`）。知らない値は簡素な文として扱う。
+ */
+const pitchSourceOf = (raw: unknown): PitchSource => (raw === "persona" ? "persona" : "fallback");
 
 type FetchFormProps = {
   /** 登録の値（その回の好みの初めの値・基準 3.13）。応答の形を検査していないので在ることに頼らない。 */
@@ -95,13 +102,25 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults }: FetchFor
       }
       if (line.type === "pitch" && current !== null && typeof line.storeId === "string" && typeof line.reason === "string") {
         const { storeId, reason } = line;
+        const pitchSource = pitchSourceOf(line.source);
         const shown: FetchResult = current;
-        current = { ...shown, items: shown.items.map((item) => (item.storeId === storeId ? { ...item, reason } : item)) };
+        // 届いた1件のカードだけ紹介文を差し替え、「届いた」印を付ける（まだ印の無いカードは
+        // シマーを重ねたまま待つ・`ResultList` の `OfferPitch`）。並び順は `init` のまま動かさない。
+        current = { ...shown, items: shown.items.map((item) => (item.storeId === storeId ? { ...item, reason, pitchSource } : item)) };
         onResults(current);
       }
     });
     // 1行も届かなかった応答は「少しずつ届く入口が働いていない」とみなし、普通の入口へ倒す
-    return outcome === null && current === null ? STREAM_UNAVAILABLE : outcome;
+    if (outcome === null && current === null) return STREAM_UNAVAILABLE;
+    // ここまで来たら紹介文はもう届かない。まだ印の無いカードを簡素な文として確定させる
+    // ——でないとシマーが回り続ける（速成版の `settlePendingPitches` と同じ後始末）。
+    if (current !== null) {
+      const shown: FetchResult = current;
+      if (shown.items.some((item) => item.pitchSource === undefined)) {
+        onResults({ ...shown, items: shown.items.map((item) => (item.pitchSource === undefined ? { ...item, pitchSource: "fallback" as const } : item)) });
+      }
+    }
+    return outcome;
   };
 
   const submit = async () => {
@@ -123,7 +142,8 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults }: FetchFor
       setFailure(result);
       return;
     }
-    onResults({ fetchId: result.fetchId, items: result.items, party: Number(party) });
+    // 普通の入口は紹介文まで揃えて返すので、全部「届いた」印を付けて出す（待ちの見せ方をしない）
+    onResults({ fetchId: result.fetchId, items: result.items.map((item) => ({ ...item, pitchSource: "fallback" as const })), party: Number(party) });
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -133,8 +153,9 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults }: FetchFor
   };
 
   return (
-    <form data-testid="form-fetch" noValidate onSubmit={handleSubmit}>
+    <form className="fetch-form" data-testid="form-fetch" noValidate onSubmit={handleSubmit}>
       <h2>今入れるお店を探す</h2>
+      <p className="fetch-form__lead">近くの空いている席を、今の気分と予算から探します。</p>
 
       <label htmlFor="fetch-place">場所（空のままにすると、今いる場所で探します）</label>
       <input
@@ -161,34 +182,42 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults }: FetchFor
       />
       <FieldMessage name="party" failure={failure} ctx={{ field: "人数", min: PARTY_MIN, max: PARTY_MAX }} />
 
-      <fieldset data-testid="field-genres">
-        <legend>今の気分のジャンル（この回だけ・登録は変わりません）</legend>
-        {TEXTS.genres.map((genre) => (
-          <label key={genre}>
-            <input type="checkbox" data-testid={`genre-${genre}`} checked={genres.includes(genre)} onChange={() => toggleGenre(genre)} />
-            {genre}
-          </label>
-        ))}
-      </fieldset>
-      <FieldMessage name="genres" failure={failure} ctx={{ field: "ジャンル" }} />
-
-      <label htmlFor="fetch-budget">1人あたりの予算の上限（この回だけ・空なら上限なし）</label>
-      <input
-        id="fetch-budget"
-        data-testid="field-budgetMax"
-        type="number"
-        inputMode="numeric"
-        min={BUDGET_MAX_MIN}
-        max={BUDGET_MAX_MAX}
-        value={budgetMax}
-        onChange={(event) => setBudgetMax(event.target.value)}
-      />
-      <FieldMessage name="budgetMax" failure={failure} ctx={{ field: "予算の上限", min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
-
-      <button type="submit" data-testid="btn-fetch" disabled={pending}>
-        {pending ? "探しています…" : "今入れる店を探す"}
+      {/* 主な操作は場所・人数のすぐ下に置く（第2回の指摘「今すぐ探すボタンを場所の入力欄のすぐ下に
+          配置し、こだわり条件はそのボタンの下に展開してオプション感をだす」）。
+          操作の直下に出る断り（`FormMessage`）はこのボタンに付いたまま動かす
+          ——出し場所の決まりは設計書「入力の誤りの出し方」の規則5。 */}
+      <button type="submit" className="fetch-form__go" data-testid="btn-fetch" disabled={pending}>
+        {pending ? "探しています…" : "🔍 今入れる店を探す"}
       </button>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
+
+      <div className="fetch-options">
+        <p className="fetch-options__head">こだわり条件（任意）</p>
+
+        <fieldset data-testid="field-genres">
+          <legend>今の気分のジャンル（この回だけ・登録は変わりません）</legend>
+          {TEXTS.genres.map((genre) => (
+            <label key={genre}>
+              <input type="checkbox" data-testid={`genre-${genre}`} checked={genres.includes(genre)} onChange={() => toggleGenre(genre)} />
+              {genre}
+            </label>
+          ))}
+        </fieldset>
+        <FieldMessage name="genres" failure={failure} ctx={{ field: "ジャンル" }} />
+
+        <label htmlFor="fetch-budget">1人あたりの予算の上限（この回だけ・空なら上限なし）</label>
+        <input
+          id="fetch-budget"
+          data-testid="field-budgetMax"
+          type="number"
+          inputMode="numeric"
+          min={BUDGET_MAX_MIN}
+          max={BUDGET_MAX_MAX}
+          value={budgetMax}
+          onChange={(event) => setBudgetMax(event.target.value)}
+        />
+        <FieldMessage name="budgetMax" failure={failure} ctx={{ field: "予算の上限", min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+      </div>
     </form>
   );
 };
