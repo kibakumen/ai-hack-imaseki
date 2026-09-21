@@ -47,6 +47,21 @@ describe("client/api が応答の形を確かめてから返す", () => {
     expect(failure.error).toBeUndefined();
   });
 
+  it("アプリの外が返した既定の応答（2xx でなく ok:false も持たない）は kind network に倒す", async () => {
+    // アプリ自身の断りは必ず `ok:false` を持つので、ここへ来るのは間に挟まった機器や
+    // プラットフォームが返した応答。形だけ見て成功として読むと、画面が中身の無い値で描き出す
+    // （2026-09-22 タスク25 が足した。タスク4の監査の指摘 F2）。
+    respondWith(502, { message: "Bad gateway" });
+    expect(failureOf(await apiCall<Ok>("GET", "/api/customer/home")).error?.kind).toBe("network");
+    respondWith(500, { ok: true });
+    expect(failureOf(await apiCall<Ok>("GET", "/api/customer/home")).error?.kind).toBe("network");
+  });
+
+  it("2xx の応答は、形を渡さなければそのまま返る（状態コードの検査が成功の道を塞がない）", async () => {
+    respondWith(201, { ok: true, id: "r1" });
+    expect(await apiCall<Ok>("POST", "/api/customer/reports", { storeId: "s1" })).toEqual({ ok: true, id: "r1" });
+  });
+
   it("約束と違う形の断り（error が物でない）は kind network に倒す", async () => {
     respondWith(400, { ok: false, error: "こわれている" });
     expect(failureOf(await apiCall<Ok>("POST", "/api/customer/fetch", {})).error?.kind).toBe("network");

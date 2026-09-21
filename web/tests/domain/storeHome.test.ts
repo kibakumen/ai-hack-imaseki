@@ -6,8 +6,8 @@
 // 押さえる（時刻の境目は、この検査でしか全部は見られない）。
 
 import { describe, expect, it } from "vitest";
-import { canComplete } from "./reservation";
-import { arrivalRows, COMPLETED_ROW_VIEW_MS, STORE_CANCELLED_ROW_VIEW_MS, type ArrivalRowInput } from "./storeHome";
+import { canComplete } from "../../lib/domain/reservation";
+import { arrivalRows, COMPLETED_ROW_VIEW_MS, STORE_CANCELLED_ROW_VIEW_MS, type ArrivalRowInput } from "../../lib/domain/storeHome";
 
 const MIN = 60_000;
 const T0 = new Date("2026-09-22T06:00:00.000Z");

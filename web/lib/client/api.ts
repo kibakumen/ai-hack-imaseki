@@ -79,6 +79,10 @@ export const apiCall = async <T = Record<string, unknown>>(method: HttpMethod, p
     // 検査した値ではなく元の値を返す（partyMax・home のような場面ごとの項目を落とさないため）。
     return failureSchema.safeParse(json).success ? (json as ApiFailure) : networkFailure();
   }
+  // ここから先は `ok:false` を持たない応答。アプリ自身の断りは必ず `ok:false` を持つので、
+  // 状態コードが 2xx でなければ**アプリの外**が返した既定の応答（プラットフォームの 502・
+  // 間に挟まった機器の 503 など）で、成功として読ませてはいけない（2026-09-22 タスク25 が足した）。
+  if (!res.ok) return networkFailure();
   if (!schema) return json as T;
   const parsed = schema.safeParse(json);
   return parsed.success ? parsed.data : networkFailure();

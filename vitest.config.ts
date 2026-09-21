@@ -23,6 +23,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["web/**/*.test.{ts,tsx}", "tests/acceptance/v2/**/*.test.{ts,tsx}"],
-    setupFiles: ["tests/acceptance/v2/_setup.ts"],
+    // `acceptance-globals.ts` は、直下の `acceptance-globals.d.ts` が型で宣言している
+    // 場面の準備の5つを、実行時にも globalThis へ置く（2026-09-22 タスク25 が足した）。
+    setupFiles: ["tests/acceptance/v2/_setup.ts", "tests/acceptance-globals.ts"],
   },
 });

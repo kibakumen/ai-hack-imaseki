@@ -2,8 +2,8 @@
 // 受け入れ検査（r07）は ok の真偽だけを見るので、落ちた訳の語（記録の validation_failed に
 // 添えるもの）と、壊れた形・コードフェンスの書き方の揺れはここで縛る。
 import { describe, expect, it } from "vitest";
-import { fallbackResult, validateSelection } from "./selection";
-import { TEXTS } from "./texts";
+import { fallbackResult, validateSelection } from "../../lib/domain/selection";
+import { TEXTS } from "../../lib/domain/texts";
 
 const IDS = ["s1", "s2", "s3", "s4", "s5", "s6"];
 const body = (items: Array<{ storeId: string; reason: string }>) => JSON.stringify({ selections: items });

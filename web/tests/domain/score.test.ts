@@ -2,7 +2,7 @@
 // 800m の外の距離が来たときの収め方と、点数・距離・登録の古さが全部同じときの順（基準 6.7 の
 // 「毎回同じ並び」を、入力の並びが変わっても保てるか）。
 import { describe, expect, it } from "vitest";
-import { rankStores, scoreStore } from "./score";
+import { rankStores, scoreStore } from "../../lib/domain/score";
 
 const item = (id: string, over: Partial<{ distanceMeters: number; storeGenres: string[]; createdAt: string }> = {}) => ({
   id,

@@ -1,6 +1,6 @@
 // セッションの見分けと、使われるたびの延長（要件14）。受け入れ検査が触れない2つの道を固定する:
 // ①期限の値が壊れているときに「切れている」側へ倒すこと（フェイルクローズ・本人選択 2026-09-21）
-// ②残りが半分を切ったときだけ延ばすこと（スライディングウィンドウ・同）。
+// ②残りが1時間（SESSION_RENEW_WITHIN_SECONDS）を切ったときだけ延ばすこと（スライディングウィンドウ・同）。
 import { describe, expect, it } from "vitest";
 import type { Deps } from "../ports";
 import { SESSION_MAX_AGE_SECONDS } from "../schemas/limits";
@@ -75,14 +75,14 @@ describe("セッションの見分け", () => {
 });
 
 describe("使われるたびの延長", () => {
-  it("残りが半分より多ければ、表も Cookie も動かさない", async () => {
+  it("残りが延長の窓（1時間）より多く残っていれば、表も Cookie も動かさない", async () => {
     const { deps, ran } = fakeDeps(sessionRow(minutesFromNow(90)));
     const session = (await identifySession(requestWithCookie(), deps))!;
     expect(await renewSession(deps, session)).toEqual([]);
     expect(ran).toEqual([]);
   });
 
-  it("残りが半分を切っていれば、表の期限を今から2時間先へ動かし、同じ長さの Set-Cookie を返す", async () => {
+  it("残りが1時間を切っていれば、表の期限を今から25時間先へ動かし、同じ長さの Set-Cookie を返す", async () => {
     const { deps, ran } = fakeDeps(sessionRow(minutesFromNow(30)));
     const session = (await identifySession(requestWithCookie(), deps))!;
     const cookies = await renewSession(deps, session);

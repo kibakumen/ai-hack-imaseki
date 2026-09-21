@@ -1,7 +1,7 @@
 // 保存するパスワードの値（方式・繰り返しの回数・塩・ハッシュを1つにした文字列）の組み立てと読み取り。
 // 受け入れ検査（14.4）は保存された値を parsePasswordRecord で読むので、壊れた値で null になる道も固定する。
 import { describe, expect, it } from "vitest";
-import { buildPasswordRecord, constantTimeEqual, parsePasswordRecord, saltFromBytes } from "./password";
+import { buildPasswordRecord, constantTimeEqual, parsePasswordRecord, saltFromBytes } from "../../lib/domain/password";
 
 const RECORD = buildPasswordRecord({ iterations: 100_000, salt: "c2FsdA==", hashB64: "aGFzaA==" });
 

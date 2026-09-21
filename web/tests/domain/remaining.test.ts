@@ -3,7 +3,7 @@
 // の場合分けと、押さえていない状態を固定する。
 
 import { describe, expect, it } from "vitest";
-import { holdsSlot, remainingOf } from "./remaining";
+import { holdsSlot, remainingOf } from "../../lib/domain/remaining";
 
 const NOW = new Date("2026-09-22T06:10:00.000Z");
 const FUTURE = new Date("2026-09-22T06:20:00.000Z");

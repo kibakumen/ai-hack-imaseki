@@ -11,8 +11,8 @@ const DAY_SECONDS = 24 * 60 * 60;
 /** 400日（7桁以上・設計書「比べた案と、決めたこと」）。 */
 export const CUSTOMER_COOKIE_MAX_AGE_SECONDS = 400 * DAY_SECONDS;
 /**
- * 店と運営のセッションの Cookie は、表の `sessions.expires_at` と同じ寿命にする（2時間）。
- * アクセスのたびに残りが半分を切っていれば、表と Cookie の両方を同じだけ延ばす
+ * 店と運営のセッションの Cookie は、表の `sessions.expires_at` と同じ寿命にする（25時間）。
+ * アクセスのたびに残りが1時間を切っていれば、表と Cookie の両方を同じだけ延ばす
  * （スライディングウィンドウ・本人選択／AI提示 2026-09-21。数字の正本は schemas/limits.ts）。
  */
 export const SESSION_COOKIE_MAX_AGE_SECONDS = SESSION_MAX_AGE_SECONDS;

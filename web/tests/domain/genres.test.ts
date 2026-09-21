@@ -2,8 +2,8 @@
 // 部品は lib/domain のうち texts.ts しか値として読めない（依存の向き）ので写しが要る。
 // 写しが黙ってずれないよう、一致をここで固定する。
 import { describe, expect, it } from "vitest";
-import { GENRES } from "./genres";
-import { TEXTS } from "./texts";
+import { GENRES } from "../../lib/domain/genres";
+import { TEXTS } from "../../lib/domain/texts";
 
 describe("ジャンルの選択肢", () => {
   it("12個あり、同じものが2度は入っていない（基準 1.4）", () => {

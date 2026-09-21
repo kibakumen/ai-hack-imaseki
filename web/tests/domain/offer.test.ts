@@ -2,7 +2,7 @@
 // SQL 側（repo/sqlFragments.ts）との突き合わせは受け入れ検査 r05・r18 が見る。
 
 import { describe, expect, it } from "vitest";
-import { isReceivable } from "./offer";
+import { isReceivable } from "../../lib/domain/offer";
 
 const iso = (s: string) => new Date(s);
 const UNTIL = iso("2026-09-22T08:00:00.000Z");

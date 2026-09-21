@@ -1,6 +1,6 @@
 // domain/fileType の単体（受け入れ検査 r13 は入口ごしに見るので、境目はここで固める）。
 import { describe, expect, it } from "vitest";
-import { detectFileType } from "./fileType";
+import { detectFileType } from "../../lib/domain/fileType";
 
 const withPadding = (head: number[], length = 64) => new Uint8Array([...head, ...new Array(length).fill(0x20)]);
 

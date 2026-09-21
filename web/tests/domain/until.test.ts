@@ -2,7 +2,7 @@
 // 起点 T0 = 2026-09-22 15:00 JST。枠は公開から12時間＝翌 03:00 まで。
 
 import { describe, expect, it } from "vitest";
-import { formatTimeOfDay, latestUntilOf, parseTimeOfDay, resolveUntil } from "./until";
+import { formatTimeOfDay, latestUntilOf, parseTimeOfDay, resolveUntil } from "../../lib/domain/until";
 
 const jst = (hhmm: string, dayOffset = 0): Date => {
   const [h, m] = hhmm.split(":").map(Number);

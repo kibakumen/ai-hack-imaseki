@@ -18,7 +18,7 @@ import { useState, type FormEvent } from "react";
 import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, type RefusalContext } from "../ui/InputRefusal";
-import { timeInJst } from "./jstTime";
+import { timeInJst } from "../ui/jstTime";
 
 export type OfferPanelOffer = {
   id: string;
