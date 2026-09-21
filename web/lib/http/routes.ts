@@ -4,7 +4,8 @@
 import type { RouteDefinition } from "./defineRoute";
 import { authRoutes } from "./endpoints/auth";
 import { configRoutes } from "./endpoints/config";
+import { couponRoutes } from "./endpoints/coupons";
 import { customerRoutes } from "./endpoints/customer";
 import { storeRoutes } from "./endpoints/store";
 
-export const ROUTE_DEFINITIONS: RouteDefinition[] = [...configRoutes, ...customerRoutes, ...authRoutes, ...storeRoutes];
+export const ROUTE_DEFINITIONS: RouteDefinition[] = [...configRoutes, ...customerRoutes, ...authRoutes, ...storeRoutes, ...couponRoutes];

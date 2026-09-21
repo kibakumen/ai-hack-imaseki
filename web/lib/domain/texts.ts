@@ -90,3 +90,32 @@ export const TEXTS = {
   push: (scene: string): { title: string; body: string } => (PUSH_TEXTS[scene] ?? (() => ({ title: "お知らせ", body: "アプリを開いて確かめてください。" })))(),
   fallbackReason: "今の条件で近い順に選びました",
 } as const;
+
+// ---------- クーポンの画面の断りの文（要件16の基準 16.2・16.5） ----------
+// 汎用の INPUT_REFUSAL_TEXTS では足りない語が2つある:
+//   limit_reached … 汎用の文は個数を言わない（上の語は 15.7 のおすすめメニューとも共有なので、
+//                   そちらの個数に寄せられない）。クーポンの画面は「3つまで」と数を出す。
+//   coupon_in_use … 汎用の文は「変えられません」で止まり、次の一手（公開を止める）を言わない。
+//                   基準 16.5 は「公開を止めてから行うよう示す」ことまでを求める。
+// 語から文を選ぶ判断は、決まった文の置き場であるこのファイルに置く（部品の側で語を場合分けしない）。
+
+/** 断りの応答のうち、文を選ぶのに要る所だけ（lib/domain は何も import しないので、形だけで受ける）。 */
+type CouponFailure = { error?: { kind?: string; fields?: Array<{ name: string }> } } | null | undefined;
+
+const COUPON_FORM_TEXTS: Record<string, (max: number) => string> = {
+  limit_reached: (max) => `クーポンは${max}つまでです。`,
+  coupon_in_use: () => "公開中のオファーが見せているクーポンは、公開を止めてから変えられます。",
+};
+
+export const COUPON_TEXTS = {
+  /**
+   * 押した操作の直下に出す文。項目に帰せる断り（name・note）のときは null——その文は
+   * 項目の直下（msg-<項目名>）に出るので、ここでは出さない。
+   */
+  formMessage: (failure: CouponFailure, max: number): string | null => {
+    const error = failure?.error;
+    if (!error?.kind) return null;
+    if ((error.fields ?? []).length > 0) return null;
+    return (COUPON_FORM_TEXTS[error.kind] ?? ((): string => TEXTS.inputRefusal(error.kind ?? "")))(max);
+  },
+} as const;
