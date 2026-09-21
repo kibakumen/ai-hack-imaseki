@@ -24,6 +24,7 @@ import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as s
 import { usePolling } from "../../lib/client/usePolling";
 import { AccountSettings } from "./AccountSettings";
 import { AdminCancelledView } from "./AdminCancelledView";
+import { ClaimedCelebration } from "./ClaimedCelebration";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
 import { FetchForm, type FetchResult } from "./FetchForm";
@@ -69,6 +70,12 @@ export const CustomerApp = () => {
   // ——断られたときに元の表示のまま文を出す必要があるため（基準 26.19・28.5）。
   const [panel, setPanel] = useState<Panel>("none");
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  /**
+   * たった今受け取りが通ったか（2026-09-22 の本人の指摘「受け取った瞬間にファンファーレみたいな
+   * エフェクト」「別画面に遷移してオファー承諾の楽しい演出」）。確保中の表示は消さずに、その上へ
+   * `ClaimedCelebration` を重ねる。閉じれば下の確保中の表示がそのまま在る。
+   */
+  const [celebrating, setCelebrating] = useState(false);
 
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
@@ -117,6 +124,8 @@ export const CustomerApp = () => {
     setRefused(body !== undefined && keepsNotice ? { offerId, body } : null);
     // 通ったときは結果の一覧を片づける（確保中の表示へ移る・基準 8.5）
     if (failure === null) setFetchResult(null);
+    // 通って確保中になったときだけ、受け取りの演出を前面に出す（断りでは出さない）
+    if (failure === null && responded !== null && responded.reservation !== undefined && responded.kind === "active") setCelebrating(true);
   };
 
   /**
@@ -241,8 +250,18 @@ export const CustomerApp = () => {
     return null;
   };
 
+  /**
+   * 受け取った直後の演出（確保中の表示の上に重ねる）。閉じるか、確保が確保中でなくなったら消える
+   * ——期限切れ・取り消しに変わったあとまで「受け取りました」を出したままにしない。
+   */
+  const celebration =
+    celebrating && reservation !== undefined && home.kind === "active" ? (
+      <ClaimedCelebration reservation={reservation} onClose={() => setCelebrating(false)} />
+    ) : null;
+
   return (
     <main>
+      {celebration}
       {stale ? (
         <p className="msg" role="status" data-testid="stale-notice">
           最新の状態を確かめられていません。最後に確かめられた内容を出しています。

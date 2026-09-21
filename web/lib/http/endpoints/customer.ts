@@ -3,7 +3,9 @@
 // 手続きを呼んで応答の形に直すだけ。
 
 import { customerRegisterSchema } from "../../schemas/customer";
+import { placeQuerySchema } from "../../schemas/place";
 import { customerHome } from "../../usecases/customerHome";
+import { placeLabel } from "../../usecases/placeLabel";
 import { registerCustomer } from "../../usecases/registerCustomer";
 import { CUSTOMER_COOKIE_MAX_AGE_SECONDS, CUSTOMER_COOKIE_NAME, serializeCookie } from "../cookies";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
@@ -37,4 +39,18 @@ const customerHomeRoute = defineRoute({
   },
 });
 
-export const customerRoutes: RouteDefinition[] = [registerCustomerRoute, customerHomeRoute];
+/**
+ * 現在地の座標を地名へ直す（読むだけ）。画面が開いた瞬間に場所の欄へ入れる文字を取る入口で、
+ * 地図の鍵を画面へ渡さないために挟む（2026-09-22 の本人の指摘「開いた瞬間にここに現在地の
+ * 文字に変換した場所が入っていて」）。直せなければ `label: null` を返す（断りにはしない——
+ * 客は座標のまま探せる）。
+ */
+const customerPlaceRoute = defineRoute({
+  method: "GET",
+  path: "/api/customer/place",
+  auth: "customer",
+  input: placeQuerySchema,
+  handler: async ({ input, deps }) => ({ status: 200, body: await placeLabel(deps, input) }),
+});
+
+export const customerRoutes: RouteDefinition[] = [registerCustomerRoute, customerHomeRoute, customerPlaceRoute];
