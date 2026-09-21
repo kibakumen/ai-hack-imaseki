@@ -18,6 +18,13 @@ export const TOKEN_BYTES = 16;
 // 内部の番号（customers.id など。Cookie の値とは別物・設計書「客の識別子」）の乱数の長さ（AI判断）
 export const ID_BYTES = 16;
 
+// 要件3（取得の入力）の基準 3.3・3.10・3.11
+/** 場所の文字の上限（基準 3.3・値は AI判断） */
+export const PLACE_MAX = 50;
+/** 人数の範囲（基準 3.10・範囲は AI判断） */
+export const PARTY_MIN = 1;
+export const PARTY_MAX = 10;
+
 // 要件12（店の登録）の基準 12.3・12.4・12.5
 export const STORE_NAME_MIN = 1;
 /** 店名の上限は要件15の基準 15.2 と同じ範囲（基準 12.5 がそれを指す） */
