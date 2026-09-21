@@ -3,7 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { loadWeb, makeCtx, one, receivedScene, WEB, type Ctx } from "./_fakes";
+// 2026-09-22 の直し: 53〜60行が使う5つ（approvedStore・publishOffer・fetchOffers・registerCustomer・receive）が
+// import されておらず、実行時に ReferenceError で落ちていた。型検査が通っていたのは acceptance-globals.d.ts が
+// グローバルとして宣言していたためで、実行時にそれらを定義する場所はどこにも無い。ほかの受け入れ検査55ファイルは
+// 全部 _fakes から明示 import しており、このファイルだけが取りこぼしていた。検査の意図は1文字も変えていない。
+import { approvedStore, fetchOffers, loadWeb, makeCtx, one, publishOffer, receive, receivedScene, registerCustomer, WEB, type Ctx } from "./_fakes";
 
 const SUBSCRIPTION = { endpoint: "https://push.example.test/sub/1", keys: { p256dh: "BPUB", auth: "AUTH" } };
 
