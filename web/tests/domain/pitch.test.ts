@@ -1,6 +1,6 @@
 // 紹介文の決定論のガード（domain/pitch）。AI を呼ばずに、返ってきた文字列だけを見る。
 import { describe, expect, it } from "vitest";
-import { checkPitch, fallbackPitch, PITCH_CHAR_LIMIT, readJudgement } from "./pitch";
+import { checkPitch, fallbackPitch, PITCH_CHAR_LIMIT, readJudgement } from "../../lib/domain/pitch";
 
 const STORE = { name: "海鮮どんぶり亭", genres: ["和食"], menus: ["刺身盛り", "焼き魚定食"], walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, couponName: "生ビール1杯", couponNote: "1組1回" };
 
