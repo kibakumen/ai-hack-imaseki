@@ -1,0 +1,179 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/usecases/registerStore.ts",
+          "line": 21,
+          "quote": "if (await findAccountByEmail(deps.db, input.email)) return { ok: false, kind: \"email_taken\" };"
+        },
+        {
+          "path": "web/lib/usecases/registerStore.ts",
+          "line": 29,
+          "quote": "await deps.db.batch(["
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 206,
+          "quote": "const result = await config.handler({ input, params, req, deps, ctx: ctx as RouteAuthContextFor<TAuth> });"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 38,
+          "quote": "fetch: async (req: Request): Promise<Response> => {"
+        },
+        {
+          "path": "web/migrations/0001_init.sql",
+          "line": 5,
+          "quote": "email TEXT NOT NULL COLLATE NOCASE UNIQUE,"
+        }
+      ],
+      "note": "defineRoute.handle（148-208行）と createApp.fetch（38-47行）を全文読んだが try/catch は1つも無く、表の UNIQUE 違反は確かに誰も受けない——ただし db.batch は原子的で、落ちても店だけが残る形にはならないので、実害は『409 の断りが 500 になる』に留まる（重さは low〜medium が妥当という異議を添える）。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 59,
+          "quote": "res = await fetch(path, { method, headers, body: payload });"
+        },
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 69,
+          "quote": "if (isFailure(json)) {"
+        },
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 73,
+          "quote": "if (!schema) return json as T;"
+        },
+        {
+          "path": "web/components/auth/LoginForm.tsx",
+          "line": 52,
+          "quote": "window.location.assign(HOME_BY_ROLE[result.role ?? \"store\"] ?? HOME_BY_ROLE.store);"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 46,
+          "quote": "return new Response(JSON.stringify({ ok: false, error: { kind: \"invalid_input\" } }), { status: 404, headers: { \"content-type\": \"application/json\" } });"
+        }
+      ],
+      "note": "api.ts 全90行に res.ok / res.status の参照が1つも無いのは事実で、ログインは schema を渡さない（LoginForm.tsx:42）ため成功の形も見ていない。ただしアプリ側の断りは jsonResponse・app.ts:46・endpoints/{auth,store}.ts のすべてが ok:false を持つと確認したので、失敗が成功に化ける経路はアプリの外（プラットフォームの既定応答）にしか無く、重さは low が妥当。⚠️ 証拠の行番号が誤り——LoginForm.tsx は全100行で、引用の実位置は52行（監査が書いた592は差分ファイルの行番号とほぼ一致しており、物差しが禁じている『差分の行を実ファイルの行として引く』が起きている）。主張自体は実ファイルで裏が取れたので指摘は残す。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/lib/schemas/limits.ts",
+          "line": 39,
+          "quote": "セッションの寿命は2時間で、アクセスのたびに残りが半分（1時間）を切っていたら延ばす"
+        },
+        {
+          "path": "web/lib/schemas/limits.ts",
+          "line": 43,
+          "quote": "export const SESSION_MAX_AGE_SECONDS = 25 * 60 * 60;"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 64,
+          "quote": "if (session.expiresAt.getTime() - now > SESSION_RENEW_WITHIN_SECONDS * 1000) return [];"
+        },
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 15,
+          "quote": "アクセスのたびに残りが半分を切っていれば、表と Cookie の両方を同じだけ延ばす"
+        },
+        {
+          "path": "web/lib/http/session.test.ts",
+          "line": 78,
+          "quote": "it(\"残りが半分より多ければ、表も Cookie も動かさない\", async () => {"
+        }
+      ],
+      "note": "実値25時間・平坦な1時間での比較を自分で確認し、コメントの『2時間』『残りが半分』はどちらも実装と食い違う（25時間の半分は12.5時間）。⚠️ 監査が挙げた4か所は不足で、cookies.ts:15 と session.test.ts:78 も同じ誤りなので直す範囲は6か所。挙動は正しいというF3の結論には同意。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "店の登録で重複メールを断ったとき、画面には「このメールアドレスは登録済みです。」ではなく「メールアドレスは選択肢から選んでください。」が出る（設計書442行が名指しした文が構造的に出せない）。入口は 409 で kind=email_taken と fields=[{email, not_allowed}] を返すが、項目の出し口 FieldMessage は reason の文しか描かず、操作の出し口 FormMessage は『このフォームが持つ項目の断りが在る』ときに null を返すため、kind の文はどちらの経路からも描画されない。要件12.2『重複していることを示す』の画面側が満たされず、受け入れ検査 r12 は msg-email 要素の存在しか見ないので落ちない。監査役2体（分担A・分担B）ともこの型（仕様との不一致）を出していない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 442,
+          "quote": "`kind: email_taken`（`fields` は `email`・文「このメールアドレスは登録済みです」）"
+        },
+        {
+          "path": "web/lib/http/endpoints/store.ts",
+          "line": 21,
+          "quote": "return { status: 409, body: { ok: false, error: { kind: result.kind, fields: [{ name: \"email\", reason: \"not_allowed\" }] } } };"
+        },
+        {
+          "path": "web/components/ui/InputRefusal.tsx",
+          "line": 25,
+          "quote": "{TEXTS.fieldReason(field.reason, ctx)}"
+        },
+        {
+          "path": "web/components/ui/InputRefusal.tsx",
+          "line": 42,
+          "quote": "if (fields.some((f) => fieldNames.includes(f.name))) return null;"
+        },
+        {
+          "path": "web/lib/domain/texts.ts",
+          "line": 46,
+          "quote": "not_allowed: (ctx) => `${str(ctx.field, \"この項目\")}は選択肢から選んでください。`,"
+        },
+        {
+          "path": "web/components/store/RegisterForm.tsx",
+          "line": 13,
+          "quote": "const FIELD_NAMES = [\"name\", \"email\", \"password\"];"
+        },
+        {
+          "path": "tests/acceptance/v2/r12-store-register.ui.test.tsx",
+          "line": 30,
+          "quote": "await screen.findByTestId(TID.msg(\"email\"));"
+        }
+      ]
+    },
+    {
+      "claim": "設計書209行は getPublicConfig() を『1回取って、ページの生きている間はメモリに持つ（取り直さない・AI判断）』と定めているが、この差分はその memo 化を撤去し、正反対の『値をメモリに溜めない』へ変えている（各フォームが mount ごとに /api/config/public を呼ぶ）。撤去の理由は実装者がタスク表の申し送りに書いたが、設計書209行は直っておらず、正本と実装が黙って食い違ったまま残っている。どちらを正とするかは本人判断（監査役はこの不一致を挙げていない）。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 209,
+          "quote": "`client/api.ts` の `getPublicConfig()` が1回取って、ページの生きている間はメモリに持つ（取り直さない・AI判断）"
+        },
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 83,
+          "quote": "**値をメモリに溜めない**: 画面が作り直されるたびに取り直す。公開の直後や設定の入れ替えで"
+        },
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 88,
+          "quote": "const result = await apiCall<AppConfig>(\"GET\", \"/api/config/public\");"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 53,
+          "quote": "`getPublicConfig()` はメモ化しない。"
+        }
+      ]
+    }
+  ],
+  "score_objections": [
+    {
+      "axis": "読みやすさ",
+      "reason": "分担Bの5点の理由『guards.ts:57-61 の renewSession のコメントが「半分を切ったときだけ」という条件をそのままコードと対応させている』は一次データと食い違う——そのコメント（59行）こそ F3 が指摘した誤りの当事者で、64行の比較は25時間の半分ではなく平坦な1時間。結合で低い方（4点）が採られるため点は変わらないが、根拠としては採用できない。"
+    }
+  ],
+  "target": "task-4",
+  "cycle": 1,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T09:44:54.452Z"
+}
