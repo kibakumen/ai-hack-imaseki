@@ -4,6 +4,11 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-09-21",
   "compatibility_flags": ["nodejs_compat"],
+  // 1回の取得が D1 へ何度も往復する（店の一覧 → オファー → クーポン → 記録の書き込み）ので、
+  // 客に一番近い端で動かすより、D1 の近くで動かした方が往復の分だけ縮む見込みで頼む。
+  // ⚠️ 効果は未実測（2026-09-22）。Cloudflare 側が「近づけても縮まない」と判断した要求は
+  //    そのまま端で処理されるので、外れても遅くはならない。実測できたら数字をここに書く。
+  "placement": { "mode": "smart" },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"

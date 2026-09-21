@@ -754,3 +754,40 @@
   transform: scale(0.9);
   transform-origin: top left;
 }
+
+/* ------------------------------------------------------------------
+   取りこぼしていた2つのクラス（2026-09-22）。
+   部品の側で使われているのに `me.css` に定義が無く、素のまま出ていた
+   （使用66クラスと定義90クラスを突き合わせて見つけた）。
+   部品を触らず CSS だけで閉じる——凍結された検査が DOM を見ているため。
+   ------------------------------------------------------------------ */
+
+/* 確定の演出の中のクーポン。`.offer-coupons` が付いていない1箇所ぶん。
+   本人の指摘「クーポンが小カードにして見えるように」をここでも効かせる。 */
+.coupon-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  justify-content: center;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.coupon-list > li {
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-accent));
+  border: 1px dashed color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  padding: 0.375rem 0.625rem;
+}
+
+/* こだわり条件の見出し。「探す」ボタンより下のオプション感を出すため、本文より小さく淡く。 */
+.fetch-options-title {
+  color: var(--color-text-muted, color-mix(in srgb, currentColor 65%, transparent));
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.5rem;
+}
