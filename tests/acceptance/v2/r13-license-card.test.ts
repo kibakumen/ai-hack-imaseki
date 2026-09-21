@@ -40,8 +40,10 @@ describeTask("7", "営業許可書とカード", () => {
 
   it("13.4 上げ直すと前のファイルが消え、読むと新しい方が返る", async () => {
     const s = await registerStore(ctx);
+    const before = new Set(ctx.files.store.keys()); // 前の it が置いた別の店の分は数えない（置き場は it をまたいで残る）
     await uploadLicense(s.api, PDF_BYTES, "first.pdf");
-    const first = [...ctx.files.store.keys()];
+    const first = [...ctx.files.store.keys()].filter((k) => !before.has(k));
+    expect(first.length).toBeGreaterThan(0);
     await uploadLicense(s.api, PNG_BYTES, "second.png", "image/png");
     const keysForStore = (await one(ctx.db, "SELECT license_key, license_mime FROM stores WHERE id = ?", s.id))!;
     expect(keysForStore.license_mime).toBe("image/png");

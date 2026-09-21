@@ -13,7 +13,7 @@ describeTask("8", "店の一覧・絞り込み・検索・集計・詳細", () =
     const approved = await approvedStore(ctx, { name: "承認済みの店", email: "approved-store@example.com", address: "東京都港区赤坂1-1" });
     const publishing = await approvedStore(ctx, { name: "公開中の店", email: "publishing@example.com", address: "東京都中野区中野2-2" });
     await publishOffer(publishing.api, { capacity: 1 });
-    await approvedStore(ctx, { name: "承認済みで公開していない店", email: "idle@example.com", address: "東京都杉並区3-3" });
+    await approvedStore(ctx, { name: "公開していない店", email: "idle@example.com", address: "東京都杉並区3-3" });
     const scene = await receivedScene(ctx, { capacity: 1, storeName: "受け取りの店" });
     const banned = await approvedStore(ctx, { name: "止められた店", email: "banned@example.com" });
     await ctx.admin!.api.post(`/api/admin/stores/${banned.id}/ban`, {});
@@ -49,8 +49,8 @@ describeTask("8", "店の一覧・絞り込み・検索・集計・詳細", () =
     expect((await list("?q=承認済み")).items.map((s: any) => s.id)).toEqual([ids.approved]);
     expect((await list("?q=赤坂")).items.map((s: any) => s.id)).toEqual([ids.approved]);
     expect((await list("?q=publishing%40")).items.map((s: any) => s.id)).toEqual([ids.publishing]);
-    expect((await list(`?q=${encodeURIComponent("の店")}`)).items.length).toBeGreaterThanOrEqual(5);
-    expect((await list(`?q=${encodeURIComponent("の店")}&filter=banned`)).items.map((s: any) => s.id)).toEqual([ids.banned]);
+    expect((await list(`?q=${encodeURIComponent("店")}`)).items.length).toBeGreaterThanOrEqual(5);
+    expect((await list(`?q=${encodeURIComponent("店")}&filter=banned`)).items.map((s: any) => s.id)).toEqual([ids.banned]);
     expect((await list("?q=zzz-nothing")).items).toEqual([]);
   });
 
