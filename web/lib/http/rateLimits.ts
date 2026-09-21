@@ -47,6 +47,9 @@ const LOGIN_RULE: RateRule = { name: "login", limit: LOGIN_FAILURE_LIMIT, window
 /** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則）。ここに無い入口には1度も表を引かない。 */
 const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
   ["POST /api/customer/fetch", FETCH_RULE],
+  // 少しずつ届ける入口（NDJSON）も同じ規則・同じ鍵（客ごと）で数える。別扱いにすると、
+  // そちらから同じ回数だけ AI を呼べてしまい、抑止が黙って外れる。
+  ["POST /api/customer/fetch/stream", FETCH_RULE],
   ["POST /api/register/customer", REGISTER_RULE],
   ["POST /api/register/store", REGISTER_RULE],
   ["POST /api/customer/reports", REPORT_RULE],

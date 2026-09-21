@@ -37,8 +37,11 @@ export type SelectionResult = { ok: true; items: Selection[] } | { ok: false; re
 const SENTENCE_END = /[。！？!?]/;
 const TRAILING_SENTENCE_END = /[。！？!?]$/;
 
-/** ```json … ``` で包まれていたら中身を取り出す（基準 7.3 の「コードフェンスつきでも受ける」） */
-const stripCodeFence = (text: string): string => {
+/**
+ * ```json … ``` で包まれていたら中身を取り出す（基準 7.3 の「コードフェンスつきでも受ける」）。
+ * 紹介文の検査官の答えも同じ癖で返ってくるので domain/pitch も読む（判定の写しを作らない）。
+ */
+export const stripCodeFence = (text: string): string => {
   const fenced = text.trim().match(/^```[A-Za-z0-9_-]*\s*\n?([\s\S]*?)\n?```$/);
   return (fenced ? fenced[1] : text).trim();
 };

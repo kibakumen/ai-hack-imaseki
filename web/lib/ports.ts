@@ -21,6 +21,43 @@ export type AiSelectResult =
   | { ok: false; error: string; costUsd?: number | null };
 export type AiSelector = { select(input: AiSelectInput, opts: { signal?: AbortSignal }): Promise<AiSelectResult> };
 
+/**
+ * 人格つきの紹介文の口（店の選定 AiSelector とは**別の層**）。選定が済んだあとに、選ばれた店ごとに
+ * 1本ずつ書かせる。書き手と検査官で別のモデルを使う（実物は adapters/orcarouter）。
+ *
+ * ⚠️ 差し替え口として**任意**にしてある（`Deps.pitch`）。無い場面では紹介文の層ごと走らせず、
+ * 選定が返した決まった理由をそのまま出す——受け入れ検査の場面（この口を渡さない）で、
+ * 店の選定の筋が1行も変わらないようにするため。
+ */
+export type PitchStore = {
+  name: string;
+  genres: string[];
+  menus: string[];
+  walkMinutes: number;
+  budgetMin: number;
+  budgetMax: number;
+  couponName: string | null;
+  couponNote: string | null;
+};
+export type PitchInput = {
+  party: number;
+  genres: string[];
+  budgetMax: number | null;
+  store: PitchStore;
+  /** 文字数の上限（判断は domain/pitch が持つ。口はそれを指示文へ写すだけ） */
+  charLimit: number;
+  /** 直前の案が落ちた理由。1回目は null（2回目だけ「同じ失敗を避けて書き直す」と伝える） */
+  critique: string | null;
+};
+export type PitchJudgeInput = { text: string; store: Pick<PitchStore, "name" | "genres" | "menus" | "couponName"> };
+export type PitchResult =
+  | { ok: true; text: string; costUsd: number | null; truncated: boolean; resolvedModel?: string | null; requestId?: string | null; fallbackLevel?: number | null }
+  | { ok: false; error: string; costUsd?: number | null };
+export type PitchWriter = {
+  write(input: PitchInput, opts: { signal?: AbortSignal }): Promise<PitchResult>;
+  judge(input: PitchJudgeInput, opts: { signal?: AbortSignal }): Promise<PitchResult>;
+};
+
 export type Geocoder = {
   geocode(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; lat: number; lng: number } | { ok: false }>;
 };
@@ -42,6 +79,8 @@ export type Deps = {
   db: any;
   files: FileStore;
   ai: AiSelector;
+  /** 紹介文の層（任意）。渡さなければ紹介文を書かせない＝選定の結果だけを返す */
+  pitch?: PitchWriter;
   geocoder: Geocoder;
   push: PushSender;
   card: CardRegistrar;

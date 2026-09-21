@@ -9,7 +9,7 @@
 // の規則5）。入力欄の属性（maxLength・min・max）は打ち間違いを減らす補助で、正本ではない。
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { apiCall, apiStream, isFailure, STREAM_UNAVAILABLE, type ApiFailure, type StreamLine, type StreamOutcome } from "../../lib/client/api";
 import { currentLocation } from "../../lib/client/geolocation";
 import { TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, PARTY_MAX, PARTY_MIN, PLACE_MAX } from "../../lib/schemas/limits";
@@ -79,6 +79,31 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults }: FetchFor
     return isFailure(located) ? located : { lat: located.lat, lng: located.lng };
   };
 
+  /**
+   * 少しずつ届く入口で探す（`init` で店のカードを先に出し、`pitch` が届くたびに紹介文だけを差し替える）。
+   * この入口を持たないサーバーでは `STREAM_UNAVAILABLE` が返るので、呼ぶ側が普通の入口へ倒す。
+   */
+  const searchByStream = async (payload: Record<string, unknown>): Promise<StreamOutcome> => {
+    let current: FetchResult | null = null;
+    const outcome = await apiStream("/api/customer/fetch/stream", payload, (line: StreamLine) => {
+      if (line.type === "init" && typeof line.fetchId === "string" && Array.isArray(line.items)) {
+        current = { fetchId: line.fetchId, items: line.items as ResultItem[], party: Number(party) };
+        onResults(current);
+        // カードが出た時点で「探しています…」を解く（紹介文は後から差し込まれる）
+        setPending(false);
+        return;
+      }
+      if (line.type === "pitch" && current !== null && typeof line.storeId === "string" && typeof line.reason === "string") {
+        const { storeId, reason } = line;
+        const shown: FetchResult = current;
+        current = { ...shown, items: shown.items.map((item) => (item.storeId === storeId ? { ...item, reason } : item)) };
+        onResults(current);
+      }
+    });
+    // 1行も届かなかった応答は「少しずつ届く入口が働いていない」とみなし、普通の入口へ倒す
+    return outcome === null && current === null ? STREAM_UNAVAILABLE : outcome;
+  };
+
   const submit = async () => {
     setFailure(null);
     onResults(null);
@@ -87,12 +112,13 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults }: FetchFor
       setFailure(from);
       return;
     }
-    const result = await apiCall<FetchOk>("POST", "/api/customer/fetch", {
-      ...from,
-      party: partyToSend(party),
-      genres,
-      budgetMax: budgetToSend(budgetMax),
-    });
+    const payload = { ...from, party: partyToSend(party), genres, budgetMax: budgetToSend(budgetMax) };
+    const streamed = await searchByStream(payload);
+    if (streamed !== STREAM_UNAVAILABLE) {
+      if (isFailure(streamed)) setFailure(streamed);
+      return;
+    }
+    const result = await apiCall<FetchOk>("POST", "/api/customer/fetch", payload);
     if (isFailure(result)) {
       setFailure(result);
       return;
