@@ -22,6 +22,7 @@ import { storeResultsRoutes } from "./endpoints/storeResults";
 import { historyRoutes } from "./endpoints/history";
 import { reportRoutes } from "./endpoints/reports";
 import { customerDeleteRoutes } from "./endpoints/customerDelete";
+import { storeImageRoutes } from "./endpoints/storeImage";
 
 export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   ...adminStoreRoutes,
@@ -44,4 +45,5 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   ...historyRoutes,
   ...reportRoutes,
   ...customerDeleteRoutes,
+  ...storeImageRoutes,
 ];

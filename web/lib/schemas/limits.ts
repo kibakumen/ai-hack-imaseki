@@ -88,6 +88,11 @@ export const MENUS_MAX = 5;
 
 /** 地図のサービスの打ち切り（設計書「時間の割り振り」: 地図3秒）。差し替えた時計と AbortSignal の両方で使う */
 export const GEOCODE_TIMEOUT_MS = 3000;
+/**
+ * 店のホームページから雰囲気画像を取る打ち切り（2026-09-22 移植。地図と同じ3秒・値は AI判断）。
+ * 差し替えた時計と AbortSignal の両方で使う（usecases/storeImage）。
+ */
+export const STORE_IMAGE_TIMEOUT_MS = 3000;
 // 要件13（営業許可書とカード）の基準 13.3
 /** 営業許可書の大きさの上限（10MB・値は AI判断）。ちょうど10MB は通り、1バイト超えると断る */
 export const LICENSE_MAX_BYTES = 10 * 1024 * 1024;

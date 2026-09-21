@@ -25,6 +25,7 @@
 import type { ReceiveRefusal } from "./home";
 import { OfferReveal } from "./OfferReveal";
 import { RefusalNotice } from "./RefusalNotice";
+import { StoreImage } from "./StoreImage";
 
 /**
  * 紹介文の出どころ（少しずつ届く入口の `pitch` フレームの `source`）。
@@ -78,18 +79,19 @@ const EmptyResult = () => (
 );
 
 /**
- * 店の雰囲気の面（第1回の指摘「お店の画像もほしい」）。
- * ⚠️ **いまは絵柄の地だけ**——応答（`items[]`）に画像の在り処が無く、外から取ってくる入口
- * （ホームページの meta を読む経路）は入口の側の作りになる。ここは「面が在る」ところまでを作って
- * おき、画像が入る日にこの部品の中だけを差し替えられるようにする。
+ * 店の雰囲気の面（第1回の指摘「お店の画像もほしい」・第2回の指摘で実装。2026-09-22 移植）。
+ * ホームページの URL があれば `StoreImage` が og:image / twitter:image を取りに行き、取れれば
+ * それを見せる。取れない・URL が無い・まだ届いていない間は、下の飾りの地（絵文字＋グラデーション）
+ * がそのまま見える——**画像は飾りなので、落ちても本文は出る**。
  * 店ごとに地の傾きを変えて、同じ絵が並んで見えないようにする（番号ではなく店の名前から決めるので、
  * 並びが変わっても同じ店は同じ地になる）。
  */
-const OfferArt = ({ storeName }: { storeName: string }) => {
+const OfferArt = ({ storeName, storeUrl }: { storeName: string; storeUrl: string | null }) => {
   const tilt = [...storeName].reduce((sum, ch) => sum + ch.codePointAt(0)!, 0) % 4;
   return (
     <div aria-hidden className="offer-card__art" data-tilt={tilt}>
       <span className="offer-card__art-glyph">🍴</span>
+      <StoreImage url={storeUrl} />
     </div>
   );
 };
@@ -130,7 +132,7 @@ type ResultCardProps = {
 
 const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holding = false }: ResultCardProps) => (
   <li className="offer-card" data-testid={`result-${item.offerId}`} style={{ animationDelay: `${index * 70}ms` }}>
-    <OfferArt storeName={item.storeName} />
+    <OfferArt storeName={item.storeName} storeUrl={item.storeUrl} />
 
     <p className="offer-card__meta">
       <span>徒歩{item.walkMinutes}分</span>
