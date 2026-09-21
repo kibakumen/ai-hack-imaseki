@@ -6,6 +6,7 @@ import type { ZodType } from "zod";
 import type { InputRefusalKind, FieldReason } from "../domain/inputRefusal";
 import type { Deps } from "../ports";
 import { checkOrigin, identifyCustomer, identifySession, renewSession } from "./guards";
+import { passRateLimit, rateKeyFor, rateRuleFor, recordRateOutcome } from "./rateLimits";
 
 export type RouteAuth = "public" | "customer" | "store" | "admin";
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -211,6 +212,14 @@ export const defineRoute = <TInput, TAuth extends RouteAuth>(config: RouteConfig
       input = parsed.data;
     }
 
+    // 【最終日】連打の抑止（要件30）。見分けと入力の検査が済んだ時点で数え、手続きより手前で断る
+    // ——断った取得では AI も地図も呼ばれない（基準 30.5）。どの入口を数えるかは rateLimits.ts の表。
+    const rateRule = rateRuleFor(config.method, config.path);
+    const rateKey = rateRule ? rateKeyFor(rateRule, { ip: req.headers.get("cf-connecting-ip"), customerId: ctx.auth === "customer" ? ctx.customerId : null, input }) : null;
+    if (rateRule && rateKey && !(await passRateLimit(deps, rateRule, rateKey))) {
+      return jsonResponse(429, { ok: false, error: { kind: "rate_limited" as InputRefusalKind } }, renewCookies);
+    }
+
     if (config.human && humanDeadline) {
       const rawToken = (raw as Record<string, unknown>)?.humanToken;
       const token = typeof rawToken === "string" && rawToken !== "" ? rawToken : null;
@@ -221,6 +230,8 @@ export const defineRoute = <TInput, TAuth extends RouteAuth>(config: RouteConfig
     }
 
     const result = await config.handler({ input, params, req, deps, ctx: ctx as RouteAuthContextFor<TAuth> });
+    // 落ちた要求だけを数える規則（ログインの失敗・基準 30.4）は、結果が出てからでないと数えられない。
+    if (rateRule && rateKey && rateRule.counts === "failures") await recordRateOutcome(deps, rateRule, rateKey, result.status < 400);
     const cookies = [...(result.cookies ?? []), ...renewCookies];
     return result.raw ? rawResponse(result.status, result.raw, cookies) : jsonResponse(result.status, result.body, cookies);
   },

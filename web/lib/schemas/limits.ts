@@ -84,3 +84,19 @@ export const CARD_SESSION_ID_MAX = 255;
 // 要件24（運営の店の一覧）の基準 24.5
 /** 検索の語の上限（AI判断。店名50字・住所・メールアドレス254字のどれにも当てられる長さ） */
 export const ADMIN_SEARCH_MAX = 254;
+
+// 【最終日】要件30（連打の抑止）の基準 30.1・30.2・30.3・30.4。
+// 回数と時間の値はどれも要件の側で AI判断として決まったもの（requirements.md の補足）。
+// 窓の長さをミリ秒で持つのは、判定が `deps.clock.now()` との差でしか行われないため（秒の単位を挟まない）。
+/** 同じ客の取得は1分に5回まで（基準 30.1） */
+export const FETCH_RATE_LIMIT = 5;
+export const FETCH_RATE_WINDOW_MS = 60 * 1000;
+/** 同じ接続元からの客の登録と店の登録は、合わせて1時間に10回まで（基準 30.2） */
+export const REGISTER_RATE_LIMIT = 10;
+export const REGISTER_RATE_WINDOW_MS = 60 * 60 * 1000;
+/** 同じ客の通報は1時間に5回まで（基準 30.3） */
+export const REPORT_RATE_LIMIT = 5;
+export const REPORT_RATE_WINDOW_MS = 60 * 60 * 1000;
+/** 同じアカウントへのログインの失敗が10回続くと、15分そのアカウントへのログインを断る（基準 30.4） */
+export const LOGIN_FAILURE_LIMIT = 10;
+export const LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
