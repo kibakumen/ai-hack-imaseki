@@ -1,0 +1,508 @@
+<title>意図（ai-hack / v2）— 聞き取りの段</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1f2328; --muted:#57606a; --border:#d0d7de;
+  --accent:#0969da; --card:#f6f8fa; --code-bg:#eef1f4;
+  --sev-high:#cf222e; --sev-medium:#9a6700; --sev-low:#1a7f37; --sev-improve:#0969da;
+  --badge-submit:#0969da; --badge-final:#8250df; --badge-cut:#6e7781;
+  --change:#9a6700;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0d1117; --fg:#e6edf3; --muted:#9198a1; --border:#30363d;
+    --accent:#4493f8; --card:#161b22; --code-bg:#1c2128;
+    --sev-high:#ff7b72; --sev-medium:#e3b341; --sev-low:#3fb950; --sev-improve:#4493f8;
+    --badge-submit:#4493f8; --badge-final:#bc8cff; --badge-cut:#8b949e;
+    --change:#e3b341;
+  }
+}
+[data-theme="dark"]{
+  --bg:#0d1117; --fg:#e6edf3; --muted:#9198a1; --border:#30363d;
+  --accent:#4493f8; --card:#161b22; --code-bg:#1c2128;
+  --sev-high:#ff7b72; --sev-medium:#e3b341; --sev-low:#3fb950; --sev-improve:#4493f8;
+  --badge-submit:#4493f8; --badge-final:#bc8cff; --badge-cut:#8b949e;
+  --change:#e3b341;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Hiragino Sans,"Noto Sans JP",sans-serif;
+  line-height:1.65; font-size:15px;
+}
+.wrap{max-width:960px; margin:0 auto; padding:28px 20px 80px}
+h1.doc-title{font-size:20px; margin:0 0 4px}
+p.meta{color:var(--muted); font-size:13px; margin:0 0 24px}
+h2{font-size:16px; margin:36px 0 12px; padding-bottom:6px; border-bottom:2px solid var(--border)}
+h2 .count{color:var(--muted); font-weight:400; font-size:13px}
+h3{font-size:14px; margin:22px 0 8px}
+blockquote{margin:0 0 16px; padding:12px 16px; background:var(--card); border-left:3px solid var(--accent); border-radius:4px; font-weight:600}
+dl.kv{margin:0}
+dl.kv dt{font-weight:600; margin-top:12px; font-size:13.5px}
+dl.kv dd{margin:2px 0 0; color:var(--fg); font-size:13.5px}
+.scroll-x{overflow-x:auto; border:1px solid var(--border); border-radius:6px; margin-bottom:8px}
+table{border-collapse:collapse; width:100%; min-width:560px; font-size:13px}
+th,td{padding:6px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top}
+thead th{background:var(--card); position:sticky; top:0; white-space:nowrap}
+tbody tr.group-head td{background:var(--code-bg); font-weight:600; color:var(--muted); font-size:12px}
+td.num{white-space:nowrap; color:var(--muted); width:2.4em}
+td.lines{font-variant-numeric:tabular-nums; color:var(--muted)}
+.badge{display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; color:#fff; white-space:nowrap}
+.badge.submit{background:var(--badge-submit)}
+.badge.final{background:var(--badge-final)}
+.badge.cut{background:var(--badge-cut)}
+.fbadge{display:inline-block; padding:0 6px; border-radius:5px; font-size:11px; font-weight:700; border:1px solid; white-space:nowrap; margin-left:4px}
+.fbadge.medium{color:var(--sev-medium); border-color:var(--sev-medium)}
+.fbadge.low{color:var(--sev-low); border-color:var(--sev-low)}
+ul.plain{margin:0; padding-left:1.2em}
+ul.plain li{margin-bottom:8px; font-size:13.5px}
+.persona{border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:14px; background:var(--card)}
+.persona h3{margin:0 0 6px; font-size:14.5px}
+.persona .role{color:var(--muted); font-size:12px; margin-bottom:6px}
+.persona dl{margin:0}
+.persona dl dt{font-weight:600; font-size:12.5px; margin-top:6px; color:var(--muted)}
+.persona dl dd{margin:2px 0 0; font-size:13.5px}
+.scenario{border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:16px}
+.scenario h3{margin:0 0 8px; font-size:14px}
+.scenario ol{margin:0; padding-left:1.4em}
+.scenario li{margin-bottom:7px; font-size:13.3px}
+.scenario li.change{background:var(--code-bg); border-radius:4px; padding:4px 6px; margin-left:-6px}
+.tag-change{display:inline-block; color:var(--change); font-weight:700; font-size:12px; margin-right:4px}
+.note-audit{display:inline-block; margin-top:2px; font-size:12px; color:var(--sev-medium); border:1px dashed var(--sev-medium); border-radius:4px; padding:1px 6px}
+.finding{border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:14px; background:var(--card)}
+.finding-head{display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap}
+.dot{width:9px; height:9px; border-radius:50%; display:inline-block; flex:none}
+.dot.medium{background:var(--sev-medium)}
+.dot.low{background:var(--sev-low)}
+.fid{font-weight:700; font-size:13px}
+.ftype{color:var(--muted); font-size:12px}
+.fbody{font-size:13.5px}
+.fbody .label{color:var(--muted); font-size:12px; margin-top:8px}
+.quote{display:block; background:var(--code-bg); border-radius:4px; padding:6px 8px; font-size:12.3px; margin:4px 0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap}
+.score-table td, .score-table th{font-size:13px}
+.score-cell{font-weight:700}
+footer.note{margin-top:32px; font-size:12px; color:var(--muted); border-top:1px solid var(--border); padding-top:12px}
+</style>
+
+<div class="wrap">
+
+<h1 class="doc-title">意図（ai-hack / v2）— 聞き取りの段</h1>
+<p class="meta">
+  ゲート通過（聞き取り）。「AI判断」の印 246件（承認のときに本人が確認する）。
+  第6周の回答（2026-09-20 16:50・17:15）までを重ねた版。監査は cycle 7・exchange 1（audits/intent-c7-e1.audit.json、2026-09-20T07:40 記録）。
+</p>
+
+<h2>目的・誰の・どの場面の・どの痛みか</h2>
+
+<blockquote>
+急に客足が途切れて席が空いた飲食店が、その場で「あと何組・何名まで・何時まで」を決めてオファーを公開し、
+見せるクーポンを選んでおけば、その時間に近くで店を探している客のうち好みのジャンルと予算の合う人へ
+システムが店を選んで渡すようにして、店がその場で呼び込みに手を割かなくても、席が空いたまま時間が過ぎる痛みを解く。
+</blockquote>
+
+<dl class="kv">
+  <dt>誰のためか</dt>
+  <dd>主は飲食店（店）。客（近くで今食べる店を探す人）と運営（チームD）もそれぞれの画面を持つ（三者の構成はv2メモ・本人発案）</dd>
+
+  <dt>痛みの名指し</dt>
+  <dd>「席が空いたまま時間が過ぎる」はv1から引き継ぐ（v1ではAI判断として承認済み）。場面は「短時間で客が来ないときのスポット集客」（要件の段での回答・本人発案）。毎日同じ時間帯に出すことは想定しない（第3周のあとの回答・本人発案）。「店がその場で手を動かさなくてよい」はチーム案とv2メモから設計者が補った（AI判断）</dd>
+
+  <dt>客にとっての価値</dt>
+  <dd>取得のボタンを1回押すと、今の場所・人数・好みで入れる店が徒歩の分数・予算の幅・理由つきで返る（AI判断）。客は受け取る段階ではクーポンのことを考えず「その店に行く」を決める（第3周のあとの回答・本人発案）。受け取りの単位はオファー（店）で、クーポンを選ぶ手は置かない（第4周のあとの回答・本人選択）。受け取ると店へ向かう前に1組ぶんの席が押さえられる（第3周のあとの回答・本人選択）。確保した人数もクーポンの利用も、客に提供する予約として担保され、そのあと店が募集する組数や「何名まで」を動かしても影響を受けない（第6周の回答・本人発案）。店はその席を予約として用意しておくのが原則で、どうしても入れられなくなったときの最終手段として店が確保を取り消し、客にはプッシュ通知で知らせる（第4周のあとの回答・本人発案と本人選択。「最終手段」の位置づけは第6周の回答・本人発案）</dd>
+
+  <dt>品質の水準</dt>
+  <dd>デモではなく本番運用を想定した品質で作る（本人発案）。ただしフェーズ1の中での話（本人の回答・本人発案）。v1のデモで削った安全と品質（demo/DEBT.md）のうち、v2に当てはまるものを受け入れ基準に入れた（選び方はAI判断）</dd>
+
+  <dt>期限と見せる相手</dt>
+  <dd>目標は大会の提出 2026-09-22(火) 15:00（進行役のAI判断）。提出版で動いていなければならないものと、最終日（9/23の会場）まで回してよいものを分けた（本人の回答・本人選択）。見せる相手は審査員、評価は5項目（セキュリティ／コストパフォーマンス／信頼性・堅牢性／自律性／アイデア・独創性）、テーマは「業務を自律化するAIエージェント」</dd>
+
+  <dt>この題材で「自律」に当たるもの</dt>
+  <dd>店が公開したあと、客の取得から候補の絞り込み・AIによる最大5件の選定と理由づけ・コード発行・残りの数の更新・来なかった客の確保の取り消し・残り0や受付終了での取り下げまでをシステムが行うところ（AI判断）。店が必ず手を動かすのは公開するときと完了済みにするときの2つ。ほかに店の状況が変わったときだけ行う操作が5つ——追加で出す（本人発案）／残りの募集を減らす・「何時まで」を動かす・個別の確保を取り消す（この3つは第4周のあとの回答、個別の取り消しは最終手段・第6周の回答・本人発案）／「何名まで」を上げ下げする（引き下げは第5周、上げ下げどちらも公開したままは第6周・どちらも本人発案）。はじめの5つは公開したまま行い、公開を止めるのはオファーを終わらせる操作。公開したままの変更は確保済みの客には影響せず、これから受け取ろうか迷っている人にだけ効く（第6周の回答・本人発案）。AIが失敗しても人に回さず、点数順の結果に倒す（本人選択）</dd>
+</dl>
+
+<h2>ペルソナ <span class="count">3人・3人とも設計者が置いた仮の人物（AI判断・名前は仮名）</span></h2>
+
+<div class="persona">
+  <h3>店: 佐藤さん（定食と居酒屋の店主）</h3>
+  <div class="role">渋谷駅から歩いて6分、24席の店を、昼は1人、夜はアルバイトと2人で回している。</div>
+  <dl>
+    <dt>いつ</dt><dd>平日の14〜17時。雨の日の20時以降。予約の団体が直前に取り消した直後。決まった曜日や時刻ではなく、「今、空いた」と気づいたそのとき</dd>
+    <dt>どこで</dt><dd>厨房とレジの間。手元にあるのは私物のスマホ1台</dd>
+    <dt>何に困って</dt><dd>席が半分以上空いているのに、呼び込みに出る人手も、SNSに書いて反応を待つ時間も無い。グルメサイトのクーポンは常設のもので「今から2時間だけ」には使えない。空いた席は1時間経てばそのまま売上ゼロ。かといって一気に大勢が来て店が回らなくなるのも、来ると言って来ない客のために席を空け続けるのも困る</dd>
+  </dl>
+</div>
+
+<div class="persona">
+  <h3>客: 田中さん（友人と待ち合わせた会社員）</h3>
+  <div class="role">渋谷で19時に友人と待ち合わせた。店は決めていない。</div>
+  <dl>
+    <dt>いつ</dt><dd>合流した直後から、歩きながら</dd>
+    <dt>どこで</dt><dd>駅前の人混みの中。片手でスマホを持っている</dd>
+    <dt>何に困って</dt><dd>グルメサイトで良さそうな店は見つかるが、今入れるかが分からない。電話して聞くのは気が重い。店の前まで行って満席で断られるのを2軒繰り返すと時間も友人の機嫌も減る。しかも友人の気分（焼肉のつもりが、やっぱり和食）や人数（あとから2人合流）は歩いている間に変わる。どのクーポンが得かをじっくり比べる余裕は無く、決めたいのは「どの店に行くか」だけ</dd>
+  </dl>
+</div>
+
+<div class="persona">
+  <h3>運営: チームDの当番（私たちのうちの1人）</h3>
+  <dl>
+    <dt>いつ</dt><dd>1日に数回、まとめて管理画面を開く。通報が来ていないかもそのとき見る（通報が来たことの通知は無い）</dd>
+    <dt>どこで</dt><dd>自宅か職場のPC</dd>
+    <dt>何に困って</dt><dd>店が自分で登録できる形なので、営業許可の無い店やなりすましが混ざりうる。生レバーの提供のような違反が起きたとき、仲介した側として止める手段が無いと責任を取れない。常時見張る人手は無い</dd>
+  </dl>
+</div>
+
+<h2>利用シーン <span class="count">6本・57歩（すべて設計者が置いたもの・AI判断）</span></h2>
+
+<div class="scenario">
+<h3>S1・客がはじめて使い、途中で友人の気が変わる（田中さん）</h3>
+<ol>
+<li>渋谷駅前で友人と合流し、スマホのブラウザでサービスを開く（スマホ・基準36）</li>
+<li>初回なので呼び名・電話番号・好きなジャンル（焼肉・居酒屋）・1人あたりの予算を登録する。このスマホが田中さんのものとして覚えられ、次からは入れ直さない（登録・基準1、好みの選び方・基準2、見える範囲・基準29）</li>
+<li>人数に「2」を入れる。場所は現在地のまま（位置・基準3、人数・基準4）</li>
+<li>取得を押す。数秒で最大5件の店が返る。それぞれに徒歩の分数・予算の幅・AIの理由1文・何名まで受け入れるか・付いてくるクーポンの名前と特記事項が出ている（取得・基準5）</li>
+<li>徒歩4分の焼肉店（4名まで）を受け取る。クーポンは選ばない。画面に「確保しました・19:32まで」と8桁のコードが出る。はじめての受け取りなので「店の都合で確保が取り消されたときだけ通知します」と通知の許可を聞かれ、許可する（受け取り・基準6、確保と期限・基準42、客への知らせ・基準53）<span class="note-audit">F1・F6: この文言は基準53の2条件（店の取り消し／運営の緊急停止）のうち1つしか伝えていない</span></li>
+<li class="change"><span class="tag-change">【変化: 気が変わる】</span>友人が「やっぱり和食がいい」と言う。田中さんは確保中の表示から自分で取り消す。焼肉店の残りは1戻る（客による取り消しと確保の数・基準44、残りの数・基準10）</li>
+<li>取得の画面でジャンルのチェックを「和食」に変え、もう一度取得を押す。和食の店を受け取り直す（好みの選び方・基準2、取得・基準5、受け取り・基準6）</li>
+<li>店に着き、確保中の表示（コード・店名・人数・期限・クーポン）を店員に見せる。店員は「向かっている客」から同じコードの行を見つけ「完了済み」を押す。田中さんの画面も「完了済み」に変わる。どのクーポンを使うかはその場で口頭で伝える（確保中の表示・基準46、受け取った客の確認・基準14、完了済みにする・基準15）</li>
+<li>翌週、また渋谷で店を探す。前回の確保は完了済みで終わっているので「同時に持てる確保は1つ」には数えられず、そのまま取得して新しく受け取れる。登録は入れ直さない（客による取り消しと確保の数・基準44、登録・基準1）</li>
+</ol>
+</div>
+
+<div class="scenario">
+<h3>S2・客の人数が増え、遅れて期限が切れる（田中さん）</h3>
+<ol>
+<li>2人で和食の店（4名まで）を確保して歩いている（受け取り・基準6）</li>
+<li class="change"><span class="tag-change">【変化: 人数が変わる】</span>友人から「あと2人来る」と連絡が入る。確保中の表示から人数を「4」に変える。4名までなのでそのまま通る。店の画面の人数も「4」に変わる（人数の変更・基準45、受け取った客の確認・基準14）</li>
+<li>もし5人になっていたら、この店は受け入れられないことが出る。確保を取り消して5人で取得し直す（人数の変更・基準45、客による取り消し・基準44）</li>
+<li class="change"><span class="tag-change">【変化: 遅れる】</span>合流を待って遅れ、期限を過ぎる。期限切れではプッシュ通知は来ない（送るのは店か運営に取り消されたときだけ・基準53）。画面を開くと確保中の表示が「期限が切れて取り消されました」に変わっている（自動の取り消し・基準43）</li>
+<li>その店のオファーがまだ受け取れる状態（残りがあり、受付時間の中で、公開中）なら同じ画面からそのまま受け取り直す。そうでなければ取得し直す（自動の取り消し・基準43、取得・基準5）</li>
+<li class="change"><span class="tag-change">【変化: 期限ぎりぎりで着く】</span>別の日。探す範囲の端の店を確保して歩き、信号に捕まって店の前に着いたところで期限が切れた。画面は「期限が切れて取り消されました」に変わるが、コード・店名・人数はそのまま出ていて「店に着いているなら、この画面を店の人に見せてください」とある。店員は「向かっている客」に「期限切れ」として残っている行とコードを目で見比べ、席がまだあるので「完了済み」を押す。期限切れで戻っていた残りは1減る（自動の取り消し・基準43、確保中の表示・基準46、受け取った客の確認・基準14、完了済みにする・基準15）</li>
+<li>もし期限が切れたあとに戻った残りを別の客が受け取っていて席がもう無ければ、店員は「席が埋まってしまいました」と断る。田中さんはその場で取得し直す。期限を過ぎたのは田中さんの側なので、店が入れるかどうかは店の判断——承知のうえの形（完了済みにする・基準15、取得・基準5）</li>
+<li class="change"><span class="tag-change">【変化: 行かない】</span>別の日。確保したまま行くのをやめ画面も閉じた。何もしなくても期限で自動で取り消され、店の残りは1戻る（自動の取り消し・基準43）</li>
+<li class="change"><span class="tag-change">【変化: 店に取り消される】</span>また別の日。3人で確保して歩いている途中、スマホに「確保した店が、席を用意できなくなったため確保を取り消しました」とプッシュ通知が届く。確保中の表示が「店の都合で取り消されました」に変わり、取得し直す入口がある。そこから別の店を受け取る。店の前まで行って断られることは無い（店による確保の取り消し・基準51、客への知らせ・基準53、取得・基準5）</li>
+<li>通知を許可していなかった友人の場合はプッシュは届かない。確保中の表示を開いたときに同じ表示と取得し直す入口が出る。店から電話が掛かってくることもある（客への知らせ・基準53、受け取った客の確認・基準14）</li>
+</ol>
+</div>
+
+<div class="scenario">
+<h3>S3・客が位置情報を許可せず、1件も見つからない（田中さん）</h3>
+<ol>
+<li>ブラウザの位置情報の許可を断った。取得の画面が場所を文字で入れるよう求める（位置・基準3）</li>
+<li>「あのへん」と打つ。場所に直せないので入れ直しを求められる。「渋谷」と打ち直す（位置・基準3）</li>
+<li>6人で取得を押す。結果は0件。「見つかりませんでした」と、人数を減らすと見つかるかもしれないことが出る（取得・基準5）</li>
+<li class="change"><span class="tag-change">【変化: 人数を割る】</span>3人ずつに分かれ、人数「3」で取得し直すと見つかる。1人が同時に持てる確保は1つなので、もう1組の分は友人が自分のスマホで登録して受け取る（客による取り消しと確保の数・基準44）</li>
+<li class="change"><span class="tag-change">【変化: 使うのをやめる】</span>後日、電話番号を残しておきたくないので自分の登録を消す。行った店の画面に残っていた田中さんの行から呼び名と電話番号が出なくなる。取得の記録に残る識別子と探した場所は消えない——承知のうえの穴。最終日までに動けばよい（登録の消去・基準54、提示と選択の記録・基準27）</li>
+</ol>
+</div>
+
+<div class="scenario">
+<h3>S4・店が登録して、承認を待つ（佐藤さん）</h3>
+<ol>
+<li>営業を終えた23時、私物のスマホで店のアカウントを作る。ログインのIDになるメールアドレスを入れる（登録と承認・基準7、ログイン・基準28）</li>
+<li>営業許可書を上げる。<span class="tag-change">【変化: 手元にPDFが無い】</span>あるのは壁の許可書を撮った写真だけ。写真を受け付けるかは要件の段で決める。受け付けない場合は理由が出て、スマホでPDFにして上げ直す（営業許可書・基準47、入力の検査・基準32）</li>
+<li>クレジットカードを登録する（カードの登録・基準48）</li>
+<li>住所・ホームページのURL・店のジャンル・おすすめメニュー（5件まで）・1人あたりの予算の幅を入れる（店の編集画面・基準8）</li>
+<li>クーポンを3つまで作る。名前と特記事項を入れる（クーポン3つ・基準9）</li>
+<li>店の画面に「未承認」と出ている。この間はオファーを公開する操作ができず、承認を待っていることが出る（登録と承認・基準7）</li>
+<li>翌日の昼に運営が承認する。店への通知は無いので、店の画面を開いて「承認済み」に変わったのを知る（登録と承認・基準7）</li>
+</ol>
+</div>
+
+<div class="scenario">
+<h3>S5・店が空いたときにオファーを公開し、客を受け付ける（佐藤さん）</h3>
+<ol>
+<li>火曜の15時、客が1組だけ。スマホで店の画面を開いてログインする（ログイン・基準28）</li>
+<li>クーポン3つのうち2つにチェックを入れ、募集する組数「3」、受け入れる人数「4名まで」、終わり「17時まで」でオファーを公開する。始まりは既定の「今から」のまま（オファーの公開と停止・基準12、募集する組数と追加・基準41）</li>
+<li>仕込みに戻る。客が来るまで何もしない</li>
+<li>2人組が受け取ると、店の画面の「向かっている客」に呼び名・電話番号・人数・コード・期限が出る。残りは2になる。2人ぶんの席を予約として取っておく（受け取った客の確認・基準14、残りの数・基準10、店による確保の取り消しの原則・基準51）</li>
+<li>客が来て確保中の表示を見せる。コードと「向かっている客」の行を目で見比べ「完了済み」を押す（完了済みにする・基準15）</li>
+<li class="change"><span class="tag-change">【変化: 店の状況が変わる】</span>15:35に3人組がもう1組受け取り残りは1。直後の15:40に予約なしの団体が入って満席になった。「残りの募集を減らす」で残りを1から0にする。オファーは取得の結果に出なくなる。止めずに残りを0にしたので、あとで席が空けば足せる。向かっている3人組の確保は減らしても取り消されない（公開中の変更・基準52、出す・出さない・基準11）</li>
+<li class="change"><span class="tag-change">【変化: 確保した客を入れられない】</span>取っておくはずだった3人組の席まで団体に使ってしまった。確保は予約として担保されたもので取り消しは最終手段だが、席のやりくりではどうにもならない。「向かっている客」のその行の「取り消す」を押す。客のスマホにプッシュ通知が飛び、画面は「店の都合で取り消されました」に変わる。取り消したぶんの残りは戻らない。通知が届いたか店からは分からないので、念のため画面の電話番号へ自分の電話でも一言伝える（店による確保の取り消し・基準51、客への知らせ・基準53、受け取った客の確認・基準14、電話番号の扱い・基準30）</li>
+<li class="change"><span class="tag-change">【変化: 空いたが、小さい席だけ】</span>16:10に団体が帰った。すぐ使えるのは2人掛けが2卓だけ。残っている席が「4名まで」を下回ったので、先に「何名まで」を4から2へ引き下げる。引き下げは公開したままできる。すでに確保している客の確保は人数ごと担保されたまま残る（公開中の変更・基準52）</li>
+<li>受付時間の中でまだ生きているので「追加で出す」で2組足す。オファーはまた取得の結果に出る（募集する組数と追加・基準41、出す・出さない・基準11、取得・基準5）</li>
+<li class="change"><span class="tag-change">【変化: 客が来ない】</span>16:15までに2組が受け取り残りは0。そのうち1組が期限まで来ない。自動で取り消され残りが1戻り、別の客が受け取る。店は何もしない（自動の取り消し・基準43、出す・出さない・基準11）</li>
+<li class="change"><span class="tag-change">【変化: 期限が切れたあとに着く】</span>16:38、期限が切れた組が息を切らせて着いた。「向かっている客」に「期限切れ」として残っている行とコードを見比べれば「完了済み」を押せるが、戻った残りはもう別の客が受け取っていて席が無い。事情を話して断り、客はその場で取得し直す。席が空いていたならそのまま「完了済み」を押して入れていた（受け取った客の確認・基準14、完了済みにする・基準15、自動の取り消し・基準43）</li>
+<li class="change"><span class="tag-change">【変化: さばけたが、まだ空いている】</span>16:40、受け取っていた2組とも来て完了済みにした。「追加で出す」で1組足し、終わりを「17時まで」から「18時まで」に延ばす。さばけた数を自分で数えて打ち直すことはしない（募集する組数と追加・基準41、公開中の変更・基準52）</li>
+<li class="change"><span class="tag-change">【変化: 受け入れる人数を増やしたい】</span>17:20、奥の6人掛けの席が空いた。公開したまま「何名まで」を2から6へ引き上げる。止めて公開し直す必要は無い（公開中の変更・基準52、取得・基準5）</li>
+<li class="change"><span class="tag-change">【変化: 確保した客がいるまま、受け入れる人数を下げる】</span>17:25、5人組が受け取り残りは0。6人掛けをその組のために取っておく。手前の2人掛けが1卓空いているので、先に「何名まで」を6から2へ引き下げてから「追加で出す」で1組足す。5人組の確保は人数5のまま担保されていて引き下げの影響を受けない。5人組が着き、コードを見比べて「完了済み」を押す。個別の取り消しは最終手段でここでは使わない（公開中の変更・基準52、人数の変更・基準45、完了済みにする・基準15、店による確保の取り消し・基準51）</li>
+<li>18時になる。受付時間が終わりオファーは自動で取得の結果に出なくなる。何もしない（出す・出さない・基準11）</li>
+<li>閉店後、今日のオファーごとの実績（結果に出た回数・受け取られた数・完了済みになった数・取り消された数）を見る（実績・基準16）</li>
+<li>翌週の雨の夜、また席が空いた。先週のオファーは受付時間が終わって終わりになっているので新しく公開する。前回の値（クーポンのチェック・組数・「2名まで」）が初めから入っているので「何名まで」を4に、「何時まで」を22時にするだけで済む（オファーの公開と停止・基準12）</li>
+</ol>
+</div>
+
+<div class="scenario">
+<h3>S6・運営が店を承認し、通報を受けて緊急のときに止める（運営の当番と、通報する客）</h3>
+<ol>
+<li>昼、PCで管理画面にログインする。一覧を「未承認」で絞り込むと佐藤さんの店がある（ログイン・基準28、店の一覧・基準17）</li>
+<li>店の情報・おすすめメニュー・営業許可書のPDFを開いて確かめる。カードは登録済みかどうかだけが見え、番号は見えない（おすすめメニュー・基準19、営業許可書・基準47、カードの登録・基準48）</li>
+<li>承認する。店は「承認済み」で絞り込むと出るようになる（承認・基準20）</li>
+<li class="change"><span class="tag-change">【変化: 許可書が読めない】</span>別の店の許可書は文字が潰れていて読めない。承認せず「未承認」のまま置く。システムから店へ送る手段は無いので、当番が店のメールアドレスへ自分のメールで理由を伝える（承認・基準20、登録と承認・基準7）</li>
+<li class="change"><span class="tag-change">【変化: 緊急】</span>数日後、ある客が受け取って行った店で生レバーが出されているのを見た。店はもう「完了済み」を押していて、この客の確保は確保中ではなくなっているが、通報ボタンは完了済みになったあとでも押せる所にある。理由の欄に「生レバーを出している」と書いて送る。理由が空のままでは送れない（通報・基準50）</li>
+<li>当番が次に管理画面を開くと通報の一覧にその店と理由が出ている。通報が来たことの通知は無いので気づくのは開いたとき——承知のうえの穴（通報・基準50）</li>
+<li>店名で検索して（または「オファー公開中」で絞り込んで）その店を見つけ、止める（BAN）。公開中のオファーは同時に取り下がり、取得の結果に出なくなる（店の一覧・基準17、公開中の店・基準18、緊急の停止・基準49）</li>
+<li>その店を確保して向かっている客が1組いる。確保とコードは取り消され、客のスマホにプッシュ通知が飛ぶ。画面には「この店は運営が停止したため、確保は取り消されました」と取得し直す入口が出る。通知を許可していない客・届かない端末の客は、開いたときに知る。開かずに着いた客は店頭で知る——承知のうえの穴（緊急の停止・基準49、客への知らせ・基準53）</li>
+<li>止めた理由を店のメールアドレスへ自分のメールで伝える（承認・基準20）</li>
+</ol>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="dot medium"></span><span class="fid">F5</span><span class="ftype">defect・重さ: medium・確度: 高確率</span></div>
+  <div class="fbody">
+    S1〜S6のすべての歩みが店頭で「確保中の表示」をスマホ画面で見せることに依存しているが、電波が切れて画面が開けない・読み込めない場合の歩き方がどこにも無い。田中さんのペルソナ自身が「駅前の人混みの中」という電波の弱くなりうる場所を明記しているのに、この状況の変化が1本も歩かれていない。
+    <div class="label">根拠</div>
+    <span class="quote">intent.md:139　どこで: 駅前の人混みの中。片手でスマホを持っている</span>
+    <span class="quote">intent.md:161　店に着き、確保中の表示（コード・店名・人数・期限・クーポン）を店員に見せる。…</span>
+    <span class="quote">intent.md:334　基準46 確保中の表示: 客が確保を持っている間、客の画面を開くと…がいつでも出ること（項目はAI判断）</span>
+    <div class="label">監査記録の提案</div>
+    S1・S2・S5のいずれかに「【変化: 電波が切れる】」の1歩を足し、確保中の表示が最後に取得できた内容をオフラインでも見せられる（キャッシュする）のか、店頭で立ち往生するのかを本人に確認して基準46へ明記する。
+  </div>
+</div>
+
+<h2>受け入れ基準の一覧 <span class="count">54件（うち基準13は欠番）</span></h2>
+
+<div class="scroll-x">
+<table>
+<thead><tr><th>#</th><th>名前</th><th>印</th><th>監査</th></tr></thead>
+<tbody>
+<tr class="group-head"><td colspan="4">客側（基準1〜6）</td></tr>
+<tr><td class="num">1</td><td>登録</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">2</td><td>好みの選び方</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">3</td><td>位置</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">4</td><td>人数</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">5</td><td>取得</td><td><span class="badge submit">提出版</span></td><td><span class="fbadge low">F4</span></td></tr>
+<tr><td class="num">6</td><td>受け取り</td><td><span class="badge submit">提出版</span> <span class="badge final">最終日</span>（過去の見返しのみ）</td><td></td></tr>
+
+<tr class="group-head"><td colspan="4">店側（基準7〜16）</td></tr>
+<tr><td class="num">7</td><td>登録と承認</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">8</td><td>店の編集画面</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">9</td><td>クーポン3つ</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">10</td><td>残りの数</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">11</td><td>出す・出さない</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">12</td><td>オファーの公開と停止</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">13</td><td>（欠番）店のクーポン番号 — 「やらないこと」へ移動</td><td><span class="badge cut">欠番</span></td><td></td></tr>
+<tr><td class="num">14</td><td>受け取った客の確認</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">15</td><td>完了済みにする</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">16</td><td>実績</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+
+<tr class="group-head"><td colspan="4">運営側・管理画面（基準17〜20）</td></tr>
+<tr><td class="num">17</td><td>店の一覧</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">18</td><td>公開中の店</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">19</td><td>おすすめメニュー</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">20</td><td>承認</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+
+<tr class="group-head"><td colspan="4">絞り込みとAI（基準21〜27）</td></tr>
+<tr><td class="num">21</td><td>決定論の絞り込み</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">22</td><td>点数と上位10件</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">23</td><td>AIの選定</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">24</td><td>AIが失敗したら</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">25</td><td>OrcaRouter</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">26</td><td>AIに渡さないもの</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">27</td><td>提示と選択の記録</td><td><span class="badge submit">提出版</span></td><td><span class="fbadge low">F2</span> <span class="fbadge low">F3</span></td></tr>
+
+<tr class="group-head"><td colspan="4">本番運用を想定した品質（基準28〜36）</td></tr>
+<tr><td class="num">28</td><td>ログイン</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">29</td><td>見える範囲</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">30</td><td>電話番号の扱い</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">31</td><td>同時の受け取り</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">32</td><td>入力の検査</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">33</td><td>連打の抑止</td><td><span class="badge final">最終日</span></td><td></td></tr>
+<tr><td class="num">34</td><td>自動テスト</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">35</td><td>明暗の両対応</td><td><span class="badge final">最終日</span></td><td></td></tr>
+<tr><td class="num">36</td><td>スマホ</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+
+<tr class="group-head"><td colspan="4">構成と提出の条件（基準37〜40）</td></tr>
+<tr><td class="num">37</td><td>Next.js・Cloudflare・OrcaRouterの構成</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">38</td><td>demo/とは別の新フォルダに1から書く</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">39</td><td>秘密情報・個人データを含まない</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">40</td><td>README</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+
+<tr class="group-head"><td colspan="4">ミーティングで足したもの（基準41〜49）</td></tr>
+<tr><td class="num">41</td><td>募集する組数と追加（獲得上限）</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">42</td><td>確保と期限</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">43</td><td>自動の取り消し</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">44</td><td>客による取り消しと確保の数</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">45</td><td>人数の変更</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">46</td><td>確保中の表示</td><td><span class="badge submit">提出版</span></td><td><span class="fbadge medium">F5</span></td></tr>
+<tr><td class="num">47</td><td>営業許可書</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">48</td><td>カードの登録</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">49</td><td>緊急の停止（BAN）</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+
+<tr class="group-head"><td colspan="4">第3周のあとの回答で足したもの（基準50）</td></tr>
+<tr><td class="num">50</td><td>通報</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+
+<tr class="group-head"><td colspan="4">第4周のあとの回答で足したもの（基準51〜54）</td></tr>
+<tr><td class="num">51</td><td>店による確保の取り消し</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">52</td><td>公開中の変更</td><td><span class="badge submit">提出版</span></td><td></td></tr>
+<tr><td class="num">53</td><td>客への知らせ（Webプッシュ）</td><td><span class="badge submit">提出版</span></td><td><span class="fbadge medium">F1</span> <span class="fbadge low">F6</span></td></tr>
+<tr><td class="num">54</td><td>登録の消去</td><td><span class="badge final">最終日</span></td><td><span class="fbadge low">F3</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="dot medium"></span><span class="fid">F1</span><span class="ftype">defect・重さ: medium・確度: 高確率</span></div>
+  <div class="fbody">
+    利用シーンS1で客に見せる通知許可の文言が「店の都合で確保が取り消されたときだけ通知します」となっており、基準53が定めるWebプッシュの発火条件（店による取り消し／運営による緊急停止の2つ）のうち1つしか客に伝えていない。もし利用シーンの引用文がそのまま実装のUI文言として使われると、運営がBANしたときにもプッシュが届く（基準53・S6の8歩目・やらないこと節）という実際の振る舞いと、客に事前に伝えた説明が食い違う。
+    <div class="label">根拠</div>
+    <span class="quote">intent.md:158　はじめての受け取りなので、「店の都合で確保が取り消されたときだけ通知します」と通知の許可を聞かれ、許可する（受け取り・基準6、確保と期限・基準42、客への知らせ・基準53）</span>
+    <span class="quote">intent.md:347　客の確保が、店に取り消されたとき（基準51）と、運営が店を緊急で止めて取り消されたとき（基準49）に、その客へWebプッシュを送ること。送るのはこの2つの場面だけであること</span>
+    <div class="label">監査記録の提案</div>
+    S1の許可文言を「店や運営の都合で確保が取り消されたときだけ通知します」のように2条件とも指すよう直すか、基準53側に「客への案内文言は2条件をどう伝えるかは要件の段で決める」という同様のAI判断の逃げを明記して、少なくともどちらかを揃える。他の場面（S2の9歩目・S6の8歩目）の引用文はBANと店都合の取り消しの両方を扱っているので、S1だけ整合を取ればよい。
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="dot low"></span><span class="fid">F2</span><span class="ftype">defect・重さ: low・確度: 確実</span></div>
+  <div class="fbody">
+    基準27（提示と選択の記録）で選ばれなかった案「残さず、件数だけ数える」が、intent.mdのどこにも（基準27の本文にも「やらないこと」にも）記録されていない。
+    <div class="label">根拠</div>
+    <span class="quote">04_v2の注文.md:63　「誰に・何位で見せて・選ばれたか」の記録を残す…（本人選択） | 残さず、件数だけ数える（v1の決定のまま）</span>
+    <span class="quote">intent.md:301　27. 【提出版】提示と選択の記録: 取得のたびに、誰に・どの店を何位で見せて・そのうちどれが受け取られたかを残すこと（本人の回答・本人選択）。</span>
+    <div class="label">監査記録の提案</div>
+    基準27の文末、または「やらないこと」節に「件数だけ数えて詳細は残さない形（v1の決定・不採用）」を一文足す。この文書は他のほぼ全ての「選ばなかった案」を丁寧に残しており、ここだけ抜けている。
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="dot low"></span><span class="fid">F3</span><span class="ftype">defect・重さ: low・確度: 確実</span></div>
+  <div class="fbody">
+    要件の段での回答（04の7節）で選ばれなかった案「消すときに記録の識別子を空にする」が、intent.mdの基準27・基準54・客の識別子の用語定義のどこにも記録されていない。
+    <div class="label">根拠</div>
+    <span class="quote">04_v2の注文.md:97　客が登録を消しても…残す（本人選択） | 消すときに記録の識別子を空にする（「記録は上書きしない」という決まりを緩める必要がある）</span>
+    <span class="quote">intent.md:301　客が登録を消しても（登録の消去・基準54・最終日）、記録に残る客の識別子と探した場所は残すこと（要件の段での回答・本人選択…承知のうえの穴で、記録からの消去は次のバージョンへ送る）</span>
+    <span class="quote">intent.md:348　54. 【最終日】登録の消去: 客が自分の登録を消せること（第4周のあとの回答・本人選択。選ばなかった案: 提出版に入れる／v2では作らない）。</span>
+    <div class="label">監査記録の提案</div>
+    基準54か基準27の記述に「記録の識別子を消去時に空にする形（不採用・『記録は上書きしない』の規則を緩める必要があるため）」を足す。消去まわりはプライバシーに関わるので、却下の理由が残っているほうが承認時に効く。
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="dot low"></span><span class="fid">F4</span><span class="ftype">defect・重さ: low・確度: 確実</span></div>
+  <div class="fbody">
+    要件の段での回答（04の7節）で選ばれなかった案「店は出して全オファーを非活性で見せる」が、intent.mdの基準5にも「やらないこと」にも記録されていない。この振る舞い（人数が合わない店を出さない）は後の周でも変わらず残っているので、まだ有効な却下案である。
+    <div class="label">根拠</div>
+    <span class="quote">04_v2の注文.md:96　客の人数を受け入れられるオファーが1つも無い店は、取得の結果に出さない…（本人選択） | 店は出して全オファーを非活性で見せる（店を並べる規則を距離とジャンルだけで決め直す必要がある）</span>
+    <span class="quote">intent.md:269　客の人数がオファーの「何名まで」を超える店は、結果に出さないこと（人数による絞り込み・聞き取り前の決定・本人選択。…）</span>
+    <div class="label">監査記録の提案</div>
+    基準5または「やらないこと」に「人数の合わない店も一覧に出し非活性で見せる形（不採用・店を並べる規則を作り直す必要があるため）」を足す。
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="dot low"></span><span class="fid">F6</span><span class="ftype">improvement・重さ: low・確度: 確実</span></div>
+  <div class="fbody">
+    初回受け取り時の通知許可のダイアログ文言が「店の都合で確保が取り消されたときだけ通知します」となっているが、基準53が定める実際の送信トリガーは店の取り消し（基準51）と運営の緊急停止（基準49）の2つ。文書自身が別の場面（S6）では両者を別の文言で描き分けているのに、同意を取る最初の説明文だけが片方しか言っていない。
+    <div class="label">根拠</div>
+    <span class="quote">intent.md:158　はじめての受け取りなので、「店の都合で確保が取り消されたときだけ通知します」と通知の許可を聞かれ、許可する</span>
+    <span class="quote">intent.md:347　客の確保が、店に取り消されたとき（基準51）と、運営が店を緊急で止めて取り消されたとき（基準49）に…この2つの場面だけであること</span>
+    <span class="quote">intent.md:224　客の画面には「この店は運営が停止したため、確保は取り消されました」と取得し直す入口が出る。</span>
+    <div class="label">監査記録の提案</div>
+    許可を求める文言を「店に取り消されたとき・緊急で店が止められたときだけ通知します」のように2トリガーとも触れる形に直すか、この文言はあくまで例示（AI判断）であることを明記する。
+  </div>
+</div>
+
+<h2>やらないこと</h2>
+<ul class="plain">
+<li>オファーを客へ届けるための通知、および例外の2場面（店による取り消し／運営の緊急停止）以外の客への通知。店への通知（承認された・客が受け取った）・運営への通知（通報が来た）・システムから店へメールを送ることも作らない</li>
+<li>段階配信（波の拡大・配信総数の上限での自動停止）</li>
+<li>店のクーポン番号・外部クーポンサイトとの連携・セルフレジやセルフオーダー機へのコード入力</li>
+<li>店が決めた1つの番号を全員に見せる形／店の番号があればそれを、無ければ8桁を発行する形</li>
+<li>残りを店が手で打って管理する形。公開中でも全部編集できる形／公開後は「追加で出す」だけの形／公開中に変えられるのは追加と延長だけの形。「何名まで」を変えるときは止めて新しく公開し直す形／引き下げだけ公開したままで引き上げは止めて公開し直す形。終わりを早めるときは止めて新しく公開し直す形。「何名まで」を引き下げたとき超過分の確保を自動で取り消す形。止めたオファーを同じ残りのまま再開する形。1つの店が複数のオファーを同時に公開する形。募集する組数とは別の獲得上限／運営が店の組数に設ける天井</li>
+<li>曜日の繰り返しで受付時間を表す形と、残りを日ごとに組数へ戻すこと</li>
+<li>クーポンごとの人数・公開の設定・件数の管理。人数に合わないクーポンの非活性表示と「おすすめ」の印。受け取り時にクーポンを1つ選ぶ形／完了済み時に使われたクーポンを記録する形／クーポンごとの実績</li>
+<li>アレルギーの入力と、それによる絞り込み</li>
+<li>詳細な提供メニュー（値段・アレルゲンつき）と、1つの値の目安料金の登録</li>
+<li>嗜好の自由記述の欄と入口のAI。店がひとことでオファーを作るのを助けるAI／営業許可書を読み取って承認を助けるAI／場所の自由記述を場所へ直すAI</li>
+<li>通報の深い作り（運営への通知・対応状況の管理・通報した客への返事・通報の数による自動の停止）。通報ボタンをシステムに作らず外部連絡だけで受ける形</li>
+<li>電話番号のSMSによる本人確認・ログイン／下4桁での照合／保存するだけで使わない形。店からシステム経由で客へ電話・SMSを掛ける機能。客のログインと客ごとの合言葉</li>
+<li>運営が店のアカウントを作って招待する形／店が登録してすぐ公開される形</li>
+<li>並びを決定論にしてAIは理由文だけ書く形／AIの選定を後から足す形。Workers AI</li>
+<li>客の受け取りに店の承認を挟む流れ。確保の期限の延長。客が「着きました」を押すと期限が止まる形／期限ぎりぎりで着いた客を承知のうえの穴として明記するだけの形。自動では取り消さず店が「来なかった」を押す形／完了の時点で残りを減らす形。満席時に店の取り消しを作らず電話後に客が自分で取り消すだけの形／店が個別に取り消せるだけで席を予約とする原則を伴わない形／確保した客は必ず入れる約束だけで取り消し手段を置かない形。店が取り消したときに募集する組数を1下げる規則／店が取り消したぶんを残りへ1戻す形。完了済みになった確保の取り消し</li>
+<li>取得の記録からの客の識別子と探した場所の消去（次バージョンへ送る）。登録の消去を提出版に入れること（→最終日）</li>
+<li>POS連携とセルフオーダー機との連携そのもの</li>
+<li>フェーズ2そのもの（残した記録を使った来店予測など）</li>
+<li>ネイティブアプリ・常時のバックグラウンド位置追跡</li>
+<li>チーム案の緩和策（ジオフェンス通知・「今ブースト」・店頭POP/QRからの流入の設計）</li>
+<li>店への利用料請求の実行・従量課金や月額の計算・法人名義カード限定などの厳密な制限。客の支払いのオンライン決済</li>
+<li>実店舗・実ユーザーを集めての運用の開始</li>
+<li>Qiita/Zennの記事執筆とGoogleフォームでの提出。チームDの役割分担とOrcaRouterワークスペース所有者の決定</li>
+</ul>
+
+<h2>「AI判断」の印 <span class="count">246件・節ごとの分布（行番号つき）</span></h2>
+<div class="scroll-x">
+<table>
+<thead><tr><th>節</th><th>行番号</th><th>件数</th></tr></thead>
+<tbody>
+<tr><td>序文（帰属の説明）</td><td class="lines">16, 17(×5)</td><td>6</td></tr>
+<tr><td>目的</td><td class="lines">25(×2), 26, 27, 28, 29(×4)</td><td>9</td></tr>
+<tr><td>v1から変わったこと・表</td><td class="lines">40, 42</td><td>2</td></tr>
+<tr><td>朝の版から変わったこと・表</td><td class="lines">48, 55, 62</td><td>3</td></tr>
+<tr><td>第3周のあとの回答・差分表</td><td class="lines">75(×2), 79, 80, 82</td><td>5</td></tr>
+<tr><td>第4周のあとの回答・差分表</td><td class="lines">86, 90, 91(×2), 92(×2), 93, 94, 95, 96(×3), 97</td><td>13</td></tr>
+<tr><td>第5周のあとの回答・差分表</td><td class="lines">101, 105(×2), 106, 107(×3), 108(×2)</td><td>9</td></tr>
+<tr><td>第6周の回答・差分表</td><td class="lines">112, 116, 117(×3), 118(×2), 119, 120(×2)</td><td>10</td></tr>
+<tr><td>ペルソナ</td><td class="lines">124</td><td>1</td></tr>
+<tr><td>利用シーン（S1〜S6の導入）</td><td class="lines">150</td><td>1</td></tr>
+<tr><td>提出版と最終日の境目</td><td class="lines">235(×3), 236(×4), 238</td><td>8</td></tr>
+<tr><td>この文書の用語</td><td class="lines">245, 246, 248, 249, 251, 253, 254, 258</td><td>8</td></tr>
+<tr><td>客側・基準1〜6</td><td class="lines">262(×2), 263(×2), 264, 268(×2), 271</td><td>8</td></tr>
+<tr><td>店側・基準7〜16</td><td class="lines">275(×2), 276(×3), 277, 278(×2), 279, 280(×7), 282(×2), 283(×5), 284(×3)</td><td>26</td></tr>
+<tr><td>運営側・基準17〜20</td><td class="lines">288(×2), 289, 290, 291</td><td>5</td></tr>
+<tr><td>絞り込みとAI・基準21〜27</td><td class="lines">295, 296, 297(×2), 298(×2), 299, 300, 301</td><td>9</td></tr>
+<tr><td>本番運用品質・基準28〜36</td><td class="lines">305, 307, 310, 312(×2), 313, 314(×2), 315(×2), 316, 318</td><td>12</td></tr>
+<tr><td>構成と提出条件・基準37〜40</td><td class="lines">323(×2), 325</td><td>3</td></tr>
+<tr><td>ミーティングで足したもの・基準41〜49</td><td class="lines">329(×4), 331(×4), 332(×3), 333, 334(×4), 335(×2), 336(×2), 337(×4)</td><td>24</td></tr>
+<tr><td>第3周で足したもの・基準50</td><td class="lines">341(×5)</td><td>5</td></tr>
+<tr><td>第4周で足したもの・基準51〜54</td><td class="lines">345(×9), 346(×13), 347(×7), 348(×2)</td><td>31</td></tr>
+<tr><td>設計者の案3点への本人の答え</td><td class="lines">358, 367, 374, 375</td><td>4</td></tr>
+<tr><td>設計の段への申し送り</td><td class="lines">380〜389（各1〜2）, 391</td><td>13</td></tr>
+<tr><td>本人が決めること</td><td class="lines">397, 399〜406（各1〜2）</td><td>10</td></tr>
+<tr><td>やらないこと</td><td class="lines">410(×2), 414(×6), 418, 420, 421, 424(×3), 428, 429, 430(×3), 431, 432</td><td>21</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>採点と崩せなかった点</h2>
+
+<div class="scroll-x">
+<table class="score-table">
+<thead><tr><th>軸</th><th>結合後（低い方）</th><th>分担A</th><th>分担B</th><th>分担C（物差し: ux）</th></tr></thead>
+<tbody>
+<tr><td>明確さ</td><td class="score-cell">4/5</td><td>4</td><td>4</td><td>—</td></tr>
+<tr><td>痛みの名指し</td><td class="score-cell">4/5</td><td>5</td><td>4</td><td>—</td></tr>
+<tr><td>利用シーンの具体さ</td><td class="score-cell">4/5</td><td>—</td><td>—</td><td>4</td></tr>
+</tbody>
+</table>
+</div>
+
+<dl class="kv">
+<dt>明確さ（4/5）</dt>
+<dd>54件の受け入れ基準・6本のペルソナ利用シーンのほぼ全てが単一解釈で読め、未決事項もすべて「AI判断・要件の段で決める」と明示的に切り分けられている。F1のように利用シーン内の引用UI文言と基準の記述内容が1箇所食い違っている点で減点</dd>
+<dt>痛みの名指し（4/5）</dt>
+<dd>目的の一文が「飲食店が」「急に客足が途切れて席が空いた」「席が空いたまま時間が過ぎる」で主語・場面・痛みを揃えて示せている。ペルソナ節は各人物とも痛みが複数文にわたる点でやや減点</dd>
+<dt>利用シーンの具体さ（4/5）</dt>
+<dd>3人のペルソナすべてにいつ・どこで・何に困ってが具体的にあり、S1〜S6が最初の1歩から最後まで受け入れ基準の行と対応づけて歩け、複雑な状態変化も内部矛盾なく計算し直せたが、店頭確認という核心の歩みを支える「電波が切れる」変化が1本も歩かれておらず基準にも無いため5には届かない</dd>
+</dl>
+
+<h3>崩せなかった点（unbroken）</h3>
+<ul class="plain">
+<li>「公開したまま店ができる操作」の個数（目的節の6つ／基準52の5つ）を全文突き合わせたが、両箇所の内訳・帰属注記は一致しており矛盾は無かった</li>
+<li>確保の「残り」の増減ロジック（受け取りで-1、客取消・期限切れで+1、店取消は戻さない、期限切れ完了済みで再度-1）を用語節・基準10・15・41・43・51・52・利用シーンS2/S5の記述で突き合わせたが、食い違いは見つからなかった</li>
+<li>「何名まで」の変更が既存の確保に影響しない原則（基準51・52・目的節）と、S5の8・13・14歩目の描写を突き合わせたが一貫していた</li>
+<li>基準の番号体系（欠番13・41以降の追加規則）と本文中の相互参照をすべて辿ったが、指している基準番号に誤りは無かった</li>
+<li>客の登録・受け取り・確保・完了済み・登録の消去にまつわる「客の識別子」と「コード」の使い分け（基準29・52節）は終始一貫していた</li>
+<li>3人のペルソナ（店・客・運営）と目的の一文について、誰の・どの場面の・どの痛みかを崩そうと試みたが、いずれも主語と場面が明示されており破れなかった</li>
+<li>04・05・06・01の各文書にある「選ばなかった案」を通して照合したが、F1〜F3以外の却下案（30件以上）は「やらないこと」節または該当基準の本文に過不足なく反映されており、崩せなかった</li>
+<li>S5の14歩（残りの募集の増減・何名まで4→2→6→2・複数回の追加で出す）を自分で数え直したが、募集する組数と残りの増減規則（基準41・52）に矛盾は無かった</li>
+<li>何名まえを引き下げても既に確保済みの客の人数はそのまま有効、という基準52の原則はS5の8歩目・14歩目の両方で一貫して守られていた</li>
+<li>期限切れの確保を店が完了済みにする新ルール（基準14・15・43・46・第6周の回答で追加）はS2の6歩目とS5の11歩目の2箇所で歩かれ、残りの数え方も含めて矛盾が無かった</li>
+<li>受け取りの単位がオファー（クーポンは選ばない）という決定は、S1〜S6のどの歩みにも取りこぼしなく反映されていた（クーポンを選ばせる歩・非活性表示・おすすめの印は1つも残っていない）</li>
+<li>3人のペルソナ全員に、いつ・どこで・何に困ってが揃っており「ペルソナの穴」型の破れは見つからなかった</li>
+</ul>
+
+<footer class="note">
+  この1枚は docs/specs/v2/intent.md（成果物）と docs/specs/v2/audits/intent-c7-e1.audit.json（監査記録・cycle7/exchange1、2026-09-20T07:40記録）から機械的に写したもの。
+  一次データに無い評価・推測は加えていない。監査の findings は分担 A・B・C 合わせて6件（F1〜F6）を全数掲載した。
+</footer>
+
+</div>

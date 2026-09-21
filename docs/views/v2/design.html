@@ -1,0 +1,343 @@
+<title>AI HACK v2 設計 ─ 1枚（第7周の監査つき）</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1b1f24; --muted:#5b6470; --border:#d7dde3;
+  --box:#f6f8fa; --box2:#eef2f6; --accent:#2f6fed; --accent-bg:#eaf1ff;
+  --honnin-hatsuan:#0f7a3c; --honnin-hatsuan-bg:#e6f5eb;
+  --honnin-sentaku:#0f6ab3; --honnin-sentaku-bg:#e6f2fb;
+  --ai:#9a5b00; --ai-bg:#fbf0dd;
+  --sev-medium:#b23b00; --sev-medium-bg:#fdeee5;
+  --sev-low:#6b6f14; --sev-low-bg:#f6f7dd;
+  --defect:#a3122b; --improve:#4d5b1f;
+  --code-bg:#eef1f4;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#15181c; --fg:#e7ebef; --muted:#9aa4b0; --border:#33393f;
+    --box:#1c2126; --box2:#22282e; --accent:#6ea8ff; --accent-bg:#1b2a44;
+    --honnin-hatsuan:#5fd08a; --honnin-hatsuan-bg:#123722;
+    --honnin-sentaku:#6cc0f2; --honnin-sentaku-bg:#0f2f42;
+    --ai:#e0b45a; --ai-bg:#3a2c10;
+    --sev-medium:#ff8a5c; --sev-medium-bg:#3a1f10;
+    --sev-low:#d8dd6a; --sev-low-bg:#2d2f10;
+    --defect:#ff7a8a; --improve:#b7c26a;
+    --code-bg:#20262c;
+  }
+}
+[data-theme="dark"]{
+  --bg:#15181c; --fg:#e7ebef; --muted:#9aa4b0; --border:#33393f;
+  --box:#1c2126; --box2:#22282e; --accent:#6ea8ff; --accent-bg:#1b2a44;
+  --honnin-hatsuan:#5fd08a; --honnin-hatsuan-bg:#123722;
+  --honnin-sentaku:#6cc0f2; --honnin-sentaku-bg:#0f2f42;
+  --ai:#e0b45a; --ai-bg:#3a2c10;
+  --sev-medium:#ff8a5c; --sev-medium-bg:#3a1f10;
+  --sev-low:#d8dd6a; --sev-low-bg:#2d2f10;
+  --defect:#ff7a8a; --improve:#b7c26a;
+  --code-bg:#20262c;
+}
+*{box-sizing:border-box;}
+body{
+  background:var(--bg); color:var(--fg);
+  font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  line-height:1.7; margin:0; padding:20px 16px 60px; max-width:980px; margin-inline:auto;
+  font-size:15px;
+}
+h1{font-size:20px; margin:0 0 4px;}
+h2{font-size:16px; margin:36px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); color:var(--fg);}
+h3{font-size:13.5px; margin:18px 0 8px; color:var(--muted);}
+p{margin:8px 0;}
+.meta{color:var(--muted); font-size:12.5px; margin-bottom:18px;}
+.gate{
+  display:inline-flex; gap:10px; align-items:center; padding:8px 12px;
+  border:1px solid var(--border); border-radius:8px; background:var(--box); font-size:13px; margin-bottom:6px;
+}
+.gate b{color:var(--honnin-hatsuan);}
+.badge{
+  display:inline-block; padding:1px 7px; border-radius:99px; font-size:11px; font-weight:600;
+  white-space:nowrap;
+}
+.b-hatsuan{color:var(--honnin-hatsuan); background:var(--honnin-hatsuan-bg);}
+.b-sentaku{color:var(--honnin-sentaku); background:var(--honnin-sentaku-bg);}
+.b-ai{color:var(--ai); background:var(--ai-bg);}
+.b-medium{color:var(--sev-medium); background:var(--sev-medium-bg);}
+.b-low{color:var(--sev-low); background:var(--sev-low-bg);}
+.b-defect{color:var(--defect); background:var(--sev-medium-bg);}
+.b-improve{color:var(--improve); background:var(--sev-low-bg);}
+code{
+  background:var(--code-bg); padding:1px 5px; border-radius:4px; font-size:12.5px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+}
+.scrollbox{overflow-x:auto; border:1px solid var(--border); border-radius:8px; margin:10px 0;}
+table{border-collapse:collapse; width:100%; font-size:12.8px; min-width:640px;}
+th,td{border-bottom:1px solid var(--border); padding:7px 10px; text-align:left; vertical-align:top;}
+th{background:var(--box2); position:sticky; top:0; font-weight:700; white-space:nowrap;}
+tr:hover td{background:var(--box);}
+.small{font-size:11.8px; color:var(--muted);}
+.note{
+  border-left:3px solid var(--accent); background:var(--accent-bg); padding:8px 12px;
+  border-radius:0 6px 6px 0; font-size:13px; margin:10px 0;
+}
+.tree{border:1px solid var(--border); border-radius:10px; padding:14px; background:var(--box); margin:10px 0; overflow-x:auto;}
+.box{border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--box2); min-width:150px;}
+.box-title{font-weight:700; font-size:12.6px; margin-bottom:4px;}
+.box-desc{font-size:11.6px; color:var(--muted);}
+.row{display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap;}
+.chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;}
+.chip{
+  font-size:11px; background:var(--box); border:1px solid var(--border); border-radius:99px;
+  padding:2px 9px; color:var(--muted);
+}
+.dim{opacity:0.7;}
+.web-box{flex:1; min-width:520px;}
+.lib-box{flex:1; min-width:230px;}
+.layer{
+  border:1px solid var(--border); border-radius:6px; padding:6px 9px; margin-bottom:5px;
+  font-size:11.8px; background:var(--bg);
+}
+.layer b{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.8px;}
+.finding{
+  border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:12px 0; background:var(--box);
+}
+.finding-head{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px;}
+.finding-id{font-weight:700; font-family:ui-monospace,Menlo,Consolas,monospace;}
+.quote{
+  border-left:3px solid var(--border); padding:4px 10px; margin:6px 0; font-size:12.3px; color:var(--muted);
+}
+.scorebar{
+  display:inline-flex; gap:2px; vertical-align:middle;
+}
+.scorebar span{width:9px; height:14px; border-radius:2px; background:var(--border); display:inline-block;}
+.scorebar span.on{background:var(--accent);}
+ul{margin:6px 0; padding-left:22px;}
+li{margin:3px 0;}
+.foot{margin-top:40px; font-size:11.5px; color:var(--muted); border-top:1px solid var(--border); padding-top:12px;}
+</style>
+
+<h1>AI HACK v2 ─ 設計の1枚</h1>
+<p class="meta">spec: v2 ／ phase: design ／ 元データ: <code>design.md</code>（第6周のあとの直しまで反映済み）・<code>requirements.md</code>・<code>intent.md</code>・監査記録 <code>design-c7-e1.audit.json</code>（第7周・分担A/B/C）・ゲート結果 <code>design.gate.txt</code></p>
+<div class="gate">🚪 <b>ゲート通過（設計）</b> ／「AI判断」の印: <b>100件</b>（承認のときに本人が確認する）</div>
+
+<h2>① ファイル構成の計画（境界）</h2>
+<p>客・店・運営の三者の画面と API を1つの Next.js アプリ <code>web/</code> に書き、Cloudflare Workers に載せる（AI判断）。判断はすべて <code>lib/domain/</code>（副作用なし）に置き、画面の部品はサーバーが返した「表示の種類」を描くだけ。外のサービス（AI・地図・プッシュ・カード・ファイル・人かどうかの確かめ・ログ）は <code>lib/adapters/</code>の1サービス1ファイルだけが触る。</p>
+
+<div class="tree">
+  <div class="box root">
+    <div class="box-title">リポジトリ直下</div>
+    <div class="chips">
+      <span class="chip">package.json / pnpm-workspace.yaml（ワークスペースの根）</span>
+      <span class="chip">tsconfig.json / vitest.config.ts（web/ と tests/ の両方を見る）</span>
+      <span class="chip">README.md（基準34.7）</span>
+      <span class="chip">.gitignore（/dev のどの役割も書けない・読むだけ）</span>
+    </div>
+    <div class="row">
+      <div class="box dim">
+        <div class="box-title">demo/ ・ sprint/</div>
+        <div class="box-desc">触らない・import もしない。sprint/ は 2026-09-20 に git 追跡から外れた（本人選択）</div>
+      </div>
+      <div class="box" style="min-width:170px;">
+        <div class="box-title">tests/acceptance/v2/</div>
+        <div class="box-desc">受け入れ検査（設計者の持ち場）。<code>_setup.ts</code>（fetch を外へ出たら落とす）・<code>_tasks.ts</code>（<code>describeTask</code>——着手の記録が無いタスクのブロックを飛ばす）</div>
+      </div>
+      <div class="box web-box">
+        <div class="box-title">web/ ── v2 の本体（基準34.5）</div>
+        <div class="row wrap">
+          <div class="box" style="min-width:150px;">
+            <div class="box-title">app/</div>
+            <div class="box-desc">page・me・login・store/…・admin/…・api/**/route.ts（defineRoute を呼ぶだけ）・manifest.ts・globals.css</div>
+          </div>
+          <div class="box" style="min-width:150px;">
+            <div class="box-title">components/</div>
+            <div class="box-desc">customer・store・admin・ui。画面の部品。<code>RefusalNotice</code>（受け取りの断り）・<code>InputRefusal</code>（入力の断り）はそれぞれ唯一の描き口</div>
+          </div>
+          <div class="box lib-box">
+            <div class="box-title">lib/ ── 8つの粒度</div>
+            <div class="layer"><b>domain/</b> 判断（副作用なし）。読んでよいのは自分だけ</div>
+            <div class="layer"><b>schemas/</b> zod。<code>limits.ts</code>（数字の定数）だけ部品も値で読める</div>
+            <div class="layer"><b>repo/</b> D1 の SQL。domain・schemas だけ読む</div>
+            <div class="layer"><b>usecases/</b> 手続き。domain・schemas・repo・ports.ts を読む</div>
+            <div class="layer"><b>ports.ts</b> 差し替え口の型（10個）</div>
+            <div class="layer"><b>adapters/</b> 差し替え口の実物。ports.ts・schemas だけ読む</div>
+            <div class="layer"><b>http/</b> defineRoute・guards・cookies</div>
+            <div class="layer"><b>client/</b> 画面が fetch を呼ぶただ1つの場所。domain は型と<code>texts.ts</code>だけ</div>
+          </div>
+          <div class="box" style="min-width:150px;">
+            <div class="box-title">public/ ・ migrations/ ・ scripts/ ・ 設定</div>
+            <div class="box-desc"><code>sw.js</code>（プッシュ受信・/me 保存）・<code>0001_init.sql</code>・<code>seed-admin.mjs</code>・<code>gen-vapid.mjs</code>・<code>wrangler.jsonc</code>・<code>open-next.config.ts</code>・<code>eslint.config.mjs</code>・<code>.dev.vars.example</code></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>依存の向き（lint で強制・第5周の直しで <code>lib/domain</code> の粒度をファイル単位に絞った）</h3>
+<div class="scrollbox">
+<table>
+<tr><th>フォルダ</th><th>読んでよいもの</th><th>読んではいけないもの</th></tr>
+<tr><td><code>lib/domain</code></td><td>自分だけ</td><td>ほかの全部（D1 の型・<code>Date.now()</code>・<code>crypto</code> も直接使わない）</td></tr>
+<tr><td><code>lib/schemas</code></td><td><code>lib/domain</code>の定数</td><td>—</td></tr>
+<tr><td><code>lib/repo</code></td><td>domain・schemas</td><td>usecases・adapters・app・components</td></tr>
+<tr><td><code>lib/usecases</code></td><td>domain・schemas・repo・ports.ts</td><td>adapters（実物を知らない）・next/*・app・components</td></tr>
+<tr><td><code>lib/adapters</code></td><td>ports.ts・schemas</td><td>usecases・repo</td></tr>
+<tr><td><code>lib/http</code>・<code>app/api</code></td><td>上の全部</td><td>components</td></tr>
+<tr><td><code>lib/client</code></td><td>schemas（値も）・domain は<b>型と<code>texts.ts</code>の値だけ</b></td><td>repo・usecases・adapters・http・domain の texts.ts 以外</td></tr>
+<tr><td><code>components</code>・<code>app</code>の画面</td><td>schemas は型と<code>limits.ts</code>の値だけ・domain は型と<code>texts.ts</code>の値だけ・lib/client</td><td>repo・usecases・adapters・http・schemas の zod 定義（値）・domain の texts.ts 以外</td></tr>
+</table>
+</div>
+<p class="small">第5周の直しで <code>RefusalNotice</code> の <code>nextStep</code> 決定を部品から手続き（<code>usecases/receiveOffer</code>）へ移し、部品が判断を持たない形に揃えた（監査役 F2 への答え）。</p>
+
+<h2>② 要件ごとの検査の割り当て（34要件・368基準の要約）</h2>
+<p>検査の方法は5種——<b>純粋</b>（domain/schemasの関数に表を当てる）・<b>手続き</b>（usecasesを偽の外部で走らせる）・<b>入口</b>（route.tsにRequestを渡す）・<b>部品</b>（Testing Libraryで描く）・<b>構造</b>（無いことの走査）。下は要件単位の要約（本文の全368行は<code>design.md</code>「要件ごとの検査の割り当て」節が正本）。</p>
+<div class="scrollbox">
+<table>
+<tr><th>要件</th><th>主な検査ファイル</th><th>検証の段</th><th>実現する場所（代表）</th></tr>
+<tr><td>1 客の登録</td><td><code>r01-customer-register</code></td><td>段1</td><td>usecases/registerCustomer・schemas/customer</td></tr>
+<tr><td>2 客の見分け方（客の識別子）</td><td><code>r02-customer-identity</code></td><td>段1</td><td>domain/token・adapters/webcrypto</td></tr>
+<tr><td>3 取得の入力</td><td><code>r03-fetch-input</code>・<code>structure.test.ts</code></td><td>段1・段2</td><td>components/customer/FetchForm・client/geolocation</td></tr>
+<tr><td>4 取得の結果</td><td><code>r04-fetch-result</code></td><td>段1・段3（4.13）</td><td>usecases/fetchOffers・domain/score</td></tr>
+<tr><td>5 決定論の絞り込み</td><td><code>r05-filter</code></td><td>段1</td><td>domain/filter・repo/sqlFragments</td></tr>
+<tr><td>6 決定論の点数づけと上位10件</td><td><code>r06-score</code></td><td>段1</td><td>domain/score</td></tr>
+<tr><td>7 AI の選定と理由</td><td><code>r07-ai-select</code></td><td>段1・段2・段4（7.10）</td><td>domain/selection・adapters/orcarouter</td></tr>
+<tr><td>8 受け取りと確保</td><td><code>r08-receive</code></td><td>段1</td><td>usecases/receiveOffer・domain/receiveRefusal</td></tr>
+<tr><td>9 確保中の表示</td><td><code>r09-reservation-view</code></td><td>段1・段5（9.12）</td><td>domain/customerHome・client/usePolling</td></tr>
+<tr><td>10 客による取り消しと人数の変更</td><td><code>r10-cancel-party</code></td><td>段1</td><td>usecases/cancelByCustomer・usecases/changeParty</td></tr>
+<tr><td>11 確保の期限と自動の取り消し</td><td><code>r11-expiry</code></td><td>段1</td><td>domain/reservation・repo/sqlFragments</td></tr>
+<tr><td>12 店の登録と承認の状況</td><td><code>r12-store-register</code></td><td>段1</td><td>usecases/registerStore・domain/storeHome</td></tr>
+<tr><td>13 営業許可書とカードの登録</td><td><code>r13-license-card</code></td><td>段1・段2・段3</td><td>adapters/files・adapters/stripe</td></tr>
+<tr><td>14 店と運営のログインと見える範囲</td><td><code>r14-login-scope</code></td><td>段1</td><td>usecases/login・domain/password</td></tr>
+<tr><td>15 店の情報</td><td><code>r15-store-profile</code></td><td>段1</td><td>usecases/saveStoreProfile・adapters/geocoding</td></tr>
+<tr><td>16 クーポン</td><td><code>r16-coupons</code></td><td>段1</td><td>usecases/coupons</td></tr>
+<tr><td>17 オファーの公開と停止</td><td><code>r17-publish</code></td><td>段1</td><td>usecases/publishOffer・domain/until</td></tr>
+<tr><td>18 残りの数</td><td><code>r18-remaining</code></td><td>段1</td><td>repo/sqlFragments・domain/remaining</td></tr>
+<tr><td>19 公開中の変更</td><td><code>r19-live-changes</code></td><td>段1</td><td>usecases/changeOffer・domain/until</td></tr>
+<tr><td>20 向かっている客と完了済み</td><td><code>r20-arrivals</code></td><td>段1</td><td>domain/storeHome・usecases/completeReservation</td></tr>
+<tr><td>21 店による確保の取り消し（最終手段）</td><td><code>r21-store-cancel</code></td><td>段1</td><td>usecases/cancelByStore</td></tr>
+<tr><td>22 客への知らせ（Web プッシュ）</td><td><code>r22-push</code></td><td>段1・段3（22.13）</td><td>adapters/webpush・public/sw.js</td></tr>
+<tr><td>23 店の実績</td><td><code>r23-results</code></td><td>段1</td><td>usecases/storeResults</td></tr>
+<tr><td>24 運営の管理画面</td><td><code>r24-admin-list</code></td><td>段1</td><td>usecases/adminStores</td></tr>
+<tr><td>25 承認と緊急の停止（BAN）</td><td><code>r25-approve-ban</code></td><td>段1</td><td>usecases/approveStore・usecases/banStore</td></tr>
+<tr><td>26 通報</td><td><code>r26-report</code></td><td>段1</td><td>usecases/reportStore</td></tr>
+<tr><td>27 提示と選択の記録</td><td><code>r27-logs</code></td><td>段1</td><td>repo/logs（追加だけ）</td></tr>
+<tr><td>28 客の個人データと登録の消去</td><td><code>r28-personal-data</code></td><td>段1</td><td>usecases/deleteCustomer</td></tr>
+<tr><td>29 入力の検査</td><td><code>structure.test.ts</code>・<code>r29-validation</code></td><td>段1・段2</td><td>http/defineRoute・client/api</td></tr>
+<tr><td>30 連打の抑止【最終日】</td><td><code>r30-rate-limit</code></td><td>段1</td><td>http/defineRoute・repo/rateCounters</td></tr>
+<tr><td>31 自動テスト</td><td><code>structure.test.ts</code></td><td>段1</td><td>tests/acceptance/v2/・vitest.config.ts</td></tr>
+<tr><td>32 画面の前提（スマホ・明暗）</td><td>本人の目視</td><td>段5</td><td>components/**・app/globals.css</td></tr>
+<tr><td>33 効果を示す数字の記録</td><td><code>r33-metrics</code></td><td>段1</td><td>repo/logs（ai_calls）・usecases/adminMetrics</td></tr>
+<tr><td>34 構成と提出の条件</td><td><code>structure.test.ts</code>・実物確認</td><td>段1・段2・段3</td><td>web/・.gitignore・GitHub リポジトリ</td></tr>
+</table>
+</div>
+<p class="small">加えて「要件に基準が無い、設計の決めの検査」（ログの個人データ・Turnstile・Origin確認・crypto境界・入力の断りの形・受け取りの断りの形など計14項目）が段1・段2で置かれている。段3・段4・段5をいつやるかは、公開版への提出前1回（段3）・実装の段の監査時（段4・基準7.10）・タスク表で本人担当（段5）と決められている。</p>
+
+<h2>③ ゲートの3つのコマンド</h2>
+<div class="scrollbox">
+<table>
+<tr><th>種類</th><th>コマンド（配列）</th></tr>
+<tr><td>型検査</td><td><code>["pnpm","exec","tsc","--noEmit","-p","tsconfig.json"]</code></td></tr>
+<tr><td>lint</td><td><code>["pnpm","--dir","web","exec","eslint","."]</code></td></tr>
+<tr><td>テスト</td><td><code>["pnpm","exec","vitest","run"]</code></td></tr>
+</table>
+</div>
+<ul>
+<li>直下の <code>tsconfig.json</code> は <code>web/**</code> と <code>tests/**</code> の両方を検査（demo/・sprint/・生成物は除く）</li>
+<li>直下の <code>vitest.config.ts</code> は <code>web/**/*.test.{ts,tsx}</code> と <code>tests/acceptance/v2/**/*.test.{ts,tsx}</code> の両方を走らせる</li>
+<li><b>lint は今のまま <code>web/</code> の中だけに掛ける</b>（本人選択・2026-09-20・18節。第1周の監査「受け入れ検査フォルダも対象に」を、理由（強制する境界が tests/ には無い）を示して据え置いた）</li>
+<li><b>受け入れ検査はタスクごとに走る</b>（第5周のあとの直し）: 各ブロックは <code>describeTask(タスク番号, 名前, 本体)</code> を通す。<code>.dev/runs/v2/task-&lt;番号&gt;.json</code>（着手の記録・進行役の道具のみが作る）が無ければそのブロックは飛ぶ。着手の記録のフォルダそのものが無い手元では全部走る</li>
+</ul>
+
+<h2>④ 監査の指摘（第7周・分担A/B/C）を該当する節の横に</h2>
+
+<div class="finding">
+  <div class="finding-head"><span class="finding-id">F1</span><span class="badge b-defect">defect</span><span class="badge b-medium">重さ: medium</span><span class="small">確度: 高確率／分担A</span></div>
+  <p><b>該当する節:</b> 「受け入れ検査をタスクごとに走らせる」（<code>describeTask</code>の仕組み）</p>
+  <p>タスク番号の食い違いなどで対象ブロックが全部 skip されても、ゲート（<code>gate-code.mjs</code>）は終了コードだけで通過を決めるため、「何も実行されていないのにゲート通過」が構造的に起こり得る（設計書は「飛ばしたことは隠れない」と書くが、それを見るのは終了コードを見る仕組みではない）。</p>
+  <div class="quote">design.md 114行「飛ばしたブロックは Vitest の出力に skipped として数が出るので、飛ばしたことは隠れない。」</div>
+  <div class="quote">gate-code.mjs 33行「if (result.status === 0) return { shown, error: null };」</div>
+  <p class="small"><b>直し方の提案:</b> テストコマンドを <code>--reporter=json</code> 等で走らせ、着手中タスクのブロックが1件以上「実行された（skipでない）」ことを不合格条件に足す。</p>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="finding-id">F2</span><span class="badge b-improve">improvement</span><span class="badge b-low">重さ: low</span><span class="small">確度: 高確率／分担B</span></div>
+  <p><b>該当する節:</b> 「入口（API）の一覧」の「登録の入口」の分類</p>
+  <p>要件書の用語「登録の入口」は「客の登録と店の登録だけが入る」と閉じて定義されているが、design.md はこの同じラベルを、ログイン・ログアウト・公開設定値取得（<code>GET /api/config/public</code>）まで含む5つの入口の分類名として、帰属の印を欠いたまま無印で再利用している。</p>
+  <div class="quote">requirements.md 65行「まだ要求の主を持たない人が最初に使う要求のまとまり（語はAI判断）。客の登録…と、店の登録…だけが入る。」</div>
+  <div class="quote">design.md 331行「登録の入口｜POST /api/register/customer・…・POST /api/auth/login・POST /api/auth/logout・GET /api/config/public…」</div>
+  <p class="small"><b>直し方の提案:</b> 見分けの5つ目のカテゴリ名を「無記名の入口」など要件書と別の語にする。あるいは requirements.md 側に、設計の段で同分類に含める場合がある旨を申し送る。</p>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="finding-id">F3</span><span class="badge b-defect">defect</span><span class="badge b-low">重さ: low</span><span class="small">確度: 高確率／分担C（利用シーンを歩く）</span></div>
+  <p><b>該当する節:</b> 「利用シーンを画面の上で歩く」のS1（客がはじめて使う場面）5歩目</p>
+  <p>S1の5歩目は、田中さんが初回受け取り直後に「通知を受け取る」を押して許可する前提で書かれているが、design.md自身が別の場所で、プッシュの仕組みが無いブラウザ（ホーム画面未追加のiPhone Safariが明示例）では「通知を受け取る」ボタン自体が出ず説明文だけになると定めている。田中さんの1歩目（intent.md）にはホーム画面への追加が出てこない。</p>
+  <div class="quote">design.md 496行「プッシュの仕組みが無いブラウザ（iPhone の Safari でホーム画面に追加していない場合など）では、許可を求めるボタンを出さず…」</div>
+  <div class="quote">design.md 551行「焼肉店のカードの「この店に行く」→確保中の表示…その上に通知の説明が1回だけ出る→「通知を受け取る」」</div>
+  <p class="small"><b>直し方の提案:</b> S1の5歩目に条件分岐を明記する。実害は無い（開けば分かるフォールバックが既にある）が、design.md自身の歩きが自身の制約と矛盾している点は直すべき。</p>
+</div>
+
+<div class="finding">
+  <div class="finding-head"><span class="finding-id">F4</span><span class="badge b-improve">improvement</span><span class="badge b-low">重さ: low</span><span class="small">確度: 高確率／分担C</span></div>
+  <p><b>該当する節:</b> 「利用シーンを画面の上で歩く」のS1・7歩目／要件3の補足（人数の初めの値）</p>
+  <p>取得画面の人数は「初めの値を置かない」方針（S2の人数変化の見落とし防止のため）だが、S1の7歩目のように人数が変わっていない再検索（ジャンルだけ和食に変える）でも同じ手間で人数を打ち直させており、方針の根拠が当てはまらない場面にも一律適用されている。</p>
+  <div class="quote">design.md 553行「取得の画面でジャンルを「和食」に変え（その回だけ）、人数2を入れて探す→和食の店を受け取る」</div>
+  <div class="quote">requirements.md 149行「人数の初めの値は置かない（AI判断。…前回の人数が残ると S2 のような人数の変化を見落とす）」</div>
+  <p class="small">必須の修正ではない（要件は満たせている）。</p>
+</div>
+
+<h2>⑤ 採点と崩せなかった点</h2>
+
+<h3>結合後の点（結合は軸ごとの低い方）</h3>
+<div class="scrollbox">
+<table>
+<tr><th>軸</th><th>点</th><th>理由</th></tr>
+<tr><td>単純さ</td><td>4 <span class="scorebar"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span></span></td><td>34要件・368基準・複数外部サービスの規模に対して部品数は概ね妥当。OrcaRouterの3点セットは本体と分離した独立タスクに切り出せており本体を膨らませていない</td></tr>
+<tr><td>変更しやすさ</td><td>4 <span class="scorebar"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span></span></td><td>依存の向きの表とlintでフォルダ・ファイル粒度の境界を強制し、判断の置き場所が1責務=1箇所の表で明示されている</td></tr>
+<tr><td>撤退しやすさ</td><td>5 <span class="scorebar"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></span></td><td>外部サービスは1サービス1ファイルの差し替え口に閉じ、「撤退しやすさ」節が差し替え先を明記している</td></tr>
+<tr><td>慣習どおりか</td><td>4 <span class="scorebar"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span></span></td><td>Next.js/Cloudflare/D1の使い方は素直。自前セッション・PBKDF2・自前ポーリングなどの独自判断は全て比較表付きで理由が明記されている</td></tr>
+<tr><td>検査しやすさ</td><td>4 <span class="scorebar"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span></span></td><td>368基準のほぼ全部に検査方法・検証の段・実現場所が対応表で割り当てられている。ただしF1のとおり、タスク単位skip機構の「実行された保証」に穴があり、置き場所の充実に対して実行の裏付けが一段弱い</td></tr>
+<tr><td>通り抜け</td><td>5 <span class="scorebar"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></span></td><td>S1〜S6全ての利用シーンで各歩の主語・支える画面・基準が明示され、独立に歩いても行き止まりは見つからなかった</td></tr>
+<tr><td>状況の変化への強さ</td><td>5 <span class="scorebar"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></span></td><td>気が変わる・人数増減・遅延・期限ぎりぎり到着・店取消・緊急停止・満席・許可書不備・写真アップロード・位置情報拒否など、intent.mdの全【変化】に対応する画面・基準が具体的にあり、詰む経路は見つからなかった</td></tr>
+<tr><td>判断のしやすさと手数</td><td>4 <span class="scorebar"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span></span></td><td>取得結果の判断材料（徒歩分数・予算幅・理由・何名まで・クーポン）は十分。F1・F2の小さな手数/矛盾のみが差分</td></tr>
+</table>
+</div>
+
+<h3>分担ごとの点（分担A・B＝構造の監査／分担C＝利用シーンを歩く監査・物差し ux）</h3>
+<div class="scrollbox">
+<table>
+<tr><th>分担</th><th>軸</th><th>点</th></tr>
+<tr><td rowspan="5">A</td><td>単純さ</td><td>4</td></tr>
+<tr><td>変更しやすさ</td><td>4</td></tr>
+<tr><td>撤退しやすさ</td><td>5</td></tr>
+<tr><td>慣習どおりか</td><td>4</td></tr>
+<tr><td>検査しやすさ</td><td>4</td></tr>
+<tr><td rowspan="5">B</td><td>単純さ</td><td>4</td></tr>
+<tr><td>変更しやすさ</td><td>5</td></tr>
+<tr><td>撤退しやすさ</td><td>5</td></tr>
+<tr><td>慣習どおりか</td><td>4</td></tr>
+<tr><td>検査しやすさ</td><td>5</td></tr>
+<tr><td rowspan="3">C（ux・利用シーンを歩く）</td><td>通り抜け</td><td>5</td></tr>
+<tr><td>状況の変化への強さ</td><td>5</td></tr>
+<tr><td>判断のしやすさと手数</td><td>4</td></tr>
+</table>
+</div>
+<p class="small">分担Bは「変更しやすさ」「検査しやすさ」を結合前の点より高く見ており（5点）、結合後は分担Aの4点が採られている（軸ごとの低い方）。</p>
+
+<h3>崩せなかった点（監査役が崩そうとして崩れなかったもの）</h3>
+<ul>
+<li><code>dev.config.json</code> のゲートが空（型検査/lint/テスト未設定）は欠陥ではない——「設計承認後に進行役が確認して書き写す」と設計書・SKILL.mdの両方が明記し、実際その運びで一致している</li>
+<li>着手の記録 <code>.dev/runs/v2/task-&lt;番号&gt;.json</code> がどの/dev役割からも書けないという主張は、<code>lib/config.mjs</code>の<code>INFRA_DENY</code>と<code>gate-code.mjs</code>65行目の実装で事実と一致した</li>
+<li><code>lib/adapters</code>以外で<code>crypto</code>を呼べない境界は、<code>web/scripts/</code>を明示的な例外として文書化しており隠れた例外ではない</li>
+<li><code>web/wrangler.jsonc</code>の<code>vars</code>の許可名の一覧（3つ）と秘密の名前パターンの走査は一貫しており、秘密情報が紛れ込む経路は見当たらなかった</li>
+<li>10個の差し替え口（AiSelector・Geocoder・PushSender・CardRegistrar・FileStore・HumanCheck・Logger・Clock・Rng・Hasher）で外部サービスが全部覆われ、段1で検査を置けない外部直結は見つからなかった</li>
+<li>TSとSQLの二重実装（「受け取れる状態」「残りの数」）は既に前回監査で指摘され、判定記録で「記録だけ」として本人に承認済みの既知のトレードオフであり、新規の欠陥としては数えなかった</li>
+<li>要件1〜34の全基準368件が検査割り当て表に番号単位で網羅されているかを通しで確認し、抜けは見つからなかった</li>
+<li>「やらないこと」に列挙された除外機能（段階配信・入口のAI・アレルギー・詳細メニュー・クーポン番号・客のログイン・Workers AI・複数オファー同時公開など）が構成のどこにも入っていないことを確認した</li>
+<li>過去周回で矛盾が指摘され直された箇所（17.16/25.8の確保取消しの分岐・18.7/18.8の残り計算・19.8/19.9/19.13の「何時まで」の解釈）は現行版で要件書の文言と整合している</li>
+<li>客側の受け取りの断り（RefusalNotice）と店側の公開中操作の断り（InputRefusal・第6周の直し）の両方に、文言・次の一手・その場に留まる・画面が壊れないことが明記されており、独立に歩いても行き止まりは見つからなかった</li>
+<li>「何時まで」の解釈をS5・12歩目の裏側の数値例で監査役自身が計算し直したが、19.9/19.13の分岐は記述どおり成立した</li>
+<li>通報の7日ウィンドウ・登録消去の期限切れ20分以内の制限は意図的な決めとして明記されており、新しい行き止まりにはならなかった</li>
+<li>S3（位置情報拒否・6人で0件・3人ずつに分割）の全歩は、場所の再入力・0件時の次の手・友人の別スマホ登録まで支える基準が揃っており崩せなかった</li>
+</ul>
+
+<p class="small"><code>questions_for_human</code>: 0件（第7周の監査では本人へ聞くことは無かった）。</p>
+
+<div class="foot">この1枚は監査記録・設計書・要件書・意図書に書かれていることだけを写したもの。判断・評価は加えていない。「AI判断」の印は本文に100件（design.md冒頭の注記より）。</div>
