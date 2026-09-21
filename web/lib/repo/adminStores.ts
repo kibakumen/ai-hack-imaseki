@@ -7,7 +7,7 @@
 
 import type { Deps } from "../ports";
 import type { AdminStoreFilter } from "../schemas/admin";
-import { publishingOfferCondition } from "./sqlFragments";
+import { publishingOfferCondition, remainingExpression } from "./sqlFragments";
 import type { StoreStatus } from "./stores";
 
 type Db = Deps["db"];
@@ -19,6 +19,18 @@ export type AdminStoreListRow = {
   email: string | null;
   status: StoreStatus;
   publishing: boolean;
+  /** 登録した時刻（並び替え「登録が新しい順」の元・基準は stores.created_at）。 */
+  createdAt: string;
+  /** 受け取り実績＝完了済みの確保の数（並び替え「受け取り実績が多い順」）。0件なら0。 */
+  claims: number;
+  /** 予算の下限（並び替え「予算が安い順」）。未設定の店は null。 */
+  budgetMin: number | null;
+  /**
+   * 公開中のオファーの残り枠（並び替え「残り枠が多い順」）。公開中のオファーが無い店は null
+   * （タスク8の持ち場の外で作った値を装わない）——並べるときは末尾へ回す（画面側 compareNullsLast）。
+   * `sqlFragments.remainingExpression` を直に使うので、客側の「残り」の判断と食い違わない。
+   */
+  offerRemaining: number | null;
 };
 
 export type AdminStoreDetailRow = AdminStoreListRow & {
@@ -50,6 +62,24 @@ const binder = () => {
 
 const toBoolean = (value: unknown): boolean => value === 1 || value === true || (typeof value === "string" && value !== "");
 
+/**
+ * 受け取り実績＝その店の確保のうち完了済みの数。`reservations.store_id` を直に見る
+ * （タスク13の設計より、店の全確保は `store_id` を持つので offers 経由の JOIN は要らない）。
+ * `status='completed'` は `effectiveState` が期限切れから導く値ではなく、保存された値そのもの
+ * （domain/reservation.ts の注記どおり）なので、SQL の `status='completed'` で正確に数えられる。
+ */
+const adminStoreClaimsExpression = (storeAlias: string): string =>
+  `(SELECT COUNT(*) FROM reservations cr WHERE cr.store_id = ${storeAlias}.id AND cr.status = 'completed')`;
+
+/**
+ * 公開中のオファーの残り枠。その店に公開中のオファーは同時に1つだけ（`publishOffer` が二重公開を
+ * 断る・基準 17.9）ので `LIMIT 1` で確定する。無ければ null（存在しない値を作らない）。
+ * 残りの数え方は `sqlFragments.remainingExpression` を直に呼ぶ——客側の「残り」と同じ答えを出す。
+ */
+const adminStorePublishingRemainingExpression = (storeAlias: string, nowPlaceholder: string): string =>
+  `(SELECT ${remainingExpression("ao", nowPlaceholder)} FROM offers ao` +
+  ` WHERE ao.store_id = ${storeAlias}.id AND ${publishingOfferCondition("ao", nowPlaceholder)} LIMIT 1)`;
+
 const toListRow = (row: Record<string, unknown>): AdminStoreListRow => ({
   id: row.id as string,
   name: row.name as string,
@@ -57,6 +87,10 @@ const toListRow = (row: Record<string, unknown>): AdminStoreListRow => ({
   email: (row.email as string | null) ?? null,
   status: row.status as StoreStatus,
   publishing: toBoolean(row.publishing),
+  createdAt: row.created_at as string,
+  claims: Number(row.claims ?? 0),
+  budgetMin: (row.budget_min as number | null) ?? null,
+  offerRemaining: row.offer_remaining === null || row.offer_remaining === undefined ? null : Number(row.offer_remaining),
 });
 
 /**
@@ -78,7 +112,10 @@ export const listStoresForAdmin = async (
     conditions.push(`(s.name LIKE ${like} ESCAPE '\\' OR COALESCE(s.address, '') LIKE ${like} ESCAPE '\\' OR COALESCE(a.email, '') LIKE ${like} ESCAPE '\\')`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const sql = `SELECT s.id, s.name, s.address, s.status, a.email, ${publishingExists} AS publishing
+  const sql = `SELECT s.id, s.name, s.address, s.status, s.created_at, s.budget_min, a.email,
+       ${publishingExists} AS publishing,
+       ${adminStoreClaimsExpression("s")} AS claims,
+       ${adminStorePublishingRemainingExpression("s", now)} AS offer_remaining
      FROM stores s
      LEFT JOIN accounts a ON a.store_id = s.id AND a.role = 'store'
      ${where}
@@ -104,9 +141,11 @@ export const summarizeStoresForAdmin = async (db: Db, nowIso: string): Promise<A
 export const findStoreForAdmin = async (db: Db, storeId: string, nowIso: string): Promise<AdminStoreDetailRow | null> => {
   const row = await db
     .prepare(
-      `SELECT s.id, s.name, s.address, s.status, s.url, s.genres, s.menus, s.budget_min, s.budget_max,
+      `SELECT s.id, s.name, s.address, s.status, s.url, s.genres, s.menus, s.created_at, s.budget_min, s.budget_max,
               s.license_key, s.card_registered_at, a.email,
-              EXISTS (SELECT 1 FROM offers o WHERE o.store_id = s.id AND ${publishingOfferCondition("o", "?2")}) AS publishing
+              EXISTS (SELECT 1 FROM offers o WHERE o.store_id = s.id AND ${publishingOfferCondition("o", "?2")}) AS publishing,
+              ${adminStoreClaimsExpression("s")} AS claims,
+              ${adminStorePublishingRemainingExpression("s", "?2")} AS offer_remaining
          FROM stores s
          LEFT JOIN accounts a ON a.store_id = s.id AND a.role = 'store'
         WHERE s.id = ?1`,

@@ -17,6 +17,14 @@ export type AdminStoreListItem = {
   status: StoreStatus;
   /** 公開中のオファー（残りが0のものを含む・基準 24.4）を持っているか */
   publishing: boolean;
+  /** 登録した時刻（ISO 8601）。並び替え「登録が新しい順」の元。 */
+  createdAt: string;
+  /** 受け取り実績＝完了済みの確保の数。並び替え「受け取り実績が多い順」の元。 */
+  claims: number;
+  /** 予算の下限。未設定の店は null。並び替え「予算が安い順」の元。 */
+  budgetMin: number | null;
+  /** 公開中のオファーの残り枠。公開中のオファーが無い店は null。並び替え「残り枠が多い順」の元。 */
+  offerRemaining: number | null;
 };
 
 export type AdminStoreListResult = { items: AdminStoreListItem[]; summary: AdminStoreSummary };
