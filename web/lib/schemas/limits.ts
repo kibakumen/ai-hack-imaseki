@@ -125,3 +125,17 @@ export const REPORT_RATE_WINDOW_MS = 60 * 60 * 1000;
 /** 同じアカウントへのログインの失敗が10回続くと、15分そのアカウントへのログインを断る（基準 30.4） */
 export const LOGIN_FAILURE_LIMIT = 10;
 export const LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
+// 要件8（受け取りと確保）の基準 8.2・8.3（タスク13が足した）
+/** コードのもとになる乱数の長さ（domain/code.ts が先頭4バイトを8桁に直す） */
+export const CODE_BYTES = 4;
+/**
+ * 空きのコードを探す回数の上限。前半は乱数の引き直し、それで見つからなければ隣の値を見る
+ * （`domain/code.nextCode`）。値は AI判断——1億通りに対し、引き直し4回で当たらない見込みは無い。
+ */
+export const CODE_DRAW_ATTEMPTS = 4;
+export const CODE_SEARCH_ATTEMPTS = 12;
+/**
+ * 入力で受ける番号（オファー・確保・取得の記録）の長さの上限（AI判断）。
+ * 断るためではなく、長すぎる本文を早く切るため（実際の番号は16バイトを base64url にした22字）。
+ */
+export const ID_MAX_LENGTH = 64;

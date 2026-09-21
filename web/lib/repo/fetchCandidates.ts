@@ -5,7 +5,7 @@
 // 時刻の比較は、呼ぶ側が束縛した「今」で行う（SQLite の datetime('now') は使わない・実行者への契約）。
 
 import type { Deps } from "../ports";
-import { RECEIVABLE_CONDITION } from "./sqlFragments";
+import { receivableCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -49,7 +49,7 @@ const CANDIDATES_SQL = `
   JOIN stores s ON s.id = o.store_id
   WHERE s.status = 'approved'
     AND s.lat IS NOT NULL AND s.lng IS NOT NULL
-    AND ${RECEIVABLE_CONDITION}
+    AND ${receivableCondition("o", "?1")}
   ORDER BY s.id
 `;
 
