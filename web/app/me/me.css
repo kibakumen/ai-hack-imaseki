@@ -664,3 +664,93 @@
   border-color: var(--color-highlight-edge);
   color: var(--color-highlight-text);
 }
+
+/* ---------- 2026-09-22 の導線の直し（自動登録・場所・確定の演出）の見た目 ----------
+   部品の側は色を1つも持たない（構造の検査 32.3）。ここだけが色を知っている。 */
+
+/* 場所——現在地のボタンと、その下の自由入力 */
+.fetch-place {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.use-location {
+  align-self: flex-start;
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  color: var(--color-accent);
+  font-weight: 700;
+  padding: 0.55rem 1.1rem;
+}
+/* 欄の中身が現在地から離れたとき、いつでも戻せることを示す（本人の指摘） */
+.use-location-away {
+  animation: attention-pulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+.locate-status {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+.locate-away {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+/* 今すぐ探す——場所のすぐ下でいちばん目立つ */
+.fetch-submit {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--color-on-accent, #fff);
+  background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 70%, #f59e0b));
+  border: none;
+  border-radius: var(--radius-lg, 1rem);
+  box-shadow: var(--shadow-md, 0 6px 16px rgb(0 0 0 / 0.15));
+}
+
+/* 確定の演出——置き方は部品の inline が持つので、ここは色と文字だけ */
+.claimed-celebration {
+  background: linear-gradient(160deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 55%, #fbbf24)) !important;
+  color: var(--color-on-accent, #fff);
+}
+.claimed-celebration-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+  padding: 2rem 1.25rem;
+}
+.claimed-mark {
+  font-size: clamp(2rem, 9vw, 3rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.claimed-code-label {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+.claimed-route {
+  margin-top: 0.5rem;
+  display: inline-block;
+  padding: 0.7rem 1.2rem;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface);
+  color: var(--color-accent);
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: var(--shadow-md, 0 6px 16px rgb(0 0 0 / 0.2));
+}
+.confetti-piece {
+  animation: confetti-fall 1.4s ease-in forwards;
+}
+
+/* 人かどうかの確かめ——裏で走る間は目立たせない */
+.human-check-quiet {
+  min-height: 0;
+  opacity: 0.35;
+  transform: scale(0.9);
+  transform-origin: top left;
+}

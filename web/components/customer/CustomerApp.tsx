@@ -18,13 +18,13 @@
 // 同じで、応答の `home` をそのまま使う（`applyHome`）。次の一手をどこへ繋ぐかはここが決め、
 // 断りの文とボタンの文は `RefusalNotice` が `domain/texts` から引く。
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { apiCall, isFailure, isNetworkFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
 import { usePolling } from "../../lib/client/usePolling";
 import { AccountSettings } from "./AccountSettings";
 import { AdminCancelledView } from "./AdminCancelledView";
-import { ClaimCelebration } from "./ClaimCelebration";
+import { ClaimedCelebration } from "./ClaimedCelebration";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
 import { FetchForm, type FetchResult } from "./FetchForm";
@@ -71,14 +71,11 @@ export const CustomerApp = () => {
   const [panel, setPanel] = useState<Panel>("none");
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   /**
-   * 受け取れた**直後**か（2026-09-22 の見た目の直し。第1回の指摘「受け取った瞬間にファンファーレ
-   * みたいなエフェクトが欲しい」）。ホームの種類だけでは「今受け取った」と「確保を持ったまま
-   * 開き直した」を見分けられないので、応答が通った瞬間だけ立てる。幕（`ClaimCelebration`）は
-   * しばらくしたら自分で引き、ここを倒す。
+   * たった今受け取りが通ったか（2026-09-22 の本人の指摘「受け取った瞬間にファンファーレみたいな
+   * エフェクト」「別画面に遷移してオファー承諾の楽しい演出」）。確保中の表示は消さずに、その上へ
+   * `ClaimedCelebration` を重ねる。閉じれば下の確保中の表示がそのまま在る。
    */
   const [celebrating, setCelebrating] = useState(false);
-  /** 幕の側の effect が毎描画で作り直されないよう、受け皿の姿を固定する */
-  const stopCelebrating = useCallback(() => setCelebrating(false), []);
 
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
@@ -126,10 +123,9 @@ export const CustomerApp = () => {
     const keepsNotice = responded !== null && KEEPS_REFUSAL.includes(responded.kind);
     setRefused(body !== undefined && keepsNotice ? { offerId, body } : null);
     // 通ったときは結果の一覧を片づける（確保中の表示へ移る・基準 8.5）
-    if (failure === null) {
-      setFetchResult(null);
-      setCelebrating(true);
-    }
+    if (failure === null) setFetchResult(null);
+    // 通って確保中になったときだけ、受け取りの演出を前面に出す（断りでは出さない）
+    if (failure === null && responded !== null && responded.reservation !== undefined && responded.kind === "active") setCelebrating(true);
   };
 
   /**
@@ -254,8 +250,18 @@ export const CustomerApp = () => {
     return null;
   };
 
+  /**
+   * 受け取った直後の演出（確保中の表示の上に重ねる）。閉じるか、確保が確保中でなくなったら消える
+   * ——期限切れ・取り消しに変わったあとまで「受け取りました」を出したままにしない。
+   */
+  const celebration =
+    celebrating && reservation !== undefined && home.kind === "active" ? (
+      <ClaimedCelebration reservation={reservation} onClose={() => setCelebrating(false)} />
+    ) : null;
+
   return (
     <main>
+      {celebration}
       {stale ? (
         <p className="msg" role="status" data-testid="stale-notice">
           最新の状態を確かめられていません。最後に確かめられた内容を出しています。
@@ -279,12 +285,6 @@ export const CustomerApp = () => {
       ) : (
         reservationView()
       )}
-
-      {/* 受け取れた瞬間の幕。確保中の囲い（`view-active`）の**外**に立てる——囲いの中に何かを足すと、
-          受け入れ検査が見ている「ホームページが無い店では外への行き先が無い」等の条件に触れうるため。 */}
-      {celebrating && reservation !== undefined && home.kind === "active" ? (
-        <ClaimCelebration code={reservation.code} storeName={reservation.storeName} onDone={stopCelebrating} />
-      ) : null}
 
       {RECENT_ENTRY_KINDS.includes(home.kind) ? (
         <nav aria-label="そのほか">

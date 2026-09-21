@@ -12,8 +12,21 @@ const GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 
 type GeocodeResponse = {
   status?: unknown;
-  results?: Array<{ geometry?: { location?: { lat?: unknown; lng?: unknown } } }>;
+  results?: Array<{ formatted_address?: unknown; geometry?: { location?: { lat?: unknown; lng?: unknown } } }>;
 };
+
+/**
+ * Google が返す日本の住所から、客が自分の居場所として読める部分だけを残す。
+ * 素の `formatted_address` は「日本、〒150-0043 東京都渋谷区道玄坂1丁目…」のように
+ * 国名と郵便番号が前に付き、場所の欄に入れると一目で読めない（速成版 `sprint/lib/geo.ts` の
+ * `normalizeJpAddress` と同じ整え方）。
+ */
+export const shortenJapaneseAddress = (raw: string): string =>
+  raw
+    .trim()
+    .replace(/^日本[、,]?\s*/, "")
+    .replace(/^〒?\s*\d{3}-?\d{4}\s*/, "")
+    .trim();
 
 export type GeocodingOptions = {
   /** Google の API の鍵（秘密。束縛から読む） */
@@ -22,28 +35,45 @@ export type GeocodingOptions = {
   fetch?: typeof globalThis.fetch;
 };
 
-export const createGeocoder = ({ apiKey, fetch: fetchImpl = globalThis.fetch }: GeocodingOptions): Geocoder => ({
-  geocode: async (text, opts) => {
-    // 空の文字は外へ聞かずに「直せなかった」（呼ぶ側が断る）。
-    if (text.trim() === "") return { ok: false };
+export const createGeocoder = ({ apiKey, fetch: fetchImpl = globalThis.fetch }: GeocodingOptions): Geocoder => {
+  /** 問い合わせを1回投げて、当たった応答の `results` を返す（読めない・0件は null）。 */
+  const ask = async (params: Record<string, string>, signal: AbortSignal | undefined): Promise<GeocodeResponse["results"] | null> => {
     try {
       const url = new URL(GEOCODE_URL);
-      url.searchParams.set("address", text);
+      for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
       url.searchParams.set("language", "ja");
-      url.searchParams.set("region", "jp");
       url.searchParams.set("key", apiKey);
 
-      const res = await fetchImpl(url, { signal: opts.signal });
-      if (!res.ok) return { ok: false };
+      const res = await fetchImpl(url, { signal });
+      if (!res.ok) return null;
       const json = (await res.json()) as GeocodeResponse;
       // ZERO_RESULTS・OVER_QUERY_LIMIT・REQUEST_DENIED はどれも「直せなかった」。
-      if (json.status !== "OK") return { ok: false };
-      const location = json.results?.[0]?.geometry?.location;
-      if (typeof location?.lat !== "number" || typeof location?.lng !== "number") return { ok: false };
-      return { ok: true, lat: location.lat, lng: location.lng };
+      if (json.status !== "OK") return null;
+      return json.results ?? null;
     } catch {
       // 打ち切り・通信の失敗・JSON でない応答。
-      return { ok: false };
+      return null;
     }
-  },
-});
+  };
+
+  return {
+    geocode: async (text, opts) => {
+      // 空の文字は外へ聞かずに「直せなかった」（呼ぶ側が断る）。
+      if (text.trim() === "") return { ok: false };
+      const results = await ask({ address: text, region: "jp" }, opts.signal);
+      const location = results?.[0]?.geometry?.location;
+      if (typeof location?.lat !== "number" || typeof location?.lng !== "number") return { ok: false };
+      return { ok: true, lat: location.lat, lng: location.lng };
+    },
+
+    // 逆方向（位置 → 地名）。`results[0]` がいちばん細かい住所。
+    reverse: async (point, opts) => {
+      if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return { ok: false };
+      const results = await ask({ latlng: `${point.lat},${point.lng}` }, opts.signal);
+      const first = results?.[0]?.formatted_address;
+      if (typeof first !== "string") return { ok: false };
+      const label = shortenJapaneseAddress(first);
+      return label === "" ? { ok: false } : { ok: true, label };
+    },
+  };
+};

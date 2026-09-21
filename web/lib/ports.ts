@@ -60,6 +60,16 @@ export type PitchWriter = {
 
 export type Geocoder = {
   geocode(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; lat: number; lng: number } | { ok: false }>;
+  /**
+   * 位置を地名へ直す（逆方向）。客の画面が**開いた瞬間に場所の欄へ地名を入れる**ために使う
+   * （2026-09-22 の本人の指摘「開いた瞬間にここに現在地の文字に変換した場所が入っていて」）。
+   *
+   * ⚠️ **任意**にしてある（`Deps.pitch` と同じ置き方）。この口を持たない場面では地名を出さずに
+   * 座標のまま探す——受け入れ検査の偽物（`tests/acceptance/v2/_fakes.ts` の `fakeGeocoder`）は
+   * この口を持たないので、**必須にすると検査の場面が落ちる**。地名は客への見せ方の飾りで、
+   * 探す筋（座標で探す）には要らない。
+   */
+  reverse?(point: { lat: number; lng: number }, opts: { signal?: AbortSignal }): Promise<{ ok: true; label: string } | { ok: false }>;
 };
 export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
 export type CardRegistrar = {
