@@ -37,13 +37,16 @@ describe("運営の数字: モデル別・用途別・倒れた回数", () => {
   it("モデルと用途が混ざった行から、モデル別（件数・平均実費・平均所要・検査落ち率・受け皿率）と用途別（件数・実費の合計・平均所要）と倒れた回数を正しく分ける", async () => {
     const scene = await receivedScene(ctx);
     const fetchId = scene.fetchId;
+    // id は検査の中で一意であればよい。`crypto` を直に呼ばないのは、lint が
+    // 「crypto を呼ぶのは lib/adapters だけ」という依存の向きを見張っているため。
+    let seq = 0;
     const insert = (row: { model: string | null; purpose: string; cost: number | null; ms: number; succeeded: number; vf: number; level: number | null }) =>
       ctx.db
         .prepare(
           `INSERT INTO ai_calls (id, fetch_id, purpose, cost_usd, duration_ms, succeeded, validation_failed, resolved_model, request_id, fallback_level, at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(crypto.randomUUID(), fetchId, row.purpose, row.cost, row.ms, row.succeeded, row.vf, row.model, null, row.level, ctx.clock.now().toISOString())
+        .bind(`call-${++seq}`, fetchId, row.purpose, row.cost, row.ms, row.succeeded, row.vf, row.model, null, row.level, ctx.clock.now().toISOString())
         .run();
 
     // gpt-4o-mini が「店の選定」を2回（1回は検査落ち）

@@ -20,22 +20,25 @@ export type StoreImageProps = {
 };
 
 export const StoreImage = ({ url, alt = "" }: StoreImageProps) => {
-  const [src, setSrc] = useState<string | null>(null);
+  // どの URL の答えなのかを一緒に持つ。`url` が変わった瞬間は「まだ答えが無い」を
+  // **描くときに** 導けるので、効果の中で同期的に状態を捨てる必要がない
+  // （同期の setState は連鎖した描き直しを起こすので lint が止める）。
+  const [answered, setAnswered] = useState<{ url: string | null; src: string | null }>({ url: null, src: null });
 
   useEffect(() => {
     let alive = true;
-    setSrc(null);
     if (!url) return;
     void (async () => {
       const answer = await apiCall<{ imageUrl?: unknown }>("GET", `/api/customer/store-image?url=${encodeURIComponent(url)}`);
       if (!alive) return;
-      setSrc(!isFailure(answer) && typeof answer.imageUrl === "string" ? answer.imageUrl : null);
+      setAnswered({ url, src: !isFailure(answer) && typeof answer.imageUrl === "string" ? answer.imageUrl : null });
     })();
     return () => {
       alive = false;
     };
   }, [url]);
 
+  const src = answered.url === url ? answered.src : null;
   if (!src) return null;
   // eslint-disable-next-line @next/next/no-img-element -- 店ごとに違う外部ドメインの画像なので、next/image の許可リスト設定を要しない img を使う
   return <img src={src} alt={alt} loading="lazy" className="offer-card__art-img" />;
