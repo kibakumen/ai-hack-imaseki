@@ -1,0 +1,633 @@
+/* 店の画面の見た目（2026-09-22。速成版 sprint/app/store で本人が磨いた形を v2 へ移した）。
+   色の値はここでも持たない——`app/globals.css` の `--color-*` だけを混ぜて濃淡を作るので、
+   暗い設定へ切り替わると、この面も一緒に切り替わる（要件32の基準 32.3 の考え方を守る）。
+   `app/store/layout.tsx` だけがこのファイルを読む＝店の画面の外には漏れない。 */
+
+.store-main {
+  max-width: 64rem;
+  gap: 0.75rem;
+}
+
+.store-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.store-head h1 {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.store-eyebrow {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+/* ---------- タブ（オファー・クーポン・店舗情報…） ---------- */
+
+.store-tabs {
+  background: var(--color-surface);
+  border-radius: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.store-tab {
+  border-radius: 0.75rem;
+  color: var(--color-text-muted);
+  flex: 1 1 5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.store-tab:hover {
+  color: var(--color-text);
+}
+
+.store-tab[aria-current="page"] {
+  background: var(--color-background);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-text) 16%, transparent);
+  color: var(--color-text);
+}
+
+/* ---------- 共通のカード ---------- */
+
+.store-card {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.store-card--accent {
+  background: linear-gradient(160deg, var(--color-background), color-mix(in srgb, var(--color-accent) 9%, var(--color-background)));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.store-card > h2,
+.store-card > h3 {
+  margin: 0;
+}
+
+.store-card__head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.store-badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
+  border-radius: 999px;
+  color: var(--color-accent-text);
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+}
+
+.store-badge--off {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.store-badge__dot {
+  animation: store-pulse 1.6s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 999px;
+  height: 0.5rem;
+  width: 0.5rem;
+}
+
+.store-badge--off .store-badge__dot {
+  animation: none;
+}
+
+.store-empty {
+  background: var(--color-surface);
+  border-radius: 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  padding: 0.75rem;
+}
+
+.store-note {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+/* ---------- 向かっている客（いちばん上・横長・完了がすぐ押せる） ---------- */
+
+.store-arrivals {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.store-arrivals > h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.store-arrival-grid {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 48rem) {
+  .store-arrival-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.store-arrival {
+  align-items: center;
+  animation: store-pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 10%, transparent);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.75rem;
+}
+
+.store-arrival--done {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  box-shadow: none;
+  color: var(--color-text-muted);
+}
+
+.store-arrival__main {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.store-arrival__name {
+  font-weight: 700;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-arrival__meta {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.store-arrival__side {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+.store-arrival__code {
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 1.125rem;
+  letter-spacing: 0.15em;
+  margin: 0;
+}
+
+.store-arrival__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.store-past {
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.store-past > summary {
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.store-past .store-arrival-grid {
+  margin-top: 0.5rem;
+}
+
+/* ---------- ボタン ---------- */
+
+.store-btn {
+  border-radius: 0.75rem;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.625rem 1rem;
+}
+
+.store-btn--primary {
+  font-size: 0.9375rem;
+}
+
+.store-btn--quiet {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.375rem 0.625rem;
+}
+
+.store-btn--danger {
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--color-background));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-danger);
+}
+
+/* ---------- ダイヤル式のピッカー ---------- */
+
+.store-dials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.store-dial {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  /* 裏の入力欄（.store-sr-only）をこの中に収めるため */
+  position: relative;
+}
+
+.store-dial__label {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* `--store-dial-item`（目盛り1つの高さ）は WheelPicker.tsx が渡す。
+   中央へ寄せる計算が同じ数を使うので、こちらには写しを置かない（下の値は渡らなかった時の保険）。 */
+.store-dial__window {
+  --store-dial-item: 32px;
+
+  position: relative;
+}
+
+.store-dial__rail {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  /* 3行ぶんだけ見せる（中央の1行が選ばれた値） */
+  height: calc(var(--store-dial-item) * 3);
+  overflow-y: scroll;
+  padding-block: var(--store-dial-item);
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  text-align: center;
+  width: 3.75rem;
+}
+
+.store-dial__rail::-webkit-scrollbar {
+  display: none;
+}
+
+.store-dial__item {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex;
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-weight: 700;
+  height: var(--store-dial-item);
+  justify-content: center;
+  scroll-snap-align: center;
+}
+
+.store-dial__item--on {
+  color: var(--color-text);
+}
+
+.store-dial__marker {
+  border-block: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  border-radius: 0.375rem;
+  height: var(--store-dial-item);
+  inset-inline: 0;
+  pointer-events: none;
+  position: absolute;
+  top: var(--store-dial-item);
+}
+
+.store-dial__unit {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+/* 目には出さないが DOM には残す（読み上げと キーボード入力の受け口）。 */
+.store-sr-only {
+  block-size: 1px;
+  border: 0;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+}
+
+/* ---------- クーポンのチェックのカード（横並び） ---------- */
+
+.store-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.store-chip {
+  align-items: center;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 0.875rem;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.875rem;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.5rem 0.75rem;
+}
+
+.store-chip:has(input:checked) {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-background));
+  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
+  font-weight: 700;
+}
+
+.store-chip__text {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.store-chip__note {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+}
+
+/* ---------- 開け閉め（終了時刻を初めは隠す） ---------- */
+
+.store-collapse {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.store-collapse--closed {
+  display: none;
+}
+
+.store-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.store-field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.store-field > label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.store-field > input {
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.625rem;
+}
+
+/* ---------- 配信カードの2カラム ---------- */
+
+.store-two-col {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 48rem) {
+  .store-two-col {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.store-col {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.store-col--aside {
+  align-content: start;
+  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-background));
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  padding: 0.75rem;
+}
+
+.store-facts {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.store-fact {
+  background: color-mix(in srgb, var(--color-surface) 60%, var(--color-background));
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.store-fact__label {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+}
+
+.store-fact__value {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.store-change {
+  border: 1px solid var(--color-border);
+  border-radius: 0.875rem;
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.625rem;
+}
+
+.store-change > label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.store-change__line {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.store-change__line > input {
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  width: 6rem;
+}
+
+/* ---------- 折れ線グラフ ---------- */
+
+.store-chart {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.store-chart__legend {
+  display: grid;
+  gap: 0.375rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.store-chart__svg {
+  height: 6rem;
+  width: 100%;
+}
+
+.store-chart__line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.store-chart__line--received {
+  stroke: var(--color-accent);
+}
+
+.store-chart__line--capacity {
+  stroke: var(--color-text-muted);
+  stroke-dasharray: 4 4;
+}
+
+.store-chart__dot {
+  fill: var(--color-accent);
+}
+
+.store-chart__legend dd {
+  margin: 0;
+}
+
+.store-chart__axis {
+  color: var(--color-text-muted);
+  display: flex;
+  font-size: 0.625rem;
+  justify-content: space-between;
+}
+
+.store-progress {
+  align-items: center;
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.5rem;
+}
+
+.store-progress__track {
+  background: var(--color-surface);
+  border-radius: 999px;
+  flex: 1;
+  height: 0.625rem;
+  overflow: hidden;
+}
+
+.store-progress__bar {
+  background: var(--color-accent);
+  border-radius: 999px;
+  height: 100%;
+  transition: width 240ms ease;
+}
+
+/* ---------- 確かめの窓 ---------- */
+
+.store-confirm {
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  border-radius: 1rem;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--color-text) 18%, transparent);
+  display: grid;
+  gap: 0.625rem;
+  padding: 1rem;
+}
+
+.store-confirm__buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ---------- 動き ---------- */
+
+@keyframes store-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes store-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .store-arrival,
+  .store-badge__dot {
+    animation: none;
+  }
+
+  .store-dial__rail {
+    scroll-behavior: auto;
+  }
+}

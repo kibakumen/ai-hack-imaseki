@@ -89,8 +89,12 @@ export const ProfileForm = () => {
     };
   }, []);
 
+  /** 外すのはいつでもできる。足すのは上限まで（画面の側でも止める・下の fieldset の注を参照）。 */
   const toggleGenre = (genre: string) => {
-    setGenres((prev) => (prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]));
+    setGenres((prev) => {
+      if (prev.includes(genre)) return prev.filter((g) => g !== genre);
+      return prev.length >= STORE_GENRES_MAX ? prev : [...prev, genre];
+    });
   };
 
   const addMenu = () => {
@@ -176,20 +180,32 @@ export const ProfileForm = () => {
       />
       <FieldMessage name="url" failure={failure} ctx={{ field: "ホームページの URL", hint: URL_HINT, max: STORE_URL_MAX }} />
 
-      <fieldset>
-        <legend>ジャンル（{STORE_GENRES_MIN}〜{STORE_GENRES_MAX}個）</legend>
-        {TEXTS.genres.map((genre) => (
-          <label key={genre} htmlFor={`store-profile-genre-${genre}`}>
-            <input
-              id={`store-profile-genre-${genre}`}
-              data-testid={`genre-${genre}`}
-              type="checkbox"
-              checked={genres.includes(genre)}
-              onChange={() => toggleGenre(genre)}
-            />
-            {genre}
-          </label>
-        ))}
+      {/* ⚠️ 上限（3個）は**チェックを付けさせない形**で示す（2026-09-21 の本人の指摘）。
+          4つ目を押せてから入口に断られるより、押せないほうが早く分かる。
+          下限（1個）と上限そのものの正本は入口——ここは同じ数を schemas/limits から読んで
+          見た目に映すだけで、規則を画面に写し取ってはいない。 */}
+      <fieldset className="store-field">
+        <legend>
+          ジャンル（{genres.length}/{STORE_GENRES_MAX}・{STORE_GENRES_MIN}〜{STORE_GENRES_MAX}個）
+        </legend>
+        <div className="store-chips">
+          {TEXTS.genres.map((genre) => {
+            const checked = genres.includes(genre);
+            return (
+              <label className="store-chip" key={genre} htmlFor={`store-profile-genre-${genre}`}>
+                <input
+                  id={`store-profile-genre-${genre}`}
+                  data-testid={`genre-${genre}`}
+                  type="checkbox"
+                  checked={checked}
+                  disabled={!checked && genres.length >= STORE_GENRES_MAX}
+                  onChange={() => toggleGenre(genre)}
+                />
+                <span className="store-chip__text">{genre}</span>
+              </label>
+            );
+          })}
+        </div>
       </fieldset>
       <FieldMessage name="genres" failure={failure} ctx={{ field: "ジャンル", min: STORE_GENRES_MIN, max: STORE_GENRES_MAX }} />
 

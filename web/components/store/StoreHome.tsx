@@ -4,19 +4,22 @@
 // 未承認なら足りないもののチェックリストを出す（設計書「店の画面」の1）。
 // 部品は返された値を描くだけで、自分では判断しない。
 //
-// ⚠️ **この画面は3つのタスクが順に育てる**（2026-09-21 の並列の実装）。
-//    タスク7（ここ）が帯とチェックリストと取り直しの骨を置き、
-//    **タスク9 が公開中のオファーのカード（`offer`）**、**タスク17 が「向かっている客」（`arrivals`）**を
-//    下の ⚠️ の場所へ足す。公開のフォームの中身もタスク9（`PublishForm`）。
+// 並びは 2026-09-21 の本人の指摘で入れ替えた（速成版 sprint/app/store が基準）:
+//   **向かっている客がいちばん上**——店が開きっぱなしにするのはこの画面で、いちばん急ぐのは
+//   「来た客を完了にする」操作だから。公開の設定はその下（1日に何度も触るものではない）。
+// 画面のあいだの行き来はタブに変えた（StoreNav）。新しい客が増えた時は音で知らせる。
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiCall, isFailure } from "../../lib/client/api";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
 import { ArrivalsList, type ArrivalsListRow } from "./ArrivalsList";
+import { playNotifyBeep } from "./beep";
 import { PublishForm, type PublishFormCoupon, type PublishFormPrefill } from "./PublishForm";
 import { OfferPanel, type OfferPanelOffer } from "./OfferPanel";
+import { appendTrend, type TrendPoint } from "./OfferTrend";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusBanner, type StoreStatusValue } from "./StatusBanner";
+import { StoreNav } from "./StoreNav";
 
 /** 入口 `GET /api/store/home` の応答のうち、この画面が読む分（受け入れ検査の契約 `StoreHomeDto`）。 */
 export type StoreHomeView = {
@@ -32,22 +35,44 @@ export type StoreHomeView = {
 
 export const StoreHome = () => {
   const [home, setHome] = useState<StoreHomeView | null>(null);
+  /** 「今日の動き」の点。カードが作り直されても消えないように、ここで持つ */
+  const [trend, setTrend] = useState<TrendPoint[]>([]);
+  /** 前に見た確保の番号。**初めの読み込みでは鳴らさない**（開いた瞬間に全員ぶん鳴るのを避ける） */
+  const seenRef = useRef<Set<string> | null>(null);
 
   const loadHome = useCallback(async (): Promise<StoreHomeView | null> => {
     const result = await apiCall<StoreHomeView>("GET", "/api/store/home");
     return isFailure(result) ? null : result;
   }, []);
 
+  /**
+   * 取り直した中身を受け取ったときの1手ぶん——
+   *   1. 新しく向かい始めた客がいれば音で知らせる（気づけないと客を待たせるため）
+   *   2. 「今日の動き」に点を足す（値が変わった時だけ）
+   * 描く途中ではなく**受け取った時**に済ませる（描き直しの連鎖を作らない）。
+   */
+  const absorb = useCallback((next: StoreHomeView) => {
+    const ids = new Set((next.arrivals ?? []).filter((row) => row.kind === "active").map((row) => row.reservationId));
+    const seen = seenRef.current;
+    seenRef.current = ids;
+    if (seen !== null && [...ids].some((id) => !seen.has(id))) playNotifyBeep();
+    const at = Date.now();
+    setTrend((prev) => appendTrend(prev, next.offer, at));
+    setHome(next);
+  }, []);
+
   useEffect(() => {
     let alive = true;
     void (async () => {
       const next = await loadHome();
-      if (alive) setHome(next);
+      if (!alive) return;
+      if (next) absorb(next);
+      else setHome(null);
     })();
     return () => {
       alive = false;
     };
-  }, [loadHome]);
+  }, [loadHome, absorb]);
 
   // 確保の追加と状態の変化を30秒以内に一覧へ映す（基準 20.4）。開いている間だけ動き、
   // 取れなかった回は前の値のままにする（一覧が空に落ちて、向かっている客が消えないように）。
@@ -56,17 +81,22 @@ export const StoreHome = () => {
     const timer = setInterval(() => {
       void (async () => {
         const next = await loadHome();
-        if (alive && next) setHome(next);
+        if (!alive || !next) return;
+        absorb(next);
       })();
     }, ARRIVALS_REFRESH_MS);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, [loadHome]);
+  }, [loadHome, absorb]);
 
   const reload = () => {
-    void (async () => setHome(await loadHome()))();
+    void (async () => {
+      const next = await loadHome();
+      if (next) absorb(next);
+      else setHome(null);
+    })();
   };
 
   if (!home) return <main aria-busy="true" />;
@@ -75,23 +105,25 @@ export const StoreHome = () => {
   const canPublish = home.status === "approved" && home.offer === null;
 
   return (
-    <main>
+    <main className="store-main">
+      <div className="store-head">
+        <div>
+          <p className="store-eyebrow">店の画面</p>
+          <h1>今日のオファー</h1>
+        </div>
+      </div>
+
+      <StoreNav active="home" />
+
       <StatusBanner status={home.status} />
 
       {home.status === "pending" && <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />}
 
-      {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={reload} />}
-
-      {home.offer ? <OfferPanel offer={home.offer} onChanged={reload} /> : null}
-
       <ArrivalsList rows={home.arrivals ?? []} onChanged={reload} />
 
-      <nav>
-        <a href="/store/profile">店の情報</a>
-        <a href="/store/coupons">クーポン</a>
-        <a href="/store/documents">書類</a>
-        <a href="/store/results">実績</a>
-      </nav>
+      {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={reload} />}
+
+      {home.offer ? <OfferPanel offer={home.offer} trend={trend} onChanged={reload} /> : null}
     </main>
   );
 };

@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
 import { FormMessage } from "../ui/InputRefusal";
+import { StoreNav } from "./StoreNav";
 import { dateTimeInJst } from "./jstTime";
 
 /** 取り消された数の内訳（基準 23.6）。 */
@@ -58,7 +59,8 @@ export const ResultsTable = () => {
   }, []);
 
   return (
-    <main>
+    <main className="store-main">
+      <StoreNav active="results" />
       <h1>実績</h1>
 
       <FormMessage failure={failure} />
