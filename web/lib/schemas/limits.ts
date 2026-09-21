@@ -42,3 +42,9 @@ export const SESSION_TOKEN_BYTES = 16;
  */
 export const SESSION_MAX_AGE_SECONDS = 25 * 60 * 60;
 export const SESSION_RENEW_WITHIN_SECONDS = 60 * 60;
+
+/**
+ * 【最終日】運営が発行する仮のパスワードの乱数の長さ（要件14の基準 14.11: 16字以上）。
+ * 16バイトを base64url へ直すと22字になり、基準の16字を満たす（値は AI判断）。
+ */
+export const TEMP_PASSWORD_BYTES = 16;

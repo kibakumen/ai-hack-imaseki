@@ -38,8 +38,10 @@ const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
 // ---------- 項目ごとの理由（reason） ----------
 const FIELD_REASON_TEXTS: Record<string, (ctx: Ctx) => string> = {
   required: (ctx) => `${str(ctx.field, "この項目")}を入れてください。`,
-  too_short: (ctx) => `${str(ctx.field, "この項目")}は${str(ctx.min, "")}〜${str(ctx.max, "")}字で入れてください。`,
-  too_long: (ctx) => `${str(ctx.field, "この項目")}は${str(ctx.min, "")}〜${str(ctx.max, "")}字で入れてください。`,
+  // ⚠️ 短い側と長い側で**違う文**にする（受け入れ検査 r14 の 14.15 が、同じ欄に続けて出た2つの文が
+  // 入れ替わったことを、文の違いで見る）。範囲そのものは両方に出す——直すには上下の両方が要るため。
+  too_short: (ctx) => `${str(ctx.field, "この項目")}は${str(ctx.min, "")}〜${str(ctx.max, "")}字で入れてください（今は短いようです）。`,
+  too_long: (ctx) => `${str(ctx.field, "この項目")}は${str(ctx.min, "")}〜${str(ctx.max, "")}字で入れてください（今は長いようです）。`,
   out_of_range: (ctx) => `${str(ctx.field, "この項目")}は${str(ctx.min, "")}〜${str(ctx.max, "")}の数で入れてください。`,
   not_integer: (ctx) => `${str(ctx.field, "この項目")}は整数で入れてください。`,
   bad_format: (ctx) => `${str(ctx.field, "この項目")}は${str(ctx.hint, "決まった形式")}で入れてください。`,
