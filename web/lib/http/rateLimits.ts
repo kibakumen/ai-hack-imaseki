@@ -18,6 +18,8 @@ import {
   REGISTER_RATE_WINDOW_MS,
   REPORT_RATE_LIMIT,
   REPORT_RATE_WINDOW_MS,
+  STORE_IMAGE_RATE_LIMIT,
+  STORE_IMAGE_RATE_WINDOW_MS,
 } from "../schemas/limits";
 
 /** 何で数えるか。客の番号（基準 30.1・30.3）・接続元（基準 30.2）・入力のメールアドレス（基準 30.4）。 */
@@ -43,6 +45,9 @@ const FETCH_RULE: RateRule = { name: "fetch", limit: FETCH_RATE_LIMIT, windowMs:
 const REGISTER_RULE: RateRule = { name: "register", limit: REGISTER_RATE_LIMIT, windowMs: REGISTER_RATE_WINDOW_MS, by: "ip", counts: "requests" };
 const REPORT_RULE: RateRule = { name: "report", limit: REPORT_RATE_LIMIT, windowMs: REPORT_RATE_WINDOW_MS, by: "customer", counts: "requests" };
 const LOGIN_RULE: RateRule = { name: "login", limit: LOGIN_FAILURE_LIMIT, windowMs: LOGIN_LOCK_WINDOW_MS, by: "loginEmail", counts: "failures" };
+// 店の画像の取得（2026-09-22 追加）。ここだけ**客の渡した URL へ Worker が自分から出ていく**ので、
+// 抑止が無いと外向きの取得を好きな回数踏ませられる。要件には無い（AI判断・要確認）。
+const STORE_IMAGE_RULE: RateRule = { name: "storeImage", limit: STORE_IMAGE_RATE_LIMIT, windowMs: STORE_IMAGE_RATE_WINDOW_MS, by: "customer", counts: "requests" };
 
 /** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則）。ここに無い入口には1度も表を引かない。 */
 const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
@@ -54,6 +59,7 @@ const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
   ["POST /api/register/store", REGISTER_RULE],
   ["POST /api/customer/reports", REPORT_RULE],
   ["POST /api/auth/login", LOGIN_RULE],
+  ["GET /api/customer/store-image", STORE_IMAGE_RULE],
 ]);
 
 export const rateRuleFor = (method: string, path: string): RateRule | null => RULES_BY_ROUTE.get(`${method} ${path}`) ?? null;

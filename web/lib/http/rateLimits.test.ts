@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import type { Deps } from "../ports";
 import type { RateCounterRow } from "../repo/rateCounters";
-import { FETCH_RATE_LIMIT, LOGIN_FAILURE_LIMIT, LOGIN_LOCK_WINDOW_MS, REGISTER_RATE_LIMIT } from "../schemas/limits";
+import { FETCH_RATE_LIMIT, LOGIN_FAILURE_LIMIT, LOGIN_LOCK_WINDOW_MS, REGISTER_RATE_LIMIT, STORE_IMAGE_RATE_LIMIT } from "../schemas/limits";
 import { CUSTOMER_COOKIE_NAME } from "./cookies";
 import { defineRoute } from "./defineRoute";
 import { decideRate, rateKeyFor, rateRuleFor, type RateRule } from "./rateLimits";
@@ -136,6 +136,17 @@ describe("抑止を掛ける入口と鍵", () => {
     expect(rateRuleFor("POST", "/api/auth/login")?.counts).toBe("failures");
     expect(rateRuleFor("GET", "/api/customer/home")).toBeNull();
     expect(rateRuleFor("POST", "/api/store/offers")).toBeNull();
+  });
+
+  // 2026-09-22 追加。店の画像の取得は**客が渡した URL へ Worker が自分から出ていく**唯一の入口で、
+  // 抑止が無いと外向きの取得を好きな回数踏ませられる。GET でも表が引かれることを併せて確かめる
+  // （既存の5つは全部 POST だったため、GET が素通りしないことが未検証だった）。
+  it("店の画像の取得にも規則が在り、GET でも表が引かれる", () => {
+    const rule = rateRuleFor("GET", "/api/customer/store-image");
+    expect(rule).not.toBeNull();
+    expect(rule!.limit).toBe(STORE_IMAGE_RATE_LIMIT);
+    expect(rule!.by).toBe("customer");
+    expect(rule!.counts).toBe("requests");
   });
 
   it("30.2 客の登録と店の登録は同じ名前で数える（合わせて1時間に10回）", () => {
