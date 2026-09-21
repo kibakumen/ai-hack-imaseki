@@ -14,11 +14,27 @@ type FieldMessageProps = {
   name: string;
   failure: ApiFailure | null;
   ctx?: RefusalContext;
+  /**
+   * この項目の直下に出す、規則の断りの語（例: 住所が位置に直せなかった address_unresolved）。
+   * 理由（reason）だけでは何が起きたか伝わらない断りのために、呼ぶ側が項目に結びつける。
+   * 断りの語を読むのはこのファイルだけ（構造の検査が見張る）ので、呼ぶ側は語の一覧を渡すだけにする。
+   */
+  kinds?: string[];
 };
 
 /** その項目の断りが返っているときだけ、入力欄の直下に文を出す。 */
-export const FieldMessage = ({ name, failure, ctx }: FieldMessageProps) => {
-  const field = failure?.error?.fields?.find((f) => f.name === name);
+export const FieldMessage = ({ name, failure, ctx, kinds = [] }: FieldMessageProps) => {
+  const error = failure?.error;
+  const kind = error?.kind;
+  // 項目に結びついた規則の断りが先。あれば理由の文より、その語の文を出す。
+  if (kind !== undefined && kinds.includes(kind)) {
+    return (
+      <p className="msg" role="alert" data-testid={`msg-${name}`}>
+        {TEXTS.inputRefusal(kind, ctx)}
+      </p>
+    );
+  }
+  const field = error?.fields?.find((f) => f.name === name);
   if (!field) return null;
   return (
     <p className="msg" role="alert" data-testid={`msg-${name}`}>

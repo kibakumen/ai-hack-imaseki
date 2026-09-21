@@ -42,3 +42,23 @@ export const SESSION_TOKEN_BYTES = 16;
  */
 export const SESSION_MAX_AGE_SECONDS = 25 * 60 * 60;
 export const SESSION_RENEW_WITHIN_SECONDS = 60 * 60;
+
+// 要件15（店の情報）の基準 15.2・15.4・15.5・15.6・15.7・15.8
+// 店名の範囲は STORE_NAME_MIN・STORE_NAME_MAX をそのまま使う（要件12と同じ範囲・基準 15.2）。
+export const STORE_ADDRESS_MIN = 1;
+export const STORE_ADDRESS_MAX = 200;
+/** ホームページの URL の長さの上限（AI判断。断るためではなく、長すぎる本文を早く切るため） */
+export const STORE_URL_MAX = 2048;
+/** ホームページの URL は http か https で始まる（基準 15.4）。空のままは通る（基準 15.3） */
+export const HTTP_URL_PATTERN = /^https?:\/\//;
+/** 店のジャンルは1個以上3個以下（本人選択・要件15の補足） */
+export const STORE_GENRES_MIN = 1;
+export const STORE_GENRES_MAX = 3;
+export const MENU_NAME_MIN = 1;
+export const MENU_NAME_MAX = 40;
+export const MENUS_MAX = 5;
+// 店の予算の幅の範囲は、客の予算の上限と同じ 0〜100,000（基準 15.8）。同じ数を2度書かないため
+// BUDGET_MAX_MIN・BUDGET_MAX_MAX をそのまま使う（schemas/store.ts がこの2つを読む）。
+
+/** 地図のサービスの打ち切り（設計書「時間の割り振り」: 地図3秒）。差し替えた時計と AbortSignal の両方で使う */
+export const GEOCODE_TIMEOUT_MS = 3000;
