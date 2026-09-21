@@ -9,10 +9,12 @@
 //   - 未承認をもっと強調する大見出し＋「未承認だけ見る」ボタン（押すと一覧までスクロール）
 //   - 並び替え。既定は「登録が新しい順」。一覧の応答は登録した順（古い順）で返るので、その逆順で出す
 //     （`lib/repo/adminStores.ts` のコメント「並びは登録した順」に依拠）。
-//     ⚠️ 受け取り実績順・予算順・残り枠順は、一覧の応答（AdminStoreListItem）にその値が無く、
-//     `web/lib/**` を足さないと並べられない（このタスクの持ち場の外）。選べるが並ばないまま返す代わりに、
-//     選べなくして「まだ並べられない」ことを選択肢の側で見せる（下の SORT_OPTIONS の available）。
 //   - カードのデザイン（状態バッジ・件数タイル）
+//
+// 2026-09-22 並び替えの残り3つを有効化（本人指摘）: 一覧の入口（`lib/repo/adminStores.ts`）に
+// 受け取り実績・予算の下限・公開中のオファーの残り枠を足したので、選べるだけでなく実際に並ぶ。
+// 並べ替え自体はこの画面（クライアント側）で行う——問い合わせ文字列に `sort` は無い。
+// 予算未設定・オファー無しの店（値が null）は compareNullsLast で末尾へ回す。
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -30,6 +32,12 @@ type StoreRow = {
   email: string | null;
   status: StoreStatus;
   publishing?: boolean;
+  /** 受け取り実績＝完了済みの確保の数（並び替え「受け取り実績が多い順」）。応答に無ければ0扱い。 */
+  claims?: number;
+  /** 予算の下限。未設定の店は null（並び替え「予算が安い順」）。 */
+  budgetMin?: number | null;
+  /** 公開中のオファーの残り枠。無ければ null（並び替え「残り枠が多い順」）。 */
+  offerRemaining?: number | null;
 };
 
 type StoreListResponse = { items: StoreRow[]; summary: { publishing: number; pending: number } };
@@ -51,16 +59,39 @@ const STATUS_LABELS: Record<StoreStatus, string> = {
 
 type SortKey = "created_desc" | "claims_desc" | "price_asc" | "remaining_desc";
 
-/** `available: false` の3つは、一覧の応答に元データが無いため並べ替えられない（上のコメント参照）。 */
 const SORT_OPTIONS: { key: SortKey; label: string; available: boolean }[] = [
   { key: "created_desc", label: "登録が新しい順", available: true },
-  { key: "claims_desc", label: "受け取り実績が多い順", available: false },
-  { key: "price_asc", label: "予算が安い順", available: false },
-  { key: "remaining_desc", label: "残り枠が多い順", available: false },
+  { key: "claims_desc", label: "受け取り実績が多い順", available: true },
+  { key: "price_asc", label: "予算が安い順", available: true },
+  { key: "remaining_desc", label: "残り枠が多い順", available: true },
 ];
 
-/** 一覧の応答は登録した順（古い順）。「新しい順」はその逆順にするだけで並べられる。 */
-const sortItems = (items: StoreRow[], key: SortKey): StoreRow[] => (key === "created_desc" ? [...items].reverse() : items);
+/**
+ * null は常に末尾へ回す（予算未設定・公開中のオファー無し）。`direction` は null 以外どうしの比べ方
+ * （"asc"=小さい順・"desc"=大きい順）。
+ */
+const compareNullsLast = (a: number | null | undefined, b: number | null | undefined, direction: "asc" | "desc"): number => {
+  const av = a ?? null;
+  const bv = b ?? null;
+  if (av === null && bv === null) return 0;
+  if (av === null) return 1;
+  if (bv === null) return -1;
+  return direction === "asc" ? av - bv : bv - av;
+};
+
+/** 一覧の応答は登録した順（古い順）。「新しい順」はその逆順にするだけで並べられる（他の3つは値で並べる）。 */
+const sortItems = (items: StoreRow[], key: SortKey): StoreRow[] => {
+  switch (key) {
+    case "created_desc":
+      return [...items].reverse();
+    case "claims_desc":
+      return [...items].sort((a, b) => compareNullsLast(a.claims ?? 0, b.claims ?? 0, "desc"));
+    case "price_asc":
+      return [...items].sort((a, b) => compareNullsLast(a.budgetMin, b.budgetMin, "asc"));
+    case "remaining_desc":
+      return [...items].sort((a, b) => compareNullsLast(a.offerRemaining, b.offerRemaining, "desc"));
+  }
+};
 
 export const StoreList = () => {
   const [filter, setFilter] = useState("");
