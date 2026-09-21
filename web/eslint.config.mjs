@@ -141,10 +141,13 @@ const uiBoundary = {
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  { ignores: ["scripts/**"] },
+  // 組み込みの出力は lint の対象外。`.next/**` は eslint-config-next が既に外しているが、
+  // `.open-next/**`（公開用に1つへ束ねた約30MB の worker.js）と `.wrangler/**` は外していないので、
+  // 公開の組み立てを1度でも走らせたあとに `eslint .` が記憶を使い切って落ちる。
+  { ignores: ["scripts/**", ".open-next/**", ".wrangler/**"] },
   {
     files: ["**/*.{ts,tsx,js,mjs}"],
-    ignores: ["scripts/**"],
+    ignores: ["scripts/**", ".open-next/**", ".wrangler/**"],
     rules: {
       "no-console": "error",
       "no-restricted-globals": noRestrictedCrypto,
