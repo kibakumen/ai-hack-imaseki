@@ -21,6 +21,8 @@ CREATE TABLE sessions (
 CREATE TABLE stores (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  -- 店の登録の時刻。同点・同距離のときの並びに使う（要件6の基準 6.4・要件4の基準 4.12）
+  created_at TEXT NOT NULL DEFAULT '2026-09-21T00:00:00.000Z',
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'banned')),
   address TEXT,
   lat REAL,

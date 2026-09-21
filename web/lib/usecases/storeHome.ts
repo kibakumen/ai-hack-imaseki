@@ -4,11 +4,14 @@
 
 import type { Deps } from "../ports";
 import { findStoreSummary, type StoreStatus } from "../repo/stores";
+import { storeHomeOfferPart, type StoreHomeOfferPart } from "./storeHomeOffer";
 
-export type StoreHome = { id: string; status: StoreStatus };
+export type StoreHome = { id: string; status: StoreStatus } & StoreHomeOfferPart;
 
 /** 見分けの直後に店が消えた場合だけ null（入口が 401 に倒す）。 */
 export const storeHome = async (deps: Deps, storeId: string): Promise<StoreHome | null> => {
   const store = await findStoreSummary(deps.db, storeId);
-  return store ? { id: store.id, status: store.status } : null;
+  if (!store) return null;
+  // タスク9 の差し込み（オファー・公開のフォームの初めの値・足りない店の情報・クーポン）。
+  return { id: store.id, status: store.status, ...(await storeHomeOfferPart(deps, store.id)) };
 };

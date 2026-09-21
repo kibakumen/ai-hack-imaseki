@@ -32,17 +32,24 @@ type FormMessageProps = {
   /** このフォームが持っている項目名。ここに在る項目の断りは、項目の直下に出るのでここでは出さない。 */
   fieldNames?: string[];
   ctx?: RefusalContext;
+  /**
+   * 断りの種類ごとに、文の後ろへ足す行き先（例: `profile_incomplete` → 店の情報の画面）。
+   * どこへ送るかは画面の話なので呼ぶ側が決め、この部品は語で引いて描くだけ（判断はしない）。
+   */
+  links?: Record<string, { href: string; label: string }>;
 };
 
 /** 項目に帰せない断り（人かどうかの確かめ・規則の断り・通信の失敗）を、押した操作の直下に出す。 */
-export const FormMessage = ({ failure, fieldNames = [], ctx }: FormMessageProps) => {
+export const FormMessage = ({ failure, fieldNames = [], ctx, links }: FormMessageProps) => {
   const error = failure?.error;
   if (!error) return null;
   const fields = error.fields ?? [];
   if (fields.some((f) => fieldNames.includes(f.name))) return null;
+  const link = links?.[error.kind];
   return (
     <p className="msg" role="alert" data-testid="msg-form">
       {TEXTS.inputRefusal(error.kind, ctx)}
+      {link ? <a href={link.href}>{link.label}</a> : null}
     </p>
   );
 };
