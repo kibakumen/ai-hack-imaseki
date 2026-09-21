@@ -3,7 +3,7 @@
 // 時刻の比較は、手続きが束縛した「今」を引数で受ける（SQLite の datetime('now') は使わない）。
 
 import type { Deps } from "../ports";
-import { offerLiveCondition, remainingExpression } from "./sqlFragments";
+import { publishingOfferCondition, remainingExpression } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -83,7 +83,7 @@ export const isCouponInUse = async (db: Db, storeId: string, couponId: string, n
   const row = await db
     .prepare(
       `SELECT 1 AS found FROM offers o` +
-        ` WHERE o.store_id = ?1 AND ${offerLiveCondition("o", "?3")}` +
+        ` WHERE o.store_id = ?1 AND ${publishingOfferCondition("o", "?3")}` +
         ` AND EXISTS (SELECT 1 FROM json_each(o.coupon_ids) WHERE json_each.value = ?2)`,
     )
     .bind(storeId, couponId, nowIso)
@@ -122,7 +122,7 @@ export const findLiveOffer = async (db: Db, storeId: string, nowIso: string): Pr
   const row = await db
     .prepare(
       `SELECT ${OFFER_COLUMNS}, ${remainingExpression("o", "?2")} AS remaining FROM offers o` +
-        ` WHERE o.store_id = ?1 AND ${offerLiveCondition("o", "?2")}` +
+        ` WHERE o.store_id = ?1 AND ${publishingOfferCondition("o", "?2")}` +
         ` ORDER BY o.published_at DESC, o.rowid DESC LIMIT 1`,
     )
     .bind(storeId, nowIso)
@@ -163,7 +163,7 @@ export const insertOfferIfNone = async (db: Db, offer: NewOffer): Promise<boolea
       `INSERT INTO offers (id, store_id, capacity, initial_capacity, party_max, published_at, until_at, coupon_ids)` +
         ` SELECT ?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7` +
         ` WHERE EXISTS (SELECT 1 FROM stores s WHERE s.id = ?2 AND s.status = 'approved')` +
-        ` AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.store_id = ?2 AND ${offerLiveCondition("o", "?5")})`,
+        ` AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.store_id = ?2 AND ${publishingOfferCondition("o", "?5")})`,
     )
     .bind(offer.id, offer.storeId, offer.capacity, offer.partyMax, offer.publishedAtIso, offer.untilAtIso, JSON.stringify(offer.couponIds))
     .run();
@@ -176,7 +176,7 @@ export const insertOfferIfNone = async (db: Db, offer: NewOffer): Promise<boolea
  */
 export const stopLiveOffer = async (db: Db, storeId: string, nowIso: string): Promise<boolean> => {
   const result = await db
-    .prepare(`UPDATE offers SET ended_at = ?2, end_reason = 'stopped' WHERE store_id = ?1 AND ${offerLiveCondition("offers", "?2")}`)
+    .prepare(`UPDATE offers SET ended_at = ?2, end_reason = 'stopped' WHERE store_id = ?1 AND ${publishingOfferCondition("offers", "?2")}`)
     .bind(storeId, nowIso)
     .run();
   return changedRows(result) > 0;

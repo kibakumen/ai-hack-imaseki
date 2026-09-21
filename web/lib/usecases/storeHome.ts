@@ -9,6 +9,7 @@
 import { EMPTY_PUBLISH_PREFILL, missingProfileFields, type ArrivalView, type OfferView, type PublishPrefillView, type StoreStatusView } from "../domain/storeHome";
 import type { Deps } from "../ports";
 import { listCouponsByStore, type CouponRow } from "../repo/coupons";
+import { insertExpiredEvents } from "../repo/logs";
 import { findStoreHomeRow } from "../repo/stores";
 import { storeHomeOfferPart } from "./storeHomeOffer";
 
@@ -29,6 +30,11 @@ export type StoreHome = {
 export const storeHome = async (deps: Deps, storeId: string): Promise<StoreHome | null> => {
   const store = await findStoreHomeRow(deps.db, storeId);
   if (!store) return null;
+
+  // 期限切れの記録（要件27の基準 27.4）は、読む側の手続きの先頭で足す（設計書「期限切れの記録」）。
+  // 期限切れは書き込みを伴わないので、客のホームと店のホームのどちらかが読んだ時に記録が付く。
+  // 何度呼んでも増えない（タスク13が足した `insertExpiredEvents` が番号で重なりを落とす）。
+  await insertExpiredEvents(deps.db, { kind: "store", id: storeId }, deps.clock.now().toISOString());
 
   const coupons = await listCouponsByStore(deps.db, storeId);
 

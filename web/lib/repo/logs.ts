@@ -7,6 +7,10 @@
 //
 // ⚠️ 並行作業の申し送り: selections（タスク13）と reservation_events（タスク13）の追加も、
 // このファイルに同じ形で足すこと（記録の入口を1つにするため）。
+// → 2026-09-21 タスク13 が足した（このファイルの下半分）。**確保の状態が変わるたびに
+//   `insertReservationEvent` を呼ぶ**のが基準 27.4 の唯一の置き場所。タスク15（客の取り消し）・
+//   17（完了済み）・18（店の取り消し）・21（運営の停止）も、状態を変える1文が通った直後に
+//   これを呼ぶこと（呼ばないと、自動で取り消された割合〔要件33〕が後から数えられない）。
 
 import type { Deps } from "../ports";
 
@@ -85,5 +89,50 @@ export const insertAiCall = async (db: Db, call: AiCallRecord): Promise<void> =>
   await db
     .prepare(INSERT_AI_CALL)
     .bind(call.id, call.fetchId, call.costUsd, call.durationMs, call.succeeded, call.validationFailed, call.resolvedModel, call.requestId, call.fallbackLevel, call.at)
+    .run();
+};
+
+// ---------- 選択と、確保の状態の変化（タスク13が足した・要件27の基準 27.3・27.4） ----------
+
+/** 客が受け取った時に「どの取得のどの店が選ばれたか」を1件足す（基準 27.3）。 */
+export type SelectionRecord = { id: string; fetchId: string; storeId: string; at: string };
+
+/** 確保の状態が変わった時に「どの確保がどの状態へいつ変わったか」を1件足す（基準 27.4）。 */
+export type ReservationEventRecord = { id: string; reservationId: string; status: string; at: string };
+
+const INSERT_SELECTION = `INSERT INTO selections (id, fetch_id, store_id, at) VALUES (?1, ?2, ?3, ?4)`;
+
+const INSERT_RESERVATION_EVENT = `INSERT INTO reservation_events (id, reservation_id, status, at) VALUES (?1, ?2, ?3, ?4)`;
+
+export const insertSelection = async (db: Db, record: SelectionRecord): Promise<void> => {
+  await db.prepare(INSERT_SELECTION).bind(record.id, record.fetchId, record.storeId, record.at).run();
+};
+
+export const insertReservationEvent = async (db: Db, record: ReservationEventRecord): Promise<void> => {
+  await db.prepare(INSERT_RESERVATION_EVENT).bind(record.id, record.reservationId, record.status, record.at).run();
+};
+
+/** 期限切れの記録の番号は確保の番号から決める（同じ確保に2件付かないので `OR IGNORE` が効く）。 */
+const EXPIRED_EVENT_ID_SUFFIX = ":expired";
+
+/**
+ * まだ記録の無い期限切れを足す（基準 27.4・設計書「期限切れの記録」）。
+ *
+ * 期限切れは書き込みを伴わない（基準 11.1・11.2）ので、状態の変化の記録は**読む側の手続きの先頭**で
+ * 足す。客のホーム（`usecases/customerHome`）と店のホーム（`usecases/storeHome`）が呼ぶ。
+ * 時刻は読んだ時ではなく**期限の時刻**（誰も読まない間は記録が遅れて付くが、中身は変わらない）。
+ *
+ * 番号を確保の番号から決めているので、何度呼んでも増えない（`OR IGNORE` が2件目を落とす）。
+ * 行を書き換えず・消さずに冪等にするための形（基準 27.7）。
+ */
+export const insertExpiredEvents = async (db: Db, scope: { kind: "customer" | "store"; id: string }, nowIso: string): Promise<void> => {
+  const where = scope.kind === "customer" ? "res.customer_id = ?1" : "res.store_id = ?1";
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, at)` +
+        ` SELECT res.id || ?3, res.id, 'expired', res.expires_at FROM reservations res` +
+        ` WHERE ${where} AND res.status = 'active' AND res.expires_at <= ?2`,
+    )
+    .bind(scope.id, nowIso, EXPIRED_EVENT_ID_SUFFIX)
     .run();
 };

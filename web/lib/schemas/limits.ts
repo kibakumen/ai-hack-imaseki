@@ -104,3 +104,18 @@ export const OFFER_PARTY_MAX_CHOICES = [2, 4, 6] as const;
 export const OFFER_COUPONS_MAX = 3;
 /** 「何時まで」の入力の形（時分だけ。解釈の正本は domain/until.ts） */
 export const TIME_OF_DAY_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// 要件8（受け取りと確保）の基準 8.2・8.3（タスク13が足した）
+/** コードのもとになる乱数の長さ（domain/code.ts が先頭4バイトを8桁に直す） */
+export const CODE_BYTES = 4;
+/**
+ * 空きのコードを探す回数の上限。前半は乱数の引き直し、それで見つからなければ隣の値を見る
+ * （`domain/code.nextCode`）。値は AI判断——1億通りに対し、引き直し4回で当たらない見込みは無い。
+ */
+export const CODE_DRAW_ATTEMPTS = 4;
+export const CODE_SEARCH_ATTEMPTS = 12;
+/**
+ * 入力で受ける番号（オファー・確保・取得の記録）の長さの上限（AI判断）。
+ * 断るためではなく、長すぎる本文を早く切るため（実際の番号は16バイトを base64url にした22字）。
+ */
+export const ID_MAX_LENGTH = 64;

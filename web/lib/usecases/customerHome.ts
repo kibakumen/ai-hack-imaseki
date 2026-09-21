@@ -1,19 +1,59 @@
-// 客の画面がまず呼ぶ入口の中身（要件1の基準 1.8）。登録が済んでいる客には取得の画面を返す。
-// ⚠️ 確保中・期限切れ・取り消し・完了済みの表示の切り替え（優先の順・設計書「客の画面」）は
-// タスク13〜16 がこの手続きに足す。ここでは登録の有無だけで kind を決める。
+// 客の画面がまず呼ぶ入口の中身（要件1の基準 1.8・要件9の基準 9.1〜9.7・9.13）。
+// **何を出すかの判断は `domain/customerHome.ts`** が持つ（優先の順の表）。ここは読みと記録だけ。
+//
+// ⚠️ 期限切れの記録（基準 27.4）は**この手続きの先頭**で足す（設計書「期限切れの記録」）——
+//    期限切れは書き込みを伴わないので、読む側が足さないと記録が残らない。店のホーム
+//    （`usecases/storeHome`）も同じ呼び出しを持つ。
+//
+// ⚠️ タスク16（期限切れと受け取り直しの表示）・タスク22（通知の説明 `pushPromptDue`）は、
+//    ここに応答のキーを足す形で入る（判断は `domain/customerHome` 側に足すこと）。
 
+import { customerHomeView, type CustomerHomeView } from "../domain/customerHome";
 import type { Deps } from "../ports";
 import { findCustomerProfile } from "../repo/customers";
+import { insertExpiredEvents } from "../repo/logs";
+import { findLastFetchAt, findLatestReservation, type ReservationContext } from "../repo/reservations";
 import type { CustomerProfile } from "../schemas/customer";
 
-export type CustomerHome = {
-  kind: "fetch";
-  profile: CustomerProfile;
+export type CustomerHome = CustomerHomeView & { profile: CustomerProfile };
+
+/** 確保の行・店・オファーを、判断の関数が読む形へ（時刻は Date のまま渡す）。 */
+const toViewInput = (context: ReservationContext | null, lastFetchAt: Date | null) => {
+  if (!context) return { reservation: null, offer: null, lastFetchAt };
+  const { reservation, store, offer } = context;
+  return {
+    reservation: {
+      id: reservation.id,
+      code: reservation.code,
+      storeId: store.id,
+      storeName: store.name,
+      storeAddress: store.address,
+      storeUrl: store.url,
+      party: reservation.party,
+      expiresAt: reservation.expiresAt,
+      statusAt: reservation.statusAt,
+      status: reservation.status,
+      coupons: reservation.coupons,
+    },
+    offer,
+    lastFetchAt,
+  };
 };
 
 /** 登録が見つからなければ null（入口が見分けの断り 401 に倒す）。 */
 export const customerHome = async (deps: Deps, customerId: string): Promise<CustomerHome | null> => {
+  const now = deps.clock.now();
+  const nowIso = now.toISOString();
+
   const profile = await findCustomerProfile(deps.db, customerId);
+  // 登録が無い客のために記録を足さない（消した客の分も足さない・基準 28.8）
   if (!profile) return null;
-  return { kind: "fetch", profile };
+
+  await insertExpiredEvents(deps.db, { kind: "customer", id: customerId }, nowIso);
+
+  const context = await findLatestReservation(deps.db, customerId, nowIso);
+  // 確保が1件も無い客のために取得の記録を読まない（優先の順の4にしか要らない）
+  const lastFetchAt = context ? await findLastFetchAt(deps.db, customerId) : null;
+
+  return { profile, ...customerHomeView(toViewInput(context, lastFetchAt), now) };
 };
