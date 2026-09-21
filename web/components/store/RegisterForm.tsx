@@ -11,6 +11,13 @@ import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
 const FIELD_NAMES = ["name", "email", "password"];
+/**
+ * メールアドレスの欄は、形の誤りだけでなく「もう登録されている」も直下に出す（要件12の基準 12.2）。
+ * 入口は 409 で `kind` に登録済みの語を、`fields` に `email`／`not_allowed` を返す。ここを渡さないと
+ * 項目の出し口は理由（not_allowed）の文しか描かず、操作の出し口は「この項目の断りが在る」と何も描かない
+ * ——どちらの経路からも `kind` の文が画面に出なかった（2026-09-22 タスク25 が直した）。
+ */
+const EMAIL_KINDS = ["email_taken"];
 const EMAIL_HINT = "メールアドレスの形";
 /** 登録が済んだら店のホームへ（画面の遷移は1本だけ・呼ぶ側に渡さない） */
 const STORE_HOME_PATH = "/store";
@@ -86,7 +93,7 @@ export const RegisterForm = () => {
         maxLength={EMAIL_MAX}
         onChange={(event) => setEmail(event.target.value)}
       />
-      <FieldMessage name="email" failure={failure} ctx={{ field: "メールアドレス", hint: EMAIL_HINT, max: EMAIL_MAX }} />
+      <FieldMessage name="email" failure={failure} kinds={EMAIL_KINDS} ctx={{ field: "メールアドレス", hint: EMAIL_HINT, max: EMAIL_MAX }} />
 
       <label htmlFor="store-register-password">パスワード</label>
       <input

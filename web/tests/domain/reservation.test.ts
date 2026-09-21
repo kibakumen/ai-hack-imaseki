@@ -2,7 +2,7 @@
 // 時刻から導く——書き込みは起きない。
 
 import { describe, expect, it } from "vitest";
-import { canCancelByStore, effectiveState, isWithinExpiredGrace, RESERVATION_HOLD_MS } from "./reservation";
+import { canCancelByStore, effectiveState, isWithinExpiredGrace, RESERVATION_HOLD_MS } from "../../lib/domain/reservation";
 
 const EXPIRES = new Date("2026-09-22T06:20:00.000Z");
 const at = (minutesFromExpiry: number) => new Date(EXPIRES.getTime() + minutesFromExpiry * 60_000);

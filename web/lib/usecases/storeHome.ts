@@ -6,7 +6,9 @@
 //    **タスク9 が `offer` と `publishPrefill`**、**タスク17 が `arrivals`** を埋める。
 //    下の3か所の ⚠️ が、その差し込み口（ほかの行は触らずに済む形にしてある）。
 
-import { arrivalRows, ARRIVALS_WINDOW_MS, EMPTY_PUBLISH_PREFILL, missingProfileFields, type ArrivalView, type OfferView, type PublishPrefillView, type StoreStatusView } from "../domain/storeHome";
+// `EMPTY_PUBLISH_PREFILL` の読み込みは、タスク9 が `publishPrefill` を `storeHomeOffer` の側で
+// 組むようにしたあとの置き忘れで、lint の警告として残っていた。2026-09-22 タスク25 が外した。
+import { arrivalRows, ARRIVALS_WINDOW_MS, missingProfileFields, type ArrivalView, type OfferView, type PublishPrefillView, type StoreStatusView } from "../domain/storeHome";
 import type { Deps } from "../ports";
 import { listCouponsByStore, type CouponRow } from "../repo/coupons";
 import { insertExpiredEvents } from "../repo/logs";

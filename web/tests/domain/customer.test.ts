@@ -1,7 +1,7 @@
 // 登録を消せるかの判断（要件28の基準 28.5 と、17節の持ち越しの猶予）。
 import { describe, expect, it } from "vitest";
-import { canDeleteRegistration } from "./customer";
-import { EXPIRED_GRACE_MS } from "./reservation";
+import { canDeleteRegistration } from "../../lib/domain/customer";
+import { EXPIRED_GRACE_MS } from "../../lib/domain/reservation";
 
 const NOW = new Date("2026-09-22T06:00:00.000Z");
 /** 期限が「今から ms 後（負なら前）」の確保1行。 */

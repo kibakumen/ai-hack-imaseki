@@ -18,8 +18,13 @@ import { customerHome, type CustomerHome } from "./customerHome";
 
 export type ChangePartyResult =
   | { ok: true; home: CustomerHome }
-  /** 在らない番号・別の客の確保（存在を教えない） */
-  | { ok: false; status: 400; error: { kind: "invalid_input"; fields: Array<{ name: string; reason: FieldReason }> } }
+  /**
+   * 在らない番号・別の客の確保（存在を教えない）。
+   * 404 で返す——別の客の確保に 400 を返すと、入力の形が誤っていた場合と見分けがつかず、
+   * 「その番号は在る／在らない」を状態コードで言い分けてしまう（要件2の基準 2.4・2.5。
+   * 2026-09-22 タスク25 の横断の揃えで 400 から変えた）。
+   */
+  | { ok: false; status: 404; error: { kind: "invalid_input"; fields: Array<{ name: string; reason: FieldReason }> } }
   /** 確保中でない確保への変更。今の状態を返す（取り消しと同じ形・基準 10.3 と揃える） */
   | { ok: false; status: 409; current: { state: EffectiveState } }
   /** 増やす変更が「何名まで」を超えた（基準 10.7）。人数は変えず、その時点の値を添える */
@@ -28,7 +33,7 @@ export type ChangePartyResult =
 /** 見分けの直後に登録が消えた場合だけ（入口が 401 に倒す）。 */
 export type ChangePartyMissing = null;
 
-const notFound: ChangePartyResult = { ok: false, status: 400, error: { kind: "invalid_input", fields: [{ name: "id", reason: "bad_format" }] } };
+const notFound: ChangePartyResult = { ok: false, status: 404, error: { kind: "invalid_input", fields: [{ name: "id", reason: "bad_format" }] } };
 
 const stateRefusal = (state: EffectiveState): ChangePartyResult => ({ ok: false, status: 409, current: { state } });
 

@@ -21,15 +21,20 @@ import { customerHome, type CustomerHome } from "./customerHome";
 
 export type CancelByCustomerResult =
   | { ok: true; home: CustomerHome }
-  /** 在らない番号・別の客の確保（存在を教えない・設計書の倒し方は `usecases/receiveOffer` と同じ） */
-  | { ok: false; status: 400; error: { kind: "invalid_input"; fields: Array<{ name: string; reason: FieldReason }> } }
+  /**
+   * 在らない番号・別の客の確保（存在を教えない・設計書の倒し方は `usecases/receiveOffer` と同じ）。
+   * 404 で返す——別の客の確保に 400 を返すと、入力の形が誤っていた場合と見分けがつかず、
+   * 「その番号は在る／在らない」を状態コードで言い分けてしまう（要件2の基準 2.4・2.5。
+   * 2026-09-22 タスク25 の横断の揃えで 400 から変えた）。
+   */
+  | { ok: false; status: 404; error: { kind: "invalid_input"; fields: Array<{ name: string; reason: FieldReason }> } }
   /** 確保中でない確保への取り消し（基準 10.3）。状態も残りも変えず、今の状態を返す */
   | { ok: false; status: 409; current: { state: EffectiveState } };
 
 /** 見分けの直後に登録が消えた場合だけ（入口が 401 に倒す）。 */
 export type CancelByCustomerMissing = null;
 
-const notFound: CancelByCustomerResult = { ok: false, status: 400, error: { kind: "invalid_input", fields: [{ name: "id", reason: "bad_format" }] } };
+const notFound: CancelByCustomerResult = { ok: false, status: 404, error: { kind: "invalid_input", fields: [{ name: "id", reason: "bad_format" }] } };
 
 const stateRefusal = (state: EffectiveState): CancelByCustomerResult => ({ ok: false, status: 409, current: { state } });
 

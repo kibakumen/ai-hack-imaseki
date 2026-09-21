@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 import type { ApiFailure } from "../../lib/client/api";
 import { PushPrompt } from "./PushPrompt";
 import { ReservationActions } from "./ReservationActions";
-import { timeInJst } from "../store/jstTime";
+import { timeInJst } from "../ui/jstTime";
 import { FormMessage } from "../ui/InputRefusal";
 import type { ReservationDto } from "./home";
 

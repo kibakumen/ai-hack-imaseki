@@ -1,6 +1,6 @@
 // 「最近行った店」と通報を受け付ける期間（要件26の基準 26.10・26.15・26.18）。
 import { describe, expect, it } from "vitest";
-import { RECENT_STORE_WINDOW_MS, isWithinRecentWindow, recentWindowStart } from "./report";
+import { RECENT_STORE_WINDOW_MS, isWithinRecentWindow, recentWindowStart } from "../../lib/domain/report";
 
 const NOW = new Date("2026-09-29T06:00:00.000Z");
 const ago = (ms: number) => new Date(NOW.getTime() - ms);

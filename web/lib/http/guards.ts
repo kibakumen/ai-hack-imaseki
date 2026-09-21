@@ -56,7 +56,8 @@ export const identifySession = async (req: Request, deps: Deps): Promise<Session
 
 /**
  * 使われるたびにセッションを延ばす（スライディングウィンドウ・本人選択／AI提示 2026-09-21）。
- * 残りが半分（1時間）を切っているときだけ、表の期限と Cookie の Max-Age を同じだけ先へ動かす。
+ * 残りが1時間（SESSION_RENEW_WITHIN_SECONDS）を切っているときだけ、表の期限と Cookie の Max-Age を
+ * 今から25時間（SESSION_MAX_AGE_SECONDS）先へ動かす。
  * 延ばさないときは空の配列——毎回 Set-Cookie と UPDATE を出さないため。
  */
 export const renewSession = async (deps: Deps, session: SessionIdentity): Promise<string[]> => {

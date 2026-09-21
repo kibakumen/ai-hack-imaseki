@@ -22,7 +22,7 @@ import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
 import { ARRIVALS_TEXTS } from "../../lib/domain/texts";
 import { FormMessage } from "../ui/InputRefusal";
 import { playNotifyBeep } from "./beep";
-import { timeInJst } from "./jstTime";
+import { timeInJst } from "../ui/jstTime";
 
 /** 入口 `GET /api/store/home` の `arrivals` の1行（受け入れ検査の契約 `ArrivalRow`）。 */
 export type ArrivalsListRow = {

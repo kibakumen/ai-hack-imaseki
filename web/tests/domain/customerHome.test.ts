@@ -2,7 +2,7 @@
 // 受け入れ検査（r08・r11）は入口を通した形で見るので、ここでは表の**順そのもの**と境界を固定する。
 
 import { describe, expect, it } from "vitest";
-import { CANCELLED_VIEW_MS, COMPLETED_VIEW_MS, customerHomeView, retryability } from "./customerHome";
+import { CANCELLED_VIEW_MS, COMPLETED_VIEW_MS, customerHomeView, retryability } from "../../lib/domain/customerHome";
 
 const NOW = new Date("2026-09-22T06:30:00.000Z");
 const minutes = (n: number) => new Date(NOW.getTime() + n * 60_000);

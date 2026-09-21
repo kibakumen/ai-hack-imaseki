@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
 import { FormMessage } from "../ui/InputRefusal";
 import { StoreNav } from "./StoreNav";
-import { dateTimeInJst } from "./jstTime";
+import { dateTimeInJst } from "../ui/jstTime";
 
 /** 取り消された数の内訳（基準 23.6）。 */
 type CancelledBreakdown = { total: number; customer: number; expired: number; store: number; admin: number };
