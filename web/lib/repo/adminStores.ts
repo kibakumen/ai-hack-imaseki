@@ -137,6 +137,13 @@ export const approveStoreStatement = (db: Db, storeId: string) =>
 export const banStoreStatement = (db: Db, storeId: string) =>
   db.prepare(`UPDATE stores SET status = 'banned' WHERE id = ?1 AND status = 'approved'`).bind(storeId);
 
+/**
+ * 承認済みへ戻す（基準 25.9）。止められている店だけが承認済みになる。
+ * 終わったオファーと取り消された確保は戻さない（基準 25.10）——この文は `stores` だけを触る。
+ */
+export const restoreStoreStatement = (db: Db, storeId: string) =>
+  db.prepare(`UPDATE stores SET status = 'approved' WHERE id = ?1 AND status = 'banned'`).bind(storeId);
+
 /** 止めた店の公開中のオファーを終わりにする（基準 25.7）。終わった理由は banned。 */
 export const endPublishedOffersStatement = (db: Db, storeId: string, nowIso: string) =>
   db

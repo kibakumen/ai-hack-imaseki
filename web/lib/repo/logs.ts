@@ -13,6 +13,7 @@
 //   これを呼ぶこと（呼ばないと、自動で取り消された割合〔要件33〕が後から数えられない）。
 
 import type { Deps } from "../ports";
+import { activeReservationCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -136,3 +137,27 @@ export const insertExpiredEvents = async (db: Db, scope: { kind: "customer" | "s
     .bind(scope.id, nowIso, EXPIRED_EVENT_ID_SUFFIX)
     .run();
 };
+
+/** 運営の停止で取り消された確保の記録の番号も、確保の番号から決める（下の注と同じ理由）。 */
+const ADMIN_CANCELLED_EVENT_ID_SUFFIX = ":admin_cancelled";
+
+/**
+ * 運営が店を止めたときに取り消される確保の、状態の変化の記録（基準 27.4・タスク21）。
+ *
+ * ⚠️ **確保の状態を書き換える文より前**に `db.batch` の並びへ置く——まだ `status='active'` の行を
+ * 選ぶ文なので、順が後ろだと1件も当たらない（`banStore` のまとまりの中でその順を守っている）。
+ *
+ * ⚠️ このファイルの言葉づかいの縛り: 構造の検査（基準 27.7）が**このファイル全体**から
+ * 書き換え・削除の SQL の語を探すので、注記の中でもその語を書かない（「書き換える文」と呼ぶ）。
+ *
+ * 番号を確保の番号から決めているので、何度流れても増えない（`OR IGNORE` が2件目を落とす）。
+ * 行を書き換えず・消さずに冪等にするための形（基準 27.7）。
+ */
+export const adminCancelledEventsStatement = (db: Db, storeId: string, nowIso: string) =>
+  db
+    .prepare(
+      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, at)` +
+        ` SELECT res.id || ?3, res.id, 'admin_cancelled', ?2 FROM reservations res` +
+        ` WHERE res.store_id = ?1 AND ${activeReservationCondition("res", "?2")}`,
+    )
+    .bind(storeId, nowIso, ADMIN_CANCELLED_EVENT_ID_SUFFIX);

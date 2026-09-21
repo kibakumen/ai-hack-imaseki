@@ -31,13 +31,24 @@ export const publishingOfferCondition = (alias: string, nowPlaceholder: string):
   `${alias}.ended_at IS NULL AND ${alias}.until_at > ${nowPlaceholder}`;
 
 /**
+ * 「確保中の確保」の条件（`status='active'` で、今が期限より前）。
+ * TS 側の正本は `domain/reservation.ts` の `effectiveState`（`active` を返す場合）。
+ *
+ * ⚠️ 2026-09-21 タスク21 が足した。運営の停止は「確保中の確保」を3つの文で見る（送る相手を読む・
+ * 記録を足す・状態を変える）ので、同じ条件を3か所に書かないためにここへ出した（基準 25.8）。
+ * 下の `holdsSlotCondition` の1つ目もこれを通す（出る文字列は前と同じ）。
+ */
+export const activeReservationCondition = (reservationAlias: string, nowPlaceholder: string): string =>
+  `${reservationAlias}.status = 'active' AND ${reservationAlias}.expires_at > ${nowPlaceholder}`;
+
+/**
  * 枠を押さえている確保（設計書「確保の状態と、残りの数え方」の3つ）:
  * ①確保中（期限より前）②完了済みで holds_slot=1 ③店が取り消したもの（常に押さえたまま）。
  *
  * TS 側の正本は domain/remaining.ts の `holdsSlot`（同じ順・同じ条件）。
  */
 export const holdsSlotCondition = (reservationAlias: string, nowPlaceholder: string): string =>
-  `((${reservationAlias}.status = 'active' AND ${reservationAlias}.expires_at > ${nowPlaceholder})` +
+  `((${activeReservationCondition(reservationAlias, nowPlaceholder)})` +
   ` OR (${reservationAlias}.status = 'completed' AND ${reservationAlias}.holds_slot = 1)` +
   ` OR ${reservationAlias}.status = 'store_cancelled')`;
 
