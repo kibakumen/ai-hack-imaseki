@@ -153,4 +153,22 @@ export const ARRIVALS_TEXTS = {
   refused: (state: string): string => ARRIVAL_REFUSED_TEXTS[state] ?? "この確保の状態が変わったため、完了済みにできませんでした。",
   /** 出す行が1件も無いとき（基準 20.18） */
   empty: "向かっている客はいません。",
+// ---------- 確保の状態の見出し（要件8の基準 8.11。2026-09-21 タスク30 が足した） ----------
+// 過去の受け取りの見返し（`components/customer/History`）が、確保の状態を客に見せるための文。
+// 語の正本は `domain/reservation.ts`（保存する5つ ＋ 時刻から導く「期限切れ」）で、ここは文だけを持つ
+// （識別子は機械が読むもの・文は人が読むものとして分ける・設計書「どの判断をどこに置くか」）。
+// 部品は `lib/domain` のうちこのファイルしか値として読めないので、状態の文もここに置く。
+
+const RESERVATION_STATUS_LABELS: Record<string, string> = {
+  active: "確保中",
+  expired: "期限切れ",
+  completed: "完了済み",
+  customer_cancelled: "取り消し（自分で）",
+  store_cancelled: "取り消し（お店の都合）",
+  admin_cancelled: "取り消し（運営の都合）",
+};
+
+export const RESERVATION_STATUS_TEXTS = {
+  /** 知らない語が来ても表示を止めない（黙って空欄にせず、分からないことを出す）。 */
+  label: (status: string): string => RESERVATION_STATUS_LABELS[status] ?? "状態が分かりません",
 } as const;

@@ -18,6 +18,8 @@ import { adminMetricsRoutes } from "./endpoints/adminMetrics";
 import { reservationRoutes } from "./endpoints/reservations";
 import { pushRoutes } from "./endpoints/push";
 import { storeReservationRoutes } from "./endpoints/storeReservations";
+import { storeResultsRoutes } from "./endpoints/storeResults";
+import { historyRoutes } from "./endpoints/history";
 
 export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   ...adminStoreRoutes,
@@ -36,4 +38,6 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   ...reservationRoutes,
   ...pushRoutes,
   ...storeReservationRoutes,
+  ...storeResultsRoutes,
+  ...historyRoutes,
 ];
