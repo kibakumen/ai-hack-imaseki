@@ -12,6 +12,7 @@
 //    **状態を変える1つの UPDATE（前の状態を WHERE に入れる）** をここへ足す形で書く。
 //    `RESERVATION_COLUMNS` と `toReservationRow` を使い回せば、列の名前を写さずに済む。
 
+import type { ReservationStateRow } from "../domain/reservation";
 import type { Deps } from "../ports";
 import { activeReservationCondition, publishingOfferCondition, remainingExpression } from "./sqlFragments";
 
@@ -154,6 +155,19 @@ export const hasActiveReservation = async (db: Db, customerId: string, nowIso: s
     .bind(customerId, nowIso)
     .first();
   return row !== null;
+};
+
+/**
+ * その客の確保を、状態を導くのに要る2つの列だけで全部返す（タスク32 が足した）。
+ * 登録を消せるかの判断（`domain/customer.canDeleteRegistration`・基準 28.5）が、期限切れの猶予
+ * まで見るので、`hasActiveReservation` の真偽ひとつでは足りない。
+ */
+export const listReservationStatesOfCustomer = async (db: Db, customerId: string): Promise<ReservationStateRow[]> => {
+  const result = await db.prepare(`SELECT res.status, res.expires_at FROM reservations res WHERE res.customer_id = ?1`).bind(customerId).all();
+  return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    status: row.status as string,
+    expiresAt: new Date(row.expires_at as string),
+  }));
 };
 
 /** そのコードが既に使われているか（完了済み・取り消された確保のものも含む・基準 8.3）。 */

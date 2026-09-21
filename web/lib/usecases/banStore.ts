@@ -17,6 +17,7 @@ import { banStoreStatement, endPublishedOffersStatement, findStoreStatus } from 
 import { adminCancelledEventsStatement } from "../repo/logs";
 import { adminCancelReservationsStatement, listActiveReservationsOfStore } from "../repo/reservations";
 import type { StoreStatus } from "../repo/stores";
+import { sendCancellationPushes } from "./pushMessage";
 
 export type BanStoreResult =
   | { ok: true }
@@ -52,11 +53,13 @@ export const banStore = async (deps: Deps, storeId: string): Promise<BanStoreRes
   // 取り消した確保を1件ずつ残す（`id` は確保の番号。客を指す値は載せない・基準 27.6）。
   for (const reservation of affected) deps.logger.log({ event: "admin_cancel", id: reservation.id });
 
-  // ⚠️ タスク19 の `pushMessage` をここで呼ぶ（基準 22.2・22.6・22.7）。統合のときは次の1行に差し替える:
-  //     await pushMessage(deps, { customerIds: affected.map((r) => r.customerId), scene: "admin_cancelled" });
-  //   ・文は `domain/texts.ts` の `TEXTS.push("admin_cancelled")` に既に在る（店の取り消しとは違う文）
-  //   ・購読のある客に**1人1回ずつ**（基準 22.2）。購読の無い客には送らない（基準 22.7）
-  //   ・**送信の失敗はここで飲み込む**（基準 22.6）。停止はもう成立しているので throw させないこと
+  // 取り消された客へ「運営の都合で取り消された」を知らせる（基準 22.2・22.6・22.7）。
+  // 相手は上で**取り消す前に**読んである。購読のある客に1人1回ずつ・購読の無い客には送らない・
+  // 送信の失敗は飲み込む——全部 `sendCancellationPushes` の側。停止はもう成立している。
+  await sendCancellationPushes(
+    deps,
+    affected.map((reservation) => reservation.customerId),
+  );
 
   return { ok: true };
 };

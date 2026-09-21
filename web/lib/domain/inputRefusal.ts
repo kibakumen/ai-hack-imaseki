@@ -22,6 +22,15 @@ export const INPUT_REFUSAL_KINDS = [
   "login_failed",
   "place_unresolved",
   "report_not_allowed",
+  // 28.5【最終日】登録を消せない（確保中の確保か、期限から20分以内の期限切れの確保がある）。
+  // ⚠️ 受け取りの断り（`domain/receiveRefusal.ts`）にも同じ綴りの語が在るが、**別の応答の形**の語
+  // ——あちらは `refusal.kind` で描くのは RefusalNotice、こちらは `error.kind` で描くのは
+  // InputRefusal。指している出来事が同じなので綴りを揃えた（タスク32 が足した）。
+  "has_active_reservation",
+  // 20.24・20.25 店が運営に止められている間の、確保への操作の断り（店の画面に出す）。
+  // ⚠️ 受け取りの断り（`domain/receiveRefusal.ts`）にも同じ綴りの語が在るが、**別の応答の形**の語
+  // ——あちらは客に出す `refusal.kind`、こちらは店に出す `error.kind`。
+  "store_banned",
   "human_check_failed",
   "rate_limited",
   // 画面の側だけで作る2つ（client/geolocation・client/api が返す）

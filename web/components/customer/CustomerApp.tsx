@@ -5,26 +5,32 @@
 // 識別子が無い・受け付けられない（見分けの断り）なら登録の入力を出し、取得の画面は出さない
 // （基準 1.10・1.11）。登録が済んだ客には取得の画面を出す（基準 1.8）。
 //
-// この入れ物が持っているのは、表示の種類に**含まれない4つ**だけ:
+// この入れ物が持っているのは、表示の種類に**含まれない6つ**だけ:
 //   1. 取得の結果と人数（取得の画面の続き。人数は結果の側から入れ替わるので外に置く）
 //   2. 受け取り・受け取り直しが断られた1件（どのカードの中に出すか・基準 8.6）
 //   3. 確保を持ったまま「ほかの店を探す」を押したか（基準 8.10。サーバーは確保中のままを返す）
 //   4. 取り直しが通信の失敗に終わったか（端末に残した内容へ倒す・基準 9.10・9.11）
+//   5. 開いている脇の画面（最近行った店・登録の確認と消去。同時には1つだけ・基準 26.14・28.4）
+//   6. 通報が指している店（基準 26.1・26.17。断られても元の表示のままにするため外に置く）
 //
 // 受け取り・受け取り直しの応答は、通っても断られても**新しいホームを連れてくる**ので、それで
-// 表示を作り直す（設計書「受け取りが断られたとき」の4）。次の一手をどこへ繋ぐかはここが決め、
+// 表示を作り直す（設計書「受け取りが断られたとき」の4）。確保への操作（取り消し・人数の変更）も
+// 同じで、応答の `home` をそのまま使う（`applyHome`）。次の一手をどこへ繋ぐかはここが決め、
 // 断りの文とボタンの文は `RefusalNotice` が `domain/texts` から引く。
 
 import { useState } from "react";
 import { apiCall, isFailure, isNetworkFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
 import { usePolling } from "../../lib/client/usePolling";
+import { AccountSettings } from "./AccountSettings";
 import { AdminCancelledView } from "./AdminCancelledView";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
 import { FetchForm, type FetchResult } from "./FetchForm";
 import type { HomeDto, ReceiveRefusal } from "./home";
+import { RecentStores } from "./RecentStores";
 import { RegisterForm } from "./RegisterForm";
+import { ReportForm, type ReportTarget } from "./ReportForm";
 import { ReservationView } from "./ReservationView";
 import { ResultList, type ResultItem } from "./ResultList";
 import { StoreCancelledView } from "./StoreCancelledView";
@@ -39,6 +45,17 @@ type RefusedReceive = { offerId: string | null; body: ReceiveRefusal };
  */
 const KEEPS_REFUSAL: ReadonlyArray<HomeDto["kind"]> = ["fetch", "expired"];
 
+/** 通報ボタンを置く表示（基準 26.1）。期限切れと取り消しの表示には置かない。 */
+const REPORT_VIEW_KINDS: ReadonlyArray<HomeDto["kind"]> = ["active", "completed"];
+/**
+ * 「最近行った店」と「登録の確認と消去」の入口を置く表示（基準 26.14・28.4）。客が画面を開いた
+ * ときにまず出る3つで、期限切れと取り消しの表示には置かない（店へ向かう途中で出る表示・要件26の補足）。
+ */
+const RECENT_ENTRY_KINDS: ReadonlyArray<HomeDto["kind"]> = ["fetch", "active", "completed"];
+
+/** 開いている脇の画面（同時には1つだけ）。 */
+type Panel = "none" | "recent" | "settings";
+
 export const CustomerApp = () => {
   const [home, setHome] = useState<HomeDto | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -48,6 +65,10 @@ export const CustomerApp = () => {
   const [party, setParty] = useState("");
   const [refused, setRefused] = useState<RefusedReceive | null>(null);
   const [searching, setSearching] = useState(false);
+  // 脇の画面（最近行った店・登録の確認と消去）と、通報が指している店。どちらも表示の種類とは別に持つ
+  // ——断られたときに元の表示のまま文を出す必要があるため（基準 26.19・28.5）。
+  const [panel, setPanel] = useState<Panel>("none");
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
@@ -98,6 +119,24 @@ export const CustomerApp = () => {
     if (failure === null) setFetchResult(null);
   };
 
+  /**
+   * 確保への操作（取り消し・人数の変更）の応答で表示を作り直す（`ReservationActions` の `onChanged`）。
+   * 応答が新しいホームを連れてきたらそれで作り直し、連れてこない（今の状態と衝突した）なら取り直す
+   * （基準 10.3・9.8）。
+   */
+  const applyHome = (next?: unknown) => {
+    if (next === undefined || next === null) {
+      void refresh();
+      return;
+    }
+    const responded = next as HomeDto;
+    setHome(responded);
+    setLoaded(true);
+    setStale(false);
+    keep(responded);
+    if (responded.kind !== "fetch") setSearching(false);
+  };
+
   /** 結果から1件を受け取る（基準 8.1・8.5・8.6）。人数とどの取得から選んだかを一緒に送る。 */
   const receive = async (item: ResultItem): Promise<void> => {
     if (fetchResult === null) return;
@@ -141,6 +180,7 @@ export const CustomerApp = () => {
     setFetchResult(null);
     setSearching(true);
   };
+  const togglePanel = (next: Panel) => setPanel((current) => (current === next ? "none" : next));
 
   if (!loaded) return <main aria-busy="true" />;
 
@@ -155,11 +195,28 @@ export const CustomerApp = () => {
   const reservation = home.reservation;
   // 確保が載っていない表示の種類（応答の形は検査していない）でも、取得の画面なら出せる
   const onFetchScreen = home.kind === "fetch" || searching || reservation === undefined;
+  /**
+   * 確保中・完了済みの表示に置く通報ボタン（基準 26.1）。**その表示の囲いの中**に置くので、
+   * 部品（`ReservationView`・`CompletedView`）の中身として渡す——囲い（`view-active`・
+   * `view-completed`）はその部品が持っている。
+   */
+  const reportEntry =
+    reservation !== undefined && REPORT_VIEW_KINDS.includes(home.kind) ? (
+      <button type="button" data-testid="btn-report" onClick={() => setReportTarget({ storeId: reservation.storeId, storeName: reservation.storeName })}>
+        このお店を通報する
+      </button>
+    ) : null;
 
   /** 確保を持つ客の表示（優先の順の2〜5）。種類ごとに部品が1つ。 */
   const reservationView = () => {
     if (reservation === undefined) return null;
-    if (home.kind === "active") return <ReservationView pushPromptDue={home.pushPromptDue === true} reservation={reservation} onSearchMore={() => setSearching(true)} />;
+    if (home.kind === "active") {
+      return (
+        <ReservationView pushPromptDue={home.pushPromptDue === true} reservation={reservation} onChanged={applyHome} onSearchMore={() => setSearching(true)}>
+          {reportEntry}
+        </ReservationView>
+      );
+    }
     if (home.kind === "expired") {
       return (
         <ExpiredView
@@ -172,7 +229,13 @@ export const CustomerApp = () => {
         />
       );
     }
-    if (home.kind === "completed") return <CompletedView reservation={reservation} onSearchAgain={searchAgain} />;
+    if (home.kind === "completed") {
+      return (
+        <CompletedView reservation={reservation} onSearchAgain={searchAgain}>
+          {reportEntry}
+        </CompletedView>
+      );
+    }
     if (home.kind === "store_cancelled") return <StoreCancelledView reservation={reservation} onSearchAgain={searchAgain} />;
     if (home.kind === "admin_cancelled") return <AdminCancelledView reservation={reservation} onSearchAgain={searchAgain} />;
     return null;
@@ -203,6 +266,21 @@ export const CustomerApp = () => {
       ) : (
         reservationView()
       )}
+
+      {RECENT_ENTRY_KINDS.includes(home.kind) ? (
+        <nav aria-label="そのほか">
+          <button type="button" data-testid="btn-recent" onClick={() => togglePanel("recent")}>
+            最近行った店
+          </button>
+          <button type="button" data-testid="btn-settings" onClick={() => togglePanel("settings")}>
+            登録の確認と消去
+          </button>
+        </nav>
+      ) : null}
+
+      {panel === "recent" ? <RecentStores onReport={setReportTarget} /> : null}
+      {panel === "settings" ? <AccountSettings onDeleted={() => void refresh()} /> : null}
+      {reportTarget !== null ? <ReportForm storeId={reportTarget.storeId} storeName={reportTarget.storeName} onClose={() => setReportTarget(null)} /> : null}
     </main>
   );
 };

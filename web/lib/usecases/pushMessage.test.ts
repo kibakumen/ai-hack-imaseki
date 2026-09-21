@@ -66,6 +66,16 @@ describe("通知の購読の入口（POST /api/customer/push-subscription）", (
     expect(JSON.parse(saved[0].subscription_json as string)).toEqual(next);
   });
 
+  it("同じ端末が別の客として送ってきたら、前の客の購読は消える（端末1台＝客1人）", async () => {
+    const first = await newCustomer("まえのきゃく");
+    const second = await newCustomer("あとのきゃく");
+    const device = { ...SUBSCRIPTION, endpoint: "https://push.example.test/sub/shared" };
+    await first.api.post("/api/customer/push-subscription", { subscription: device });
+    await second.api.post("/api/customer/push-subscription", { subscription: device });
+    expect(await subscriptionRows(first.id)).toHaveLength(0);
+    expect(await subscriptionRows(second.id)).toHaveLength(1);
+  });
+
   it("見分けの無い要求は断る（401）。壊れた入力は入力の断り（400）", async () => {
     expect((await ctx.api().post("/api/customer/push-subscription", { subscription: SUBSCRIPTION })).status).toBe(401);
     const customer = await newCustomer("こわれた");
@@ -125,7 +135,9 @@ describe("取り消しの知らせ（usecases/pushMessage の送信の口）", (
     const a = await newCustomer("ふたりめA");
     const b = await newCustomer("ふたりめB");
     const c = await newCustomer("ふたりめC");
-    for (const customer of [a, c]) await customer.api.post("/api/customer/push-subscription", { subscription: SUBSCRIPTION });
+    // ⚠️ 客ごとに**別の端末**にする（同じ `endpoint` を2人が持つと、後から送った側だけが残る
+    // ——端末1台＝客1人。`repo/push.savePushSubscription` の注）。
+    for (const customer of [a, c]) await customer.api.post("/api/customer/push-subscription", { subscription: { ...SUBSCRIPTION, endpoint: `${SUBSCRIPTION.endpoint}/${customer.id}` } });
     const before = ctx.push.calls.length;
     await sendCancellationPushes(ctx.deps, [a.id, b.id, c.id]);
     expect(ctx.push.calls).toHaveLength(before + 2);

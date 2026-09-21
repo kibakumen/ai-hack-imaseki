@@ -20,6 +20,8 @@ import { pushRoutes } from "./endpoints/push";
 import { storeReservationRoutes } from "./endpoints/storeReservations";
 import { storeResultsRoutes } from "./endpoints/storeResults";
 import { historyRoutes } from "./endpoints/history";
+import { reportRoutes } from "./endpoints/reports";
+import { customerDeleteRoutes } from "./endpoints/customerDelete";
 
 export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   ...adminStoreRoutes,
@@ -40,4 +42,6 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   ...storeReservationRoutes,
   ...storeResultsRoutes,
   ...historyRoutes,
+  ...reportRoutes,
+  ...customerDeleteRoutes,
 ];

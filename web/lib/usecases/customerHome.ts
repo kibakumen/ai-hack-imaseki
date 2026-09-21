@@ -5,8 +5,8 @@
 //    期限切れは書き込みを伴わないので、読む側が足さないと記録が残らない。店のホーム
 //    （`usecases/storeHome`）も同じ呼び出しを持つ。
 //
-// ⚠️ タスク16（期限切れと受け取り直しの表示）・タスク22（通知の説明 `pushPromptDue`）は、
-//    ここに応答のキーを足す形で入る（判断は `domain/customerHome` 側に足すこと）。
+// ⚠️ 通知の説明（`pushPromptDue`・基準 22.8）は**確保中の表示のときだけ**載せる——画面がそれを
+//    出すのは確保中の表示だけで、ほかの表示のために購読の有無を読む理由が無い。
 
 import { customerHomeView, type CustomerHomeView } from "../domain/customerHome";
 import type { Deps } from "../ports";
@@ -14,8 +14,9 @@ import { findCustomerProfile } from "../repo/customers";
 import { insertExpiredEvents } from "../repo/logs";
 import { findLastFetchAt, findLatestReservation, type ReservationContext } from "../repo/reservations";
 import type { CustomerProfile } from "../schemas/customer";
+import { pushPromptDue } from "./pushMessage";
 
-export type CustomerHome = CustomerHomeView & { profile: CustomerProfile };
+export type CustomerHome = CustomerHomeView & { profile: CustomerProfile; pushPromptDue?: boolean };
 
 /** 確保の行・店・オファーを、判断の関数が読む形へ（時刻は Date のまま渡す）。 */
 const toViewInput = (context: ReservationContext | null, lastFetchAt: Date | null) => {
@@ -55,5 +56,8 @@ export const customerHome = async (deps: Deps, customerId: string): Promise<Cust
   // 確保が1件も無い客のために取得の記録を読まない（優先の順の4にしか要らない）
   const lastFetchAt = context ? await findLastFetchAt(deps.db, customerId) : null;
 
-  return { profile, ...customerHomeView(toViewInput(context, lastFetchAt), now) };
+  const view = customerHomeView(toViewInput(context, lastFetchAt), now);
+  // まだ通知を許可していない客にだけ、確保中の表示で説明を出す（基準 22.8・22.11）。
+  if (view.kind !== "active") return { profile, ...view };
+  return { profile, ...view, pushPromptDue: await pushPromptDue(deps, customerId) };
 };

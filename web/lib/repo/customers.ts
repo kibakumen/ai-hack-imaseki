@@ -46,6 +46,21 @@ export const updateCustomerProfile = async (db: Db, customerId: string, profile:
     .run();
 };
 
+/**
+ * 登録を消す（要件28の基準 28.6・28.8【最終日】・タスク32 が足した）。**行は消さない**——
+ * 要件27の記録（`fetch_logs` ほか）がこの `id` を指しており、行を消すと記録が壊れる
+ * （消しても記録は残す・基準 28.10・本人選択）。消すのは4項目（呼び名・電話番号・好みのジャンル・
+ * 予算の上限）と、見分けに使う `token_hash`——空にするのでその Cookie はもう誰にも当たらない（基準 28.8）。
+ *
+ * 既に消えている客には当たらない（何も起きない）＝2度押しても記録は動かない。
+ */
+export const eraseCustomer = async (db: Db, customerId: string, atIso: string): Promise<void> => {
+  await db
+    .prepare(`UPDATE customers SET nickname = '', phone = '', genres = '[]', budget_max = NULL, token_hash = NULL, deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL`)
+    .bind(customerId, atIso)
+    .run();
+};
+
 export const findCustomerProfile = async (db: Db, customerId: string): Promise<CustomerProfile | null> => {
   const row = await db.prepare(`SELECT nickname, phone, genres, budget_max FROM customers WHERE id = ?1 AND deleted_at IS NULL`).bind(customerId).first();
   if (!row) return null;

@@ -8,12 +8,35 @@ import type { Deps } from "../ports";
 
 type Db = Deps["db"];
 
-/** 同じ客が送り直したら入れ替える（客1人に1つ）。 */
+/** 購読の配信元の URL（端末の見分け）。形が違えば null＝端末を見分けられない。 */
+const endpointOf = (subscription: unknown): string | null => {
+  const endpoint = (subscription as { endpoint?: unknown } | null)?.endpoint;
+  return typeof endpoint === "string" && endpoint !== "" ? endpoint : null;
+};
+
+/**
+ * 同じ客が送り直したら入れ替える（客1人に1つ）。
+ *
+ * **同じ端末が別の客として送ってきたら、前の客の購読は消す**（設計書「データと状態」の
+ * `push_subscriptions` の行「端末1台＝客1人」）。1台の端末に2人ぶんの購読が残ると、登録を
+ * やり直した客の端末へ前の登録あての知らせが届き続ける。端末の見分けは配信元の URL
+ * （`endpoint`）で、鍵は見ない——配信元が鍵だけを更新することがある。
+ */
 export const savePushSubscription = async (db: Db, customerId: string, subscription: unknown): Promise<void> => {
-  await db
+  const json = JSON.stringify(subscription);
+  const endpoint = endpointOf(subscription);
+  const save = db
     .prepare(`INSERT INTO push_subscriptions (customer_id, subscription_json) VALUES (?1, ?2) ON CONFLICT (customer_id) DO UPDATE SET subscription_json = ?2`)
-    .bind(customerId, JSON.stringify(subscription))
-    .run();
+    .bind(customerId, json);
+  if (endpoint === null) {
+    await save.run();
+    return;
+  }
+  // 消してから入れる。同じまとまりで流すので、2人ぶんが同時に見える瞬間を作らない。
+  await db.batch([
+    db.prepare(`DELETE FROM push_subscriptions WHERE customer_id <> ?1 AND json_extract(subscription_json, '$.endpoint') = ?2`).bind(customerId, endpoint),
+    save,
+  ]);
 };
 
 /** 通知を許可していない客は null（呼ぶ側は送信を試みない・基準 22.7）。壊れた JSON も null。 */

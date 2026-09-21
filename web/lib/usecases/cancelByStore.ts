@@ -16,6 +16,7 @@ import type { Deps } from "../ports";
 import { insertReservationEvent } from "../repo/logs";
 import { cancelReservationByStore, findReservationOfStore } from "../repo/reservations";
 import { ID_BYTES } from "../schemas/limits";
+import { sendCancellationPush } from "./pushMessage";
 
 export type CancelByStoreResult =
   | { ok: true }
@@ -52,13 +53,11 @@ export const cancelByStore = async (deps: Deps, storeId: string, reservationId: 
   await insertReservationEvent(deps.db, { id: newId(deps), reservationId, status: "store_cancelled", at: nowIso });
   deps.logger.log({ event: "store_cancel", id: reservationId });
 
-  // ⚠️ タスク19 の `pushMessage` をここで呼ぶ（基準 22.1・22.6・22.7）。統合のときは次の1行に差し替える:
-  //     await pushMessage(deps, { customerIds: [reservation.customerId], scene: "store_cancelled" });
-  //   ・文は `domain/texts.ts` の `TEXTS.push("store_cancelled")` に既に在る（中身はプッシュに載せない）
-  //   ・購読の無い客には送らない（基準 22.7）／TTL は20分（基準 22.1）——どちらも `pushMessage` の側
-  //   ・**送信の失敗はここで飲み込む**（例外でも「もう無い」でも 200 で返す・基準 22.6）。
-  //     取り消しはもう成立しているので、この行より後ろで throw させないこと
-  //   ・相手は `reservation.customerId`（上で読んだ行が持っている）
+  // その客へ「お店の都合で取り消された」を知らせる（基準 22.1・22.6・22.7）。
+  // 購読の無い客には送らない・TTL は20分・送信の失敗は飲み込む——全部 `sendCancellationPush` の側。
+  // **状態を変えたあとに await する**（先に送ると、Service Worker が文面を取りに来た時点で
+  // まだ確保中に見える）。待つ理由は、応答が返った時点で送信が済んでいること（基準 22.1）。
+  await sendCancellationPush(deps, reservation.customerId);
 
   return { ok: true };
 };

@@ -125,6 +125,14 @@ export const REPORT_RATE_WINDOW_MS = 60 * 60 * 1000;
 /** 同じアカウントへのログインの失敗が10回続くと、15分そのアカウントへのログインを断る（基準 30.4） */
 export const LOGIN_FAILURE_LIMIT = 10;
 export const LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
+// 要件26（通報）の基準 26.2・26.3（タスク23が足した）
+/**
+ * 通報の理由の字数（基準 26.2・26.3。500字は値が AI判断・要件26の補足）。
+ * 空と空白だけを断るのは手続き（`usecases/reportStore`）——空欄は `required`、
+ * 長すぎは `too_long` で返す（設計書「入力の誤りの出し方」の 26.3 の行が指定した2つの語）。
+ */
+export const REPORT_REASON_MIN = 1;
+export const REPORT_REASON_MAX = 500;
 // 要件8（受け取りと確保）の基準 8.2・8.3（タスク13が足した）
 /** コードのもとになる乱数の長さ（domain/code.ts が先頭4バイトを8桁に直す） */
 export const CODE_BYTES = 4;
