@@ -8,24 +8,32 @@ const SEPARATOR = "$";
 export type PasswordRecord = {
   algorithm: typeof PASSWORD_ALGORITHM;
   iterations: number;
-  saltB64: string;
+  /** 塩（base64）。受け入れ検査（14.4）がこの名前で読む */
+  salt: string;
   hashB64: string;
 };
 
+/** Rng がくれたバイト列を、塩として保存できる base64 の文字列にする（乱数そのものは作らない）。 */
+export const saltFromBytes = (bytes: Uint8Array): string => {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+};
+
 /** 保存する1つの文字列を組む（`accounts.password_hash` に入れる値）。 */
-export const buildPasswordRecord = (input: { iterations: number; saltB64: string; hashB64: string }): string =>
-  [PASSWORD_ALGORITHM, String(input.iterations), input.saltB64, input.hashB64].join(SEPARATOR);
+export const buildPasswordRecord = (input: { iterations: number; salt: string; hashB64: string }): string =>
+  [PASSWORD_ALGORITHM, String(input.iterations), input.salt, input.hashB64].join(SEPARATOR);
 
 /** 保存された1つの文字列を解く。形が違えば null（壊れた値・古い方式）。 */
 export const parsePasswordRecord = (record: string): PasswordRecord | null => {
   const parts = record.split(SEPARATOR);
   if (parts.length !== 4) return null;
-  const [algorithm, iterationsText, saltB64, hashB64] = parts;
+  const [algorithm, iterationsText, salt, hashB64] = parts;
   if (algorithm !== PASSWORD_ALGORITHM) return null;
   const iterations = Number(iterationsText);
   if (!Number.isInteger(iterations) || iterations <= 0) return null;
-  if (!saltB64 || !hashB64) return null;
-  return { algorithm, iterations, saltB64, hashB64 };
+  if (!salt || !hashB64) return null;
+  return { algorithm, iterations, salt, hashB64 };
 };
 
 /** 2つの文字列（同じ塩・同じ回数で導いたハッシュどうし）を、長さの違いを早期に返さない形で比べる。 */

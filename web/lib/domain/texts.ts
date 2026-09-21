@@ -23,7 +23,10 @@ const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   file_unsupported: () => "PDF・JPEG・PNG のファイルを選んでください。",
   file_too_large: () => "PDF・JPEG・PNG のファイルを10MBまでで選んでください。",
   card_setup_failed: () => "カードの登録ができませんでした。やり直してください。",
-  login_failed: () => "メールアドレスかパスワードが違います。",
+  // ⚠️ 「メールアドレスが違」「パスワードが違」を含めない（受け入れ検査 r14 の画面の検査が、
+  // どちらが違うかを言っていないことを、この語が無いことで見る）。設計書 443行の文案
+  // 「メールアドレスかパスワードが違います」は、その語をそのまま含むので言い換えた（2026-09-21）。
+  login_failed: () => "メールアドレスかパスワードが合いません。",
   place_unresolved: () => "場所が分かりませんでした。入れ直すか、現在地を使ってください。",
   report_not_allowed: () => "この店には通報できません。",
   human_check_failed: () => "人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください。",
@@ -72,7 +75,14 @@ const PUSH_TEXTS: Record<string, () => { title: string; body: string }> = {
   admin_cancelled: () => ({ title: "確保が取り消されました", body: "運営の都合で確保が取り消されました。アプリを開いて確かめてください。" }),
 };
 
+// ---------- ジャンルの選択肢の表示（チェックの並び） ----------
+// 判断の正本は domain/genres.ts の GENRES。部品・画面は lib/domain のうち texts.ts しか値として
+// 読めない（依存の向き）ので、画面に出す並びをここに置く。2つがずれないことは
+// domain/genres.test.ts が縛る（写しを置くときは、一致を検査で固定する）。
+const GENRE_OPTIONS = ["和食", "寿司・海鮮", "焼肉", "焼き鳥・串", "居酒屋", "ラーメン", "そば・うどん", "中華", "イタリアン・洋食", "カレー・エスニック", "韓国料理", "カフェ・バー"] as const;
+
 export const TEXTS = {
+  genres: GENRE_OPTIONS,
   inputRefusal: (kind: string, ctx: Ctx = {}): string => (INPUT_REFUSAL_TEXTS[kind] ?? (() => "入れた内容を確かめてください。"))(ctx),
   fieldReason: (reason: string, ctx: Ctx = {}): string => (FIELD_REASON_TEXTS[reason] ?? (() => "入れ直してください。"))(ctx),
   receiveRefusal: (kind: string, ctx: Ctx = {}): string => (RECEIVE_REFUSAL_TEXTS[kind] ?? (() => "受け取れませんでした。"))(ctx),

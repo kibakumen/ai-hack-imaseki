@@ -1,0 +1,194 @@
+{
+  "kind": "audit",
+  "rubric": "impl@1",
+  "model": "sonnet",
+  "share": "A",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "店の重複メール登録は「事前チェック→INSERT」の順で、事前チェックをすり抜けた同時登録（2つの要求がほぼ同時に findAccountByEmail を通過してから batch へ進む）が起きると、表の UNIQUE 制約違反の例外を誰も捕まえず、`email_taken` の409ではなく未処理の例外としてそのまま外へ抜ける。",
+      "evidence": [
+        {
+          "path": "web/lib/usecases/registerStore.ts",
+          "line": 19,
+          "quote": "// 店と運営を通して重複を見る（基準 12.2）。表の UNIQUE（COLLATE NOCASE）が最後の砦で、"
+        },
+        {
+          "path": "web/lib/usecases/registerStore.ts",
+          "line": 21,
+          "quote": "if (await findAccountByEmail(deps.db, input.email)) return { ok: false, kind: \"email_taken\" };"
+        },
+        {
+          "path": "web/lib/usecases/registerStore.ts",
+          "line": 29,
+          "quote": "await deps.db.batch(["
+        },
+        {
+          "path": "web/lib/http/defineRoute.ts",
+          "line": 206,
+          "quote": "const result = await config.handler({ input, params, req, deps, ctx: ctx as RouteAuthContextFor<TAuth> });"
+        },
+        {
+          "path": "web/lib/http/app.ts",
+          "line": 44,
+          "quote": "return route.handle(req, deps, params);"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "registerStore の deps.db.batch(...) を try/catch し、UNIQUE 制約違反（D1 のエラーから判別できる種別）を email_taken の断りへ変換する。あるいは createApp.fetch または defineRoute.handle に、手続きが投げた例外を安全な応答（少なくとも 500 系＋ログ）へ倒す共通の受け皿を1つ置く（同種の穴が他の usecases にも潜みうるため、コメントの『最後の砦』を実体化する）。",
+      "share": "A",
+      "source_id": "F1"
+    },
+    {
+      "id": "F2",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "client/api.ts の apiCall は、応答の HTTP 状態コード（res.ok/res.status）を一度も見ず、JSON 本文に `ok:false` があるかどうかだけで成功/失敗を判定している。アプリ自身が作る断りは必ず `ok:false` を持つので通常は問題ないが、`ok:false` を持たない JSON をエラー時に返す経路（フレームワーク/プラットフォームの既定のエラー応答が偶然 JSON かつこの形でない場合、F1 のような未処理例外の帰結など）があると、失敗を成功として扱い、フォームはそのまま成功時の遷移（例: ログイン成功として /store へ遷移）を行う。",
+      "evidence": [
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 48,
+          "quote": "export const apiCall = async <T = Record<string, unknown>>(method: HttpMethod, path: string, body?: unknown, schema?: ZodType<T>): Promise<T | ApiFailure> => {"
+        },
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 69,
+          "quote": "if (isFailure(json)) {"
+        },
+        {
+          "path": "web/lib/client/api.ts",
+          "line": 73,
+          "quote": "if (!schema) return json as T;"
+        },
+        {
+          "path": "web/components/auth/LoginForm.tsx",
+          "line": 592,
+          "quote": "window.location.assign(HOME_BY_ROLE[result.role ?? \"store\"] ?? HOME_BY_ROLE.store);"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "apiCall で `res.ok`（または 2xx 帯）を先に見て、`!res.ok` のときは本文が既知の断りの形（error/refusal/current のいずれか）に合致しない限り networkFailure() へ倒す、という条件を明示的に足す。現状は本文の形だけに依存しており、状態コードを一切参照していない。",
+      "share": "A",
+      "source_id": "F2"
+    },
+    {
+      "id": "F3",
+      "type": "defect",
+      "severity": "low",
+      "claim": "セッションの寿命について、コード上の実値（25時間・残り1時間未満で延長）と、コメント中の説明（『2時間』『残りが半分＝1時間』）が複数ファイルにわたって食い違っている。tasks.md の申し送り（『実装時に一度2時間へ短縮したが…25時間へ調整』）どおり、2時間版のコメントが更新されずに残った痕跡と見られる。",
+      "evidence": [
+        {
+          "path": "web/lib/schemas/limits.ts",
+          "line": 39,
+          "quote": "セッションの寿命は2時間で、アクセスのたびに残りが半分（1時間）を切っていたら延ばす"
+        },
+        {
+          "path": "web/lib/schemas/limits.ts",
+          "line": 43,
+          "quote": "export const SESSION_MAX_AGE_SECONDS = 25 * 60 * 60;"
+        },
+        {
+          "path": "web/lib/http/cookies.ts",
+          "line": 14,
+          "quote": "店と運営のセッションの Cookie は、表の `sessions.expires_at` と同じ寿命にする（2時間）。"
+        },
+        {
+          "path": "web/lib/http/guards.ts",
+          "line": 59,
+          "quote": "残りが半分（1時間）を切っているときだけ、表の期限と Cookie の Max-Age を同じだけ先へ動かす。"
+        },
+        {
+          "path": "web/lib/http/session.test.ts",
+          "line": 85,
+          "quote": "it(\"残りが半分を切っていれば、表の期限を今から2時間先へ動かし、同じ長さの Set-Cookie を返す\", async () => {"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "上記4か所の『2時間』『残りが半分（1時間）』という表現を、実際の値（25時間・残り『1時間未満』で延長。半分ではない）に合わせて書き直す。挙動そのものは正しい（SESSION_RENEW_WITHIN_SECONDS は SESSION_MAX_AGE_SECONDS の半分ではなくフラットな1時間として比較されている）ので、コメントだけの修正で足りる。",
+      "share": "A",
+      "source_id": "F3"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "読みやすさ",
+      "score": 4,
+      "reason": "ほぼ全ファイルに『なぜ』を説明するコメントがあり命名も一貫しているが、セッション寿命まわりのコメント（F3）が実値と矛盾しており部分的に誤読を誘う"
+    },
+    {
+      "axis": "単純さ",
+      "score": 4,
+      "reason": "RouteAuthContextFor<TAuth> のような型の工夫はあるが、customer/store/admin の3種の見分けをそのまま表現する最小限の追加で、過剰な抽象化や不要な分岐は見当たらない"
+    },
+    {
+      "axis": "本人が説明できるか",
+      "score": 3,
+      "reason": "決定の理由は丁寧に書かれているが、同時登録時の例外の伝播経路（F1）や apiCall が状態コードを見ない設計（F2）は、質問されたときにその場で意図を説明しづらい暗黙の挙動になっている"
+    }
+  ],
+  "unbroken": [
+    "identifySession は期限の値が日付として読めないときにフェイルクローズ（切れている扱い）で断っており、壊れた値が『まだ有効』側へ倒れることはない",
+    "ログ出力（adapters/logger.ts）と Logger 型に、呼び名・電話番号・メールアドレス・パスワードなど個人情報を渡している箇所は見当たらない",
+    "Origin の確かめは GET 以外の全要求（登録・ログインを含む）に一様に適用されており、public 認可だから素通りする経路は無い",
+    "Turnstile の秘密鍵はサーバー側（adapters/turnstile.ts）にのみ在り、GET /api/config/public はサイトキーだけを返す",
+    "ログイン失敗時、アカウントが見つからない場合も同じ重さのパスワード導出を行っており、応答時間でアカウントの有無を推測しにくくしている（constantTimeEqual も長さの違いを早期リターンしない実装）",
+    "客の登録フォームには自由記述・アレルギー・パスワード・ログインの入力欄が無く、基準1.5・2.7 を壊す入力経路は見当たらない",
+    "ログインの断り文（login_failed: 「メールアドレスかパスワードが合いません。」web/lib/domain/texts.ts:29）は、受け入れ検査 r14-login.ui.test.tsx:27 の禁止語チェックを回避するための言い換えだが、要件14.2「どちらが違うかを示さない」という実質は保っており、特定のトークン値やテスト専用の分岐で通しているわけではない（受け入れ検査への過剰適合ではなく、要件の意図とテストの語彙制約の両方を満たす一般的な文言変更）。web/lib 全体を grep しても tok-ok・tok-bot 等のテスト専用リテラルへの分岐は無い。",
+    "schemas/error.ts の errorSchema/errorBodySchema の分離（web/lib/schemas/error.ts:13-32）は、タスク2の監査記録（docs/specs/v2/audits/task-2-c2.verdict.json）で指摘済みの『検査が読む名前と実装の名前の食い違い』の是正であり、r29-validation.test.ts の使い方（封筒ごと safeParse）と整合する。新たな不一致は作っていない。",
+    "要件12（店の登録: 12.1〜12.5）・要件14（ログインとセッション: 14.1〜14.4・14.8・14.9）の各基準を requirements.md の原文と照合し、schemas/account.ts の EMAIL_PATTERN・STORE_NAME_MIN/MAX・PASSWORD_MIN/MAX、usecases/registerStore.ts・login.ts の分岐を1つずつ突き合わせたが、範囲・重複判定（COLLATE NOCASE）・役割固定（role を入力から読まない）のいずれも要件文と一致していた。",
+    "SESSION_MAX_AGE_SECONDS=25時間・SESSION_RENEW_WITHIN_SECONDS=1時間（web/lib/schemas/limits.ts:482-487）は design.md:362 に同じ値と根拠（r20/r18/r19 の既存受け入れ検査が最大24時間1分を想定）が記載されており、設計書との不一致は無い。",
+    "d02-human-check.test.ts のタスク3・タスク4ブロック（客の登録・店の登録・ログインを人かどうかの確かめが守る）を読み、defineRoute.ts の実装順（Origin確認→見分け→本文解析→スキーマ検査→人かどうかの確かめ→ハンドラ）と突き合わせたが、確かめ失敗時に DB へ書き込みが発生する経路は無く、テストの『D1が変わらない』という期待と矛盾しない。"
+  ],
+  "shares": [
+    "A",
+    "B"
+  ],
+  "scores_by_share": {
+    "A": [
+      {
+        "axis": "読みやすさ",
+        "score": 4,
+        "reason": "ほぼ全ファイルに『なぜ』を説明するコメントがあり命名も一貫しているが、セッション寿命まわりのコメント（F3）が実値と矛盾しており部分的に誤読を誘う"
+      },
+      {
+        "axis": "単純さ",
+        "score": 4,
+        "reason": "RouteAuthContextFor<TAuth> のような型の工夫はあるが、customer/store/admin の3種の見分けをそのまま表現する最小限の追加で、過剰な抽象化や不要な分岐は見当たらない"
+      },
+      {
+        "axis": "本人が説明できるか",
+        "score": 3,
+        "reason": "決定の理由は丁寧に書かれているが、同時登録時の例外の伝播経路（F1）や apiCall が状態コードを見ない設計（F2）は、質問されたときにその場で意図を説明しづらい暗黙の挙動になっている"
+      }
+    ],
+    "B": [
+      {
+        "axis": "読みやすさ",
+        "score": 5,
+        "reason": "全ファイルに「なぜ」を説明する日本語コメントがあり、関数名（renewSession・identifySession・hashPassword・verifyPassword等）が振る舞いをそのまま表す。例: web/lib/http/guards.ts:57-61 の renewSession のコメントが「半分を切ったときだけ」という条件をそのままコードと対応させている。"
+      },
+      {
+        "axis": "単純さ",
+        "score": 4,
+        "reason": "型レベルの仕掛け（RouteAuthContextFor<TAuth> による auth ごとの ctx 絞り込み・web/lib/http/defineRoute.ts:20,24,32,143）と verifyHuman の Promise.race（同ファイル125-141行）は複雑さを持ち込むが、複数ロールの型安全と3秒打ち切りという要件に対して過剰ではない。saltFromBytes のような小さいユーティリティ関数も要件に対して妥当な粒度。"
+      },
+      {
+        "axis": "本人が説明できるか",
+        "score": 4,
+        "reason": "コメントが実装判断の理由（フェイルクローズ・スライディングウィンドウ・封筒とパッケージのスキーマ分離）を明記しており追いやすい。ただし TIMED_OUT シンボルと deadline を外側で作る理由（defineRoute.ts:116-124,150）や RouteAuthContextFor の型演算は、TypeScript の型システムと Promise.race の競合パターンに慣れていないと初見では追いにくい。"
+      }
+    ]
+  },
+  "questions_for_human": [
+    "web/lib/domain/texts.ts の login_failed の文言（「合いません」）は、受け入れ検査の禁止語（`/パスワードが違/`）を避けるために設計書の文言から変えたものです。この文言変更が要件14.2の『どちらが違うかを示さない』という要求を実質的に満たしていることを、自分の言葉で説明できますか？",
+    "web/lib/http/defineRoute.ts の verifyHuman は、外部で作った deadline（Promise）を関数の外側・要求を読み始める前に生成しています。なぜ関数の中で毎回 deadline を作ってはいけないのか、偽の時計（fake clock）との関係で説明できますか？",
+    "web/lib/http/guards.ts の identifySession は、期限の値が日付として読めない場合に『期限切れ』側へ倒しています（フェイルクローズ）。この判断が無いとどのような穴が生まれるか、`NaN <= 今` の評価結果と絡めて説明できますか？"
+  ],
+  "target": "task-4",
+  "target_sha256": "88b6ff377a5575a92eb2c6494733d5a5031b6d2e381507c8950ffd35ff1e8d28",
+  "cycle": 1,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T09:36:35.120Z"
+}

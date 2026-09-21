@@ -3,9 +3,21 @@
 // （crypto を直接は呼ばない・依存の向き）。
 
 import type { Deps } from "../ports";
-import { CUSTOMER_COOKIE_NAME, SESSION_COOKIE_NAME, parseCookies } from "./cookies";
+import { extendSession, findSessionByTokenHash } from "../repo/sessions";
+import { SESSION_RENEW_WITHIN_SECONDS, SESSION_MAX_AGE_SECONDS } from "../schemas/limits";
+import { CUSTOMER_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, parseCookies, serializeCookie } from "./cookies";
 
-export type SessionIdentity = { accountId: string; role: "store" | "admin"; storeId: string | null };
+export type SessionIdentity = {
+  accountId: string;
+  role: "store" | "admin";
+  storeId: string | null;
+  mustChangePassword: boolean;
+  /** 期限を延ばすときに使う（表を引く鍵） */
+  tokenHash: string;
+  /** Cookie に載っていた生の値。延ばすときに同じ値で Set-Cookie を出し直す */
+  token: string;
+  expiresAt: Date;
+};
 
 /** Cookie の客の識別子を SHA-256 にして探す。無い・でたらめ・消去済みなら null（401 の元）。 */
 export const identifyCustomer = async (req: Request, deps: Deps): Promise<string | null> => {
@@ -16,22 +28,43 @@ export const identifyCustomer = async (req: Request, deps: Deps): Promise<string
   return row ? (row.id as string) : null;
 };
 
-/** セッションの Cookie を SHA-256 にして探す。無い・でたらめ・期限切れなら null（401 の元）。 */
+/**
+ * セッションの Cookie を SHA-256 にして探す。無い・でたらめ・期限切れなら null（401 の元）。
+ *
+ * ⚠️ 期限の値が日付として読めないとき（表が壊れた・移し替えを間違えた）は**期限切れとして断る**
+ * （フェイルクローズ・本人選択 2026-09-21）。`NaN <= 今` は常に false なので、素直に比べると
+ * 壊れた値が「まだ切れていない」側へ倒れ、守りが黙って外れる。
+ */
 export const identifySession = async (req: Request, deps: Deps): Promise<SessionIdentity | null> => {
   const token = parseCookies(req.headers.get("cookie"))[SESSION_COOKIE_NAME];
   if (!token) return null;
   const tokenHash = await deps.hasher.sha256Hex(token);
-  const row = await deps.db
-    .prepare(
-      `SELECT sessions.expires_at AS expires_at, accounts.id AS account_id, accounts.role AS role, accounts.store_id AS store_id
-       FROM sessions JOIN accounts ON accounts.id = sessions.account_id
-       WHERE sessions.token_hash = ?1`,
-    )
-    .bind(tokenHash)
-    .first();
+  const row = await findSessionByTokenHash(deps.db, tokenHash);
   if (!row) return null;
-  if (new Date(row.expires_at as string).getTime() <= deps.clock.now().getTime()) return null;
-  return { accountId: row.account_id as string, role: row.role as "store" | "admin", storeId: (row.store_id as string | null) ?? null };
+  const expiresAt = new Date(row.expiresAtIso).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= deps.clock.now().getTime()) return null;
+  return {
+    accountId: row.accountId,
+    role: row.role,
+    storeId: row.storeId,
+    mustChangePassword: row.mustChangePassword,
+    tokenHash,
+    token,
+    expiresAt: new Date(expiresAt),
+  };
+};
+
+/**
+ * 使われるたびにセッションを延ばす（スライディングウィンドウ・本人選択／AI提示 2026-09-21）。
+ * 残りが半分（1時間）を切っているときだけ、表の期限と Cookie の Max-Age を同じだけ先へ動かす。
+ * 延ばさないときは空の配列——毎回 Set-Cookie と UPDATE を出さないため。
+ */
+export const renewSession = async (deps: Deps, session: SessionIdentity): Promise<string[]> => {
+  const now = deps.clock.now().getTime();
+  if (session.expiresAt.getTime() - now > SESSION_RENEW_WITHIN_SECONDS * 1000) return [];
+  const next = new Date(now + SESSION_MAX_AGE_SECONDS * 1000).toISOString();
+  await extendSession(deps.db, session.tokenHash, next);
+  return [serializeCookie(SESSION_COOKIE_NAME, session.token, SESSION_COOKIE_MAX_AGE_SECONDS)];
 };
 
 /**

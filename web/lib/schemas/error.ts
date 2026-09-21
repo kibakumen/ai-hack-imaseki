@@ -9,16 +9,24 @@ export const fieldErrorSchema = z.object({
   reason: z.enum(FIELD_REASONS),
 });
 
-export const errorSchema = z.object({
+/** 断りの中身（`error` の値）。 */
+export const errorBodySchema = z.object({
   kind: z.enum(INPUT_REFUSAL_KINDS),
   fields: z.array(fieldErrorSchema).optional(),
 });
 
-/** 400/409 `{ ok:false, error:{ kind, fields? } }` の全体。 */
-export const inputRefusalResponseSchema = z.object({
+/**
+ * 400/409 の応答まるごと `{ ok:false, error:{ kind, fields? } }`。
+ * ⚠️ 中身だけの形（`errorBodySchema`）と役割を分けてある——受け入れ検査（r29）は応答の本文を
+ * そのまま `errorSchema` に渡すので、ここは封筒の形でなければならない（2026-09-21 の直し。
+ * 前の版は中身の形で、封筒を渡すと `kind` が無く必ず落ちた。同じ形の
+ * `inputRefusalResponseSchema` は役割が重なるので畳んだ）。
+ */
+export const errorSchema = z.object({
   ok: z.literal(false),
-  error: errorSchema,
+  error: errorBodySchema,
 });
 
 export type FieldError = z.infer<typeof fieldErrorSchema>;
-export type ErrorBody = z.infer<typeof errorSchema>;
+export type ErrorBody = z.infer<typeof errorBodySchema>;
+export type ErrorResponse = z.infer<typeof errorSchema>;

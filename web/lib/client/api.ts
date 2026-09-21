@@ -36,7 +36,8 @@ const failureSchema = z.object({
 
 const networkFailure = (): ApiFailure => ({ ok: false, error: { kind: "network" } });
 
-const isRefused = (value: unknown): boolean => typeof value === "object" && value !== null && (value as { ok?: unknown }).ok === false;
+/** 断り（`ok:false`）かどうか。画面はこれで分けるので、状態コードを持ち歩かない。 */
+export const isFailure = (value: unknown): value is ApiFailure => typeof value === "object" && value !== null && (value as { ok?: unknown }).ok === false;
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -65,7 +66,7 @@ export const apiCall = async <T = Record<string, unknown>>(method: HttpMethod, p
   } catch {
     return networkFailure();
   }
-  if (isRefused(json)) {
+  if (isFailure(json)) {
     // 検査した値ではなく元の値を返す（partyMax・home のような場面ごとの項目を落とさないため）。
     return failureSchema.safeParse(json).success ? (json as ApiFailure) : networkFailure();
   }
@@ -74,17 +75,16 @@ export const apiCall = async <T = Record<string, unknown>>(method: HttpMethod, p
   return parsed.success ? parsed.data : networkFailure();
 };
 
-let cachedConfig: AppConfig | null = null;
-
 /**
- * 公開してよい設定の値（GET /api/config/public）を1回取ってメモリに持つ（取り直さない）。
+ * 公開してよい設定の値（GET /api/config/public）を取る。取れなければ null を返し、
+ * 呼ぶ側（フォームの人かどうかの確かめ・プッシュの購読）が「部品を出さない」へ倒す。
+ *
  * 形は渡さない——画面が使う3つ（サイトキー・プッシュの公開鍵・連絡先）だけを読み、
  * 欠けていれば読む側が既定へ倒すので、ここで全部を必須にすると却って画面が止まる。
+ * **値をメモリに溜めない**: 画面が作り直されるたびに取り直す。公開の直後や設定の入れ替えで
+ * 古いサイトキーを掴んだまま断られ続けるのを避ける（この入口は軽く、フォームを開いた時にしか呼ばない）。
  */
 export const getPublicConfig = async (): Promise<AppConfig | null> => {
-  if (cachedConfig) return cachedConfig;
   const result = await apiCall<AppConfig>("GET", "/api/config/public");
-  if ((result as ApiFailure).ok === false) return null;
-  cachedConfig = result as AppConfig;
-  return cachedConfig;
+  return isFailure(result) ? null : (result as AppConfig);
 };

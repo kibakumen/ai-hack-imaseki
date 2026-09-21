@@ -359,7 +359,7 @@ flowchart LR
 | テーブル | 主な列 | 補足 |
 | --- | --- | --- |
 | `accounts` | id・email（大文字小文字を区別しない一意）・password_hash・role（store／admin）・store_id・must_change_password・failed_count・locked_until | 店と運営を1つの表に置くので、1つのメールアドレスが指すアカウントは常に1つ（基準 12.2）。後ろの3列は【最終日】 |
-| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は14日（AI判断） |
+| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は25時間・残り1時間未満のアクセスで自動延長するスライディングウィンドウ（本人選択・AI提示 2026-09-21。旧: 14日〔AI判断〕。25時間の根拠: r20/r18/r19 の既存受け入れ検査が最大24時間1分の間隔を想定しており、それを壊さない最小限の余裕） |
 | `stores` | id・name・address・lat・lng・url・genres・menus・budget_min・budget_max・status（pending／approved／banned）・license_key・license_mime・card_registered_at・stripe_customer_id・card_setup_session_id | カードの番号・有効期限・セキュリティコードの列は無い（基準 13.7） |
 | `coupons` | id・store_id・name・note・created_at | 並びは作った順（基準 4.8） |
 | `offers` | id・store_id・capacity（募集する組数）・initial_capacity（公開のとき入れた値）・party_max・published_at・until_at・coupon_ids・ended_at・end_reason（stopped／banned） | 「何時まで」で終わったことは保存しない（時刻から導く）。`ended_at` に書くのは店が止めた時と運営が店を止めた時だけ |
@@ -440,7 +440,7 @@ flowchart LR
 | 3.4・3.5・3.6・3.7 | 取得 `FetchForm` | `kind: place_unresolved`（`fields` は `place`・文「場所が分かりませんでした。入れ直すか、現在地を使ってください」）・`kind: location_required`（3.7・現在地が取れなかった・文「場所を文字で入れてください」。これは入口を呼ぶ前に `client/geolocation` が同じ形で返す） | 場所の欄の直下（S3 の1・2歩目の文はこの規則で出る） |
 | 10.5・10.7 | 確保中の表示 `ReservationView` の「人数を変える」 | `party` out_of_range／not_integer（10.5）・`kind: party_over_max`（10.7・文は「この店では受け入れられません。確保を取り消して探し直せます」のまま） | 人数の欄の直下（10.5）／操作の直下（10.7。次の一手「確保を取り消す」は表示に既に在る・基準 10.8） |
 | 12.2・12.3・12.4・12.5 | 店の登録 `components/store/RegisterForm` | `email` bad_format・`kind: email_taken`（`fields` は `email`・文「このメールアドレスは登録済みです」）・`password` too_short／too_long・`name` too_short／too_long | それぞれの欄の直下 |
-| 14.2 | ログイン `app/login` の `LoginForm` | `kind: login_failed`（`fields` 無し・文「メールアドレスかパスワードが違います」。どちらが違うかは言わない・基準 14.2） | 「ログイン」ボタンの直下。入れたメールアドレスは残る |
+| 14.2 | ログイン `app/login` の `LoginForm` | `kind: login_failed`（`fields` 無し・文「メールアドレスかパスワードが合いません。」。どちらが違うかは言わない・基準 14.2。文言は実装時に `r14-login.ui.test.tsx:27` の禁止語 `/パスワードが違/` と衝突するため直した・2026-09-21） | 「ログイン」ボタンの直下。入れたメールアドレスは残る |
 | 14.15【最終日】 | パスワードの変更 `components/store/PasswordForm` | `password` too_short／too_long | 欄の直下 |
 | 15.2・15.4・15.7・15.8・15.10 | 店の情報 `ProfileForm` | `name`・`address` too_short／too_long・`url` bad_format・`budgetMin`・`budgetMax` out_of_range／not_integer・`budgetMin` min_over_max（文「最低は最高以下にしてください」）・`menus` too_many（15.7・文「おすすめメニューは5件までです」）・`kind: address_unresolved`（15.10・`fields` は `address`・文「住所が場所に直せませんでした。入れ直すか、しばらくしてやり直してください」） | それぞれの欄の直下。おすすめメニューの6件目は、足す操作の直下 |
 | 16.2・16.3・16.5 | クーポン `CouponEditor` | `name` too_short／too_long・`note` too_long・`kind: limit_reached`（16.2・文「クーポンは3つまでです」）・`kind: coupon_in_use`（16.5・文「公開中のオファーが見せているクーポンは変えられません」） | 欄の直下／「作る」「削除」の直下 |
@@ -595,7 +595,7 @@ flowchart LR
 
 | 歩 | 誰が・どの画面で・何を |
 | --- | --- |
-| 1 | 店のホームを開く（セッションは14日。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |
+| 1 | 店のホームを開く（セッションは25時間・アクセスごとに自動延長。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |
 | 2・3 | 公開のフォームでクーポン2つにチェック・組数3・4名まで・17:00 →「公開する」。あとは触らない |
 | 4 | 「向かっている客」に行が増える（10秒以内）。オファーのカードの残りが2に |
 | 5 | 客の画面のコードと行を見比べ、「完了済み」→ 確かめ → 押す |

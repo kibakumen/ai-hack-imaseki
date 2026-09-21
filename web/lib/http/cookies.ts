@@ -2,13 +2,20 @@
 // HttpOnly・Secure・SameSite=Lax・400日の Set-Cookie）。名前は自由（受け入れ検査は
 // Set-Cookie の先頭の `name=value` をそのまま見る）。
 
+import { SESSION_MAX_AGE_SECONDS } from "../schemas/limits";
+
 export const CUSTOMER_COOKIE_NAME = "aihack_customer";
 export const SESSION_COOKIE_NAME = "aihack_session";
 
 const DAY_SECONDS = 24 * 60 * 60;
 /** 400日（7桁以上・設計書「比べた案と、決めたこと」）。 */
 export const CUSTOMER_COOKIE_MAX_AGE_SECONDS = 400 * DAY_SECONDS;
-export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * DAY_SECONDS;
+/**
+ * 店と運営のセッションの Cookie は、表の `sessions.expires_at` と同じ寿命にする（2時間）。
+ * アクセスのたびに残りが半分を切っていれば、表と Cookie の両方を同じだけ延ばす
+ * （スライディングウィンドウ・本人選択／AI提示 2026-09-21。数字の正本は schemas/limits.ts）。
+ */
+export const SESSION_COOKIE_MAX_AGE_SECONDS = SESSION_MAX_AGE_SECONDS;
 
 const COMMON_ATTRS = "Path=/; HttpOnly; Secure; SameSite=Lax";
 

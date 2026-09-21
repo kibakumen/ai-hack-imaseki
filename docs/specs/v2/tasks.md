@@ -50,6 +50,12 @@ phase: tasks
 
 （実行者が、タスクを終えるたびに分かったことを書き足す。設計者は空で渡す）
 
+- **タスク2→3**: 入口は `web/lib/http/endpoints/<領域>.ts` が `RouteDefinition[]` を export し `routes.ts` が並べる形。`app/api/**/route.ts` はまだ0件（タスク25の「揃え」でまとめて作る）。打ち切りの合図は最初の await より前に作り `Promise.race` で競わせる（`defineRoute.ts` の `verifyHuman` が手本）。人かどうかの確かめは断られたらその場で同期に `reset()` を呼び直す（effect 経由だと次の送信に間に合わない）。ジャンルの選択肢は `domain/texts.ts` の `TEXTS.genres` を画面側が読む（`lib/domain` を部品が値として直接読めない）。`getPublicConfig()` はメモ化しない。画面の分岐は `client/api.ts` の `isFailure()`。
+- **タスク3→4**: タスク3は `d02-human-check.test.ts` の横断ブロック（human な入口の一覧）がタスク4の入口が無いと通らず、タスク3・4を同じサイクルで実装・監査した（記録上は task-4 の監査としてまとめて回す）。
+- **タスク4→5以降**: `GET /api/store/home` は今 `{ id, status }` の最小版のみ。**タスク7 が `usecases/storeHome.ts` へ `checklist`・`missingProfile`・`offer`・`publishPrefill`・`coupons`・`arrivals` を足す**。`usecases/credentials.ts` の `hashPassword`／`verifyPassword`／`issueSession`（PBKDF2 10万回）はタスク31（仮パスワード・パスワード変更）が再利用できる。`repo/{accounts,stores,sessions}.ts` は `*Statement` 版もあるので `db.batch([...])` に並べられる。`identifySession` は `mustChangePassword` も返す（タスク31用）。**店・運営の入口は `defineRoute` が残り1時間未満なら勝手に延長の Set-Cookie を足す**——応答の Set-Cookie 先頭を検査するテストを書くときは条件に注意。
+  - **セッションの寿命は25時間・残り1時間未満のアクセスで自動延長**（`web/lib/schemas/limits.ts` の `SESSION_MAX_AGE_SECONDS`／`SESSION_RENEW_WITHIN_SECONDS`。本人選択・AI提示 2026-09-21。旧: 14日〔AI判断〕→ 実装時に一度2時間へ短縮したが、r20/r18/r19 の既存受け入れ検査が最大24時間1分の間隔を想定しており通らなかったため25時間へ調整・進行役が確定）。
+  - `seed-admin`: `node web/scripts/seed-admin.mjs --email … --password …`（手元D1。先に `pnpm --dir web exec wrangler d1 migrations apply ai-hack-v2 --local`）。`--print` で本番用 `wrangler d1 execute --remote` コマンドを出す（本番を黙って書き換えない）。README（タスク26）に使い方を書くこと。
+
 ## タスク
 
 ### 提出版の本体（2026-09-22 15:00 まで）
