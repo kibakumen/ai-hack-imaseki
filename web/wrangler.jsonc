@@ -1,0 +1,29 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "ai-hack-v2",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ai-hack-v2",
+      "database_id": "09a71aee-5f9e-4733-b92e-275afa4cbc57"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PERMITS",
+      "bucket_name": "ai-hack-v2-permits"
+    }
+  ],
+  "vars": {
+    "ORCAROUTER_MODEL": "orcarouter/ai-sekitori",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAE98fYv_yiGU_Aa_",
+    "VAPID_PUBLIC_KEY": "BLacCvDVdQI5_Rgb1DqHDa0m_K50tyQVp9ry6YNhaI_9nwnd77KWSmqO1Zmy5wIIecMDpSZid3sEp_AKjIeG7MI"
+  }
+}

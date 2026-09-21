@@ -1,0 +1,37 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [],
+  "omissions": [
+    {
+      "claim": "監査記録の unbroken 3項目目「境界外の変更を探したが無かった…ファイルの置き場所も design.md:246-288 の『ファイル構成の計画』の直下と web/ の一覧に全て収まっていた」は不正確。diff の1件目 acceptance-globals.d.ts（repo 直下・新規）は design.md 246-288行の「ファイル構成の計画」に一切列挙されていない。この事実は同じ監査記録の questions_for_human 自身が『acceptance-globals.d.ts…前周の監査 F1（未使用の型宣言）で記録だけが残っている状態』と認めており、cycle 1・cycle 2 の監査（task-1-c1-e1.audit.json / task-1-c2-e1.audit.json）はこれを『境界外・かつ死んだコード』として F1 で明確に指摘し、opus の反論役も両cycleでAGREE、verdict（task-1-c1.verdict.json / task-1-c2.verdict.json）はどちらも recorded_only（低severity・記録のみで良い）としている。cycle 3 時点でも acceptance-globals.d.ts は削除されておらず（diff 1-11行目に現存）、56件全ての受け入れ検査ファイルが `_fakes` から明示 import しており（`tests/acceptance/v2/r24-admin-list.test.ts:4` など）、宣言したグローバルは依然未使用のまま。**disposition 自体（0 findings・fix不要）は正しい**——F1 は cycle 1/2 で既に recorded_only と裁定済みで、cycle 3 が新規 finding として再掲しないのは妥当な運用。ただし unbroken の当該1文は『境界外の変更が一切無かった』と言い切っており、自分自身が questions で言及している既知の境界外ファイルと矛盾する。",
+      "evidence": [
+        {
+          "path": ".dev/runs/v2/task-1.diff",
+          "line": 1,
+          "quote": "diff --git a/acceptance-globals.d.ts b/acceptance-globals.d.ts"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 246,
+          "quote": "## ファイル構成の計画（境界）"
+        },
+        {
+          "path": "docs/specs/v2/audits/task-1-c2.verdict.json",
+          "line": 13,
+          "quote": "\"recorded_only\": [\n    \"F1\"\n  ],"
+        },
+        {
+          "path": "docs/specs/v2/audits/task-1-c2-e1.audit.json",
+          "line": 11,
+          "quote": "設計のファイル構成の計画（design.md 246〜288行）に無い acceptance-globals.d.ts を repo 直下に追加しているが…境界外・かつ死んだコード"
+        }
+      ]
+    }
+  ],
+  "score_objections": [],
+  "target": "task-1",
+  "cycle": 3,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T06:15:58.847Z"
+}

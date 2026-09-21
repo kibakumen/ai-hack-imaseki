@@ -1,0 +1,157 @@
+{
+  "kind": "audit",
+  "rubric": "impl@1",
+  "model": "sonnet",
+  "share": "A",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "low",
+      "claim": "設計のファイル構成の計画に無い `acceptance-globals.d.ts` を追加しているが、そこで宣言した5つのグローバル（approvedStore・publishOffer・fetchOffers・registerCustomer・receive）はどのテストファイルでも `import { … } from \"./_fakes\"` で明示 import されており、この .d.ts は実際には一度も使われていない（境界外の変更・かつ死んだコード）。",
+      "evidence": [
+        {
+          "path": "acceptance-globals.d.ts",
+          "line": 1,
+          "quote": "declare const approvedStore: typeof import(\"./tests/acceptance/v2/_fakes\").approvedStore;"
+        },
+        {
+          "path": "tests/acceptance/v2/r07-ai-select.test.ts",
+          "line": 4,
+          "quote": "import { approvedStore, fetchOffers, loadWeb, makeCtx, north, one, publishOffer, registerCustomer, rows, selectionText, SHIBUYA, type Ctx } from \"./_fakes\";"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 249,
+          "quote": "├─ package.json / pnpm-workspace.yaml   ワークスペースの根。テスト・型検査の道具だけを持つ（packages は web の1つ）"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "acceptance-globals.d.ts を削除する。もし tsc の何らかの警告を消すために置いたなら、その警告の内容と、この宣言が実際に必要になる箇所（import せずに使っている場所）をコメントで示す。無ければ削除でよい。",
+      "share": "A",
+      "source_id": "F1"
+    },
+    {
+      "id": "F2",
+      "type": "defect",
+      "severity": "high",
+      "claim": "design.md はウェブ枠組みを「Next.js 16」に決めており、根拠は demo/ と sprint/ が動いている版に揃えることだが、task-1 の実装は Next.js 15.5.3 系を入れており、その根拠にしている demo/sprint 自体は 16.3.5 を使っている。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 77,
+          "quote": "| 画面と API | Next.js 16（App Router・Route Handlers）・React 19・TypeScript | Next.js・Cloudflare・OrcaRouter の組み合わせは本人発案（意図の基準37）。版は `demo/` と `sprint/` で動いている組み合わせに揃える（AI判断） |"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 38,
+          "quote": "subgraph W[\"Worker（Next.js 16 を OpenNext で変換）\"]"
+        },
+        {
+          "path": "web/package.json",
+          "line": 10,
+          "quote": "\"next\": \"^15.5.3\","
+        },
+        {
+          "path": "web/package.json",
+          "line": 18,
+          "quote": "\"eslint-config-next\": \"^15.5.3\""
+        },
+        {
+          "path": "sprint/package.json",
+          "line": 17,
+          "quote": "\"next\": \"16.3.5\","
+        },
+        {
+          "path": "demo/package.json",
+          "line": 17,
+          "quote": "\"next\": \"16.3.5\","
+        }
+      ],
+      "confidence": "確実",
+      "fix": "web/package.json（と eslint-config-next）を Next.js 16.3.5 系に合わせ、pnpm-lock.yaml を再生成する。合わせて OpenNext（.open-next/worker.js）と wrangler の互換性を Next 16 で確認する。structure.test.ts の 34.1 の検査は `next` の存在しか見ないため、この版のずれをゲートは検出しない——監査でしか見つからない種類の不一致",
+      "share": "B",
+      "source_id": "F1"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "読みやすさ",
+      "score": 4,
+      "reason": "設定ファイル群の名前と構造は素直で振る舞いが読める。vitest.config.ts のカスタムプラグインだけ1行コメントで補足があるがやや密"
+    },
+    {
+      "axis": "単純さ",
+      "score": 3,
+      "reason": "タスク1の範囲（骨組み）に対しては概ね最小構成だが、使われない acceptance-globals.d.ts（F1）と、Vite の静的URL変換を文字列操作で回避する vitest.config.ts のプラグインが、このタスクの要求に対してやや技巧的"
+    },
+    {
+      "axis": "本人が説明できるか",
+      "score": 3,
+      "reason": "package.json・tsconfig.json・wrangler.jsonc 等は自分の言葉で説明できる範囲。vitest.config.ts の `['../../../'].join('')` で Vite の静的解析を避けるハックは、Vite の内部挙動の知識が要り、コメントはあるが初見で追うのはやや難しい"
+    }
+  ],
+  "unbroken": [
+    "安全性: git 追跡対象のファイルに鍵の形の文字列・.dev.vars・*.local・PDF/JPEG/PNG・メールアドレス（sql）を探したが無かった。web/wrangler.jsonc の vars は設計が許した3名だけ（ORCAROUTER_MODEL・VAPID_PUBLIC_KEY・TURNSTILE_SITE_KEY）で、SECRET・PRIVATE・API_KEY・PASSWORD・EMAIL を含む名前は無い。web/.dev.vars.example は全項目が空値だった",
+    "境界外の変更: acceptance-globals.d.ts（F1）以外に、設計の「ファイル構成の計画」（design.md 246〜288行）に無い場所への変更は見当たらなかった。変更ファイルは直下と web/ の中だけで、demo/・sprint/ には触れていない",
+    "握りつぶし: このタスク1の差分は設定ファイルとスキーマのみで、try/catch や例外処理のコードが1つも無いため、エラーを握りつぶす分岐自体が存在しない",
+    "エッジケース: 同上の理由でランタイムの入力を扱うコードが無く、壊れた入力の扱いを検証できる対象が無かった",
+    "web/migrations/0001_init.sql の全テーブル・列は design.md「データと状態」の一覧と1対1で対応しており、崩せなかった",
+    "web/wrangler.jsonc の name・d1_databases・r2_buckets・vars（3つだけ）は tasks.md 21〜28行の実装メモの決めと一致し、崩せなかった",
+    "直下の tsconfig.json・vitest.config.ts の include・setupFiles・compilerOptions は tasks.md 47行目の指示（module ESNext・moduleResolution bundler・jsx react-jsx・strict）と一致し、崩せなかった",
+    "web/.dev.vars.example の6つの名前・値が空であること、直下と web/ の .gitignore の要る行は、構造の受け入れ検査（structure.test.ts 79-89行）が確かめる形とも一致し、崩せなかった",
+    "受け入れ検査（acceptance-globals.d.ts が宣言するグローバル）が実際に多数の受け入れ検査ファイルで使われていることを確認し、これは型検査を通すための正当な対処であって過剰適合ではないと判断した"
+  ],
+  "questions_for_human": [
+    "acceptance-globals.d.ts は何のために置きましたか？approvedStore・publishOffer 等は各テストファイルで import 済みなので、この宣言が実際に使われている場所を示せますか？",
+    "vitest.config.ts の `preserve-acceptance-import-meta-url` プラグインは、_tasks.ts の `new URL(\"../../../\", import.meta.url)` をそのまま書くと何が起きるために、文字列を組み立てる形に書き換えているのか説明できますか？",
+    "tsconfig.json は `strict: true` としつつ `noImplicitAny: false` で一部だけ緩めていますが、なぜこの1項目だけ外したか説明できますか？",
+    "web/package.json の Next.js が ^15.5.3 になっているのは意図的な変更か、それとも見落としか。demo/ と sprint/ はどちらも 16.3.5 で動いている",
+    "vitest.config.ts に足した独自の transform プラグイン（_tasks.ts のソース文字列を書き換える）は、どの具体的な失敗を解決するために入れたか。設計書に記述が無いので、本人はこの必要性を自分の言葉で説明できるか"
+  ],
+  "shares": [
+    "A",
+    "B"
+  ],
+  "scores_by_share": {
+    "A": [
+      {
+        "axis": "読みやすさ",
+        "score": 4,
+        "reason": "設定ファイル群の名前と構造は素直で振る舞いが読める。vitest.config.ts のカスタムプラグインだけ1行コメントで補足があるがやや密"
+      },
+      {
+        "axis": "単純さ",
+        "score": 3,
+        "reason": "タスク1の範囲（骨組み）に対しては概ね最小構成だが、使われない acceptance-globals.d.ts（F1）と、Vite の静的URL変換を文字列操作で回避する vitest.config.ts のプラグインが、このタスクの要求に対してやや技巧的"
+      },
+      {
+        "axis": "本人が説明できるか",
+        "score": 3,
+        "reason": "package.json・tsconfig.json・wrangler.jsonc 等は自分の言葉で説明できる範囲。vitest.config.ts の `['../../../'].join('')` で Vite の静的解析を避けるハックは、Vite の内部挙動の知識が要り、コメントはあるが初見で追うのはやや難しい"
+      }
+    ],
+    "B": [
+      {
+        "axis": "読みやすさ",
+        "score": 4,
+        "reason": "package.json・tsconfig・migrations・wrangler.jsonc は名前と構造だけで読める。vitest.config.ts のカスタム transform プラグインだけ、なぜ要るかがコード自体からは読めない"
+      },
+      {
+        "axis": "単純さ",
+        "score": 3,
+        "reason": "tasks.md の指示に対しては最小限だが、vitest.config.ts に _tasks.ts の正確なソース文字列へ依存する transform プラグインを足しており、これは設計書に記述が無い独自の対処（Vite の `new URL(リテラル, import.meta.url)` をアセット扱いする挙動への回避と推測されるが、design.md・tasks.md のどこにも説明が無い）"
+      },
+      {
+        "axis": "本人が説明できるか",
+        "score": 3,
+        "reason": "package.json・migrations・wrangler.jsonc は本人が設計書と対応させて説明できる形。vitest.config.ts の transform プラグインは Vite の内部挙動の知識が要り、本人が初見で説明するには技巧的"
+      }
+    ]
+  },
+  "target": "task-1",
+  "target_sha256": "8b0bbf75d05e35ff126ec97f675cecf71a4564adbda2d85ae984ea31da142163",
+  "cycle": 1,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T05:22:04.809Z"
+}

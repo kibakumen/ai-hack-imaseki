@@ -54,7 +54,7 @@ phase: tasks
 
 ### 提出版の本体（2026-09-22 15:00 まで）
 
-- [ ] 1. 骨組み: ワークスペース・`web/` の Next.js・`wrangler.jsonc`（名前と束縛と `vars`）・テストと型検査の土台・`migrations/0001_init.sql`・`web/.gitignore`・`.dev.vars.example`
+- [x] 1. 骨組み: ワークスペース・`web/` の Next.js・`wrangler.jsonc`（名前と束縛と `vars`）・テストと型検査の土台・`migrations/0001_init.sql`・`web/.gitignore`・`.dev.vars.example`
   - 設計書「ファイル構成の計画」「技術構成」「秘密情報と個人データの扱い」。テーブルは「データと状態」の全部（`ai_calls` の3列と `validation_failed`・【最終日】の列も最初から入れる・AI判断）。`pnpm install` と `pnpm exec vitest run` がこの土台だけで動く（未着手のタスクのブロックは飛ぶ）。wrangler にログイン済みなら公開してもよいが、ゲートは見ない（公開は本人の担当のタスク36）
   - _要件: 34.1, 34.5, 34.6, 31.2_
   - _受け入れ検査: tests/acceptance/v2/structure.test.ts_

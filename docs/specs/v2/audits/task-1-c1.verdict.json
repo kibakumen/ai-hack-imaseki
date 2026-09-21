@@ -1,0 +1,18 @@
+{
+  "kind": "verdict",
+  "target": "task-1",
+  "target_sha256": "8b0bbf75d05e35ff126ec97f675cecf71a4564adbda2d85ae984ea31da142163",
+  "cycle": 1,
+  "mode": "full",
+  "must_fix": [
+    "F2"
+  ],
+  "human_decision": [],
+  "recorded_only": [
+    "F1"
+  ],
+  "dropped": [],
+  "carry_over": [],
+  "status": "fix",
+  "recorded_at": "2026-09-21T05:25:45.094Z"
+}

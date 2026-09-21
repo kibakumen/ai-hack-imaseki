@@ -1,0 +1,32 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [],
+  "omissions": [
+    {
+      "claim": "監査記録の questions_for_human 6項目目「tsconfig.json の exclude に加えた r11-expiry.ui.test.tsx・r26-report.ui.test.tsx（前周 F3・本人選択で解決済み）は…」は、括弧内の『前周 F3・本人選択で解決済み』という出典付けが裏取りできない。task-1 の監査で記録されている唯一の F3 は cycle 2（task-1-c2-e1.audit.json）のもので、その claim は『ルート tsconfig.json に strict を要求しているが、実装は strict: true の直後で noImplicitAny: false を上書きしている』であり、tsconfig.json の exclude 配列（r11-expiry.ui.test.tsx・r26-report.ui.test.tsx を型検査から除外する設定）には一言も触れていない。cycle 2 の fix 提案も『noImplicitAny: false の行を削除する』のみで、exclude 配列の追加・削除には触れていない。design.md・tasks.md 全文を検索しても r11-expiry.ui / r26-report.ui のtsconfig除外に関する記述・決定の記録は見当たらない。つまり『本人選択で解決済み』と断定できる一次データが無いまま、無関係な F3（noImplicitAny の件）に結びつけて既定事実のように書いている。この監査記録自体の disposition（findings 0件）には影響しないが、questions_for_human は本人に確認を求める文であり、そこに誤った前提（『もう解決済みの合意がある』）を混ぜると本人が誤って追認してしまうおそれがある。なお、この文言は c3-e1（前回往復）から一字一句変わらずそのまま残っており、往復1の反論役はこの点を指摘していない。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/audits/task-1-c3-e2.audit.json",
+          "line": 43,
+          "quote": "tsconfig.json の exclude に加えた r11-expiry.ui.test.tsx・r26-report.ui.test.tsx（前周 F3・本人選択で解決済み）は、型検査からの除外であって vitest の実行対象からは除外されていない認識で合っているか？"
+        },
+        {
+          "path": "docs/specs/v2/audits/task-1-c2-e1.audit.json",
+          "line": 75,
+          "quote": "claim\": \"タスク表はルート `tsconfig.json` に `strict` を要求しているが、実装は `\\\"strict\\\": true` の直後で `\\\"noImplicitAny\\\": false` を上書きしており"
+        },
+        {
+          "path": ".dev/runs/v2/task-1.diff",
+          "line": 7977,
+          "quote": "+  \"exclude\": [\"node_modules\", \"demo\", \"sprint\", \"tests/acceptance/v2/r11-expiry.ui.test.tsx\", \"tests/acceptance/v2/r26-report.ui.test.tsx\"]"
+        }
+      ]
+    }
+  ],
+  "score_objections": [],
+  "target": "task-1",
+  "cycle": 3,
+  "exchange": 2,
+  "recorded_at": "2026-09-21T06:23:48.981Z"
+}

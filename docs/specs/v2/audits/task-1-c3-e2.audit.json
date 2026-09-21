@@ -1,0 +1,50 @@
+{
+  "kind": "audit",
+  "rubric": "impl@1",
+  "model": "sonnet",
+  "findings": [],
+  "scores": [
+    {
+      "axis": "読みやすさ",
+      "score": 4,
+      "reason": "web/app/page.tsx・layout.tsx・migrations/0001_init.sql・wrangler.jsonc はどれも名前と構造だけで振る舞いが読める。唯一 vitest.config.ts のカスタム transform（下記）だけがコメント無しでは意図が読み取りにくい"
+    },
+    {
+      "axis": "単純さ",
+      "score": 3,
+      "reason": "骨組みタスクとしては最小構成だが、vitest.config.ts の `preserve-acceptance-import-meta-url` プラグイン（vitest.config.ts:5-21）は _tasks.ts の1つの静的URL式のためだけにソース書き換えを行っており、タスク1の範囲（土台づくり）に対して技巧的"
+    },
+    {
+      "axis": "本人が説明できるか",
+      "score": 3,
+      "reason": "wrangler.jsonc・package.json・migrations 等は本人発案の決めをそのまま反映しており説明しやすい。vitest.config.ts の transform は Vite の import.meta.url 静的解析回避という技術的詳細を要し、本人が初見で追える技巧ではない可能性がある"
+    }
+  ],
+  "unbroken": [
+    "秘密情報の直書きを探したが無かった: web/wrangler.jsonc の vars は ORCAROUTER_MODEL・TURNSTILE_SITE_KEY（公開のサイトキー）・VAPID_PUBLIC_KEY（公開鍵）の3つだけ（web/wrangler.jsonc:24-28）で、design.md:204 が Worker の秘密として挙げる ORCAROUTER_API_KEY・GOOGLE_MAPS_API_KEY・STRIPE_SECRET_KEY・VAPID_PRIVATE_KEY・TURNSTILE_SECRET_KEY はどれも含まれていない。web/.dev.vars.example（web/.dev.vars.example:1-6）も値の無い6つの名前だけで、design.md が挙げる秘密の名前と一字一句一致していた",
+    "境界外の変更を探したところ、diff の1件目 acceptance-globals.d.ts（repo 直下・新規・.dev/runs/v2/task-1.diff:1-11）が design.md:246-288『ファイル構成の計画』に一切列挙されていない、という例外が1件あった（第1往復の unbroken 3項目目『境界外の変更を探したが無かった…全て収まっていた』は誤りで、ここで訂正する）。ただしこの1件は cycle 1・cycle 2 の監査（task-1-c1-e1.audit.json / task-1-c2-e1.audit.json）が既に F1（境界外・かつ死んだコード）として指摘済みで、両cycleとも verdict（task-1-c1.verdict.json / task-1-c2.verdict.json）が recorded_only（低severity・記録のみで良い）と裁定しており、cycle 3 時点でも削除されず現存（diff 1-11行目）・56件の受け入れ検査ファイルは依然 `_fakes` から明示 import している（例: tests/acceptance/v2/r24-admin-list.test.ts:4）。裁定済みの事項を cycle 3 で新規指摘として再掲しないのは妥当な運用であり、この1件を除けば diff の全エントリが `new file mode` で既存の追跡ファイルへの変更は無く、それ以外のファイルの置き場所は design.md の一覧に全て収まっていた",
+    "握りつぶし（エラーの無視）を探したが無かった: diff 内に try/catch は1つも無い（`^\\+.*catch` で0件）。vitest.config.ts の唯一の分岐（_tasks.ts の期待文字列が見つからないケース）は握りつぶさず明示的に throw していた（vitest.config.ts の該当箇所）",
+    "root の .gitignore（既存ファイル・変更なし）が `node_modules/`・`.env`・`.dev.vars` をパターンなしで登録しており、web/.dev.vars も含め秘密ファイルが誤って追跡される経路は無かった",
+    "エッジケース型は、この差分がスキーマ・設定ファイルのみで外部入力を扱うコードを一切含まないため、そもそも成立する対象が無かった（該当ロジックはタスク2以降）",
+    "34.1（Next.js であること）: web/package.json の dependencies に next@16.3.5、web/app/page.tsx が実在し、design.md の技術構成表（73-90行）の Next.js 16 と一致",
+    "34.5（demo/ とは別の新しいフォルダ）: repo 直下に demo/・sprint/ が既存で、実装は web/ 配下の新規フォルダに置かれている",
+    "34.6（秘密情報・個人データが公開リポジトリに無い）: web/.dev.vars.example は全項目が空値、web/wrangler.jsonc の vars は ORCAROUTER_MODEL・TURNSTILE_SITE_KEY・VAPID_PUBLIC_KEY の3つだけで design.md 211行の「見張り」の仕様（SECRET・PRIVATE・API_KEY・PASSWORD・EMAIL を含む名前が vars に無い）と一致。migrations/0001_init.sql にもカード情報・メールアドレスの平文は無い",
+    "31.2（1つのコマンドで全部走り、失敗時は非0終了）: 直下 package.json の scripts.test が \"vitest run\"、vitest.config.ts の include が web/**/*.test と tests/acceptance/v2/**/*.test の両方をカバーしており、design.md 107-130行の「受け入れ検査をタスクごとに走らせる」の決めと整合",
+    "ゲートの3コマンド（tsc --noEmit・eslint・vitest run）は design.md 95-99行の表とゲート結果 task-1.gate.txt で一致しており、乖離は無い",
+    "web/migrations/0001_init.sql の全テーブル・列は design.md 359-371行の「データと状態」の表と1対1で一致（accounts の3列・ai_calls の3列+validation_failed・rate_counters を含め、タスク1の指示『データと状態の全部を最初から入れる』を満たす）",
+    "前周 F2（OpenNext 依存欠落）はこの版で web/package.json devDependencies に @opennextjs/cloudflare が入っており解消を確認"
+  ],
+  "questions_for_human": [
+    "vitest.config.ts の transform フックは `tests/acceptance/v2/_tasks.ts` の `new URL(\"../../../\", import.meta.url)` という一文をわざわざ書き換えています。これを入れないと何が壊れるか、自分の言葉で説明できますか？",
+    "web/migrations/0001_init.sql 冒頭の `PRAGMA foreign_keys = ON;` は、Cloudflare D1 上で実行のたびに本当に有効になっているか確認済みですか？",
+    "acceptance-globals.d.ts が宣言する5つのグローバル（approvedStore 等）は、実際の受け入れ検査ファイルでは全て明示 import で使われており、グローバルとしては使われていません（例: tests/acceptance/v2/r24-admin-list.test.ts:4）。このファイルを残している理由を説明できますか？",
+    "vitest.config.ts の preserve-acceptance-import-meta-url プラグイン（5-21行）は、なぜ _tasks.ts の `new URL(\"../../../\", import.meta.url)` という特定の文字列をそのまま保持する必要があるのか、Vite の import.meta.url 静的解析がどう働くと理解しているか？",
+    "acceptance-globals.d.ts は cycle 1・2 の監査 F1（未使用の型宣言・境界外）で記録だけが残っている状態だが、この宣言は今後どのタスクで使う予定か、それとも消してよいものか？",
+    "tsconfig.json の exclude に加えた r11-expiry.ui.test.tsx・r26-report.ui.test.tsx（前周 F3・本人選択で解決済み）は、型検査からの除外であって vitest の実行対象からは除外されていない認識で合っているか？"
+  ],
+  "target": "task-1",
+  "target_sha256": "4f2948753221f3f43c10afa9e1ae25384226b2cfb654ba634c9ffb3958364a86",
+  "cycle": 3,
+  "exchange": 2,
+  "recorded_at": "2026-09-21T06:18:55.746Z"
+}

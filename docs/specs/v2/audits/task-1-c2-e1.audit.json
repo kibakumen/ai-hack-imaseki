@@ -1,0 +1,182 @@
+{
+  "kind": "audit",
+  "rubric": "impl@1",
+  "model": "sonnet",
+  "share": "A",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "low",
+      "claim": "設計のファイル構成の計画（design.md 246〜288行）に無い acceptance-globals.d.ts を repo 直下に追加しているが、そこで宣言する5つのグローバル（approvedStore・publishOffer・fetchOffers・registerCustomer・receive）は、実際に使っている全テストファイルで `import { … } from \"./_fakes\"` として明示 import されており、この .d.ts のグローバル宣言は一度も使われていない（境界外・かつ死んだコード）。",
+      "evidence": [
+        {
+          "path": "acceptance-globals.d.ts",
+          "line": 1,
+          "quote": "declare const approvedStore: typeof import(\"./tests/acceptance/v2/_fakes\").approvedStore;"
+        },
+        {
+          "path": "tests/acceptance/v2/r26-report.test.ts",
+          "line": 4,
+          "quote": "import { approvedStore, fetchOffers, makeCtx, MIN, one, publishOffer, receive, receivedScene, rows, type Ctx } from \"./_fakes\";"
+        },
+        {
+          "path": "tsconfig.json",
+          "line": 18,
+          "quote": "\"include\": [\"web/**/*.ts\", \"web/**/*.tsx\", \"tests/**/*.ts\", \"tests/**/*.tsx\", \"acceptance-globals.d.ts\"],"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "acceptance-globals.d.ts を削除し、tsconfig.json の include からも外す。この宣言が必要になる（import せず素の識別子として使う）箇所が実在するなら、その箇所をコメントで示す。",
+      "share": "A",
+      "source_id": "F1"
+    },
+    {
+      "id": "F2",
+      "type": "defect",
+      "severity": "high",
+      "claim": "wrangler.jsonc は OpenNext の出力（.open-next/worker.js・.open-next/assets）を前提に組まれているのに、それを生成する @opennextjs/cloudflare がリポジトリのどこにも導入されておらず、web/package.json にも deploy スクリプトが無い。タスク表を1〜39まで見ても、この依存とスクリプトを足すタスクが存在しない（設計の技術構成が指定した公開経路がどの段でも実装されないまま進む）。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 78,
+          "quote": "実行環境 | Cloudflare Workers（`@opennextjs/cloudflare` で変換） | AI判断。`demo/` と `sprint/` が同じ載せ方で公開できている（確実・`sprint/package.json`）。選ばなかった案は下の表 |"
+        },
+        {
+          "path": "web/wrangler.jsonc",
+          "line": 4,
+          "quote": "\"main\": \".open-next/worker.js\","
+        },
+        {
+          "path": "package.json",
+          "line": 9,
+          "quote": "\"devDependencies\": {"
+        },
+        {
+          "path": "web/package.json",
+          "line": 4,
+          "quote": "\"scripts\": {\n    \"dev\": \"next dev\",\n    \"build\": \"next build\",\n    \"lint\": \"eslint .\"\n  },"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 253,
+          "quote": "- [ ] 36. 公開と段3の確かめ: `pnpm --dir web run deploy`（OpenNext・進行役が手を貸してよい）で公開し、URL が応答する／README の「提出前の確かめ」を歩く"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "web/package.json の devDependencies に `@opennextjs/cloudflare` を足し、`web/open-next.config.ts` を置き、`web/package.json` に `\"deploy\": \"opennextjs-cloudflare build && wrangler deploy\"` のようなスクリプトを追加する。タスク1（骨組み）かタスク26（README）のどちらかにこの作業を明示的に割り当て、タスク36が実際に動く状態にしておく。",
+      "share": "B",
+      "source_id": "F1"
+    },
+    {
+      "id": "F3",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "タスク表はルート `tsconfig.json` に `strict` を要求しているが、実装は `\"strict\": true` の直後で `\"noImplicitAny\": false` を上書きしており、`strict` が本来含む暗黙 any の検出が最初から無効化されている。これは strict モードを求めた指示と矛盾し、後続タスクの型の穴を型検査が拾えなくなる。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 47,
+          "quote": "`tsconfig.json`（`web/**` と `tests/**`、`jsx: react-jsx`、`module: ESNext`、`moduleResolution: bundler`、`strict`）。"
+        },
+        {
+          "path": "tsconfig.json",
+          "line": 7,
+          "quote": "\"strict\": true,"
+        },
+        {
+          "path": "tsconfig.json",
+          "line": 8,
+          "quote": "\"noImplicitAny\": false,"
+        }
+      ],
+      "confidence": "確実",
+      "fix": "`noImplicitAny: false` の行を削除する。暗黙 any を許したい具体的な理由があるなら、その理由をコメントか設計の追記として残し、監査で判断できるようにする。",
+      "share": "B",
+      "source_id": "F2"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "読みやすさ",
+      "score": 4,
+      "reason": "設定ファイル群は名前と構造だけで振る舞いが読める。vitest.config.ts のカスタム transform プラグインだけ、理由がコメント頼みでやや密"
+    },
+    {
+      "axis": "単純さ",
+      "score": 3,
+      "reason": "タスク1の範囲に対しては概ね最小構成だが、使われない acceptance-globals.d.ts（F1）が残っている"
+    },
+    {
+      "axis": "本人が説明できるか",
+      "score": 3,
+      "reason": "package.json・tsconfig.json・migrations・wrangler.jsonc は自分の言葉で説明できる範囲。vitest.config.ts の `['../../../'].join('')` という Vite の静的解析回避や、tsconfig の `strict: true` と `noImplicitAny: false` の組み合わせは、初見で本人が意図を説明するにはやや技巧的"
+    }
+  ],
+  "unbroken": [
+    "安全性: git 追跡対象になった全ファイル（diff 全文）に鍵・トークンらしき文字列・メールアドレスの直書きを探したが無かった。web/wrangler.jsonc の vars は設計が許した3名（ORCAROUTER_MODEL・VAPID_PUBLIC_KEY・TURNSTILE_SITE_KEY）だけで、SECRET・PRIVATE・API_KEY・PASSWORD・EMAIL を含む名前は無い。web/.dev.vars.example は6項目とも値が空だった",
+    "境界外の変更: acceptance-globals.d.ts（F1）以外に、変更ファイルは直下と web/ の中だけで、design.md「ファイル構成の計画」の外（demo/・sprint/ 等）には一切触れていない",
+    "境界外の変更（前回 F2＝Next.js版の不一致）: web/package.json は next 16.3.5・eslint-config-next 16.3.5 に修正済みで、demo/・sprint/ の版（16.3.5）と一致していることを確認した",
+    "握りつぶし: このタスク1の差分は設定ファイルとスキーマ（SQL・JSON・CSS・最小限の tsx）のみで、try/catch や例外処理を含むコードが1つも無く、エラーを握りつぶす分岐自体が存在しない",
+    "エッジケース: 同上の理由でランタイムの入力を扱うコードが無く、壊れた入力の扱いを検証できる対象が無かった",
+    "vitest.config.ts の preserve-acceptance-import-meta-url プラグインは、_tasks.ts のソース文字列（new URL(\"../../../\", import.meta.url)）を書き換えず、Vite の静的解析が `new URL(リテラル, import.meta.url)` をアセット参照として特別扱いする既知の挙動を避けるためのものと読め、書き換え後の式は実行時に同じ値を返すため、受け入れ検査の振る舞いを変えるものではないと判断した（境界外の変更にはあたらない）",
+    "web/migrations/0001_init.sql の全テーブル・列は design.md「データと状態」の一覧と対応し、web/wrangler.jsonc の name・d1_databases・r2_buckets・vars は tasks.md 21〜28行目の決めと一致していた",
+    "web/migrations/0001_init.sql の全テーブル・列は design.md「データと状態」の列挙（ai_calls の3列・validation_failed・rate_counters を含む）と1対1で一致しており、欠けている表・列は見つからなかった。",
+    "web/wrangler.jsonc の vars は design.md「秘密が混ざらない見張り」が指定した3つの名前（ORCAROUTER_MODEL・VAPID_PUBLIC_KEY・TURNSTILE_SITE_KEY）だけで、値も `07_鍵と環境の準備.md` の控えと一致していた（過不足なし）。",
+    "web/.dev.vars.example の6項目は「秘密情報と個人データの扱い」が列挙した5つの秘密＋ADMIN_CONTACT_EMAILと一致し、値はすべて空だった。",
+    "ルート package.json の devDependencies は tasks.md 47行目が列挙した依存（vitest・typescript・wrangler・@testing-library/react・jsdom・react・react-dom・@types/react・zod）を過不足なく満たしていた。",
+    "タスク1の差分にはまだ業務ロジック（usecases/domain/adapters）が無いため、受け入れ検査の入力だけを特別扱いする分岐や決め打ちの戻り値は見つからなかった（受け入れ検査への過剰適合の型は、この差分の範囲では崩せなかった）。"
+  ],
+  "questions_for_human": [
+    "tsconfig.json は strict: true としつつ noImplicitAny: false で1項目だけ緩めています（tsconfig.json 7〜8行目）。なぜこの項目だけ外したか説明できますか？",
+    "acceptance-globals.d.ts は何のために置きましたか。宣言している5つのグローバルは全テストファイルで import 済みで、この .d.ts が実際に使われている箇所を示せますか？",
+    "web/wrangler.jsonc の main が `.open-next/worker.js` を指しているのに、それを作る `@opennextjs/cloudflare` をどのタスクで足すつもりだったか、説明できるか？",
+    "vitest.config.ts の `preserve-acceptance-import-meta-url` プラグインが何のために要るか（Vite が `new URL(\"../../../\", import.meta.url)` をどう変換してしまうか）を、自分の言葉で説明できるか？",
+    "tsconfig.json で `strict: true` の直後に `noImplicitAny: false` を置いた理由を説明できるか？"
+  ],
+  "shares": [
+    "A",
+    "B"
+  ],
+  "scores_by_share": {
+    "A": [
+      {
+        "axis": "読みやすさ",
+        "score": 4,
+        "reason": "設定ファイル群は名前と構造だけで振る舞いが読める。vitest.config.ts のカスタム transform プラグインだけ、理由がコメント頼みでやや密"
+      },
+      {
+        "axis": "単純さ",
+        "score": 3,
+        "reason": "タスク1の範囲に対しては概ね最小構成だが、使われない acceptance-globals.d.ts（F1）が残っている"
+      },
+      {
+        "axis": "本人が説明できるか",
+        "score": 3,
+        "reason": "package.json・tsconfig.json・migrations・wrangler.jsonc は自分の言葉で説明できる範囲。vitest.config.ts の `['../../../'].join('')` という Vite の静的解析回避や、tsconfig の `strict: true` と `noImplicitAny: false` の組み合わせは、初見で本人が意図を説明するにはやや技巧的"
+      }
+    ],
+    "B": [
+      {
+        "axis": "読みやすさ",
+        "score": 4,
+        "reason": "package.json・tsconfig.json・migrations/0001_init.sql・wrangler.jsonc は素直な構造で、設計書の列挙とほぼ1対1に対応しており名前から意図が読める。"
+      },
+      {
+        "axis": "単純さ",
+        "score": 3,
+        "reason": "大半は最小の骨組みだが、vitest.config.ts の `preserve-acceptance-import-meta-url` プラグインは _tasks.ts の特定の1行のリテラル文字列に依存し、無ければ例外を投げる作りで、必要性は理解できるが局所的な技巧が1つ増えている。"
+      },
+      {
+        "axis": "本人が説明できるか",
+        "score": 3,
+        "reason": "package.json・tsconfig・migrations は本人が初見でも設計書と突き合わせて追える。vitest.config.ts の Vite の静的 URL 変換を避ける仕組みは、Vite の内部挙動の知識が要り、本人が自分の言葉で説明するには一段掘り下げが要る。"
+      }
+    ]
+  },
+  "target": "task-1",
+  "target_sha256": "ba79ae2ae6c84bb2c2e82c75037c99ce0cc1c2b18cea5986603d0496793787d3",
+  "cycle": 2,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T05:37:39.932Z"
+}

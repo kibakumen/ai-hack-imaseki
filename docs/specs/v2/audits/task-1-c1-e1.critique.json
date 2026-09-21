@@ -1,0 +1,66 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "tsconfig.json",
+          "line": 18,
+          "quote": "\"include\": [\"web/**/*.ts\", \"web/**/*.tsx\", \"tests/**/*.ts\", \"tests/**/*.tsx\", \"acceptance-globals.d.ts\"],"
+        },
+        {
+          "path": "tests/acceptance/v2/_fakes.ts",
+          "line": 413,
+          "quote": "export const registerCustomer = async (ctx: Ctx, over: Partial<typeof CUSTOMER> & { humanToken?: string } = {}) => {"
+        },
+        {
+          "path": "tests/acceptance/v2/r07-ai-select.test.ts",
+          "line": 4,
+          "quote": "import { approvedStore, fetchOffers, loadWeb, makeCtx, north, one, publishOffer, registerCustomer, rows, selectionText, SHIBUYA, type Ctx } from \"./_fakes\";"
+        }
+      ],
+      "note": "tsc は動かせなかった（このサブエージェントに Bash が無い）ので、5つの識別子（approvedStore・publishOffer・fetchOffers・registerCustomer・receive）が現れる全ファイル（名前の一致33件）を1件ずつ確認した。receive を識別子として使う箇所は全て './_fakes' から明示 import しており、明示 import はスコープ内で同名のグローバル宣言をシャドウする。r08-receive.ui.test.tsx・r04-fetch-result.ui.test.tsx・structure.test.ts の3件は文字列リテラル `TID.btn(\"receive\")` としての一致で、識別子としての参照ではない。ゆえに acceptance-globals.d.ts の ambient 宣言を実際に読む箇所は0件——分担Aの主張が正しい。⚠️ 分担Bの unbroken 項目「acceptance-globals.d.ts が宣言するグローバルが実際に多数の受け入れ検査ファイルで使われている」は誤り（識別子の名前が本文に現れることと ambient global として使われていることを混同している）。実際は全参照が明示 import で、ambient 宣言を読んでいる箇所は0件。この unbroken 項目は撤回すべき。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 77,
+          "quote": "画面と API | Next.js 16（App Router・Route Handlers）・React 19・TypeScript | Next.js・Cloudflare・OrcaRouter の組み合わせは本人発案（意図の基準37）。版は `demo/` と `sprint/` で動いている組み合わせに揃える（AI判断）"
+        },
+        {
+          "path": "web/package.json",
+          "line": 10,
+          "quote": "\"next\": \"^15.5.3\","
+        },
+        {
+          "path": "sprint/package.json",
+          "line": 17,
+          "quote": "\"next\": \"16.3.5\","
+        },
+        {
+          "path": "demo/package.json",
+          "line": 17,
+          "quote": "\"next\": \"16.3.5\","
+        },
+        {
+          "path": "tests/acceptance/v2/structure.test.ts",
+          "line": 38,
+          "quote": "expect({ ...pkg.dependencies, ...pkg.devDependencies }).toHaveProperty(\"next\");"
+        }
+      ],
+      "note": "design.md が明記する根拠（demo/・sprint/ と版を揃える）と実装が食い違うことを一次データで確認した。structure.test.ts の 34.1 の検査は toHaveProperty(\"next\") のみで版を見ないため、この不一致は監査でしか捕まらないという fix の付言も裏取りできた。"
+    }
+  ],
+  "omissions": [],
+  "score_objections": [],
+  "target": "task-1",
+  "cycle": 1,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T05:25:44.975Z"
+}

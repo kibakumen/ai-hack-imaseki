@@ -1,0 +1,88 @@
+{
+  "kind": "critique",
+  "model": "opus",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "acceptance-globals.d.ts",
+          "line": 1,
+          "quote": "declare const approvedStore: typeof import(\"./tests/acceptance/v2/_fakes\").approvedStore;"
+        },
+        {
+          "path": "tests/acceptance/v2/r26-report.test.ts",
+          "line": 4,
+          "quote": "import { approvedStore, fetchOffers, makeCtx, MIN, one, publishOffer, receive, receivedScene, rows, type Ctx } from \"./_fakes\";"
+        }
+      ],
+      "note": "56/56 のテストファイル全部が _fakes から明示 import しており（`^import.*_fakes` を全ファイルで検索し56件ヒット）、acceptance-globals.d.ts のグローバル宣言を使う箇所は1つも無い。死んだコードで確実。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "web/wrangler.jsonc",
+          "line": 4,
+          "quote": "\"main\": \".open-next/worker.js\","
+        },
+        {
+          "path": "web/package.json",
+          "line": 4,
+          "quote": "\"scripts\": {\n    \"dev\": \"next dev\",\n    \"build\": \"next build\",\n    \"lint\": \"eslint .\"\n  },"
+        },
+        {
+          "path": "package.json",
+          "line": 9,
+          "quote": "\"devDependencies\": {"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 287,
+          "quote": "wrangler.jsonc・open-next.config.ts・next.config.ts・eslint.config.mjs・.dev.vars.example・.gitignore（ビルドの生成物の行。実行者が書く）"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 57,
+          "quote": "1. 骨組み: ワークスペース・`web/` の Next.js・`wrangler.jsonc`（名前と束縛と `vars`）・テストと型検査の土台・`migrations/0001_init.sql`・`web/.gitignore`・`.dev.vars.example`"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 253,
+          "quote": "- [ ] 36. 公開と段3の確かめ: `pnpm --dir web run deploy`（OpenNext・進行役が手を貸してよい）で公開し、URL が応答する"
+        }
+      ],
+      "note": "一次データに当て直して確認した。web/package.json・package.json(直下)のどちらにも @opennextjs/cloudflare は無く、web/ ディレクトリの実ファイル一覧（tsconfig.json・next-env.d.ts・next.config.ts・wrangler.jsonc・eslint.config.mjs・package.json）に open-next.config.ts も deploy スクリプトも実在しない。design.md 287行目は open-next.config.ts の置き場所を「実行者が書く」と述べるだけでタスク番号を名乗っておらず、@opennextjs/cloudflare の追加や deploy スクリプトの中身には一切触れていない。tasks.md のタスク1本文は wrangler.jsonc・.gitignore・.dev.vars.example・migrations を名指しする一方でこの依存とスクリプトを含んでおらず、タスク26（README）も手順を書くだけで実装しない。34.2（Cloudflare上で動くこと）は本人担当タスク36に割り当てられているが、タスク36が前提する `deploy` スクリプトを作るAIタスクが存在しないため、指摘は正確。重さ高は妥当（人手作業の直前で気づく詰みになりうる）。"
+    },
+    {
+      "finding": "F3",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "tsconfig.json",
+          "line": 7,
+          "quote": "\"strict\": true,"
+        },
+        {
+          "path": "tsconfig.json",
+          "line": 8,
+          "quote": "\"noImplicitAny\": false,"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 47,
+          "quote": "`tsconfig.json`（`web/**` と `tests/**`、`jsx: react-jsx`、`module: ESNext`、`moduleResolution: bundler`、`strict`）。"
+        }
+      ],
+      "note": "実物のtsconfig.jsonを読んで確認。strict直後にnoImplicitAny: falseで暗黙anyの検出だけを無効化しており、design.md・tasks.mdのどちらにもこの上書きを認める記述は見当たらない（design.mdの技術構成の表・ファイル構成の計画にも言及なし）。理由のコメントも無い。"
+    }
+  ],
+  "omissions": [],
+  "score_objections": [],
+  "target": "task-1",
+  "cycle": 2,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T05:40:22.731Z"
+}
