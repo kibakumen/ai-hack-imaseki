@@ -6,5 +6,6 @@ import { authRoutes } from "./endpoints/auth";
 import { configRoutes } from "./endpoints/config";
 import { customerRoutes } from "./endpoints/customer";
 import { storeRoutes } from "./endpoints/store";
+import { storeLicenseRoutes } from "./endpoints/storeLicense";
 
-export const ROUTE_DEFINITIONS: RouteDefinition[] = [...configRoutes, ...customerRoutes, ...authRoutes, ...storeRoutes];
+export const ROUTE_DEFINITIONS: RouteDefinition[] = [...configRoutes, ...customerRoutes, ...authRoutes, ...storeRoutes, ...storeLicenseRoutes];

@@ -27,6 +27,25 @@ export const FieldMessage = ({ name, failure, ctx }: FieldMessageProps) => {
   );
 };
 
+/**
+ * その項目の断りが返っているとき、**断りの種類（kind）の文**を入力欄の直下に出す
+ * （2026-09-21・タスク7 が足した）。
+ *
+ * ファイルの欄のように、理由の雛形（「◯字で入れてください」）では中身が言えず、種類の文
+ * （「PDF・JPEG・PNG のファイルを10MBまでで選んでください」）の方が答えになる場合に使う
+ * （設計書「入力の誤りの出し方」の 13.3 の行: ファイルの欄の直下にこの文を出す）。
+ * 判断はしない——受け取った語を domain/texts の文にして、項目の直下に出すだけ。
+ */
+export const FieldKindMessage = ({ name, failure, ctx }: FieldMessageProps) => {
+  const error = failure?.error;
+  if (!error?.fields?.some((f) => f.name === name)) return null;
+  return (
+    <p className="msg" role="alert" data-testid={`msg-${name}`}>
+      {TEXTS.inputRefusal(error.kind, ctx)}
+    </p>
+  );
+};
+
 type FormMessageProps = {
   failure: ApiFailure | null;
   /** このフォームが持っている項目名。ここに在る項目の断りは、項目の直下に出るのでここでは出さない。 */

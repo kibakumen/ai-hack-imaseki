@@ -19,7 +19,16 @@ export type RouteAuthContext =
 /** 見分けが済んだあとの文脈。`auth: "customer"` の入口の手続きは customerId だけを受け取る。 */
 export type RouteAuthContextFor<TAuth extends RouteAuth> = Extract<RouteAuthContext, { auth: TAuth }>;
 
-export type RouteHandlerResult = { status: number; body: unknown; cookies?: string[] };
+export type RouteHandlerResult = {
+  status: number;
+  body: unknown;
+  cookies?: string[];
+  /**
+   * JSON でない本文を返す入口だけが使う（営業許可書のファイル・要件13の基準 13.5）。
+   * ここが在れば `body` は見ず、この本文と見出しをそのまま返す（2026-09-21・タスク7 が足した）。
+   */
+  raw?: { body: BodyInit; headers: Record<string, string> };
+};
 
 export type RouteHandlerArgs<TInput, TAuth extends RouteAuth> = {
   input: TInput;
@@ -52,6 +61,13 @@ const jsonResponse = (status: number, body: unknown, cookies: string[] = []): Re
   const headers = new Headers({ "content-type": "application/json" });
   for (const cookie of cookies) headers.append("set-cookie", cookie);
   return new Response(JSON.stringify(body), { status, headers });
+};
+
+/** JSON でない本文（ファイル）を返す。見出しは手続きが全部決める。 */
+const rawResponse = (status: number, raw: NonNullable<RouteHandlerResult["raw"]>, cookies: string[] = []): Response => {
+  const headers = new Headers(raw.headers);
+  for (const cookie of cookies) headers.append("set-cookie", cookie);
+  return new Response(raw.body, { status, headers });
 };
 
 const invalidInput = (fields: Array<{ name: string; reason: FieldReason }>): RouteHandlerResult => ({
@@ -204,6 +220,7 @@ export const defineRoute = <TInput, TAuth extends RouteAuth>(config: RouteConfig
     }
 
     const result = await config.handler({ input, params, req, deps, ctx: ctx as RouteAuthContextFor<TAuth> });
-    return jsonResponse(result.status, result.body, [...(result.cookies ?? []), ...renewCookies]);
+    const cookies = [...(result.cookies ?? []), ...renewCookies];
+    return result.raw ? rawResponse(result.status, result.raw, cookies) : jsonResponse(result.status, result.body, cookies);
   },
 });
