@@ -4,7 +4,8 @@
 // 開いた時に詳細の入口を1回呼び、返ってきた中身を描く。承認を断る操作は置かない（基準 25.3）。
 // 止めるときは、何が起きるかを見せて確かめを取ってから入口を呼ぶ（基準 25.5）。
 //
-// ⚠️「承認済みに戻す」（基準 25.9）はタスク21が、下の「止める」と同じ形でここへ足す。
+// 2026-09-21 タスク21 が「承認済みに戻す」（基準 25.9・25.10）を、「止める」と同じ形で足した
+// ——押すとその場で確かめが出て、確かめてから入口を呼ぶ。
 
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
@@ -48,6 +49,7 @@ export const StoreDetail = ({ storeId }: Props) => {
   const [store, setStore] = useState<StoreDetailDto | null>(null);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [confirmingBan, setConfirmingBan] = useState(false);
+  const [confirmingRestore, setConfirmingRestore] = useState(false);
 
   const load = useCallback(async () => {
     const result = await apiCall<{ store: StoreDetailDto }>("GET", `/api/admin/stores/${storeId}`);
@@ -67,7 +69,7 @@ export const StoreDetail = ({ storeId }: Props) => {
     };
   }, [load]);
 
-  /** 承認・停止のあとは、詳細を取り直して今の状況を映す（断られたときはその場に留まる）。 */
+  /** 承認・停止・復帰のあとは、詳細を取り直して今の状況を映す（断られたときはその場に留まる）。 */
   const act = async (path: string) => {
     const result = await apiCall("POST", `/api/admin/stores/${storeId}/${path}`, {});
     if (isFailure(result)) {
@@ -76,6 +78,7 @@ export const StoreDetail = ({ storeId }: Props) => {
     }
     setFailure(null);
     setConfirmingBan(false);
+    setConfirmingRestore(false);
     const next = await load();
     setStore(next.store);
   };
@@ -150,6 +153,27 @@ export const StoreDetail = ({ storeId }: Props) => {
                 止める
               </button>
               <button type="button" onClick={() => setConfirmingBan(false)}>
+                やめる
+              </button>
+            </div>
+          )}
+          <FormMessage failure={failure} />
+        </div>
+      )}
+
+      {store.status === "banned" && (
+        <div data-testid="form-restore">
+          <button type="button" data-testid="btn-restore" onClick={() => setConfirmingRestore(true)}>
+            承認済みに戻す
+          </button>
+          {confirmingRestore && (
+            <div data-testid="confirm-restore" role="group" aria-label="承認済みに戻す前の確かめ">
+              {/* 何が戻らないかを先に見せる（基準 25.10。止めるときと同じ、押す前に結果を知らせる形） */}
+              <p>終わったオファーと取り消されたお客さまの確保は戻りません。この店は公開し直せるようになります。戻しますか。</p>
+              <button type="button" data-testid="btn-confirm" onClick={() => void act("restore")}>
+                承認済みに戻す
+              </button>
+              <button type="button" onClick={() => setConfirmingRestore(false)}>
                 やめる
               </button>
             </div>

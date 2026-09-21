@@ -40,3 +40,21 @@ export const effectiveState = (row: ReservationStateRow, now: Date): EffectiveSt
 /** 期限切れになってから20分以内か（期限ちょうど＋20分は、もう外・基準 11.6 と 20.13 を同じ線で切る）。 */
 export const isWithinExpiredGrace = (row: ReservationStateRow, now: Date): boolean =>
   now.getTime() - row.expiresAt.getTime() < EXPIRED_GRACE_MS;
+
+// ---------- タスク18: 店が取り消せるか（要件21） ----------
+
+/**
+ * 店がその確保を取り消せるか（基準 21.1・21.4）。**確保中のときだけ** true
+ * （設計書「確保の状態と、残りの数え方」の「店が取り消す」の行——前の状態は「確保中」だけ）。
+ *
+ * 完了済み・期限切れ・客が取り消した・店が取り消した・運営に取り消された、の5つは false
+ * （基準 21.5・21.6）。断る側は状態も残りも変えず、今の状態を返す（基準 21.7）。
+ *
+ * **期限切れを含めない**（AI判断・設計書の表に無い組み合わせはすべて断る側）: 期限切れの確保は
+ * もう枠を押さえていないので取り消しても店に得るものが無く、客には「お店の都合で取り消された」
+ * という要らない知らせが飛ぶ。期限切れに対して店ができるのは完了済みにすること（基準 20.7）だけ。
+ *
+ * 同じ規則を、店のホームの行のボタン（`canCancel`）と入口の断りの両方が読む
+ * （設計書「どの判断をどこに置くか」——判断を手続きの側に書かない）。
+ */
+export const canCancelByStore = (row: ReservationStateRow, now: Date): boolean => effectiveState(row, now) === "active";

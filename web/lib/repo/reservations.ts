@@ -13,7 +13,7 @@
 //    `RESERVATION_COLUMNS` と `toReservationRow` を使い回せば、列の名前を写さずに済む。
 
 import type { Deps } from "../ports";
-import { publishingOfferCondition, remainingExpression } from "./sqlFragments";
+import { activeReservationCondition, publishingOfferCondition, remainingExpression } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -257,3 +257,65 @@ export const insertReservationIfReceivable = async (db: Db, input: NewReservatio
     .run();
   return changedRows(result) > 0;
 };
+
+// ---------- 店が取り消す（タスク18・要件21） ----------
+
+/**
+ * 番号で1件。**その店のものでなければ null**（別の店の確保は触れない・入口は 404 に倒す）。
+ * 残りは見ないので、`findReservationOfCustomer` と違ってオファーとも店とも繋がない。
+ */
+export const findReservationOfStore = async (db: Db, reservationId: string, storeId: string): Promise<ReservationRow | null> => {
+  const row = await db.prepare(`SELECT ${RESERVATION_COLUMNS} FROM reservations res WHERE res.id = ?1 AND res.store_id = ?2`).bind(reservationId, storeId).first();
+  return row ? toReservationRow(row as Record<string, unknown>) : null;
+};
+
+/**
+ * 店が取り消す（基準 21.1・21.4）。入ったら true。
+ *
+ * **前の状態（確保中で期限より前）を WHERE に全部入れた1つの UPDATE** なので、同じ確保へ
+ * 完了済み・客の取り消し・店の取り消しが同時に来ても、状態が2回変わることはない（基準 20.22）。
+ *
+ * `holds_slot` は触らない——店が取り消した確保は枠を押さえたままで、残りも募集する組数も
+ * 戻らない（基準 18.4・18.5。押さえている条件の3つ目は `sqlFragments.holdsSlotCondition`）。
+ */
+export const cancelReservationByStore = async (db: Db, input: { reservationId: string; storeId: string; nowIso: string }): Promise<boolean> => {
+  const result = await db
+    .prepare(
+      // 別名を付けずに表の名前で条件を書く（`endPublishedOffersStatement` と同じ形。UPDATE の
+      // 別名は SQLite の版に依るので、確実な側に寄せた）。
+      `UPDATE reservations SET status = 'store_cancelled', status_at = ?3` +
+        ` WHERE reservations.id = ?1 AND reservations.store_id = ?2 AND ${activeReservationCondition("reservations", "?3")}`,
+    )
+    .bind(input.reservationId, input.storeId, input.nowIso)
+    .run();
+  return changedRows(result) > 0;
+};
+
+// ---------- 運営が店を止める（タスク21・要件25の基準 25.8） ----------
+
+/**
+ * 止める時点で確保中の確保（番号と客の番号だけ）。**取り消す前に読む**——取り消したあとでは
+ * 「確保中だった客」を選べないので、プッシュの相手（基準 22.2）はここで決める。
+ */
+export const listActiveReservationsOfStore = async (db: Db, storeId: string, nowIso: string): Promise<Array<{ id: string; customerId: string }>> => {
+  const result = await db
+    .prepare(`SELECT res.id, res.customer_id FROM reservations res WHERE res.store_id = ?1 AND ${activeReservationCondition("res", "?2")}`)
+    .bind(storeId, nowIso)
+    .all();
+  return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({ id: row.id as string, customerId: row.customer_id as string }));
+};
+
+/**
+ * その店の確保中の確保を全部「運営に取り消された」にする1つの UPDATE（基準 25.8・25.11）。
+ * `db.batch` の並びに入れて、状況の書き換えとオファーの終わりと同じまとまりで流す。
+ *
+ * 期限切れの確保は変えない（枠をもう押さえておらず、店はまだ完了済みにできる・基準 20.7）。
+ * `holds_slot` は触らないが、押さえている条件に `admin_cancelled` は無いので残りは1戻る（基準 18.6）。
+ */
+export const adminCancelReservationsStatement = (db: Db, storeId: string, nowIso: string) =>
+  db
+    .prepare(
+      `UPDATE reservations SET status = 'admin_cancelled', status_at = ?2` +
+        ` WHERE reservations.store_id = ?1 AND ${activeReservationCondition("reservations", "?2")}`,
+    )
+    .bind(storeId, nowIso);
