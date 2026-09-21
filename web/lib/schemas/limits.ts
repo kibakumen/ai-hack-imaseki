@@ -150,3 +150,9 @@ export const PUSH_TTL_SECONDS = 20 * 60;
 export const PUSH_ENDPOINT_MAX = 2048;
 /** 購読の鍵（p256dh は65バイト・auth は16バイトを base64url にしたもの）の長さの上限（AI判断） */
 export const PUSH_KEY_MAX = 255;
+// 要件20（向かっている客と完了済み）の基準 20.4（タスク17が足した）
+/**
+ * 店のホームが開いている間、ホームを取り直す間隔（30秒）。基準 20.4 の「30秒以内に映す」の
+ * 上限そのものなので、**これより長くしない**（値は基準のまま・AI判断ではない）。
+ */
+export const ARRIVALS_REFRESH_MS = 30_000;

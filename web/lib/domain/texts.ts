@@ -124,3 +124,33 @@ export const COUPON_TEXTS = {
     return (COUPON_FORM_TEXTS[error.kind] ?? ((): string => TEXTS.inputRefusal(error.kind ?? "")))(max);
   },
 } as const;
+
+// ---------- 向かっている客の一覧（要件20の基準 20.1・20.5・20.14・20.16・20.18・20.20） ----------
+// 行の見え方（確保中・期限切れ・完了済み・店が取り消した）と、完了済み／取り消しを断られたときの
+// 「今の状態」の文。**語から文を選ぶ判断はここに置く**（部品の側で状態を場合分けしない）。
+
+const ARRIVAL_KIND_LABELS: Record<string, string> = {
+  active: "確保中",
+  expired: "期限切れ",
+  completed: "完了済み",
+  store_cancelled: "店が取り消し",
+};
+
+/** 断った理由＝その確保の今の状態（基準 20.20）。6つの状態のどれでも文が在る。 */
+const ARRIVAL_REFUSED_TEXTS: Record<string, string> = {
+  active: "この確保の状態が変わったため、完了済みにできませんでした。",
+  expired: "期限切れから20分を過ぎたため、完了済みにできませんでした。",
+  completed: "この確保はすでに完了済みです。",
+  customer_cancelled: "客が取り消していたため、完了済みにできませんでした。",
+  store_cancelled: "この確保は取り消されていました。",
+  admin_cancelled: "運営が取り消していたため、完了済みにできませんでした。",
+};
+
+export const ARRIVALS_TEXTS = {
+  /** 行の見出し（基準 20.1・20.5・20.14・20.16） */
+  kindLabel: (kind: string): string => ARRIVAL_KIND_LABELS[kind] ?? "確保中",
+  /** 断られたときに行の下へ出す文（基準 20.20） */
+  refused: (state: string): string => ARRIVAL_REFUSED_TEXTS[state] ?? "この確保の状態が変わったため、完了済みにできませんでした。",
+  /** 出す行が1件も無いとき（基準 20.18） */
+  empty: "向かっている客はいません。",
+} as const;

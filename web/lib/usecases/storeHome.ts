@@ -6,10 +6,11 @@
 //    **タスク9 が `offer` と `publishPrefill`**、**タスク17 が `arrivals`** を埋める。
 //    下の3か所の ⚠️ が、その差し込み口（ほかの行は触らずに済む形にしてある）。
 
-import { EMPTY_PUBLISH_PREFILL, missingProfileFields, type ArrivalView, type OfferView, type PublishPrefillView, type StoreStatusView } from "../domain/storeHome";
+import { arrivalRows, ARRIVALS_WINDOW_MS, EMPTY_PUBLISH_PREFILL, missingProfileFields, type ArrivalView, type OfferView, type PublishPrefillView, type StoreStatusView } from "../domain/storeHome";
 import type { Deps } from "../ports";
 import { listCouponsByStore, type CouponRow } from "../repo/coupons";
 import { insertExpiredEvents } from "../repo/logs";
+import { listStoreArrivals } from "../repo/reservations";
 import { findStoreHomeRow } from "../repo/stores";
 import { storeHomeOfferPart } from "./storeHomeOffer";
 
@@ -24,6 +25,17 @@ export type StoreHome = {
   publishPrefill: PublishPrefillView;
   coupons: CouponRow[];
   arrivals: ArrivalView[];
+};
+
+/**
+ * 「向かっている客」の一覧（要件20の基準 20.1〜20.5・20.14〜20.16）。
+ * どの行を出すか・できる操作の判断は `domain/storeHome` の `arrivalRows`（純粋）が持ち、
+ * ここは読む幅（残り方のいちばん長い24時間）を決めて渡すだけ。
+ */
+const storeArrivals = async (deps: Deps, storeId: string, storeBanned: boolean): Promise<ArrivalView[]> => {
+  const now = deps.clock.now();
+  const rows = await listStoreArrivals(deps.db, storeId, new Date(now.getTime() - ARRIVALS_WINDOW_MS).toISOString());
+  return arrivalRows(rows, now, { storeBanned });
 };
 
 /** 見分けの直後に店が消えた場合だけ null（入口が 401 に倒す）。 */
@@ -45,7 +57,6 @@ export const storeHome = async (deps: Deps, storeId: string): Promise<StoreHome 
     checklist: { license: store.licenseKey !== null, card: store.cardRegisteredAt !== null },
     missingProfile: missingProfileFields(store),
     coupons,
-    // ⚠️ タスク17: 「向かっている客」の行を読んで `ArrivalView[]` にする
-    arrivals: [],
+    arrivals: await storeArrivals(deps, storeId, store.status === "banned"),
   };
 };
