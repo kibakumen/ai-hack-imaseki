@@ -40,3 +40,35 @@ export const effectiveState = (row: ReservationStateRow, now: Date): EffectiveSt
 /** 期限切れになってから20分以内か（期限ちょうど＋20分は、もう外・基準 11.6 と 20.13 を同じ線で切る）。 */
 export const isWithinExpiredGrace = (row: ReservationStateRow, now: Date): boolean =>
   now.getTime() - row.expiresAt.getTime() < EXPIRED_GRACE_MS;
+
+// ---------- 完了済みにできるか（タスク17・要件20の基準 20.6・20.7・20.12・20.13・20.19・20.24） ----------
+
+/**
+ * 完了済みにできるかの判断に要る、確保1行ぶんと周りの2つの事実。
+ * 状態だけでは決まらない（同じ期限切れでも、客が受け取り直していれば断る）ので、
+ * 読む側が事実を揃えてから渡す。
+ */
+export type CompletableRow = ReservationStateRow & {
+  /** その客が、この確保より後に別の確保を作ったか（基準 20.12） */
+  hasNewerReservation: boolean;
+  /** その店が運営に止められているか（基準 20.23・20.24） */
+  storeBanned: boolean;
+};
+
+/**
+ * 完了済みにできる確保は2つだけ（要件20の補足）——確保中（基準 20.6）と、期限から20分以内で
+ * 客がまだ新しい確保を作っていない期限切れ（基準 20.7）。それ以外は全部できない:
+ * 20分を過ぎた期限切れ（基準 20.13）・客が新しい確保を作ったあとの期限切れ（基準 20.12）・
+ * 既に完了済み／客が取り消した／店が取り消した／運営に取り消された確保（基準 20.19）。
+ * 店が止められている間は、この2つも断る（基準 20.24）。
+ *
+ * ⚠️ **店の一覧の行（`canComplete`）と、入口の断りの両方がこの1つの関数を読む**（設計書
+ * 「どの判断をどこに置くか」）。片方だけを直すと、押せるのに断られるボタンができる。
+ */
+export const canComplete = (row: CompletableRow, now: Date): boolean => {
+  if (row.storeBanned) return false;
+  const state = effectiveState(row, now);
+  if (state === "active") return true;
+  if (state !== "expired") return false;
+  return isWithinExpiredGrace(row, now) && !row.hasNewerReservation;
+};

@@ -11,6 +11,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, isFailure } from "../../lib/client/api";
+import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
+import { ArrivalsList, type ArrivalsListRow } from "./ArrivalsList";
 import { PublishForm, type PublishFormCoupon, type PublishFormPrefill } from "./PublishForm";
 import { OfferPanel, type OfferPanelOffer } from "./OfferPanel";
 import { SetupChecklist } from "./SetupChecklist";
@@ -25,6 +27,7 @@ export type StoreHomeView = {
   offer: OfferPanelOffer | null;
   publishPrefill: PublishFormPrefill;
   coupons: PublishFormCoupon[];
+  arrivals: ArrivalsListRow[];
 };
 
 export const StoreHome = () => {
@@ -46,6 +49,22 @@ export const StoreHome = () => {
     };
   }, [loadHome]);
 
+  // 確保の追加と状態の変化を30秒以内に一覧へ映す（基準 20.4）。開いている間だけ動き、
+  // 取れなかった回は前の値のままにする（一覧が空に落ちて、向かっている客が消えないように）。
+  useEffect(() => {
+    let alive = true;
+    const timer = setInterval(() => {
+      void (async () => {
+        const next = await loadHome();
+        if (alive && next) setHome(next);
+      })();
+    }, ARRIVALS_REFRESH_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [loadHome]);
+
   const reload = () => {
     void (async () => setHome(await loadHome()))();
   };
@@ -64,7 +83,8 @@ export const StoreHome = () => {
       {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={reload} />}
 
       {home.offer ? <OfferPanel offer={home.offer} onChanged={reload} /> : null}
-      {/* ⚠️ タスク17: 「向かっている客」の一覧（`home.arrivals`） */}
+
+      <ArrivalsList rows={home.arrivals ?? []} onChanged={reload} />
 
       <nav>
         <a href="/store/profile">店の情報</a>

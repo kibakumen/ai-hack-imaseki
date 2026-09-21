@@ -1,3 +1,4 @@
+import { canComplete, effectiveState, isWithinExpiredGrace } from "./reservation";
 import { formatTimeOfDay, resolveUntil } from "./until";
 // 店のホームに何を出すかの判断（設計書「どの判断をどこに置くか」）。副作用なし・時計も引数で受け取る。
 //
@@ -146,3 +147,78 @@ export const missingStoreProfile = (store: StoreProfileState): string[] => {
   if (store.budgetMax === null) missing.push("budgetMax");
   return missing;
 };
+
+// ---------- 「向かっている客」の一覧の行（タスク17・要件20の基準 20.1〜20.5・20.14〜20.16） ----------
+
+/** 完了済みの行を一覧に残す長さ（24時間・基準 20.14・値は AI判断）。 */
+export const COMPLETED_ROW_VIEW_MS = 24 * 60 * 60 * 1000;
+
+/** 店が取り消した行を、電話番号とともに残す長さ（20分・基準 20.16・本人選択）。 */
+export const STORE_CANCELLED_ROW_VIEW_MS = 20 * 60 * 1000;
+
+/**
+ * 一覧に出しうる行のいちばん長い残り方。読む側（`repo/reservations` の問い合わせ）が
+ * 「いつ以降の行を読めば足りるか」をこれで決める——上の3つの長さのうち最も長いもの。
+ * 確保中・期限切れの行は受け取りから40分で消えるので、24時間で全部を覆える。
+ */
+export const ARRIVALS_WINDOW_MS = COMPLETED_ROW_VIEW_MS;
+
+/** 一覧の行を決めるのに要る、確保1行ぶん（表の列と同じ名前。時刻は Date で受け取る）。 */
+export type ArrivalRowInput = {
+  reservationId: string;
+  status: string;
+  expiresAt: Date;
+  /** 状態が最後に変わった時刻（確保中・期限切れでは受け取った時刻） */
+  statusAt: Date;
+  nickname: string;
+  phone: string;
+  party: number;
+  code: string;
+  /** その客が、この確保より後に別の確保を作ったか（基準 20.12） */
+  hasNewerReservation: boolean;
+};
+
+/**
+ * その行を一覧に出すか、出すならどの見え方か。出さないなら null。
+ *   確保中               → いつでも出す（基準 20.1）
+ *   期限切れ             → 期限から20分以内で、客が新しい確保を作っていないときだけ（基準 20.5・20.12）
+ *   完了済み             → 完了済みにしてから24時間（基準 20.14）
+ *   店が取り消した       → 取り消しから20分（基準 20.16）
+ *   客が取り消した・運営に取り消された → 出さない（基準 20.15）
+ */
+const visibleKind = (row: ArrivalRowInput, now: Date): ArrivalView["kind"] | null => {
+  const state = effectiveState(row, now);
+  const sinceChange = now.getTime() - row.statusAt.getTime();
+  if (state === "active") return "active";
+  if (state === "expired") return isWithinExpiredGrace(row, now) && !row.hasNewerReservation ? "expired" : null;
+  if (state === "completed") return sinceChange < COMPLETED_ROW_VIEW_MS ? "completed" : null;
+  if (state === "store_cancelled") return sinceChange < STORE_CANCELLED_ROW_VIEW_MS ? "store_cancelled" : null;
+  return null;
+};
+
+/**
+ * 一覧の行を、期限の近い順（基準 20.2）に並べて返す。人数は確保の今の値なので、客が変えれば
+ * そのまま映る（基準 20.3）。できる操作は2つの判断に委ねる——完了済みは `canComplete`
+ * （`domain/reservation`・入口の断りと同じ関数）、取り消しは確保中の行だけ（要件21の基準 21.1）。
+ */
+export const arrivalRows = (rows: readonly ArrivalRowInput[], now: Date, options: { storeBanned: boolean }): ArrivalView[] =>
+  rows
+    .flatMap((row) => {
+      const kind = visibleKind(row, now);
+      return kind === null ? [] : [{ row, kind }];
+    })
+    .sort((a, b) => a.row.expiresAt.getTime() - b.row.expiresAt.getTime())
+    .map(({ row, kind }) => ({
+      reservationId: row.reservationId,
+      kind,
+      nickname: row.nickname,
+      phone: row.phone,
+      party: row.party,
+      code: row.code,
+      expiresAt: row.expiresAt.toISOString(),
+      canComplete: canComplete({ ...row, storeBanned: options.storeBanned }, now),
+      // ⚠️ タスク18（店の取り消し）が `canCancelByStore` を `domain/reservation.ts` へ足したら、
+      //    ここをそれに差し替えること（入口の断りと同じ規則を、画面のボタンも読むため）。
+      //    止められている店に操作を出さないのは、完了済み（基準 20.23）と同じ扱い。
+      canCancel: kind === "active" && !options.storeBanned,
+    }));
