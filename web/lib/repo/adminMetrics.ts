@@ -40,10 +40,43 @@ export type FetchTotals = {
 /** 確保の数と、自動で取り消された（期限切れの）数。 */
 export type ReservationTotals = { total: number; expired: number };
 
+/**
+ * `resolved_model` で括った1行（タスク28 の続き・第4周の追記）。`model` が null の行は、
+ * 実際に答えたモデルが分からない呼び出し（OrcaRouter の応答ヘッダーが無かった等）をまとめたもの。
+ */
+export type ByModelRow = {
+  model: string | null;
+  count: number;
+  /** その群の実費が1件も残っていない（全部 NULL）ときは null（0 に倒さない・画面は「—」と出す）。 */
+  avgCostUsd: number | null;
+  avgDurationMs: number;
+  validationFailedRate: number;
+  fellBackRate: number;
+};
+
+/**
+ * `purpose` で括った1行（店の選定／紹介文の生成／紹介文の判定・migrations/0002）。
+ * こちらは「実費の合計」を持つ——本人の指示（用途別の実費内訳）が求めるのは
+ * 「その用途にいくら使ったか」の総額で、1回あたりの平均ではないため。
+ */
+export type ByPurposeRow = {
+  purpose: string;
+  count: number;
+  totalCostUsd: number;
+  avgDurationMs: number;
+};
+
 /** 集計は行が無いと NULL を返す。数として読めない値は 0 に倒す（画面に空欄を出さないため）。 */
 const toNumber = (value: unknown): number => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/** `toNumber` と違い、NULL を 0 に倒さず null のまま返す（実費の平均で「まだ1件も無い」を隠さないため）。 */
+const toNumberOrNull = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 /** 所要時間はミリ秒の整数で持つ（平均が端数になっても、表示と突き合わせの単位を1つにする）。 */
@@ -109,4 +142,75 @@ export const reservationTotals = async (db: Db, nowIso: string): Promise<Reserva
     .bind(nowIso)
     .first();
   return { total: toNumber(row?.total), expired: toNumber(row?.expired) };
+};
+
+/**
+ * `resolved_model` で括った表（タスク28・第4周の追記）。行が1つも無い（`ai_calls` が空）ときは
+ * 空配列——SQL の `GROUP BY` は行が無いと1件も返さないので、ここで空を作る必要はない。
+ *
+ * `NULL` の `resolved_model` は SQLite の `GROUP BY` の中で1つの群にまとまる（`NULL = NULL` を
+ * 使わず「同じ値」として括る規則）ので、実際に答えたモデルが分からない呼び出しは自然に1行へ集まる。
+ *
+ * `fallback_level >= 1` は「受け皿（別のモデル）が答えた」呼び出し（基準の言葉づかいは usecases 側の型コメント）。
+ * `fallback_level` が `NULL`（OrcaRouter の応答ヘッダーが無かった）の行は `CASE` の条件が `NULL` になり
+ * `ELSE` 側（0）へ落ちる——「受け皿かどうか分からない」を「受け皿だった」に混ぜない。
+ */
+export const byModelTotals = async (db: Db): Promise<ByModelRow[]> => {
+  const result = await db
+    .prepare(
+      `SELECT resolved_model AS model,
+              COUNT(*) AS count,
+              AVG(cost_usd) AS avg_cost_usd,
+              AVG(duration_ms) AS avg_duration_ms,
+              AVG(CASE WHEN validation_failed = 1 THEN 1.0 ELSE 0.0 END) AS validation_failed_rate,
+              AVG(CASE WHEN fallback_level >= 1 THEN 1.0 ELSE 0.0 END) AS fell_back_rate
+         FROM ai_calls
+        GROUP BY resolved_model`,
+    )
+    .all();
+  return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    model: (row.model as string | null) ?? null,
+    count: toNumber(row.count),
+    avgCostUsd: toNumberOrNull(row.avg_cost_usd),
+    avgDurationMs: toMilliseconds(row.avg_duration_ms),
+    validationFailedRate: toNumber(row.validation_failed_rate),
+    fellBackRate: toNumber(row.fell_back_rate),
+  }));
+};
+
+/**
+ * 倒れた（受け皿が答えた）呼び出しの数（`fallback_level >= 1`）。モデル別の行を束ねて出す代わりに
+ * 単独で持つ——応答の `fallbackCount` は全体の1つの数で、モデル別の行数とは数え方が違う
+ * （画面「AI の実費と所要（モデル別）」の見出しの下に1行だけ出す・タスク28）。
+ */
+export const fallbackCount = async (db: Db): Promise<number> => {
+  const row = await db.prepare(`SELECT COUNT(*) AS n FROM ai_calls WHERE fallback_level >= 1`).first();
+  return toNumber(row?.n);
+};
+
+/**
+ * `purpose` で括った表（店の選定 select／紹介文の生成 pitch／紹介文の判定 pitch_eval・
+ * migrations/0002_ai_call_purpose）。本人の指示「用途別の実費内訳」に応える集計で、実費は
+ * **合計**（`SUM`）を返す——「その用途にいくら使ったか」であって「1回あたりいくらか」ではないため
+ * （モデル別の `avgCostUsd` と役割が違う）。
+ *
+ * `purpose` 列は `NOT NULL DEFAULT 'select'` なので、この表に `purpose: null` の行は現れない。
+ */
+export const byPurposeTotals = async (db: Db): Promise<ByPurposeRow[]> => {
+  const result = await db
+    .prepare(
+      `SELECT purpose,
+              COUNT(*) AS count,
+              COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+              AVG(duration_ms) AS avg_duration_ms
+         FROM ai_calls
+        GROUP BY purpose`,
+    )
+    .all();
+  return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    purpose: String(row.purpose),
+    count: toNumber(row.count),
+    totalCostUsd: toNumber(row.total_cost_usd),
+    avgDurationMs: toMilliseconds(row.avg_duration_ms),
+  }));
 };
