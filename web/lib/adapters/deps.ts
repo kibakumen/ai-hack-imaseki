@@ -9,7 +9,7 @@ import { readBindings, readEnv, type RawEnv } from "./env";
 import { createFileStore } from "./files";
 import { createGeocoder } from "./geocoding";
 import { createLogger } from "./logger";
-import { createOrcaRouterSelector } from "./orcarouter";
+import { createOrcaRouterSelector, createOrcaRouterPitchWriter } from "./orcarouter";
 import { createCardRegistrar } from "./stripe";
 import { createHumanCheck } from "./turnstile";
 import { createHasher, createRng } from "./webcrypto";
@@ -31,6 +31,8 @@ export const createDeps = (env: RawEnv): Deps => {
     db,
     files: createFileStore(permits),
     ai: createOrcaRouterSelector({ apiKey: secrets.orcarouterApiKey, model: config.orcarouterModel }),
+    // 人格つきの紹介文を書く口。渡さなければ紹介文の層が丸ごと走らず、選定の理由だけが客に出る（安全側）。
+    pitch: createOrcaRouterPitchWriter({ apiKey: secrets.orcarouterApiKey, model: config.orcarouterModel }),
     geocoder: createGeocoder({ apiKey: secrets.googleMapsApiKey }),
     push: createPushSender({ publicKey: config.vapidPublicKey, privateKey: secrets.vapidPrivateKey, contactEmail: config.contactEmail }),
     card: createCardRegistrar({ secretKey: secrets.stripeSecretKey }),
