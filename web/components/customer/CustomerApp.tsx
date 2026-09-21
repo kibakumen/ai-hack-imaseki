@@ -8,11 +8,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, isFailure } from "../../lib/client/api";
 import { FetchForm, type FetchResult } from "./FetchForm";
+import { PushPrompt } from "./PushPrompt";
 import { RegisterForm } from "./RegisterForm";
 import { ResultList } from "./ResultList";
 
 /** ホームの応答（`GET /api/customer/home`）。形は検査していないので、在ることに頼らずに読む。 */
-type CustomerHome = { kind: string; profile?: { genres?: string[]; budgetMax?: number | null } };
+type CustomerHome = {
+  kind: string;
+  profile?: { genres?: string[]; budgetMax?: number | null };
+  /** まだ通知を許可していない客だけ true（要件22の基準 22.8。2026-09-21 タスク19 が足した） */
+  pushPromptDue?: boolean;
+};
 type View = { kind: "loading" } | { kind: "register" } | { kind: "home"; home: CustomerHome };
 
 export const CustomerApp = () => {
@@ -60,6 +66,15 @@ export const CustomerApp = () => {
         <section data-testid="view-fetch">
           <FetchForm profile={view.home.profile} party={party} onPartyChange={setParty} onResults={setFetchResult} />
           {fetchResult !== null && <ResultList items={fetchResult.items} />}
+        </section>
+      )}
+      {view.home.kind === "active" && (
+        // ⚠️ 2026-09-21 タスク19 が置いた囲い。**確保中の表示の中身（コード・店名・住所・人数・期限・
+        // クーポン・取り消しと人数の変更）はタスク14・15 がここへ足す**——通知の許可の求めが確保中の
+        // 表示の中に出る（基準 22.8）ので、囲いだけ先に要る側が置いた。中身を足すときは
+        // `<PushPrompt due={…} />` をこの中に残すこと。
+        <section data-testid="view-active">
+          <PushPrompt due={view.home.pushPromptDue === true} />
         </section>
       )}
     </main>

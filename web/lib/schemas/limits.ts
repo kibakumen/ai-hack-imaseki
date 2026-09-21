@@ -125,3 +125,14 @@ export const REPORT_RATE_WINDOW_MS = 60 * 60 * 1000;
 /** 同じアカウントへのログインの失敗が10回続くと、15分そのアカウントへのログインを断る（基準 30.4） */
 export const LOGIN_FAILURE_LIMIT = 10;
 export const LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
+
+// 要件22（客への知らせ・Web プッシュ）。2026-09-21 タスク19 が足した。
+/**
+ * プッシュの寿命（TTL）。確保の期限と同じ20分（AI判断・設計書「比べた案」のプッシュの行）。
+ * これより後に配信元から届いても、確保はもう無いので意味が無い。
+ */
+export const PUSH_TTL_SECONDS = 20 * 60;
+/** 購読の配信元の URL の長さの上限（AI判断。長すぎる本文を早く切るためで、断るためではない） */
+export const PUSH_ENDPOINT_MAX = 2048;
+/** 購読の鍵（p256dh は65バイト・auth は16バイトを base64url にしたもの）の長さの上限（AI判断） */
+export const PUSH_KEY_MAX = 255;
