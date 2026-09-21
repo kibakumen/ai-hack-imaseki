@@ -1,0 +1,107 @@
+{
+  "kind": "critique",
+  "model": "codex",
+  "judgments": [
+    {
+      "finding": "F1",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 114,
+          "quote": "- [ ] 11. 取得の手続きと AI の口: `POST /api/customer/fetch`・`usecases/fetchOffers`・`adapters/orcarouter`（呼び方は `sprint/lib/llm.ts` を書き写す・`tools` を持たない）・`repo/logs`（`fetch_logs`・`fetch_items`・`ai_calls` の insert）・`schemas/fetch`"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 116,
+          "quote": "- _要件: 3.2, 3.3, 3.4, 3.5, 3.6, 3.10, 3.11, 3.14, 3.15, 4.1, 4.2, 4.3, 4.6, 4.7, 4.8, 4.9, 4.10, 4.12, 5.2, 5.7, 6.6, 7.1, 7.2, 7.6, 7.9, 7.10, 7.11, 7.12, 27.1, 27.2, 27.5, 27.6, 28.3, 33.1, 33.2, 33.3, 34.3, 34.4_"
+        },
+        {
+          "path": "tests/acceptance/v2/r03-fetch-input.test.ts",
+          "line": 6,
+          "quote": "describeTask(\"11\", \"場所の文字と地図のサービス、人数の範囲、登録に書き戻さない\", () => {"
+        },
+        {
+          "path": "tests/acceptance/v2/r33-metrics.test.ts",
+          "line": 6,
+          "quote": "describeTask(\"11\", \"AI の呼び出しと取得の記録（33.1・33.2・33.3）\", () => {"
+        },
+        {
+          "path": "tests/acceptance/v2/structure.test.ts",
+          "line": 153,
+          "quote": "describeTask(\"11\", \"取得の手続き: AI の口を呼ぶ場所・道具を持たない・OrcaRouter の URL の場所\", () => {"
+        }
+      ],
+      "note": "API・スキーマ・手続き・外部AIアダプター・3表への記録を同時に実装し、複数の独立した検査群を通す範囲なので、1コミットで単独検査できる粒度を超えているという指摘は妥当。"
+    },
+    {
+      "finding": "F2",
+      "verdict": "AGREE",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 247,
+          "quote": "- [ ] 35. 鍵と環境の準備が済んでいることの確認（済の確認）: `scripts/v2-keys.sh check` で秘密5つが手元と Cloudflare の両方に在ること・D1 `ai-hack-v2`・R2 `ai-hack-v2-permits`・Workers の有料プラン・Turnstile のサイトキーと VAPID の公開の側のメモが `web/wrangler.jsonc` の `vars` と一致すること"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 249,
+          "quote": "- _要件: 34.2_"
+        },
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 975,
+          "quote": "2. 提出版は Cloudflare 上で動いていること［段3］"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 253,
+          "quote": "- [ ] 36. 公開と段3の確かめ: `pnpm --dir web run deploy`（OpenNext・進行役が手を貸してよい）で公開し、URL が応答する／README の「提出前の確かめ」を歩く"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 255,
+          "quote": "- _要件: 34.2, 4.13, 13.11, 22.13_"
+        }
+      ],
+      "note": "34.2が求める公開版の稼働確認はタスク36の内容であり、鍵・束縛・プランの存在確認だけを行うタスク35との対応は成立しない。"
+    }
+  ],
+  "omissions": [
+    {
+      "claim": "タスク11に割り当てた段4の要件7.10は、公開版の記録20件を読むことをタスク11の監査時に要求する一方、公開と実地確認は後続の本人担当タスク36で行うため、番号順ではタスク11を単独で完了・監査できない依存の逆転がある。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 243,
+          "quote": "10. AI の理由の文は、その客の好みとその店の特徴に触れた文であること［段4］"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 115,
+          "quote": "- 7.10（理由の文の中身・段4）は、このタスクの監査のときに監査役が公開した版の記録20件を読んで判定する（受け入れ検査には無い）"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 253,
+          "quote": "- [ ] 36. 公開と段3の確かめ: `pnpm --dir web run deploy`（OpenNext・進行役が手を貸してよい）で公開し、URL が応答する／README の「提出前の確かめ」を歩く"
+        },
+        {
+          "path": "docs/specs/v2/design.md",
+          "line": 806,
+          "quote": "| 7.10 | 実装の段の監査役が、公開した版の記録から取り出した理由の文20件を読み、客の好みと店の特徴に触れているかを判定する（スクリプトは作らない） | 段4 | `adapters/orcarouter`（渡す文） |"
+        }
+      ]
+    }
+  ],
+  "score_objections": [
+    {
+      "axis": "順序の妥当性",
+      "reason": "タスク11の監査が公開版の記録20件を前提にするのに、公開は後続のタスク36なので、依存逆転なしとして4点にした評価は過大。"
+    }
+  ],
+  "target": "tasks",
+  "cycle": 1,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T01:48:04.145Z"
+}

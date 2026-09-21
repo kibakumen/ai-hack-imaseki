@@ -1,0 +1,153 @@
+{
+  "kind": "audit",
+  "rubric": "tasks@1",
+  "model": "sonnet",
+  "share": "A",
+  "findings": [
+    {
+      "id": "F1",
+      "type": "defect",
+      "severity": "medium",
+      "claim": "タスク11「取得の手続きと AI の口」が他タスクと比べて明確に大きすぎる。要件38件（次点のタスク17=26件・タスク9とタスク13=24件を大きく上回る）を1タスクに詰め、schemas（入力検査）・usecases（手続き）・adapters/orcarouter（外部AIサービス連携・ヘッダー解析・fallback）・repo/logs（3表への insert）・個人情報の除外という異なる境界を1つのコミット相当に束ねている。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 114,
+          "quote": "- [ ] 11. 取得の手続きと AI の口: `POST /api/customer/fetch`・`usecases/fetchOffers`・`adapters/orcarouter`（呼び方は `sprint/lib/llm.ts` を書き写す・`tools` を持たない）・`repo/logs`（`fetch_logs`・`fetch_items`・`ai_calls` の insert）・`schemas/fetch`"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 116,
+          "quote": "_要件: 3.2, 3.3, 3.4, 3.5, 3.6, 3.10, 3.11, 3.14, 3.15, 4.1, 4.2, 4.3, 4.6, 4.7, 4.8, 4.9, 4.10, 4.12, 5.2, 5.7, 6.6, 7.1, 7.2, 7.6, 7.9, 7.10, 7.11, 7.12, 27.1, 27.2, 27.5, 27.6, 28.3, 33.1, 33.2, 33.3, 34.3, 34.4_"
+        },
+        {
+          "path": "tests/acceptance/v2/r03-fetch-input.test.ts",
+          "line": 6,
+          "quote": "describeTask(\"11\", \"場所の文字と地図のサービス、人数の範囲、登録に書き戻さない\", () => {"
+        },
+        {
+          "path": "tests/acceptance/v2/r27-logs.test.ts",
+          "line": 6,
+          "quote": "describeTask(\"11\", \"取得の記録（27.1・27.2・27.5・27.6）\", () => {"
+        },
+        {
+          "path": "tests/acceptance/v2/r28-personal-data.test.ts",
+          "line": 6,
+          "quote": "describeTask(\"11\", \"AI に渡す内容（28.3）\", () => {"
+        },
+        {
+          "path": "tests/acceptance/v2/r33-metrics.test.ts",
+          "line": 6,
+          "quote": "describeTask(\"11\", \"AI の呼び出しと取得の記録（33.1・33.2・33.3）\", () => {"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "タスク11を2つに割る案: (a)「絞り込み×AI選定の呼び出し」= schemas/fetch・usecases/fetchOffers の主経路・adapters/orcarouter の入出力形（7.1〜7.12・4.x・6.6・34.3・34.4）、(b)「取得の記録と個人データ」= repo/logs の3表 insert・28.3の個人情報除外・33.1〜33.3（記録の数字）。(b)は(a)の後続として独立コミットにできる。",
+      "share": "A",
+      "source_id": "F1"
+    },
+    {
+      "id": "F2",
+      "type": "defect",
+      "severity": "low",
+      "claim": "タスク35（鍵と環境の準備の確認）が要件34.2（提出版がCloudflare上で動いていること）を名乗っているが、タスク35の中身は秘密5つ・D1・R2・Turnstile/VAPIDの値が手元とCloudflareに在ることの確認であり、提出版が実際に動いていることは検査していない。34.2は同じくタスク36（公開して`pnpm --dir web run deploy`し応答するURLを確かめる）が正しく実装・確認しており、そちらは正しい対応。",
+      "evidence": [
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 247,
+          "quote": "- [ ] 35. 鍵と環境の準備が済んでいることの確認（済の確認）: `scripts/v2-keys.sh check` で秘密5つが手元と Cloudflare の両方に在ること・D1 `ai-hack-v2`・R2 `ai-hack-v2-permits`・Workers の有料プラン・Turnstile のサイトキーと VAPID の公開の側のメモが `web/wrangler.jsonc` の `vars` と一致すること"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 249,
+          "quote": "  - _要件: 34.2_"
+        },
+        {
+          "path": "docs/specs/v2/requirements.md",
+          "line": 975,
+          "quote": "2. 提出版は Cloudflare 上で動いていること［段3］"
+        },
+        {
+          "path": "docs/specs/v2/tasks.md",
+          "line": 255,
+          "quote": "  - _要件: 34.2, 4.13, 13.11, 22.13_"
+        }
+      ],
+      "confidence": "高確率",
+      "fix": "タスク35の _要件: 34.2_ を外す（またはタスク35が確認する内容を指す別の要件番号に置き換える）。34.2の実際の検証はタスク36に一本化する。",
+      "share": "B",
+      "source_id": "F1"
+    }
+  ],
+  "scores": [
+    {
+      "axis": "粒度",
+      "score": 3,
+      "reason": "タスク11が要件数38件で他タスク（最大26件）を大きく上回り、schemas/usecase/adapter/repoの4境界を1タスクに束ねている（F1）。それ以外の33タスクはおおむね1コミット・1受け入れ検査ファイルの単位で揃っている。"
+    },
+    {
+      "axis": "順序の妥当性",
+      "score": 4,
+      "reason": "骨組み→横断土台→登録/ログイン→店の準備（クーポン・許可書・承認）→公開→絞り込み→取得→受け取り、の順で早い段階から縦串（登録〜公開〜取得）が動く構成になっている。タスク8の ban の最小実装をタスク21で仕上げる分割は tasks.md 自身が明示し、タスク8単独でも自己完結している。"
+    },
+    {
+      "axis": "検査の強さ",
+      "score": 4,
+      "reason": "実際に開いた受け入れ検査（r25-approve-ban.test.ts・r24-admin.ui.test.tsx）は、状態が変わらないことの検査・断りの文言の中身・確かめダイアログの中身までアサートしており、決め打ちで通る形には見えなかった。ただし検査の強さは主に分担Aの型（期待値の決め打ち）であり、自分はごく一部のファイルしか開いていないため確度は限定的"
+    }
+  ],
+  "unbroken": [
+    "検査の無いタスク: AI担当の全34タスク（1〜34）について、tasks.md の『_受け入れ検査:_』行が指すファイルに、その番号を名乗る describeTask ブロックが実在することを全件確認した（例: タスク1→structure.test.ts、タスク33→r30-rate-limit.test.ts）。1件も欠けていない。",
+    "期待値の決め打ちで通る検査: 純粋関数（score, selection, until, remaining）・手続き（publish, live-changes, rate-limit, receive, results）・横断（validation, human-check, personal-data）を横断的にサンプルしたが、いずれも複数の入力パターン・境界値・失敗系を持ち、固定値を返す実装でも通ってしまうような単一入力の検査は見当たらなかった。",
+    "要件との対応の誤り（大枠）: requirements.md の全368基準を1件ずつタスク表の _要件: に突き合わせたが、抜けている基準は無かった（段5の6基準9.12/32.1/32.2/32.3/32.4/34.7も含め全て本人担当タスクに割られている）",
+    "担当の誤り: 段5（本人の目で見る）・段3（実機・デプロイが要る）の基準はすべてタスク35〜39（本人担当）に置かれており、AI担当のタスクに本人しか判断できない基準が紛れ込んでいる例は見つからなかった",
+    "依存の順序: task8のban最小実装とtask21のban仕上げ、task18のpush呼び出しとtask19のpush実装、task9の表示専用実装とtask20の操作実装など、後のタスクの実物に前のタスクが依存している例が無いか重点的に探したが、いずれも注記どおりport/テーブルの型にだけ依る設計で、崩せなかった",
+    "要件25.5（運営が止める前の確かめダイアログ）がタスク8に載っている点を最初は誤りと疑ったが、実際に `tests/acceptance/v2/r24-admin.ui.test.tsx` を開いて確認したところ describeTask(\"8\", ...) の下で API をモックしたまま確かめダイアログのUI動作だけを検査しており、タスク21が仕上げる実際のトランザクション（確保取り消し・プッシュ）には依存していなかった。対応は正しい"
+  ],
+  "shares": [
+    "A",
+    "B"
+  ],
+  "scores_by_share": {
+    "A": [
+      {
+        "axis": "粒度",
+        "score": 3,
+        "reason": "タスク11が要件数38件で他タスク（最大26件）を大きく上回り、schemas/usecase/adapter/repoの4境界を1タスクに束ねている（F1）。それ以外の33タスクはおおむね1コミット・1受け入れ検査ファイルの単位で揃っている。"
+      },
+      {
+        "axis": "順序の妥当性",
+        "score": 4,
+        "reason": "骨組み→横断土台→登録/ログイン→店の準備（クーポン・許可書・承認）→公開→絞り込み→取得→受け取り、の順で早い段階から縦串（登録〜公開〜取得）が動く構成になっている。タスク8の ban の最小実装をタスク21で仕上げる分割は tasks.md 自身が明示し、タスク8単独でも自己完結している。"
+      },
+      {
+        "axis": "検査の強さ",
+        "score": 5,
+        "reason": "サンプルした15本前後の受け入れ検査（r17-publish, r19-live-changes, r18-remaining, r07-ai-select, r29-validation, r30-rate-limit, r23-results, r06-score, d02-human-check 等）はいずれも境界値・失敗系・並行処理・DBスナップショット比較・TS/SQL突き合わせを含み、固定入力1通りで通る決め打ちの検査は見つからなかった。"
+      }
+    ],
+    "B": [
+      {
+        "axis": "粒度",
+        "score": 4,
+        "reason": "個々のタスクは概ね1つの受け入れ検査ファイルと1つの機能まとまりに対応しており妥当。task9・task11・task3など要件数が多いタスクが数件あるが、内側で閉じた範囲（分担Aの型）の判定であり、依存関係・担当・要件対応の観点からは崩せなかった"
+      },
+      {
+        "axis": "順序の妥当性",
+        "score": 5,
+        "reason": "368基準を全数突き合わせても抜け漏れが無く、前方参照（後のタスクの部品を前のタスクが前提にする）は見つからなかった。task9→task20、task18→task19、task8→task21のように意図的な分割は全て注記され、後発タスクの実物ではなく既存のports型やテーブル定義（task1・task2）だけに依っている。task1〜12で登録→取得→結果表示の縦串が早期に動く順"
+      },
+      {
+        "axis": "検査の強さ",
+        "score": 4,
+        "reason": "実際に開いた受け入れ検査（r25-approve-ban.test.ts・r24-admin.ui.test.tsx）は、状態が変わらないことの検査・断りの文言の中身・確かめダイアログの中身までアサートしており、決め打ちで通る形には見えなかった。ただし検査の強さは主に分担Aの型（期待値の決め打ち）であり、自分はごく一部のファイルしか開いていないため確度は限定的"
+      }
+    ]
+  },
+  "questions_for_human": [],
+  "target": "tasks",
+  "target_sha256": "b90e64f38436ea14abe57cdc1433b1150438fe82954edc6a748c602bbbd20f5f",
+  "cycle": 1,
+  "exchange": 1,
+  "recorded_at": "2026-09-21T01:26:28.125Z"
+}
