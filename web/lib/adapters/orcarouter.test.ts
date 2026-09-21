@@ -5,8 +5,8 @@
 // 呼び先は ORCAROUTER_ENDPOINT を読んで突き合わせる。
 
 import { describe, expect, it } from "vitest";
-import { createOrcaRouterSelector, FALLBACK_MODEL, ORCAROUTER_ENDPOINT } from "./orcarouter";
-import type { AiSelectInput } from "../ports";
+import { createOrcaRouterPitchWriter, createOrcaRouterSelector, FALLBACK_MODEL, JUDGE_MODEL, ORCAROUTER_ENDPOINT, PITCH_MAX_TOKENS, JUDGE_MAX_TOKENS } from "./orcarouter";
+import type { AiSelectInput, PitchInput } from "../ports";
 
 const INPUT: AiSelectInput = {
   party: 2,
@@ -103,6 +103,20 @@ describe("OrcaRouter の口", () => {
     expect(down).toEqual({ ok: false, error: "network", costUsd: null });
   });
 
+  it("思考トークンを止める指定と出力の上限が入る（速成版の実測: 7.9秒→1.0秒・費用は約1/17）", async () => {
+    const { calls, fetch: fake } = capturing(() => jsonResponse(okBody("{}")));
+    await createOrcaRouterSelector({ apiKey: "k", model: "orcarouter/ai-sekitori", fetch: fake }).select(INPUT, {});
+    expect(calls[0].body.extra_body).toEqual({ google: { thinking_config: { thinking_budget: 0 } } });
+    expect(typeof calls[0].body.max_tokens).toBe("number");
+    expect(calls[0].body.max_tokens as number).toBeGreaterThan(0);
+  });
+
+  it("上限で打ち切られた応答（finish_reason が length）は失敗として返る（途中で切れた JSON を検査へ回さない）", async () => {
+    const truncated = JSON.stringify({ choices: [{ message: { content: '{"selections":[{"storeId":"s1","reas' }, finish_reason: "length" }], usage: { cost_usd: 0.003 } });
+    const result = await createOrcaRouterSelector({ apiKey: "k", model: "orcarouter/auto", fetch: (async () => jsonResponse(truncated)) as typeof fetch }).select(INPUT, {});
+    expect(result).toEqual({ ok: false, error: "length", costUsd: 0.003 });
+  });
+
   it("打ち切りの合図をそのまま外の呼び出しへ渡す（呼ぶ側が6秒を持つ）", async () => {
     const controller = new AbortController();
     let passed: AbortSignal | null | undefined = null;
@@ -112,5 +126,108 @@ describe("OrcaRouter の口", () => {
     }) as typeof fetch;
     await createOrcaRouterSelector({ apiKey: "k", model: "orcarouter/auto", fetch: fake }).select(INPUT, { signal: controller.signal });
     expect(passed).toBe(controller.signal);
+  });
+});
+
+const PITCH: PitchInput = {
+  party: 2,
+  genres: ["和食"],
+  budgetMax: 4000,
+  store: { name: "海鮮どんぶり亭", genres: ["和食"], menus: ["刺身盛り"], walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, couponName: "生ビール1杯", couponNote: "1組1回" },
+  charLimit: 120,
+  critique: null,
+};
+
+describe("紹介文の口（書き手と検査官）", () => {
+  it("書き手には人格の指示・店の姿・思考を止める指定・生成の上限が渡る", async () => {
+    const { calls, fetch: fake } = capturing(() => jsonResponse(okBody("刺身盛りが自慢の一軒です")));
+    const result = await createOrcaRouterPitchWriter({ apiKey: "k", model: "orcarouter/ai-sekitori", fetch: fake }).write(PITCH, {});
+    expect(calls[0].url).toBe(ORCAROUTER_ENDPOINT);
+    expect(calls[0].body.model).toBe("orcarouter/ai-sekitori");
+    expect((calls[0].body.models as string[]).at(-1)).toBe(FALLBACK_MODEL);
+    expect(calls[0].body.max_tokens).toBe(PITCH_MAX_TOKENS);
+    expect(calls[0].body.extra_body).toEqual({ google: { thinking_config: { thinking_budget: 0 } } });
+    const sent = JSON.stringify(calls[0].body);
+    expect(sent).toContain("刺身盛り");
+    expect(sent).toContain("地元の常連");
+    expect(sent).not.toContain("tool");
+    expect(result).toMatchObject({ ok: true, text: "刺身盛りが自慢の一軒です", truncated: false });
+  });
+
+  it("書き直しのときだけ、直前の案が落ちた理由が指示に入る", async () => {
+    const { calls, fetch: fake } = capturing(() => jsonResponse(okBody("焼きたての香りが心地よい一軒です")));
+    const writer = createOrcaRouterPitchWriter({ apiKey: "k", model: "orcarouter/ai-sekitori", fetch: fake });
+    await writer.write(PITCH, {});
+    await writer.write({ ...PITCH, critique: "口コミに触れていた" }, {});
+    expect(JSON.stringify(calls[0].body)).not.toContain("却下");
+    expect(JSON.stringify(calls[1].body)).toContain("口コミに触れていた");
+  });
+
+  it("検査官は別ベンダーの Named Router へ行き、温度は低く・上限は検査用。指示に「評価」の語を入れない", async () => {
+    const { calls, fetch: fake } = capturing(() => jsonResponse(okBody('{"ok":true,"reason":""}')));
+    const judged = await createOrcaRouterPitchWriter({ apiKey: "k", model: "orcarouter/ai-sekitori", fetch: fake }).judge(
+      { text: "刺身盛りが自慢の一軒です", store: { name: "海鮮どんぶり亭", genres: ["和食"], menus: ["刺身盛り"], couponName: null } },
+      {},
+    );
+    expect(calls[0].body.model).toBe(JUDGE_MODEL);
+    expect(calls[0].body.models).toEqual([JUDGE_MODEL]);
+    expect(calls[0].body.max_tokens).toBe(JUDGE_MAX_TOKENS);
+    expect(calls[0].body.temperature as number).toBeLessThan(0.2);
+    // ⚠️ 判定役（openai/gpt-4o-mini）に思考を止める指定を送ると 400 で丸ごと落ちる（2026-09-22 実測）
+    expect(calls[0].body.extra_body).toBeUndefined();
+    const system = (calls[0].body.messages as Array<{ role: string; content: string }>)[0].content;
+    expect(system).not.toContain("評価");
+    expect(judged).toMatchObject({ ok: true });
+  });
+
+  it("鍵の scope で検査官が 403 になったら、生成と同じ Named Router で検査し直し、しばらくは直接そちらへ行く", async () => {
+    const calls: Captured[] = [];
+    const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      calls.push({ url: String(input), headers: new Headers(init?.headers), body });
+      if (body.model === JUDGE_MODEL) return jsonResponse(JSON.stringify({ error: { code: "model_access_denied" } }), { status: 403 });
+      return jsonResponse(okBody('{"ok":true,"reason":""}'));
+    }) as typeof fetch;
+    const writer = createOrcaRouterPitchWriter({ apiKey: "k", model: "orcarouter/ai-sekitori", fetch: fake });
+    const first = await writer.judge({ text: "文", store: { name: "店", genres: [], menus: [], couponName: null } }, {});
+    expect(first).toMatchObject({ ok: true });
+    expect(calls.map((c) => c.body.model)).toEqual([JUDGE_MODEL, "orcarouter/ai-sekitori"]);
+    // 2回目は 403 を踏みに行かない（1店ごとに無駄な往復をしない）
+    await writer.judge({ text: "文", store: { name: "店", genres: [], menus: [], couponName: null } }, {});
+    expect(calls.map((c) => c.body.model)).toEqual([JUDGE_MODEL, "orcarouter/ai-sekitori", "orcarouter/ai-sekitori"]);
+  });
+});
+
+describe("思考を止める指定を上流が知らなかったとき", () => {
+  it("『Unrecognized request argument supplied: extra_body』の 400 なら、指定を外して1回だけやり直す", async () => {
+    const calls: Captured[] = [];
+    const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      calls.push({ url: String(input), headers: new Headers(init?.headers), body });
+      if (body.extra_body !== undefined) {
+        return jsonResponse(JSON.stringify({ error: { message: "Unrecognized request argument supplied: extra_body", type: "invalid_request_error", code: null } }), { status: 400 });
+      }
+      return jsonResponse(okBody(JSON.stringify({ selections: [{ storeId: "s1", reason: "近いです" }] })));
+    }) as typeof fetch;
+    const result = await createOrcaRouterSelector({ apiKey: "k", model: "orcarouter/auto", fetch: fake }).select(INPUT, {});
+    expect(result).toMatchObject({ ok: true });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].body.extra_body).toBeDefined();
+    expect(calls[1].body.extra_body).toBeUndefined();
+    // 中身（モデル・受け皿・上限・messages）はやり直しても同じ
+    expect(calls[1].body.model).toBe(calls[0].body.model);
+    expect(calls[1].body.models).toEqual(calls[0].body.models);
+    expect(calls[1].body.max_tokens).toBe(calls[0].body.max_tokens);
+  });
+
+  it("ほかの 400（Guardrails）ではやり直さない", async () => {
+    const calls: Captured[] = [];
+    const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      return jsonResponse(JSON.stringify({ error: { code: "guardrail_blocked", message: "blocked" } }), { status: 400 });
+    }) as typeof fetch;
+    const result = await createOrcaRouterSelector({ apiKey: "k", model: "orcarouter/auto", fetch: fake }).select(INPUT, {});
+    expect(result).toEqual({ ok: false, error: "guardrail_blocked", costUsd: null });
+    expect(calls).toHaveLength(1);
   });
 });

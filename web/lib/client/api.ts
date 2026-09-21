@@ -84,6 +84,79 @@ export const apiCall = async <T = Record<string, unknown>>(method: HttpMethod, p
   return parsed.success ? parsed.data : networkFailure();
 };
 
+// ---------- 少しずつ届く応答（NDJSON） ----------
+
+/** 1行1つの JSON。種類（`type`）で分けるのは呼ぶ側（部品）の仕事。 */
+export type StreamLine = Record<string, unknown>;
+
+/** 経路そのものが無かった（古い版のサーバー）。呼ぶ側は普通の入口へ倒す。 */
+export const STREAM_UNAVAILABLE = "unavailable";
+
+/** 行が読めたか（`null`）・経路が無いか・断られたか。成功の中身は `onLine` で先に渡してある。 */
+export type StreamOutcome = null | typeof STREAM_UNAVAILABLE | ApiFailure;
+
+/** 読めない行は捨てる（1行が壊れても、後ろの行は届く）。 */
+const emitLines = (buffer: string, onLine: (line: StreamLine) => void): string => {
+  const parts = buffer.split("\n");
+  const rest = parts.pop() ?? "";
+  for (const part of parts) {
+    if (part.trim() === "") continue;
+    try {
+      onLine(JSON.parse(part) as StreamLine);
+    } catch {
+      // 途中で切れた行・JSON でない行は捨てる
+    }
+  }
+  return rest;
+};
+
+/**
+ * 少しずつ届く応答（NDJSON）を1行ずつ読む（入口 `POST /api/customer/fetch/stream`）。
+ *
+ * **画面の側の値打ちは「待たせない」こと**——店のカードは最初の行で出せるので、人格つきの
+ * 紹介文（1本ずつ AI を2往復する）を待たずに客が選び始められる。
+ *
+ * 断り（`ok:false`）は普通の入口と同じ形で返し、経路が無ければ `STREAM_UNAVAILABLE` を返す
+ * （呼ぶ側が普通の入口へ倒せるように——**少しずつ届くのは速さの工夫で、機能の前提ではない**）。
+ */
+export const apiStream = async (path: string, body: unknown, onLine: (line: StreamLine) => void): Promise<StreamOutcome> => {
+  let res: Response;
+  try {
+    res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  } catch {
+    return networkFailure();
+  }
+  // 経路が無い（404）・方法が違う（405）＝この入口を持たないサーバー
+  if (res.status === 404 || res.status === 405) return STREAM_UNAVAILABLE;
+  if (!res.ok) {
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch {
+      return networkFailure();
+    }
+    if (!isFailure(json)) return networkFailure();
+    return failureSchema.safeParse(json).success ? (json as ApiFailure) : networkFailure();
+  }
+  const reader = res.body?.getReader();
+  // 本文を少しずつ読めない環境（古い browser・検査の偽物）では、普通の入口へ倒す
+  if (!reader) return STREAM_UNAVAILABLE;
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer = emitLines(buffer + decoder.decode(chunk.value, { stream: true }), onLine);
+    }
+  } catch {
+    // 途中で切れても、そこまでに届いた行は既に渡してある（画面はそのまま使える）
+    return networkFailure();
+  }
+  emitLines(`${buffer}\n`, onLine);
+  return null;
+};
+
 /**
  * 公開してよい設定の値（GET /api/config/public）を取る。取れなければ null を返し、
  * 呼ぶ側（フォームの人かどうかの確かめ・プッシュの購読）が「部品を出さない」へ倒す。

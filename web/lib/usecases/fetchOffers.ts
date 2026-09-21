@@ -14,6 +14,8 @@ import { findCouponsForStores, findFetchCandidates, type CandidateRow } from "..
 import { insertAiCall, insertFetchItems, insertFetchLog, type AiCallRecord } from "../repo/logs";
 import type { FetchInput } from "../schemas/fetch";
 import { ID_BYTES } from "../schemas/limits";
+import { raceDeadline } from "./deadline";
+import type { PitchTarget } from "./writePitch";
 
 /** 地図のサービスの打ち切り（基準 3.5・値は AI判断） */
 const GEOCODE_TIMEOUT_MS = 3000;
@@ -36,43 +38,18 @@ export type FetchResultItem = {
   storeUrl: string | null;
 };
 
+/**
+ * 紹介文の層（usecases/writePitch）へ渡す材料。**応答の本文には載せない**——載せるのは
+ * `items` だけで（入口 lib/http/endpoints/fetch が組む）、これは後段の層が使う内部の値。
+ */
 export type FetchOffersResult =
-  | { ok: true; fetchId: string; items: FetchResultItem[] }
+  | { ok: true; fetchId: string; items: FetchResultItem[]; pitchTargets: PitchTarget[] }
   | { ok: false; kind: "place_unresolved" | "invalid_input"; fields: Array<{ name: string; reason: "bad_format" | "required" }> };
 
 /** 場所の文字を位置に直せなかった（基準 3.4・3.5・3.6 を1つの断りにまとめる）。 */
 const PLACE_UNRESOLVED: FetchOffersResult = { ok: false, kind: "place_unresolved", fields: [{ name: "place", reason: "bad_format" }] };
 /** 起点が1つも無い（文字も現在地も入っていない要求）。 */
 const ORIGIN_MISSING: FetchOffersResult = { ok: false, kind: "invalid_input", fields: [{ name: "place", reason: "required" }] };
-
-/**
- * 外の呼び出しを、打ち切りの合図2つと競わせる。
- * ①実時計（`AbortSignal.timeout`——実物の呼び出しを本当に止める）②差し替えられる時計
- * （`deadline`——検査が進める）。どちらかが先に鳴れば打ち切り。例外も打ち切りと同じ扱いにする
- * （呼ぶ側の場合分けを増やさないため）。
- *
- * ⚠️ `deadline` は **この関数の外で、最初の await より前に** 作る（`http/defineRoute` の
- * `verifyHuman` と同じ）。差し替えた時計は「今」を進めたその時に待っている合図しか起こさないので、
- * 進めたあとに作った合図はもう鳴らない。
- */
-const raceDeadline = async <T>(timeoutMs: number, deadline: Promise<void>, run: (signal: AbortSignal) => Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> => {
-  const controller = new AbortController();
-  const realTimeout = AbortSignal.timeout(timeoutMs);
-  const giveUp = new Promise<{ ok: false }>((resolve) => {
-    const stop = (): void => {
-      controller.abort();
-      resolve({ ok: false });
-    };
-    if (realTimeout.aborted) stop();
-    else realTimeout.addEventListener("abort", stop, { once: true });
-    void deadline.then(stop);
-  });
-  const work = run(controller.signal).then(
-    (value) => ({ ok: true as const, value }),
-    () => ({ ok: false as const }),
-  );
-  return Promise.race([work, giveUp]);
-};
 
 /** 絞り込み（domain/filter）と点数づけ（domain/score）の両方が見られる形に、1行を整える。 */
 const toCandidate = (origin: Point, row: CandidateRow) => ({
@@ -101,7 +78,8 @@ const resolveOrigin = async (deps: Deps, input: FetchInput, deadline: Promise<vo
   return { ok: false, refusal: ORIGIN_MISSING };
 };
 
-type AiOutcome = { selections: Selection[]; aiUsed: boolean; call: Omit<AiCallRecord, "id" | "fetchId" | "at"> | null };
+/** 用途（purpose）はここでは持たない——この手続きが記録するのは「店の選定」だけなので、書く側が入れる。 */
+type AiOutcome = { selections: Selection[]; aiUsed: boolean; call: Omit<AiCallRecord, "id" | "fetchId" | "at" | "purpose"> | null };
 
 /** AI に1回だけ聞いて、検査を通った選定だけを採る（基準 7.1・7.2・7.3・7.4・7.6・7.7・33.1）。 */
 const askAi = async (deps: Deps, input: FetchInput, ranked: readonly Candidate[], deadline: Promise<void>): Promise<AiOutcome> => {
@@ -203,7 +181,36 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   const items = buildItems(selections, ranked, coupons);
 
   const fetchId = await record(deps, { customerId, input, origin, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
-  return { ok: true, fetchId, items };
+  return { ok: true, fetchId, items, pitchTargets: buildPitchTargets(items, ranked) };
+};
+
+/**
+ * 紹介文の層へ渡す材料を、返す1件ごとに組む（店の姿＋選定が書いた理由）。
+ * 理由を持たせるのは、紹介文を諦めたときにそれをそのまま出すため（客の画面に穴を残さない）。
+ */
+const buildPitchTargets = (items: readonly FetchResultItem[], ranked: readonly Candidate[]): PitchTarget[] => {
+  const byStore = new Map(ranked.map((row) => [row.id, row]));
+  return items.flatMap((item) => {
+    const row = byStore.get(item.storeId);
+    if (!row) return [];
+    const coupon = item.coupons[0];
+    return [
+      {
+        storeId: item.storeId,
+        store: {
+          name: item.storeName,
+          genres: [...row.genres],
+          menus: [...row.menus],
+          walkMinutes: item.walkMinutes,
+          budgetMin: item.budgetMin,
+          budgetMax: item.budgetMax,
+          couponName: coupon?.name ?? null,
+          couponNote: coupon?.note ?? null,
+        },
+        selectionReason: item.reason,
+      },
+    ];
+  });
 };
 
 type RecordInput = {
@@ -242,7 +249,8 @@ const record = async (deps: Deps, input: RecordInput): Promise<string> => {
     durationMs,
     at: input.nowIso,
   });
-  if (input.outcome.call) await insertAiCall(deps.db, { id: newId(), fetchId, ...input.outcome.call, at: deps.clock.now().toISOString() });
+  // 用途は「店の選定」。紹介文の層（usecases/writePitch）は同じ表へ別の用途で足す（migrations/0002）。
+  if (input.outcome.call) await insertAiCall(deps.db, { id: newId(), fetchId, purpose: "select", ...input.outcome.call, at: deps.clock.now().toISOString() });
   const scoreByStore = new Map(input.ranked.map((row) => [row.id, row.score]));
   await insertFetchItems(
     deps.db,

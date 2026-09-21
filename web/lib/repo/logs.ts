@@ -46,10 +46,17 @@ export type FetchItemRecord = {
   reason: string;
 };
 
+/**
+ * AI の呼び出しの用途（migrations/0002）。用途別のコスト内訳を数えるための列で、
+ * 店の選定（select）・紹介文の生成（pitch）・紹介文の検査（pitch_eval）の3つ。
+ */
+export type AiCallPurpose = "select" | "pitch" | "pitch_eval";
+
 /** AI の呼び出し1回の記録（基準 33.1 ＋ OrcaRouter の応答ヘッダーの3列・設計書「OrcaRouter の使い方」）。 */
 export type AiCallRecord = {
   id: string;
   fetchId: string;
+  purpose: AiCallPurpose;
   costUsd: number | null;
   durationMs: number;
   succeeded: 0 | 1;
@@ -69,8 +76,8 @@ const INSERT_FETCH_LOG = `
 const INSERT_FETCH_ITEM = `INSERT INTO fetch_items (id, fetch_id, store_id, rank, score, reason) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`;
 
 const INSERT_AI_CALL = `
-  INSERT INTO ai_calls (id, fetch_id, cost_usd, duration_ms, succeeded, validation_failed, resolved_model, request_id, fallback_level, at)
-  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+  INSERT INTO ai_calls (id, fetch_id, purpose, cost_usd, duration_ms, succeeded, validation_failed, resolved_model, request_id, fallback_level, at)
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
 `;
 
 export const insertFetchLog = async (db: Db, log: FetchLogRecord): Promise<void> => {
@@ -89,7 +96,7 @@ export const insertFetchItems = async (db: Db, items: readonly FetchItemRecord[]
 export const insertAiCall = async (db: Db, call: AiCallRecord): Promise<void> => {
   await db
     .prepare(INSERT_AI_CALL)
-    .bind(call.id, call.fetchId, call.costUsd, call.durationMs, call.succeeded, call.validationFailed, call.resolvedModel, call.requestId, call.fallbackLevel, call.at)
+    .bind(call.id, call.fetchId, call.purpose, call.costUsd, call.durationMs, call.succeeded, call.validationFailed, call.resolvedModel, call.requestId, call.fallbackLevel, call.at)
     .run();
 };
 

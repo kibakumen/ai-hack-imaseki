@@ -2,7 +2,7 @@
 // F2（応答を検査せず as T でキャストしていた）を固定する。
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { apiCall, type ApiFailure } from "./api";
+import { apiCall, apiStream, STREAM_UNAVAILABLE, type ApiFailure } from "./api";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -72,5 +72,55 @@ describe("client/api が応答の形を確かめてから返す", () => {
   it("形を渡さない成功の応答はそのまま返る", async () => {
     respondWith(200, { ok: true, id: "r2" });
     expect(await apiCall<Ok>("GET", "/api/customer/home")).toEqual({ ok: true, id: "r2" });
+  });
+});
+
+describe("少しずつ届く応答（NDJSON）を1行ずつ読む", () => {
+  /** 少しずつ届く本文を、2回に分けて（行の途中で切って）流す偽物。 */
+  const streamWith = (chunks: string[], status = 200): void => {
+    globalThis.fetch = (async () => {
+      const body = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          const encoder = new TextEncoder();
+          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+          controller.close();
+        },
+      });
+      return new Response(body, { status, headers: { "content-type": "application/x-ndjson" } });
+    }) as typeof fetch;
+  };
+
+  it("行の途中で切れて届いても、つなぎ直して1行ずつ渡す", async () => {
+    streamWith(['{"type":"init","fetchId":"f1","items":[]}\n{"type":"pi', 'tch","storeId":"s1","reason":"刺身が自慢です"}\n{"type":"done"}\n']);
+    const lines: Array<Record<string, unknown>> = [];
+    const outcome = await apiStream("/api/customer/fetch/stream", { party: 2 }, (line) => lines.push(line));
+    expect(outcome).toBeNull();
+    expect(lines.map((l) => l.type)).toEqual(["init", "pitch", "done"]);
+    expect(lines[1].reason).toBe("刺身が自慢です");
+  });
+
+  it("壊れた行は捨てて、後ろの行は届く。最後の改行が無くても読む", async () => {
+    streamWith(['{"type":"init","fetchId":"f1","items":[]}\nこれは JSON ではない\n{"type":"done"}']);
+    const lines: Array<Record<string, unknown>> = [];
+    await apiStream("/api/customer/fetch/stream", {}, (line) => lines.push(line));
+    expect(lines.map((l) => l.type)).toEqual(["init", "done"]);
+  });
+
+  it("経路が無い（404）なら、呼ぶ側が普通の入口へ倒せる合図を返す", async () => {
+    respondWith(404, { ok: false, error: { kind: "not_found" } });
+    expect(await apiStream("/api/customer/fetch/stream", {}, () => {})).toBe(STREAM_UNAVAILABLE);
+  });
+
+  it("断り（400）は普通の入口と同じ形で返る", async () => {
+    respondWith(400, { ok: false, error: { kind: "invalid_input", fields: [{ name: "party", reason: "required" }] } });
+    const outcome = await apiStream("/api/customer/fetch/stream", {}, () => {});
+    expect(outcome).toMatchObject({ ok: false, error: { kind: "invalid_input" } });
+  });
+
+  it("通信そのものが失敗したら、通信の失敗として返る", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("offline");
+    }) as typeof fetch;
+    expect(await apiStream("/api/customer/fetch/stream", {}, () => {})).toEqual({ ok: false, error: { kind: "network" } });
   });
 });
