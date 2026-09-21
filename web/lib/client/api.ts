@@ -39,6 +39,15 @@ const networkFailure = (): ApiFailure => ({ ok: false, error: { kind: "network" 
 /** 断り（`ok:false`）かどうか。画面はこれで分けるので、状態コードを持ち歩かない。 */
 export const isFailure = (value: unknown): value is ApiFailure => typeof value === "object" && value !== null && (value as { ok?: unknown }).ok === false;
 
+/**
+ * 通信そのものが失敗した断り（応答が返らなかった・JSON として読めなかった・形が崩れていた）かどうか。
+ * 2026-09-21 タスク14 が足した——確保中の表示は、**通信の失敗のときだけ**端末に残した内容へ倒し、
+ * 見分けの断り（401）では登録の入力へ倒す（要件9の基準 9.10・9.11。401 では出さない）。
+ * 語で分ける判断を画面に置かないため（断りの語を読むのは `components/ui/InputRefusal` だけ）、
+ * 語を知っているこのファイルに判定を置く。
+ */
+export const isNetworkFailure = (value: unknown): value is ApiFailure => isFailure(value) && value.error?.kind === "network";
+
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 /**
