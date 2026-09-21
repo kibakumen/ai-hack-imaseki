@@ -2,6 +2,7 @@
 // 中のまとまりに書き、ここへ並べる。app/api/**/route.ts は、ここに在る同じ定義を実物の Deps で
 // 呼ぶだけ（defineRoute( を含み、本文を自分で読まない・構造の検査が見張る）。
 import type { RouteDefinition } from "./defineRoute";
+import { adminStoreRoutes } from "./endpoints/adminStores";
 import { authRoutes } from "./endpoints/auth";
 import { configRoutes } from "./endpoints/config";
 import { couponRoutes } from "./endpoints/coupons";
@@ -13,13 +14,14 @@ import { storeProfileRoutes } from "./endpoints/storeProfile";
 import { storeLicenseRoutes } from "./endpoints/storeLicense";
 
 export const ROUTE_DEFINITIONS: RouteDefinition[] = [
-  ...configRoutes,
-  ...customerRoutes,
+  ...adminStoreRoutes,
   ...authRoutes,
-  ...storeRoutes,
+  ...configRoutes,
   ...couponRoutes,
+  ...customerRoutes,
   ...customerProfileRoutes,
   ...passwordRoutes,
+  ...storeRoutes,
   ...storeProfileRoutes,
   ...storeLicenseRoutes,
 ];
