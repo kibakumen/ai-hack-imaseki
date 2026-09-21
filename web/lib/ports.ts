@@ -71,6 +71,18 @@ export type Geocoder = {
    */
   reverse?(point: { lat: number; lng: number }, opts: { signal?: AbortSignal }): Promise<{ ok: true; label: string } | { ok: false }>;
 };
+/**
+ * 店のホームページから雰囲気画像の URL を取る口（読むだけ・実物は adapters/storeImage）。
+ * 2026-09-22 本人の指摘「お店の画像もほしい」に応えた、速成版 `sprint/lib/ogImage.ts` の移植。
+ *
+ * ⚠️ **任意**にしてある（`Deps.pitch`・`Geocoder.reverse` と同じ置き方）。画像は見せ方の飾りで、
+ * 受け取りの筋には要らない——この口を持たない場面（受け入れ検査の偽物）でも、usecases/storeImage が
+ * 外へ聞かずに `imageUrl: null` へ倒す。
+ */
+export type StoreImageFetcher = {
+  fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; imageUrl: string } | { ok: false }>;
+};
+
 export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
 export type CardRegistrar = {
   createSetupSession(input: { storeId: string; returnUrl: string }): Promise<{ ok: true; url: string; sessionId: string } | { ok: false }>;
@@ -92,6 +104,8 @@ export type Deps = {
   /** 紹介文の層（任意）。渡さなければ紹介文を書かせない＝選定の結果だけを返す */
   pitch?: PitchWriter;
   geocoder: Geocoder;
+  /** 店の雰囲気画像の口（任意。無ければ画像を出さず、飾りの地のまま） */
+  storeImage?: StoreImageFetcher;
   push: PushSender;
   card: CardRegistrar;
   human: HumanCheck;

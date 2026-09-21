@@ -6,7 +6,8 @@
      2. 「アピール説明の大きさなどが控えめなので**もっとアピールするような**デザインに」
                                 → `.offer-pitch`（カードでいちばん大きい文・届いた瞬間に光る）
      3. 「**クーポンが小カード**にして見えるように」  → `.offer-coupon`（1枚ずつの札）
-     4. 「**お店の画像**もほしい」                    → `.offer-card__art`（いまは絵柄の地だけ）
+     4. 「**お店の画像**もほしい」                    → `.offer-card__art`（`StoreImage` が取れれば重ねる。
+        取れないときは絵柄の地がそのまま見える・2026-09-22 実装）
      5. 「～件のオファーを受け取りました！みたいな**宝くじを受け取ったような演出**」
                                 → `.offer-reveal`
      6. 「受け取った瞬間に**ファンファーレみたいなエフェクト**」 → `.claim-celebration`
@@ -154,6 +155,16 @@
   justify-content: center;
   margin-top: 0.25rem;
   overflow: hidden;
+  position: relative;
+}
+
+/* `StoreImage` が取れたときだけ重なる。取れない間は下の絵柄の地がそのまま見える。 */
+.offer-card__art-img {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
 }
 
 .offer-card__art[data-tilt="1"] {

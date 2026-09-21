@@ -10,6 +10,7 @@ import { createFileStore } from "./files";
 import { createGeocoder } from "./geocoding";
 import { createLogger } from "./logger";
 import { createOrcaRouterSelector, createOrcaRouterPitchWriter } from "./orcarouter";
+import { createStoreImageFetcher } from "./storeImage";
 import { createCardRegistrar } from "./stripe";
 import { createHumanCheck } from "./turnstile";
 import { createHasher, createRng } from "./webcrypto";
@@ -34,6 +35,8 @@ export const createDeps = (env: RawEnv): Deps => {
     // 人格つきの紹介文を書く口。渡さなければ紹介文の層が丸ごと走らず、選定の理由だけが客に出る（安全側）。
     pitch: createOrcaRouterPitchWriter({ apiKey: secrets.orcarouterApiKey, model: config.orcarouterModel }),
     geocoder: createGeocoder({ apiKey: secrets.googleMapsApiKey }),
+    // 店の雰囲気画像の口。鍵は要らない（ホームページの meta を読むだけ・adapters/storeImage）。
+    storeImage: createStoreImageFetcher(),
     push: createPushSender({ publicKey: config.vapidPublicKey, privateKey: secrets.vapidPrivateKey, contactEmail: config.contactEmail }),
     card: createCardRegistrar({ secretKey: secrets.stripeSecretKey }),
     human: createHumanCheck({ secretKey: secrets.turnstileSecretKey }),
