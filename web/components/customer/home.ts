@@ -17,6 +17,11 @@ export type ReservationDto = {
   expiresAt: string;
   status: string;
   coupons: Array<{ name: string; note: string }>;
+  /**
+   * 探したときの起点（サーバーが `fetch_logs` から載せる座標・2026-09-22）。経路の出発地に使う。
+   * 古い応答・端末に残した古いホームには無いので、**在ることに頼らない**（無ければ画面側の覚えで補う）。
+   */
+  origin?: { lat: number; lng: number } | null;
 };
 
 /** 期限切れの表示の中身（要件11の基準 11.6〜11.9。判断はサーバー側の `domain/customerHome`）。 */

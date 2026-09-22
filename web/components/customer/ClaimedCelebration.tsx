@@ -14,12 +14,15 @@
 //
 // 経路は Google マップのリンクで開く（地図の画面を埋め込むと鍵が画面側に要る——ここには置かない）。
 // 出発地は分かっていれば渡す（渡さなければマップ側が現在地から引く）。
+// ⚠️ この1枚を閉じたあとも辿り着けるよう、**同じリンクを確保中の画面（`ReservationView`）にも置いてある**
+//    （2026-09-22 の本人の指摘「確保の画面に戻ったらGoogleマップを探すボタンに辿り着けなくなる」）。
 //
 // 置き方（位置・重なり）だけを style で持ち、色は持たない——色は globals.css の変数が正本
 // （要件32の基準 32.3・構造の検査が .tsx に色の値が無いことを見張る）。見た目の仕上げは
 // `claimed-celebration` の class に当てる。
 
 import { useEffect, useMemo } from "react";
+import { routeHref, type SearchOrigin } from "../../lib/client/lastOrigin";
 import { playNotifyBeep } from "../store/beep";
 import { CouponPickNote } from "./CouponPickNote";
 import type { ReservationDto } from "./home";
@@ -54,24 +57,10 @@ const Confetti = () => {
   );
 };
 
-/**
- * 経路を開くリンク（店名と住所で引く。出発地が分かっていれば渡す）。
- *
- * ⚠️ **出発地を渡さないと、マップは端末の現在地から引く**（2026-09-22 の本人の指摘——
- * 現在地と違う場所を入れて探したのに、経路の開始地点が現在地になり、徒歩7時間と出た）。
- * 探した起点は座標のことも、客が打った場所の文字のこともある。マップの `origin` は
- * **どちらの形でも受ける**ので、そのまま渡す。
- */
-const routeHref = (reservation: ReservationDto, from: RouteOrigin | null): string | null => {
-  const destination = [reservation.storeName, reservation.storeAddress].filter((part) => part !== "").join(" ");
-  if (destination === "") return null;
-  const params = new URLSearchParams({ api: "1", destination, travelmode: "walking" });
-  if (from !== null) params.set("origin", "place" in from ? from.place : `${from.lat},${from.lng}`);
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
-};
+// 経路のリンクの組み方は `lib/client/lastOrigin.ts` の `routeHref`（確保中の画面 `ReservationView` と共用）。
 
 /** 経路の出発地。探したときの起点をそのまま使う（座標か、客が打った場所の文字）。 */
-export type RouteOrigin = { lat: number; lng: number } | { place: string };
+export type RouteOrigin = SearchOrigin;
 
 type ClaimedCelebrationProps = {
   reservation: ReservationDto;

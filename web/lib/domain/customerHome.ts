@@ -53,6 +53,8 @@ export type HomeReservationRow = {
   status: string;
   /** 受け取った時点でそのオファーが見せていたクーポンの写し（基準 16.6） */
   coupons: Array<{ name: string; note: string }>;
+  /** その確保を選んだ取得の起点（記録 `fetch_logs` から）。読めなければ null（省いても null と同じ） */
+  origin?: { lat: number; lng: number } | null;
 };
 
 /** その確保のオファーの今（受け取り直せるかの判断に使う）。見つからなければ null。 */
@@ -78,6 +80,12 @@ export type ReservationView = {
   expiresAt: string;
   status: EffectiveState;
   coupons: Array<{ name: string; note: string }>;
+  /**
+   * 探したときの起点（座標）。客の画面が経路の出発地に使う（2026-09-22 の本人の指摘・3回目）。
+   * 応答に載せるので、画面の状態や端末の保存に依らずどのタブ・どの読み直しでも同じ出発地が渡る。
+   * 受け入れ検査の契約 `ReservationDto` は `toMatchObject` で見ているので、項目を足しても通る。
+   */
+  origin: { lat: number; lng: number } | null;
 };
 
 /** 期限切れの表示の中身（基準 11.5〜11.9）。`partyMax` は「何名まで」が下がっていたときだけ。 */
@@ -101,6 +109,7 @@ const toView = (row: HomeReservationRow, state: EffectiveState, showCode: boolea
   expiresAt: row.expiresAt.toISOString(),
   status: state,
   coupons: row.coupons,
+  origin: row.origin ?? null,
 });
 
 /**

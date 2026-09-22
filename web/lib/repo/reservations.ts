@@ -64,7 +64,15 @@ export type ReservationStore = { id: string; name: string; address: string; url:
 /** その確保のオファーの今（受け取り直せるか・断りの理由の判断に使う）。 */
 export type ReservationOffer = { endedAt: Date | null; untilAt: Date; remaining: number; partyMax: number };
 
-export type ReservationContext = { reservation: ReservationRow; store: ReservationStore; offer: ReservationOffer };
+/**
+ * その確保を選んだ取得の起点（`fetch_logs.origin_lat/lng`・客が打った場所はサーバーがここで座標に直している）。
+ * 客の画面が「Googleマップで経路を開く」の出発地に使う（2026-09-22 の本人の指摘・3回目——画面の状態や
+ * `sessionStorage` に頼ると、タブが変わる・読み直す・保存を止めた端末で出発地が現在地へ戻る）。
+ * 記録が読めなければ null（外部の鍵で必ず在るはずだが、無いことを理由に確保を描けなくしない）。
+ */
+export type ReservationOrigin = { lat: number; lng: number } | null;
+
+export type ReservationContext = { reservation: ReservationRow; store: ReservationStore; offer: ReservationOffer; origin: ReservationOrigin };
 
 /** 確保の列（`res` の別名で読む。列の名前を写さないため、読む側はこれを使う）。 */
 export const RESERVATION_COLUMNS =
@@ -90,10 +98,13 @@ export const toReservationRow = (row: Record<string, unknown>): ReservationRow =
 const CONTEXT_SQL = (where: string): string =>
   `SELECT ${RESERVATION_COLUMNS},` +
   ` s.name AS store_name, s.address AS store_address, s.url AS store_url, s.status AS store_status,` +
-  ` o.ended_at, o.until_at, o.party_max, ${remainingExpression("o", "?2")} AS remaining` +
+  ` o.ended_at, o.until_at, o.party_max, ${remainingExpression("o", "?2")} AS remaining,` +
+  ` f.origin_lat, f.origin_lng` +
   ` FROM reservations res` +
   ` JOIN stores s ON s.id = res.store_id` +
   ` JOIN offers o ON o.id = res.offer_id` +
+  // 記録の表は読むだけ（追加以外の文は置かない・基準 27.7）。LEFT JOIN＝記録が無くても確保は描く
+  ` LEFT JOIN fetch_logs f ON f.id = res.fetch_id` +
   ` WHERE ${where}` +
   ` ORDER BY res.created_at DESC, res.rowid DESC LIMIT 1`;
 
@@ -112,6 +123,7 @@ const toContext = (row: Record<string, unknown>): ReservationContext => ({
     remaining: Number(row.remaining ?? 0),
     partyMax: Number(row.party_max ?? 0),
   },
+  origin: typeof row.origin_lat === "number" && typeof row.origin_lng === "number" ? { lat: row.origin_lat, lng: row.origin_lng } : null,
 });
 
 /** その客のいちばん新しい確保と、その店・そのオファーの今。1件も無ければ null。 */

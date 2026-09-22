@@ -488,6 +488,19 @@
   gap: 0.875rem;
 }
 
+/* 「Googleマップで経路を開く」（半券の直下・2026-09-22 本人の指摘「確保の画面にもおくように」）。
+   見た目は確定の演出の `.claimed-route` と同じ（同じ役目のものを別の見た目にしない・宣言はそちらが正本）。
+   ここは `<button>` なので、素のボタンの塗り（オレンジ）と縁を札の縁に揃えるぶんだけ足す。 */
+.claim-route {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  justify-self: stretch;
+  margin-top: 0;
+  text-align: center;
+}
+
 .claim-ticket {
   background: linear-gradient(160deg, color-mix(in srgb, var(--color-accent) 14%, var(--color-background)), var(--color-background));
   border: 2px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
@@ -553,11 +566,14 @@
   justify-self: start;
 }
 
-/* 副の操作（ほかの店を探す・通報）は控えめにまとめる */
+/* 副の操作（ほかの店を探す・通報）は控えめにまとめる。
+   直上の「確保を取り消す」から一段離す（2026-09-22 本人の指摘・2回目「ボタンと他要素がくっついている」——
+   `.claim-view` の gap 0.875rem だけでは、取り消しの行と副の操作の行が同じ列に見えていた）。 */
 .claim-view__quiet {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.75rem;
 }
 
 .claim-view__quiet > button {
@@ -576,7 +592,21 @@
    `.claim-view` と同じ語彙（`display: grid; gap: 0.875rem`）に揃える——この面の「囲い同士の間隔」の基準値。 */
 .claim-actions {
   display: grid;
-  gap: 0.875rem;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+/* 「確保を取り消す」の行を、「人数を変える」の囲い（`form`＝縁と影を持つ札）から離す。
+   2026-09-22 本人の指摘・2回目「確保を取り消すが人数を変えるの囲いの枠に貼り付いている」——
+   囲いの影のぶん、gap だけでは見た目の間隔が数字より狭く見える。 */
+.claim-actions > [data-testid="form-cancel"] {
+  margin-top: 0.25rem;
+}
+
+/* 確保中の画面の下に並ぶ案内（最近行った店・登録の確認と消去）を、上の操作の列から離す。
+   `main` の gap 1rem だけでは、副の操作の行と同じ列に見えていた（同じ指摘）。 */
+[data-testid="view-active"] + nav {
+  margin-top: 0.75rem;
 }
 
 /* 確保中の画面では、番号より目立つものを置かない（店頭でまず見るのは番号）。

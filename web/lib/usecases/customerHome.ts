@@ -35,6 +35,7 @@ const toViewInput = (context: ReservationContext | null, lastFetchAt: Date | nul
       statusAt: reservation.statusAt,
       status: reservation.status,
       coupons: reservation.coupons,
+      origin: context.origin,
     },
     offer,
     lastFetchAt,

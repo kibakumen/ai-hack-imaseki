@@ -238,12 +238,25 @@ export const CustomerApp = () => {
       </button>
     ) : null;
 
+  /**
+   * 経路の出発地（探したときの起点）。確保中の画面と確定の演出の**両方が同じ値**を使う。
+   * 出どころは3段。上から順に、在るものを使う:
+   *   1. **確保の応答に載る起点**（サーバーが `fetch_logs` から返す座標）。画面の状態にも端末の保存にも
+   *      依らないので、これが正本——新しいタブ・別のタブ・読み直しのあとでも渡る。
+   *   2. 探した結果に載る起点。⚠️ 受け取りが通った瞬間に `setFetchResult(null)` と `setCelebrating(true)`
+   *      が同じ描き直しにまとめられるため、**演出が出る時点ではもう null**——1回目の直しが効かなかった理由。
+   *   3. そのタブで覚えた起点（`sessionStorage`）。新しいタブ・別のタブ・保存を止めた端末では空——
+   *      2回目の直しがチームの環境で効かなかった理由。
+   * どれも無ければ null＝渡さない（嘘の起点を付けるより、マップに現在地から引かせる方がまし）。
+   */
+  const routeFrom = reservation === undefined ? null : (reservation.origin ?? fetchResult?.from ?? recallOrigin());
+
   /** 確保を持つ客の表示（優先の順の2〜5）。種類ごとに部品が1つ。 */
   const reservationView = () => {
     if (reservation === undefined) return null;
     if (home.kind === "active") {
       return (
-        <ReservationView pushPromptDue={home.pushPromptDue === true} reservation={reservation} onChanged={applyHome} onSearchMore={() => setSearching(true)}>
+        <ReservationView pushPromptDue={home.pushPromptDue === true} reservation={reservation} from={routeFrom} onChanged={applyHome} onSearchMore={() => setSearching(true)}>
           {reportEntry}
         </ReservationView>
       );
@@ -278,11 +291,10 @@ export const CustomerApp = () => {
    */
   const celebration =
     celebrating && reservation !== undefined && home.kind === "active" ? (
-      // ⚠️ 探したときの起点をそのまま経路の出発地へ渡す（2026-09-22 本人の指摘——現在地と違う場所で
+      // ⚠️ 探したときの起点を経路の出発地へ渡す（2026-09-22 本人の指摘・3回——現在地と違う場所で
       // 探したのに、マップの開始地点が現在地になり徒歩7時間と出た）。渡さないとマップが現在地から引く。
-      // ⚠️ `fetchResult` は画面を読み直すと消える。覚えている起点で補う——補えなければ
-      //    マップが現在地から引き、現在地と違う場所で探した客に別の経路が出る（2026-09-22 の指摘）。
-      <ClaimedCelebration reservation={reservation} from={fetchResult?.from ?? recallOrigin()} onClose={() => setCelebrating(false)} />
+      // 出どころと順は上の `routeFrom` の注。
+      <ClaimedCelebration reservation={reservation} from={routeFrom} onClose={() => setCelebrating(false)} />
     ) : null;
 
   return (
