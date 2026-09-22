@@ -85,7 +85,13 @@ const UntilField = ({
   </>
 );
 
-/** 見せるクーポンの選び方（チェックの付いたカードを横に並べる・2026-09-21 の本人の指摘）。 */
+/**
+ * 見せるクーポンの選び方——**チェックボックスつきの札**（2026-09-22 の本人の指摘「クーポンカードは
+ * チェックボックスカードにして選択状態がわかりやすく」）。選ばれた札は縁と地が橙に変わり、左の四角に
+ * チェックが入る。客の画面のクーポンの札（`me.css` の `.offer-coupon`・点線の縁）と同じ語彙。
+ * ⚠️ 本物の `<input type="checkbox">` は DOM に残す（受け入れ検査が `coupon-<id>` で押す・
+ *    読み上げとキーボードもこちらに答える）。目に見えるチェックは CSS が描く。
+ */
 const CouponChoices = ({
   coupons,
   selected,
@@ -95,25 +101,32 @@ const CouponChoices = ({
   selected: string[];
   onToggle: (id: string) => void;
 }) => (
-  <fieldset className="store-field" data-testid="coupon-list">
+  <fieldset className="store-field store-coupon-set" data-testid="coupon-list">
     <legend>見せるクーポン（押して選ぶ・0個でもよい）</legend>
     {coupons.length === 0 ? <p className="store-empty">クーポンはまだありません。</p> : null}
-    <div className="store-chips">
-      {coupons.map((coupon) => (
-        <label className="store-chip" key={coupon.id} htmlFor={`publish-coupon-${coupon.id}`}>
-          <input
-            id={`publish-coupon-${coupon.id}`}
-            data-testid={`coupon-${coupon.id}`}
-            type="checkbox"
-            checked={selected.includes(coupon.id)}
-            onChange={() => onToggle(coupon.id)}
-          />
-          <span className="store-chip__text">
-            <span>{coupon.name}</span>
-            {coupon.note === "" ? null : <span className="store-chip__note">{coupon.note}</span>}
-          </span>
-        </label>
-      ))}
+    <div className="store-coupons">
+      {coupons.map((coupon) => {
+        const on = selected.includes(coupon.id);
+        return (
+          <label className={on ? "store-coupon store-coupon--on" : "store-coupon"} key={coupon.id} htmlFor={`publish-coupon-${coupon.id}`}>
+            <input
+              id={`publish-coupon-${coupon.id}`}
+              data-testid={`coupon-${coupon.id}`}
+              className="store-coupon__input"
+              type="checkbox"
+              checked={on}
+              onChange={() => onToggle(coupon.id)}
+            />
+            <span className="store-coupon__check" aria-hidden="true">
+              {on ? "✓" : ""}
+            </span>
+            <span className="store-coupon__body">
+              <span className="store-coupon__name">{coupon.name}</span>
+              {coupon.note === "" ? null : <span className="store-coupon__note">{coupon.note}</span>}
+            </span>
+          </label>
+        );
+      })}
     </div>
     {/* 入れ忘れに気づかせる表示（要件17の基準 17.23）。チェックが0個の間だけ出す */}
     {selected.length === 0 ? <p className="store-note">クーポンを見せないオファーとして公開されます。</p> : null}

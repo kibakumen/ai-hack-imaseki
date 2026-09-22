@@ -74,7 +74,7 @@ export const DocumentsPanel = () => {
   if (!view) return <section aria-busy="true" />;
 
   return (
-    <section>
+    <section className="store-stack">
       <h2>書類</h2>
 
       <form

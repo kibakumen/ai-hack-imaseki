@@ -59,40 +59,60 @@ type CouponRowProps = {
   onDelete: () => void;
 };
 
-/** 1つのクーポン。今の中身を見せたまま、その場で直せる（基準 16.4）。 */
+/**
+ * 1つのクーポン。今の中身を見せたまま、その場で直せる（基準 16.4）。
+ * 見た目は**1枚ずつの札**（2026-09-22 の本人の指摘「1枚ずつのカードにして、ボタンの余白を空ける」）:
+ * 上段が券面（客に見える名前と特記事項・客の画面の `.offer-coupon` と同じ点線の縁の語彙）、
+ * 下段が直す欄と、離して置いた2つのボタン。
+ */
 const CouponRow = ({ coupon, draft, failure, onChange, onSave, onDelete }: CouponRowProps) => (
-  <li data-testid={`row-${coupon.id}`}>
-    <h3>{coupon.name}</h3>
-    {coupon.note !== "" && <p>{coupon.note}</p>}
+  <li className="store-coupon-card" data-testid={`row-${coupon.id}`}>
+    <div className="store-coupon-card__face">
+      <span className="store-coupon-card__mark" aria-hidden="true">
+        ✓
+      </span>
+      <div className="store-coupon-card__text">
+        <h3>{coupon.name}</h3>
+        {coupon.note !== "" && <p className="store-coupon-card__note">{coupon.note}</p>}
+      </div>
+    </div>
 
-    <label htmlFor={`coupon-name-${coupon.id}`}>名前</label>
-    <input
-      id={`coupon-name-${coupon.id}`}
-      data-testid={`field-name-${coupon.id}`}
-      type="text"
-      value={draft.name}
-      maxLength={COUPON_NAME_MAX}
-      onChange={(event) => onChange({ ...draft, name: event.target.value })}
-    />
-    <FieldMessage name="name" failure={failure} ctx={NAME_CTX} />
+    <div className="store-coupon-card__fields">
+      <div className="store-field">
+        <label htmlFor={`coupon-name-${coupon.id}`}>名前</label>
+        <input
+          id={`coupon-name-${coupon.id}`}
+          data-testid={`field-name-${coupon.id}`}
+          type="text"
+          value={draft.name}
+          maxLength={COUPON_NAME_MAX}
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+        />
+        <FieldMessage name="name" failure={failure} ctx={NAME_CTX} />
+      </div>
 
-    <label htmlFor={`coupon-note-${coupon.id}`}>特記事項</label>
-    <input
-      id={`coupon-note-${coupon.id}`}
-      data-testid={`field-note-${coupon.id}`}
-      type="text"
-      value={draft.note}
-      maxLength={COUPON_NOTE_MAX}
-      onChange={(event) => onChange({ ...draft, note: event.target.value })}
-    />
-    <FieldMessage name="note" failure={failure} ctx={NOTE_CTX} />
+      <div className="store-field">
+        <label htmlFor={`coupon-note-${coupon.id}`}>特記事項</label>
+        <input
+          id={`coupon-note-${coupon.id}`}
+          data-testid={`field-note-${coupon.id}`}
+          type="text"
+          value={draft.note}
+          maxLength={COUPON_NOTE_MAX}
+          onChange={(event) => onChange({ ...draft, note: event.target.value })}
+        />
+        <FieldMessage name="note" failure={failure} ctx={NOTE_CTX} />
+      </div>
+    </div>
 
-    <button type="button" data-testid="btn-save-coupon" onClick={onSave}>
-      保存する
-    </button>
-    <button type="button" data-testid="btn-delete-coupon" onClick={onDelete}>
-      削除
-    </button>
+    <div className="store-actions">
+      <button type="button" className="store-btn store-btn--primary" data-testid="btn-save-coupon" onClick={onSave}>
+        保存する
+      </button>
+      <button type="button" className="store-btn store-btn--danger" data-testid="btn-delete-coupon" onClick={onDelete}>
+        削除
+      </button>
+    </div>
     <CouponFormMessage failure={failure} />
   </li>
 );
@@ -148,11 +168,21 @@ export const CouponEditor = () => {
   const failureOf = (scope: string): ApiFailure | null => (refused?.scope === scope ? refused.failure : null);
 
   return (
-    <section data-testid="coupon-list">
-      <h2>クーポン</h2>
-      <p>お客さまに見せる特典を{COUPON_MAX}つまで用意できます。</p>
+    <section className="store-stack" data-testid="coupon-list">
+      <div className="store-head">
+        <div>
+          <p className="store-eyebrow">店の画面</p>
+          <h1>クーポン</h1>
+        </div>
+        <span className="store-count">
+          {items.length}/{COUPON_MAX}
+        </span>
+      </div>
+      <p className="store-lead">お客さまに見せる特典を{COUPON_MAX}つまで用意できます。公開するオファーにどれを付けるかは、オファーの画面で選びます。</p>
 
-      <ul>
+      {items.length === 0 ? <p className="store-empty">クーポンはまだありません。下の欄から作れます。</p> : null}
+
+      <ul className="store-coupon-cards">
         {items.map((coupon) => (
           <CouponRow
             key={coupon.id}
@@ -172,6 +202,7 @@ export const CouponEditor = () => {
       </ul>
 
       <form
+        className="store-coupon-new"
         data-testid="form-coupon"
         noValidate
         onSubmit={(event) => {
@@ -179,14 +210,35 @@ export const CouponEditor = () => {
         }}
       >
         <h3>クーポンを作る</h3>
+        <p className="store-note">名前は客の画面の札に大きく、特記事項はその下に小さく出ます。</p>
 
-        <label htmlFor="coupon-new-name">名前</label>
-        <input id="coupon-new-name" data-testid="field-name" type="text" value={name} maxLength={COUPON_NAME_MAX} onChange={(event) => setName(event.target.value)} />
-        <FieldMessage name="name" failure={failureOf(CREATE_SCOPE)} ctx={NAME_CTX} />
+        <div className="store-field">
+          <label htmlFor="coupon-new-name">名前</label>
+          <input
+            id="coupon-new-name"
+            data-testid="field-name"
+            type="text"
+            placeholder="例: 生ビール1杯"
+            value={name}
+            maxLength={COUPON_NAME_MAX}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <FieldMessage name="name" failure={failureOf(CREATE_SCOPE)} ctx={NAME_CTX} />
+        </div>
 
-        <label htmlFor="coupon-new-note">特記事項</label>
-        <input id="coupon-new-note" data-testid="field-note" type="text" value={note} maxLength={COUPON_NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
-        <FieldMessage name="note" failure={failureOf(CREATE_SCOPE)} ctx={NOTE_CTX} />
+        <div className="store-field">
+          <label htmlFor="coupon-new-note">特記事項（任意）</label>
+          <input
+            id="coupon-new-note"
+            data-testid="field-note"
+            type="text"
+            placeholder="例: 1組1回まで"
+            value={note}
+            maxLength={COUPON_NOTE_MAX}
+            onChange={(event) => setNote(event.target.value)}
+          />
+          <FieldMessage name="note" failure={failureOf(CREATE_SCOPE)} ctx={NOTE_CTX} />
+        </div>
 
         <button type="submit" data-testid="btn-create-coupon">
           作る
