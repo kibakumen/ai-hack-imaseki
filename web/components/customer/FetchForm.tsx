@@ -28,6 +28,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { apiCall, apiStream, isFailure, STREAM_UNAVAILABLE, type ApiFailure, type StreamLine, type StreamOutcome } from "../../lib/client/api";
 import { currentLocation, type CurrentLocation } from "../../lib/client/geolocation";
+import { rememberOrigin } from "../../lib/client/lastOrigin";
 import { usePlaceSuggestions } from "../../lib/client/placeSuggest";
 import { TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, GUEST_PHONE_PLACEHOLDER, PARTY_MAX, PARTY_MIN, PHONE_MAX_LENGTH, PLACE_MAX } from "../../lib/schemas/limits";
@@ -295,6 +296,8 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       setFailure(from);
       return;
     }
+    // 経路の出発地に使うので、そのタブの中で覚えておく（読み直しても残るように）。
+    rememberOrigin(from);
     const payload = { ...from, party: partyToSend(party), genres, budgetMax: budgetToSend(budgetMax) };
     const streamed = await searchByStream(payload, from);
     if (streamed !== STREAM_UNAVAILABLE) {

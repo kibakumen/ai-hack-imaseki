@@ -24,6 +24,7 @@ import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as s
 import { usePolling } from "../../lib/client/usePolling";
 import { AccountSettings } from "./AccountSettings";
 import { AdminCancelledView } from "./AdminCancelledView";
+import { recallOrigin } from "../../lib/client/lastOrigin";
 import { ClaimedCelebration } from "./ClaimedCelebration";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
@@ -279,7 +280,9 @@ export const CustomerApp = () => {
     celebrating && reservation !== undefined && home.kind === "active" ? (
       // ⚠️ 探したときの起点をそのまま経路の出発地へ渡す（2026-09-22 本人の指摘——現在地と違う場所で
       // 探したのに、マップの開始地点が現在地になり徒歩7時間と出た）。渡さないとマップが現在地から引く。
-      <ClaimedCelebration reservation={reservation} from={fetchResult?.from ?? null} onClose={() => setCelebrating(false)} />
+      // ⚠️ `fetchResult` は画面を読み直すと消える。覚えている起点で補う——補えなければ
+      //    マップが現在地から引き、現在地と違う場所で探した客に別の経路が出る（2026-09-22 の指摘）。
+      <ClaimedCelebration reservation={reservation} from={fetchResult?.from ?? recallOrigin()} onClose={() => setCelebrating(false)} />
     ) : null;
 
   return (
