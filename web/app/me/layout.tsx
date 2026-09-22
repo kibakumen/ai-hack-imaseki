@@ -5,7 +5,15 @@
 // 本番の CSS チャンクを実測して判った（`.claimed-celebration` も `.offer-card` も 0 件）。
 // Next.js は import された CSS だけを束ねるので、ファイルが在るだけでは配信されない。
 import "./me.css";
+import { ThemeToggle } from "../../components/ui/ThemeToggle";
 
+// 明暗の切り替えボタンはここで1つだけ足す（客の画面は今 `/me` の1ページだけなので、この殻が唯一の入口）。
+// `position: fixed` で描くので children の DOM 構造は変えない（既存の検査・レイアウトに影響しない）。
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      {children}
+      <ThemeToggle />
+    </>
+  );
 }

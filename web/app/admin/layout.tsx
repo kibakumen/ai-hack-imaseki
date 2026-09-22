@@ -5,6 +5,7 @@
 // 導線だけを置く殻で、中身は各画面の部品が持つ。運営の画面は PC 向けなので常に3つとも出す。
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ThemeToggle } from "../../components/ui/ThemeToggle";
 
 const ADMIN_PAGES = [
   { href: "/admin", label: "店の一覧" },
@@ -25,6 +26,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         ))}
       </nav>
       {children}
+      {/* `position: fixed` で描く（`app/globals.css` の `.theme-toggle` が admin-nav の
+          高さぶん下げる）。children の DOM 構造は変えない。 */}
+      <ThemeToggle />
     </>
   );
 }
