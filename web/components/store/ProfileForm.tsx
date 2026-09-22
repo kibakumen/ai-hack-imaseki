@@ -140,7 +140,7 @@ export const ProfileForm = () => {
       }}
     >
       <h2>お店の情報</h2>
-      <p>ここに入れた内容が、席を探している人に出ます。</p>
+      <p className="store-lead">ここに入れた内容が、席を探している人に出ます。</p>
 
       <label htmlFor="store-profile-name">店名</label>
       <input
@@ -209,55 +209,75 @@ export const ProfileForm = () => {
       </fieldset>
       <FieldMessage name="genres" failure={failure} ctx={{ field: "ジャンル", min: STORE_GENRES_MIN, max: STORE_GENRES_MAX }} />
 
-      <label htmlFor="store-profile-menu">おすすめメニュー（{MENUS_MAX}件まで）</label>
-      <ul>
-        {menus.map((item, index) => (
-          <li key={`${item}-${index}`}>
-            {item}
-            <button type="button" onClick={() => removeMenu(index)}>
-              消す
-            </button>
-          </li>
-        ))}
-      </ul>
+      {/* おすすめメニューは**1行1枚の札**にして、名前と「消す」を離す（2026-09-22 の本人の指摘
+          「メニュー名と消すボタンが重なっている」）。足す欄とボタンは1行に並べる。 */}
+      <label htmlFor="store-profile-menu">
+        おすすめメニュー（{menus.length}/{MENUS_MAX}・{MENUS_MAX}件まで）
+      </label>
+      {menus.length > 0 ? (
+        <ul className="store-menu-list">
+          {menus.map((item, index) => (
+            <li className="store-menu-item" key={`${item}-${index}`}>
+              <span className="store-menu-item__mark" aria-hidden="true">
+                {index + 1}
+              </span>
+              <span className="store-menu-item__name">{item}</span>
+              <button type="button" className="store-btn store-btn--quiet" onClick={() => removeMenu(index)}>
+                消す
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {/* 1件ずつ足す形（基準 15.6）。1件の長さは打てる字数で抑え、件数の上限は入口が断る（基準 15.7）。 */}
-      <input
-        id="store-profile-menu"
-        data-testid="field-menu"
-        type="text"
-        value={menu}
-        minLength={MENU_NAME_MIN}
-        maxLength={MENU_NAME_MAX}
-        onChange={(event) => setMenu(event.target.value)}
-      />
-      <button type="button" data-testid="btn-add-menu" onClick={addMenu}>
-        メニューを足す
-      </button>
+      <div className="store-inline">
+        <input
+          id="store-profile-menu"
+          data-testid="field-menu"
+          type="text"
+          placeholder="例: 刺身盛り合わせ"
+          value={menu}
+          minLength={MENU_NAME_MIN}
+          maxLength={MENU_NAME_MAX}
+          onChange={(event) => setMenu(event.target.value)}
+        />
+        <button type="button" className="store-btn store-btn--quiet" data-testid="btn-add-menu" onClick={addMenu}>
+          ＋ 足す
+        </button>
+      </div>
       <FieldMessage name="menus" failure={failure} ctx={{ field: "おすすめメニュー", min: MENU_NAME_MIN, max: MENUS_MAX }} />
 
-      <label htmlFor="store-profile-budget-min">{BUDGET_LABEL}（最低）</label>
-      <input
-        id="store-profile-budget-min"
-        data-testid="field-budgetMin"
-        type="number"
-        value={budgetMin}
-        min={BUDGET_MAX_MIN}
-        max={BUDGET_MAX_MAX}
-        onChange={(event) => setBudgetMin(event.target.value)}
-      />
-      <FieldMessage name="budgetMin" failure={failure} ctx={{ field: BUDGET_LABEL, min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
-
-      <label htmlFor="store-profile-budget-max">{BUDGET_LABEL}（最高）</label>
-      <input
-        id="store-profile-budget-max"
-        data-testid="field-budgetMax"
-        type="number"
-        value={budgetMax}
-        min={BUDGET_MAX_MIN}
-        max={BUDGET_MAX_MAX}
-        onChange={(event) => setBudgetMax(event.target.value)}
-      />
-      <FieldMessage name="budgetMax" failure={failure} ctx={{ field: BUDGET_LABEL, min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+      {/* 予算の最低と最高は横に並べる（「〜の最低は最高以下に」の文が、2つの欄を見比べながら読める） */}
+      <div className="store-pair">
+        <div className="store-field">
+          <label htmlFor="store-profile-budget-min">{BUDGET_LABEL}（最低・円）</label>
+          <input
+            id="store-profile-budget-min"
+            data-testid="field-budgetMin"
+            type="number"
+            inputMode="numeric"
+            value={budgetMin}
+            min={BUDGET_MAX_MIN}
+            max={BUDGET_MAX_MAX}
+            onChange={(event) => setBudgetMin(event.target.value)}
+          />
+          <FieldMessage name="budgetMin" failure={failure} ctx={{ field: BUDGET_LABEL, min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+        </div>
+        <div className="store-field">
+          <label htmlFor="store-profile-budget-max">{BUDGET_LABEL}（最高・円）</label>
+          <input
+            id="store-profile-budget-max"
+            data-testid="field-budgetMax"
+            type="number"
+            inputMode="numeric"
+            value={budgetMax}
+            min={BUDGET_MAX_MIN}
+            max={BUDGET_MAX_MAX}
+            onChange={(event) => setBudgetMax(event.target.value)}
+          />
+          <FieldMessage name="budgetMax" failure={failure} ctx={{ field: BUDGET_LABEL, min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+        </div>
+      </div>
 
       <button type="submit" data-testid="btn-save-profile">
         保存する

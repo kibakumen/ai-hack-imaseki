@@ -1,11 +1,17 @@
 /* 店の画面の見た目（2026-09-22。速成版 sprint/app/store で本人が磨いた形を v2 へ移した）。
    色の値はここでも持たない——`app/globals.css` の `--color-*` だけを混ぜて濃淡を作るので、
    暗い設定へ切り替わると、この面も一緒に切り替わる（要件32の基準 32.3 の考え方を守る）。
-   `app/store/layout.tsx` だけがこのファイルを読む＝店の画面の外には漏れない。 */
+   `app/store/layout.tsx` だけがこのファイルを読む＝店の画面の外には漏れない。
+
+   2026-09-22（2回目の指摘）で入れた方針:
+     - **色が薄すぎて面白みが無い** → 数字を大きく・濃く。差し色の橙（--color-accent）の混ぜる量を上げる。
+       別の色は持ち込まない
+     - **ボタンが密着している** → 操作の列は `.store-actions` / `.store-inline` で必ず隙間を持つ
+     - **遊び** → 客の画面（me.css）の語彙を借りる: 半券（点線の縁・切り欠き）・札・チップ */
 
 .store-main {
   max-width: 64rem;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
 .store-head {
@@ -22,15 +28,84 @@
 }
 
 .store-eyebrow {
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
+  color: var(--color-accent-strong);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
   margin: 0;
+}
+
+.store-lead {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* 見出しの右に置く「2/3」のような数の札 */
+.store-count {
+  background: var(--color-accent-soft);
+  border-radius: 999px;
+  color: var(--color-accent-strong);
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 0.875rem;
+  font-weight: 800;
+  padding: 0.25rem 0.75rem;
+}
+
+/* ---------- 並べる道具（隙間を持たせる） ---------- */
+
+.store-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.store-stack-sm {
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* 横に並ぶボタンの列。**必ず隙間を持つ**（密着の指摘への答え） */
+.store-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 0.25rem;
+}
+
+/* 欄とボタンを1行に（欄が伸び、ボタンは縮まない） */
+.store-inline {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.store-inline > input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.store-inline > .store-btn {
+  flex: 0 0 auto;
+}
+
+/* 2つの欄を横に（狭い画面では縦に） */
+.store-pair {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 30rem) {
+  .store-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* ---------- タブ（オファー・クーポン・店舗情報…） ---------- */
 
 .store-tabs {
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 1rem;
   display: flex;
   flex-wrap: wrap;
@@ -58,9 +133,9 @@
 }
 
 .store-tab[aria-current="page"] {
-  background: var(--color-background);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-text) 16%, transparent);
-  color: var(--color-text);
+  background: var(--color-accent);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  color: var(--color-accent-text);
 }
 
 /* ---------- 共通のカード ---------- */
@@ -69,15 +144,27 @@
   background: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: 1.25rem;
+  box-shadow: var(--shadow-sm);
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
 }
 
 .store-card--accent {
-  background: linear-gradient(160deg, var(--color-background), color-mix(in srgb, var(--color-accent) 9%, var(--color-background)));
-  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-accent) 12%, transparent);
+  background: linear-gradient(160deg, var(--color-background), color-mix(in srgb, var(--color-accent) 14%, var(--color-background)));
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-accent) 16%, transparent);
+  position: relative;
+}
+
+/* 上の縁に橙の帯を通す（客の画面のカードと同じ手・「ただの枠線」から離す） */
+.store-card--accent::before {
+  background: linear-gradient(90deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 60%, var(--color-accent)));
+  border-radius: 1.25rem 1.25rem 0 0;
+  content: "";
+  height: 0.375rem;
+  inset: 0 0 auto 0;
+  position: absolute;
 }
 
 .store-card > h2,
@@ -107,6 +194,7 @@
 
 .store-badge--off {
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
   color: var(--color-text-muted);
 }
 
@@ -124,6 +212,7 @@
 
 .store-empty {
   background: var(--color-surface);
+  border: 1px dashed var(--color-border);
   border-radius: 0.75rem;
   color: var(--color-text-muted);
   font-size: 0.875rem;
@@ -131,9 +220,23 @@
   padding: 0.75rem;
 }
 
+.store-empty--arrivals {
+  padding: 1.25rem 0.75rem;
+  text-align: center;
+}
+
 .store-note {
   color: var(--color-text-muted);
   font-size: 0.75rem;
+  margin: 0;
+}
+
+/* 小さな見出し（項目名） */
+.store-label {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   margin: 0;
 }
 
@@ -167,9 +270,10 @@
   align-items: center;
   animation: store-pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
   background: var(--color-background);
-  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  border-left: 0.375rem solid var(--color-accent);
   border-radius: 1rem;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 10%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 12%, transparent);
   display: flex;
   gap: 0.75rem;
   justify-content: space-between;
@@ -179,6 +283,7 @@
 .store-arrival--done {
   background: var(--color-surface);
   border-color: var(--color-border);
+  border-left-color: var(--color-border);
   box-shadow: none;
   color: var(--color-text-muted);
 }
@@ -207,12 +312,14 @@
   align-items: center;
   display: flex;
   flex-shrink: 0;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .store-arrival__code {
+  color: var(--color-accent-strong);
   font-family: ui-monospace, "SFMono-Regular", monospace;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
+  font-weight: 800;
   letter-spacing: 0.15em;
   margin: 0;
 }
@@ -220,7 +327,7 @@
 .store-arrival__actions {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.375rem;
 }
 
 .store-past {
@@ -250,22 +357,45 @@
 }
 
 .store-btn--primary {
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-accent) 30%, transparent);
   font-size: 0.9375rem;
 }
 
 .store-btn--quiet {
   background: var(--color-surface);
   border-color: var(--color-border);
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
+  color: var(--color-text);
+  font-size: 0.8125rem;
   font-weight: 600;
-  padding: 0.375rem 0.625rem;
+  padding: 0.4375rem 0.75rem;
+}
+
+@media (hover: hover) {
+  .store-btn--quiet:hover:not(:disabled) {
+    background: var(--hover-soft-bg);
+    border-color: var(--hover-soft-border);
+    color: var(--hover-soft-text);
+    filter: none;
+  }
 }
 
 .store-btn--danger {
   background: color-mix(in srgb, var(--color-danger) 12%, var(--color-background));
-  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  border-color: color-mix(in srgb, var(--color-danger) 55%, var(--color-border));
   color: var(--color-danger);
+}
+
+@media (hover: hover) {
+  .store-btn--danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger) 20%, var(--color-background));
+    filter: none;
+  }
+}
+
+/* `<a>` をボタンの形で出す */
+.store-btn--link {
+  display: inline-block;
+  text-decoration: none;
 }
 
 /* ---------- ダイヤル式のピッカー ---------- */
@@ -273,14 +403,15 @@
 .store-dials {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 1.5rem;
+  justify-content: center;
 }
 
 .store-dial {
   align-items: center;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.375rem;
   /* 裏の入力欄（.store-sr-only）をこの中に収めるため */
   position: relative;
 }
@@ -288,30 +419,72 @@
 .store-dial__label {
   color: var(--color-text-muted);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* `--store-dial-item`（目盛り1つの高さ）は WheelPicker.tsx が渡す。
    中央へ寄せる計算が同じ数を使うので、こちらには写しを置かない（下の値は渡らなかった時の保険）。 */
 .store-dial__window {
-  --store-dial-item: 32px;
+  --store-dial-item: 44px;
+  --store-dial-width: 5.5rem;
 
+  align-items: center;
+  display: grid;
+  gap: 0.25rem;
+  justify-items: center;
+  position: relative;
+}
+
+.store-dial__window--lg {
+  --store-dial-width: 6.5rem;
+}
+
+/* 上下の矢印。回すのが苦手な指でも1目盛りずつ動かせる（同じ値へ流れ込む＝1つのインターフェース） */
+.store-dial__step {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-accent-strong);
+  font-size: 0.75rem;
+  height: 1.75rem;
+  line-height: 1;
+  padding: 0;
+  width: var(--store-dial-width);
+}
+
+.store-dial__step:disabled {
+  opacity: 0.3;
+}
+
+@media (hover: hover) {
+  .store-dial__step:hover:not(:disabled) {
+    background: var(--hover-soft-bg);
+    border-color: var(--hover-soft-border);
+    filter: none;
+  }
+}
+
+/* 回す窓。3行ぶんだけ見せる（中央の1行が選ばれた値）。上下は霞ませて「続きがある」と分からせる */
+.store-dial__rail-wrap {
   position: relative;
 }
 
 .store-dial__rail {
   background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  /* 3行ぶんだけ見せる（中央の1行が選ばれた値） */
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-radius: 1rem;
   height: calc(var(--store-dial-item) * 3);
+  mask-image: linear-gradient(to bottom, transparent, #000 28%, #000 72%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28%, #000 72%, transparent);
   overflow-y: scroll;
   padding-block: var(--store-dial-item);
+  position: relative;
   scroll-behavior: smooth;
   scroll-snap-type: y mandatory;
   scrollbar-width: none;
   text-align: center;
-  width: 3.75rem;
+  width: var(--store-dial-width);
+  z-index: 1;
 }
 
 .store-dial__rail::-webkit-scrollbar {
@@ -323,29 +496,51 @@
   color: var(--color-text-muted);
   display: flex;
   font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 1.125rem;
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   height: var(--store-dial-item);
   justify-content: center;
+  opacity: 0.55;
   scroll-snap-align: center;
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
 .store-dial__item--on {
-  color: var(--color-text);
+  color: var(--color-accent-strong);
+  font-size: 1.75rem;
+  font-weight: 900;
+  opacity: 1;
 }
 
+.store-dial__window--lg .store-dial__item--on {
+  font-size: 2rem;
+}
+
+/* 中央の帯。橙の薄い地と上下の線で「ここが選ばれた値」。単位を右端に小さく添える */
 .store-dial__marker {
-  border-block: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
-  border-radius: 0.375rem;
+  align-items: center;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border-block: 2px solid color-mix(in srgb, var(--color-accent) 75%, transparent);
+  display: flex;
   height: var(--store-dial-item);
-  inset-inline: 0;
+  justify-content: flex-end;
+  padding-inline: 0.375rem;
+  left: 0;
+  margin-inline: auto;
   pointer-events: none;
   position: absolute;
-  top: var(--store-dial-item);
+  right: 0;
+  /* 上の矢印（1.75rem）＋隙間（0.25rem）＋レールの上1行ぶん */
+  top: calc(2rem + var(--store-dial-item));
+  width: var(--store-dial-width);
+  z-index: 2;
 }
 
 .store-dial__unit {
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
+  color: var(--color-accent-strong);
+  font-size: 0.6875rem;
+  font-weight: 800;
 }
 
 /* 目には出さないが DOM には残す（読み上げと キーボード入力の受け口）。 */
@@ -361,7 +556,7 @@
   white-space: nowrap;
 }
 
-/* ---------- クーポンのチェックのカード（横並び） ---------- */
+/* ---------- チップ（ジャンル）と、チェックの札（クーポン） ---------- */
 
 .store-chips {
   display: flex;
@@ -373,19 +568,26 @@
   align-items: center;
   background: var(--color-background);
   border: 1px solid var(--color-border);
-  border-radius: 0.875rem;
+  border-radius: 999px;
   cursor: pointer;
   display: inline-flex;
   font-size: 0.875rem;
   gap: 0.5rem;
   max-width: 100%;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.875rem;
+  transition: background 140ms ease, border-color 140ms ease;
 }
 
 .store-chip:has(input:checked) {
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-background));
-  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
+  background: var(--color-accent-soft);
+  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
+  color: var(--color-accent-strong);
   font-weight: 700;
+}
+
+.store-chip:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .store-chip__text {
@@ -397,6 +599,240 @@
 .store-chip__note {
   color: var(--color-text-muted);
   font-size: 0.6875rem;
+}
+
+/* クーポンの札を並べる面。`globals.css` の `fieldset:has(input[type="checkbox"])`（flex）より
+   詳細度を上げて grid に戻す（(0,2,1) > (0,1,2)）。 */
+.store-card fieldset.store-coupon-set {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.store-coupons {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+}
+
+/* 1枚の札。客の画面のクーポン（点線の縁）と同じ語彙。左に四角のチェック、右に名前と特記事項。
+   選ばれると縁が実線の橙に、地が橙の薄い色に、四角が橙で塗られてチェックが白抜きになる。 */
+.store-coupon {
+  align-items: center;
+  background: var(--color-background);
+  border: 1.5px dashed color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
+  border-radius: 0.875rem;
+  cursor: pointer;
+  display: flex;
+  gap: 0.625rem;
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+  position: relative;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+@media (hover: hover) {
+  .store-coupon:not(.store-coupon--static):hover {
+    background: var(--hover-soft-bg);
+    border-color: var(--hover-soft-border);
+  }
+}
+
+.store-coupon--on {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+  border-style: solid;
+}
+
+.store-coupon--static {
+  cursor: default;
+}
+
+.store-coupon:has(.store-coupon__input:focus-visible) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+/* 本物のチェックボックスは目に出さない（DOM には残す） */
+.store-coupon__input {
+  block-size: 1px;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  margin: -1px;
+  opacity: 0;
+  position: absolute;
+}
+
+.store-coupon__check {
+  align-items: center;
+  background: var(--color-background);
+  border: 2px solid color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  border-radius: 0.375rem;
+  color: var(--color-accent-text);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.875rem;
+  font-weight: 900;
+  height: 1.375rem;
+  justify-content: center;
+  line-height: 1;
+  transition: background 140ms ease, border-color 140ms ease;
+  width: 1.375rem;
+}
+
+.store-coupon--on .store-coupon__check {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.store-coupon__body {
+  display: grid;
+  gap: 0.0625rem;
+  min-width: 0;
+}
+
+.store-coupon__name {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.store-coupon--on .store-coupon__name {
+  color: var(--color-accent-strong);
+}
+
+.store-coupon__note {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+}
+
+/* ---------- クーポンの画面（1枚ずつの札） ---------- */
+
+.store-coupon-cards {
+  display: grid;
+  gap: 0.875rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 48rem) {
+  .store-coupon-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 半券の形——左右に丸い切り欠き（客の画面の `.claimed-ticket` と同じ手）。上段の券面と下段の欄を点線で切る */
+.store-coupon-card {
+  --notch: 0.7rem;
+
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  border-radius: 1.125rem;
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  position: relative;
+}
+
+.store-coupon-card__face {
+  align-items: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 18%, var(--color-background)), color-mix(in srgb, var(--color-accent) 6%, var(--color-background)));
+  border: 1.5px dashed color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  border-radius: 0.875rem;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+}
+
+.store-coupon-card__mark {
+  align-items: center;
+  background: var(--color-accent);
+  border-radius: 0.5rem;
+  color: var(--color-accent-text);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 1rem;
+  font-weight: 900;
+  height: 1.75rem;
+  justify-content: center;
+  width: 1.75rem;
+}
+
+.store-coupon-card__text {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.store-coupon-card__text > h3 {
+  color: var(--color-accent-strong);
+  font-size: 1.125rem;
+  font-weight: 800;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.store-coupon-card__note {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.store-coupon-card__fields {
+  border-top: 1px dashed color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  display: grid;
+  gap: 0.625rem;
+  padding-top: 0.75rem;
+}
+
+.store-coupon-card .store-actions {
+  justify-content: space-between;
+}
+
+/* 作る側の枡。`globals.css` の `form` が縁と影を持つので、ここは中の並びだけ */
+.store-coupon-new {
+  gap: 0.625rem;
+}
+
+/* ---------- 店の情報（おすすめメニューの札） ---------- */
+
+.store-menu-list {
+  display: grid;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.store-menu-item {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  display: flex;
+  gap: 0.625rem;
+  padding: 0.375rem 0.375rem 0.375rem 0.625rem;
+}
+
+.store-menu-item__mark {
+  align-items: center;
+  background: var(--color-accent);
+  border-radius: 999px;
+  color: var(--color-accent-text);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  height: 1.5rem;
+  justify-content: center;
+  width: 1.5rem;
+}
+
+.store-menu-item__name {
+  flex: 1 1 auto;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- 開け閉め（終了時刻を初めは隠す） ---------- */
@@ -433,7 +869,29 @@
   padding: 0.5rem 0.625rem;
 }
 
-/* ---------- 配信カードの2カラム ---------- */
+/* ---------- 配信カード ---------- */
+
+.store-offer__head {
+  align-items: flex-start;
+  margin-top: 0.25rem;
+}
+
+.store-offer__title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+.store-offer__title > h2 {
+  margin: 0;
+}
+
+/* 「公開を止める」——いちばん上の右。席が埋まった瞬間に押す操作なので、探させない */
+.store-offer__stop .store-btn {
+  font-size: 0.9375rem;
+  padding: 0.625rem 1.125rem;
+}
 
 .store-two-col {
   display: grid;
@@ -442,7 +900,7 @@
 
 @media (min-width: 48rem) {
   .store-two-col {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   }
 }
 
@@ -460,6 +918,7 @@
   padding: 0.75rem;
 }
 
+/* 今の中身の4項目。「残り」は橙の地に白抜きでいちばん大きい */
 .store-facts {
   display: grid;
   gap: 0.5rem;
@@ -468,47 +927,205 @@
 }
 
 .store-fact {
-  background: color-mix(in srgb, var(--color-surface) 60%, var(--color-background));
-  border-radius: 0.75rem;
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+  border-radius: 0.875rem;
   display: grid;
   gap: 0.125rem;
-  padding: 0.5rem 0.625rem;
+  padding: 0.625rem 0.75rem;
+  position: relative;
+}
+
+.store-fact--hero {
+  background: linear-gradient(150deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 80%, var(--color-text)));
+  border-color: transparent;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  color: var(--color-accent-text);
+}
+
+.store-fact--hero .store-fact__label,
+.store-fact--hero .store-fact__unit {
+  color: var(--color-accent-text);
+  opacity: 0.85;
+}
+
+/* 変える前と後が分かるように、変えた項目は縁を橙の点線に */
+.store-fact--changed {
+  border: 1.5px dashed var(--color-accent);
 }
 
 .store-fact__label {
   color: var(--color-text-muted);
   font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
 .store-fact__value {
-  font-size: 1.125rem;
+  align-items: baseline;
+  color: var(--color-accent-strong);
+  display: flex;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  gap: 0.25rem;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.store-fact--hero .store-fact__value {
+  color: var(--color-accent-text);
+  font-size: 2.5rem;
+}
+
+.store-fact__value--time {
+  font-size: 1.5rem;
+}
+
+.store-fact__unit {
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 0.8125rem;
   font-weight: 700;
 }
 
-.store-change {
-  border: 1px solid var(--color-border);
-  border-radius: 0.875rem;
+.store-fact__next {
+  color: var(--color-accent);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+/* ---------- 数を変える札（回して決めて、更新する1つで一括） ---------- */
+
+.store-tune {
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-radius: 1rem;
   display: grid;
-  gap: 0.375rem;
-  padding: 0.625rem;
+  gap: 1rem;
+  padding: 1rem;
 }
 
-.store-change > label {
-  font-size: 0.8125rem;
-  font-weight: 600;
+.store-tune__head {
+  display: grid;
+  gap: 0.125rem;
 }
 
-.store-change__line {
-  align-items: end;
+.store-tune__head > h3 {
+  margin: 0;
+}
+
+.store-tune__dials {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+
+/* ダイヤル1本ぶんの縦の並び。変えた本は地が橙の薄い色に、縁が点線に */
+.store-tune__dial {
+  align-items: center;
+  border: 1.5px solid transparent;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  padding: 0.75rem 0.5rem;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.store-tune__dial--changed {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-background));
+  border-color: var(--color-accent);
+  border-style: dashed;
+}
+
+/* 受け入れ検査が掴む `<form>`。`globals.css` の `form` が持つ縁・影・余白を全部外す。
+   欄とボタンは目に出さない（`.store-sr-only`）ので、見えるのは断りの文だけ */
+.store-tune__form {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0;
+  position: relative;
+  width: 100%;
+}
+
+/* 「何時まで」は欄のまま。ダイヤルの列に並べる */
+.store-tune__until {
+  align-content: start;
+  border: 1.5px solid transparent;
+  border-radius: 1rem;
+  gap: 0.5rem;
+  justify-items: center;
+  padding: 0.75rem 0.5rem;
+}
+
+.store-tune__until.store-tune__dial--changed {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-background));
+}
+
+.store-tune__time {
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-radius: 0.75rem;
+  color: var(--color-accent-strong);
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 1.375rem;
+  font-weight: 800;
+  padding: 0.5rem 0.625rem;
+  text-align: center;
+  width: 8.5rem;
+}
+
+/* 「今 5 組 → 8 組」 */
+.store-tune__delta {
+  align-items: center;
+  color: var(--color-text-muted);
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  font-size: 0.8125rem;
+  gap: 0.375rem;
+  justify-content: center;
+  margin: 0;
 }
 
-.store-change__line > input {
-  border-radius: 0.625rem;
-  padding: 0.5rem 0.625rem;
-  width: 6rem;
+.store-tune__delta--changed strong {
+  color: var(--color-accent-strong);
+  font-size: 1rem;
+}
+
+.store-tune__arrow {
+  color: var(--color-accent);
+  font-weight: 800;
+}
+
+.store-tune__foot {
+  align-items: center;
+  border-top: 1px dashed color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-top: 0.875rem;
+}
+
+.store-tune__pending {
+  color: var(--color-accent-strong);
+  font-size: 0.875rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.store-tune__apply {
+  flex: 1 1 12rem;
+  font-size: 1.0625rem;
+  max-width: 20rem;
+  padding: 0.875rem 1.25rem;
 }
 
 /* ---------- 折れ線グラフ ---------- */
@@ -597,7 +1214,8 @@
 
 .store-confirm__buttons {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.625rem;
 }
 
 /* ---------- 動き ---------- */

@@ -151,7 +151,7 @@ export const ArrivalsList = ({ rows, onChanged }: Props) => {
     <section className="store-arrivals" data-testid="arrivals">
       <h2>向かっている客</h2>
 
-      {rows.length === 0 ? <p className="store-empty">{ARRIVALS_TEXTS.empty}</p> : null}
+      {rows.length === 0 ? <p className="store-empty store-empty--arrivals">{ARRIVALS_TEXTS.empty}</p> : null}
 
       {waiting.length > 0 ? (
         <ul className="store-arrival-grid">
