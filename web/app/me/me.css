@@ -852,25 +852,15 @@
    部品を触らず CSS だけで閉じる——凍結された検査が DOM を見ているため。
    ------------------------------------------------------------------ */
 
-/* 確定の演出の中のクーポン。`.offer-coupons` が付いていない1箇所ぶん。
-   本人の指摘「クーポンが小カードにして見えるように」をここでも効かせる。 */
+/* 確定の演出の中のクーポン。中身の札は `.offer-coupon`（ほかの2箇所と同じ）に揃えたので、
+   ここが持つのは**並べ方だけ**。
+   ⚠️ 以前ここに `.coupon-list > li { background/border/padding }` を置いていたが、
+   `.coupon-list > li`（0,1,1）は `.offer-coupon`（0,1,0）より詳細度が高く、
+   **演出の中のクーポンだけ見た目が変わる**ので撤去した（2026-09-22）。
+   演出の面は中央揃えなので、左寄せの既定を上書きする。 */
 .coupon-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
   justify-content: center;
-  list-style: none;
   margin: 0.5rem 0 0;
-  padding: 0;
-}
-
-.coupon-list > li {
-  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-accent));
-  border: 1px dashed color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
-  border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  padding: 0.375rem 0.625rem;
 }
 
 /* こだわり条件の見出し。「探す」ボタンより下のオプション感を出すため、本文より小さく淡く。 */
@@ -880,4 +870,25 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   margin: 0 0 0.5rem;
+}
+
+/* クーポンの札の下に添える1行（2026-09-22 本人の指摘「いずれか一つを選べることを小さくてもいいから明記」）。
+   本人が言っているのは**店頭で1つ選ぶ**という事実で、アプリ側に選択の操作は置かない（要件4の基準 4.11）。
+   ⚠️ `<ul data-testid="coupon-list">` の**外**に置くこと——受け入れ検査が「0個なら中身は空文字」を見ている。 */
+.coupon-pick-note {
+  color: color-mix(in srgb, currentColor 62%, transparent);
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  margin: 0.375rem 0 0;
+}
+
+.coupon-pick-note strong {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+/* 確定の演出の中は中央揃えなので、そこだけ揃える（ほかは左のまま）。 */
+.claimed-celebration .coupon-pick-note {
+  text-align: center;
 }

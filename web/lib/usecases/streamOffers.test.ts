@@ -44,13 +44,13 @@ const readLines = async (stream: ReadableStream<Uint8Array>): Promise<Array<Reco
 
 describe("少しずつ届ける取得", () => {
   it("店のカードを先に出し、紹介文を1店1行だけ足して打ち止める", async () => {
-    const result = await buildOffersStream(makeDeps({ write: async () => ok("刺身盛りが自慢の一軒です"), judge: async () => ok('{"ok":true,"reason":""}') }), "c1", { party: 2 });
+    const result = await buildOffersStream(makeDeps({ write: async () => ok("歩いて4分、今日は刺身盛りを出してるよ"), judge: async () => ok('{"ok":true,"reason":""}') }), "c1", { party: 2 });
     expect(result.ok).toBe(true);
     const lines = result.ok ? await readLines(result.stream) : [];
     expect(lines.map((l) => l.type)).toEqual(["init", "pitch", "done"]);
     expect(lines[0]).toMatchObject({ fetchId: "fetch-1" });
     expect((lines[0].items as unknown[]).length).toBe(1);
-    expect(lines[1]).toEqual({ type: "pitch", storeId: "store-1", reason: "刺身盛りが自慢の一軒です", source: "persona" });
+    expect(lines[1]).toEqual({ type: "pitch", storeId: "store-1", reason: "歩いて4分、今日は刺身盛りを出してるよ", source: "persona" });
   });
 
   it("紹介文の口が無い場面では、選定の理由をそのまま1行ずつ出して閉じる", async () => {

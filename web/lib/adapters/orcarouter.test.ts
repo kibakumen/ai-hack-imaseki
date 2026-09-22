@@ -140,7 +140,7 @@ const PITCH: PitchInput = {
 
 describe("紹介文の口（書き手と検査官）", () => {
   it("書き手には人格の指示・店の姿・思考を止める指定・生成の上限が渡る", async () => {
-    const { calls, fetch: fake } = capturing(() => jsonResponse(okBody("刺身盛りが自慢の一軒です")));
+    const { calls, fetch: fake } = capturing(() => jsonResponse(okBody("歩いて4分、今日は刺身盛りを出してるよ")));
     const result = await createOrcaRouterPitchWriter({ apiKey: "k", model: "orcarouter/ai-sekitori", fetch: fake }).write(PITCH, {});
     expect(calls[0].url).toBe(ORCAROUTER_ENDPOINT);
     expect(calls[0].body.model).toBe("orcarouter/ai-sekitori");
@@ -149,9 +149,9 @@ describe("紹介文の口（書き手と検査官）", () => {
     expect(calls[0].body.extra_body).toEqual({ google: { thinking_config: { thinking_budget: 0 } } });
     const sent = JSON.stringify(calls[0].body);
     expect(sent).toContain("刺身盛り");
-    expect(sent).toContain("地元の常連");
+    expect(sent).toContain("アメリカ人の友人");
     expect(sent).not.toContain("tool");
-    expect(result).toMatchObject({ ok: true, text: "刺身盛りが自慢の一軒です", truncated: false });
+    expect(result).toMatchObject({ ok: true, text: "歩いて4分、今日は刺身盛りを出してるよ", truncated: false });
   });
 
   it("書き直しのときだけ、直前の案が落ちた理由が指示に入る", async () => {
@@ -166,7 +166,7 @@ describe("紹介文の口（書き手と検査官）", () => {
   it("検査官は別ベンダーの Named Router へ行き、温度は低く・上限は検査用。指示に「評価」の語を入れない", async () => {
     const { calls, fetch: fake } = capturing(() => jsonResponse(okBody('{"ok":true,"reason":""}')));
     const judged = await createOrcaRouterPitchWriter({ apiKey: "k", model: "orcarouter/ai-sekitori", fetch: fake }).judge(
-      { text: "刺身盛りが自慢の一軒です", store: { name: "海鮮どんぶり亭", genres: ["和食"], menus: ["刺身盛り"], couponName: null } },
+      { text: "歩いて4分、今日は刺身盛りを出してるよ", store: { name: "海鮮どんぶり亭", genres: ["和食"], menus: ["刺身盛り"], couponName: null } },
       {},
     );
     expect(calls[0].body.model).toBe(JUDGE_MODEL);

@@ -21,6 +21,7 @@
 
 import { useEffect, useMemo } from "react";
 import { playNotifyBeep } from "../store/beep";
+import { CouponPickNote } from "./CouponPickNote";
 import type { ReservationDto } from "./home";
 
 /** 紙吹雪の数（多すぎると読みたい番号が埋まる）。 */
@@ -100,14 +101,22 @@ export const ClaimedCelebration = ({ reservation, from = null, onClose }: Claime
         <h3>{reservation.storeName}</h3>
         <p>{reservation.storeAddress}</p>
         <p>{reservation.party}名</p>
-        <ul className="coupon-list">
+        {/* 2026-09-22 の本人の指摘「クーポンがカードで分離されていない箇所がある」——ここだけ素のリストで
+            出ており、3枚あると全部もらえるように見えていた。一覧・確保中の表示と同じ1枚ずつの札へ揃える。 */}
+        <ul className="coupon-list offer-coupons">
           {reservation.coupons.map((coupon, index) => (
-            <li key={`${coupon.name}-${index}`}>
-              {coupon.name}
-              {coupon.note === "" ? null : `（${coupon.note}）`}
+            <li className="offer-coupon" key={`${coupon.name}-${index}`}>
+              <span aria-hidden className="offer-coupon__mark">
+                🎟️
+              </span>
+              <span className="offer-coupon__body">
+                <span className="offer-coupon__name">{coupon.name}</span>
+                {coupon.note === "" ? null : <span className="offer-coupon__note">（{coupon.note}）</span>}
+              </span>
             </li>
           ))}
         </ul>
+        <CouponPickNote count={reservation.coupons.length} />
         {href === null ? null : (
           <a className="claimed-route" data-testid="link-route" href={href} target="_blank" rel="noreferrer">
             Googleマップで経路を開く

@@ -6,8 +6,8 @@ const STORE = { name: "海鮮どんぶり亭", genres: ["和食"], menus: ["刺�
 
 describe("紹介文のガード（決定論）", () => {
   it("素直な1文は通り、前後の空白と丸ごとの囲いの引用符だけが外れる", () => {
-    expect(checkPitch("  刺身盛りが評判の一軒です  ")).toEqual({ ok: true, text: "刺身盛りが評判の一軒です" });
-    expect(checkPitch("「刺身盛りが自慢の店です」")).toEqual({ ok: true, text: "刺身盛りが自慢の店です" });
+    expect(checkPitch("  歩いて4分、今日は刺身盛りを出してるよ  ")).toEqual({ ok: true, text: "歩いて4分、今日は刺身盛りを出してるよ" });
+    expect(checkPitch("「歩いて4分、今日は刺身盛りを出してるよ」")).toEqual({ ok: true, text: "歩いて4分、今日は刺身盛りを出してるよ" });
     // 対になっていない囲いは触らない（片側だけ削ると文が壊れる）
     expect(checkPitch("「刺身」と「焼き魚」が揃います")).toEqual({ ok: true, text: "「刺身」と「焼き魚」が揃います" });
   });

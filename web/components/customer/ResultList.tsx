@@ -25,6 +25,7 @@
 import type { ReceiveRefusal } from "./home";
 import { OfferReveal } from "./OfferReveal";
 import { RefusalNotice } from "./RefusalNotice";
+import { CouponPickNote } from "./CouponPickNote";
 import { StoreImage } from "./StoreImage";
 
 /**
@@ -165,6 +166,7 @@ const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holdin
           </li>
         ))}
       </ul>
+      <CouponPickNote count={item.coupons.length} />
       {item.coupons.length === 0 ? <p className="offer-card__no-coupon">クーポンの案内はありません（席の確保はできます）</p> : null}
     </div>
 

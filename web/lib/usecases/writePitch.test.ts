@@ -39,11 +39,11 @@ const purposesOf = (rows: Row[]): string[] => rows.map((r) => (r.values as unkno
 describe("紹介文の層", () => {
   it("1回で通れば人格つきの文を返し、生成と検査の2行が用途つきで残る", async () => {
     const { deps, rows } = makeDeps({
-      write: async () => ok("刺身盛りが自慢の一軒です"),
+      write: async () => ok("歩いて4分、今日は刺身盛りを出してるよ"),
       judge: async () => ok('{"ok":true,"reason":""}'),
     });
     const written = await writePitch(deps, { fetchId: "f1", party: 2, genres: ["和食"], budgetMax: 4000, target: TARGET });
-    expect(written).toEqual({ storeId: "store-1", reason: "刺身盛りが自慢の一軒です", source: "persona" });
+    expect(written).toEqual({ storeId: "store-1", reason: "歩いて4分、今日は刺身盛りを出してるよ", source: "persona" });
     expect(purposesOf(rows)).toEqual(["pitch", "pitch_eval"]);
   });
 
@@ -79,7 +79,7 @@ describe("紹介文の層", () => {
 
   it("上限で切れた文（truncated）は字数を満たしていても落とす", async () => {
     const { deps } = makeDeps({
-      write: async () => ({ ok: true, text: "刺身盛りが自慢で、名物の", costUsd: 0.0001, truncated: true }),
+      write: async () => ({ ok: true, text: "歩いて4分、今日は刺身盛りを出して", costUsd: 0.0001, truncated: true }),
       judge: async () => ok('{"ok":true,"reason":""}'),
     });
     const written = await writePitch(deps, { fetchId: "f1", party: 2, genres: [], budgetMax: null, target: TARGET });

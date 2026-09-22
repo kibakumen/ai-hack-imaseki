@@ -17,6 +17,22 @@ export const PITCH_CHAR_LIMIT = 120;
 const FORBIDDEN_WORDS = /(口コミ|クチコミ|レビュー|評価|星)/;
 const URL_OR_PHONE = /https?:|\d{2,4}-\d{2,4}-\d{3,4}/;
 
+/**
+ * 食べたことがなければ言えない評価の断定（2026-09-22 本人の指摘で追加）。
+ *
+ *   「AIの紹介文が**絶品だよなど根拠のない感想**を述べていて、**ステマ臭い**です」
+ *
+ * 書き手はその店で食べていないので、味や品質を断定した時点で**根拠が無い**。
+ * 検査官（AI）にも同じ規則を入れたが、**決定論で落とせるものを AI に聞かない**のがこの層の役目
+ * （速い・ただ・揺れない）。
+ *
+ * ⚠️ 入れるのは**誤って落とす余地がまず無い語だけ**。「近い」「好みに合いそう」「クーポンが使える」
+ * のような**状況の言い換えは1語も入れない**——そこを混ぜると、通すべき文まで落ちる。
+ * ⚠️ 広げすぎると書き直しが増え、2回で決定論の文へ倒れる（`writePitch` の `MAX_ATTEMPTS`）。
+ * 語を足すときは実際に回して、倒れる率が上がらないことを確かめること。
+ */
+const UNFOUNDED_PRAISE = /(絶品|極上|最高級|名物|自慢|折り紙付き|間違いな|外れな|美味し|おいし|うまい|絶妙|本格的|こだわりの|評判|大人気|逸品)/;
+
 /** 文全体を囲っている引用符だけを外す（対になっていないものは触らない）。 */
 const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
   ['"', '"'],
@@ -53,6 +69,8 @@ export const checkPitch = (raw: string): PitchCheck => {
   if ([...text].length > PITCH_CHAR_LIMIT) return { ok: false, critique: `${PITCH_CHAR_LIMIT}字を超えていた` };
   if (URL_OR_PHONE.test(text)) return { ok: false, critique: "URLか電話番号らしき文字列が入っていた" };
   if (FORBIDDEN_WORDS.test(text)) return { ok: false, critique: "口コミ・レビュー・評価など存在しないデータに触れていた" };
+  // 落ちた訳は**書き直しの指示として AI へ返る**ので、何を書き直せばよいかまで言う。
+  if (UNFOUNDED_PRAISE.test(text)) return { ok: false, critique: "食べたことがないと言えない評価を断定していた。近さ・すすめているメニュー・好みとの重なり・使えるクーポンだけで書き直す" };
   return { ok: true, text };
 };
 

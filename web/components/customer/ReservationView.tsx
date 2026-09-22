@@ -14,6 +14,7 @@
 
 import type { ReactNode } from "react";
 import type { ApiFailure } from "../../lib/client/api";
+import { CouponPickNote } from "./CouponPickNote";
 import { PushPrompt } from "./PushPrompt";
 import { ReservationActions } from "./ReservationActions";
 import { timeInJst } from "../ui/jstTime";
@@ -82,6 +83,7 @@ export const ReservationView = ({ reservation, onSearchMore, onChanged, failure 
           </li>
         ))}
       </ul>
+      <CouponPickNote count={reservation.coupons.length} />
       {reservation.coupons.length === 0 ? <p className="claim-coupons__none">クーポンの案内はありません。</p> : null}
     </div>
 
