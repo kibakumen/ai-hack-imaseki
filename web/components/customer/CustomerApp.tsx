@@ -22,7 +22,6 @@ import { useRef, useState } from "react";
 import { apiCall, isFailure, isNetworkFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
 import { usePolling } from "../../lib/client/usePolling";
-import { AccountSettings } from "./AccountSettings";
 import { AdminCancelledView } from "./AdminCancelledView";
 import { recallOrigin } from "../../lib/client/lastOrigin";
 import { ClaimedCelebration } from "./ClaimedCelebration";
@@ -341,14 +340,10 @@ export const CustomerApp = () => {
           <button type="button" data-testid="btn-recent" onClick={() => togglePanel("recent")}>
             最近行った店
           </button>
-          <button type="button" data-testid="btn-settings" onClick={() => togglePanel("settings")}>
-            登録の確認と消去
-          </button>
         </nav>
       ) : null}
 
       {panel === "recent" ? <RecentStores onReport={setReportTarget} /> : null}
-      {panel === "settings" ? <AccountSettings onDeleted={() => void refresh()} /> : null}
       {reportTarget !== null ? <ReportForm storeId={reportTarget.storeId} storeName={reportTarget.storeName} onClose={() => setReportTarget(null)} /> : null}
     </main>
   );
