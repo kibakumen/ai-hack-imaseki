@@ -10,8 +10,16 @@
 // 2026-09-22 速成版の磨き込みを移植（本人選択）: 停止のボタンの文言を「止める」から
 // 「登録を取り消す」に変える（`btn-ban` の入口とテキストは変えていない・確かめの文言は
 // オファー／確保／取り消の3語を含んだまま・受け入れ検査 r24-admin.ui.test.tsx:65-73）。
+//
+// 2026-09-22 本人の指摘「UIが簡素すぎるので他の所と同じようにリッチにしてほしい」で見せ方を組み直した:
+//   - 項目を「店の情報」「書類とカード」「操作」の3枚に束ねる（`admin.module.css` の `.panel`）
+//   - 素の `<dl>` のぶら下げをやめ、`dt`/`dd` を2列のグリッドに（`.facts`）。空は `.noData` で淡く
+//   - 営業許可書・カードの有無は `.badge[data-status]` の印にする（一覧の状況バッジと同じ語彙）
+//   ⚠️ data-testid・ボタンの文言・確かめの文は変えていない（受け入れ検査が DOM を見ている）。
+//   ⚠️ 色の値はここに書かない（構造の検査 34）。全部 `admin.module.css` が持つ。
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
 import { FormMessage } from "../ui/InputRefusal";
 import styles from "./admin.module.css";
@@ -41,14 +49,125 @@ const STATUS_LABELS: Record<StoreStatus, string> = {
   banned: "止められている",
 };
 
+const EMPTY_TEXT = "まだありません";
+
 /** 承認に足りないもの（基準 25.2）。表示の名前は画面の側が持つ（項目の名前と同じ扱い）。 */
 const missingLabels = (store: StoreDetailDto): string[] => [
   ...(store.license ? [] : ["営業許可書"]),
   ...(store.cardRegistered ? [] : ["カードの登録"]),
 ];
 
-const budgetText = (store: StoreDetailDto): string =>
-  store.budgetMin === null || store.budgetMax === null ? "まだありません" : `${store.budgetMin}円〜${store.budgetMax}円`;
+/** 空の値は淡く出す（埋まっている情報と同じ重さで並べない）。 */
+const Empty = () => <span className={styles.noData}>{EMPTY_TEXT}</span>;
+
+/** ジャンル・おすすめメニューは1つずつ札にする。無ければ空の印。 */
+const Chips = ({ items }: { items: string[] }) =>
+  items.length === 0 ? (
+    <Empty />
+  ) : (
+    <span className={styles.chips}>
+      {items.map((item) => (
+        <span key={item} className={styles.chip}>
+          {item}
+        </span>
+      ))}
+    </span>
+  );
+
+const Budget = ({ store }: { store: StoreDetailDto }) =>
+  store.budgetMin === null || store.budgetMax === null ? (
+    <Empty />
+  ) : (
+    <span className={styles.tabularNums}>{`${store.budgetMin}円〜${store.budgetMax}円`}</span>
+  );
+
+/** 店の情報（項目の2列）。`dt`/`dd` を直接グリッドに並べるので桁が揃う。 */
+const StoreFacts = ({ store }: { store: StoreDetailDto }) => (
+  <section className={styles.panel} aria-labelledby="store-facts-title">
+    <h2 id="store-facts-title" className={styles.panelTitle}>
+      店の情報
+    </h2>
+    <dl className={styles.facts}>
+      <dt>住所</dt>
+      <dd>{store.address ?? <Empty />}</dd>
+      <dt>メールアドレス</dt>
+      <dd>{store.email ? <a href={`mailto:${store.email}`}>{store.email}</a> : <Empty />}</dd>
+      <dt>ホームページ</dt>
+      <dd>
+        {store.url ? (
+          <a href={store.url} target="_blank" rel="noreferrer">
+            {store.url}
+          </a>
+        ) : (
+          <Empty />
+        )}
+      </dd>
+      <dt>ジャンル</dt>
+      <dd>
+        <Chips items={store.genres} />
+      </dd>
+      <dt>おすすめメニュー</dt>
+      <dd>
+        <Chips items={store.menus} />
+      </dd>
+      <dt>予算の幅</dt>
+      <dd>
+        <Budget store={store} />
+      </dd>
+    </dl>
+  </section>
+);
+
+type CheckRowProps = { testId: string; ready: boolean; readyLabel: string; missingLabel: string; children: ReactNode };
+
+/** 書類とカードの1行。揃っていれば「承認済み」の色、まだなら「未承認」の色の印を付ける。 */
+const CheckRow = ({ testId, ready, readyLabel, missingLabel, children }: CheckRowProps) => (
+  <li data-testid={testId} className={styles.checkRow} data-ready={ready ? "true" : "false"}>
+    <span className={styles.badge} data-status={ready ? "approved" : "pending"}>
+      {ready ? readyLabel : missingLabel}
+    </span>
+    <span>{children}</span>
+  </li>
+);
+
+const StoreDocuments = ({ store }: { store: StoreDetailDto }) => (
+  <section className={styles.panel} aria-labelledby="store-documents-title">
+    <h2 id="store-documents-title" className={styles.panelTitle}>
+      書類とカード
+    </h2>
+    <ul className={styles.checkList}>
+      <CheckRow testId="license-status" ready={store.license} readyLabel="提出済み" missingLabel="未提出">
+        {store.license ? (
+          <a href={`/api/admin/stores/${store.id}/license`} target="_blank" rel="noreferrer">
+            営業許可書を開く
+          </a>
+        ) : (
+          "営業許可書はまだ上がっていません"
+        )}
+      </CheckRow>
+      <CheckRow testId="card-status" ready={store.cardRegistered} readyLabel="登録済み" missingLabel="未登録">
+        {store.cardRegistered ? "カードは登録済みです" : "カードはまだ登録されていません"}
+      </CheckRow>
+    </ul>
+  </section>
+);
+
+type ConfirmProps = { testId: string; label: string; text: string; confirmTestId?: string; confirmLabel: string; danger?: boolean; onConfirm: () => void; onCancel: () => void };
+
+/** 押す前の確かめ（止める・戻す・仮のパスワード）。何が起きるかを先に見せて、確かめてから入口を呼ぶ。 */
+const ConfirmBox = ({ testId, label, text, confirmTestId = "btn-confirm", confirmLabel, danger = false, onConfirm, onCancel }: ConfirmProps) => (
+  <div data-testid={testId} role="group" aria-label={label} className={styles.confirmBox}>
+    <p className={styles.confirmText}>{text}</p>
+    <div className={styles.btnRow}>
+      <button type="button" data-testid={confirmTestId} className={danger ? styles.dangerBtn : undefined} onClick={onConfirm}>
+        {confirmLabel}
+      </button>
+      <button type="button" className={styles.quietBtn} onClick={onCancel}>
+        やめる
+      </button>
+    </div>
+  </div>
+);
 
 export const StoreDetail = ({ storeId }: Props) => {
   const [store, setStore] = useState<StoreDetailDto | null>(null);
@@ -105,7 +224,8 @@ export const StoreDetail = ({ storeId }: Props) => {
 
   if (!store) {
     return (
-      <main>
+      <main className={styles.page}>
+        {failure === null && <p className={styles.noData}>読み込んでいます…</p>}
         <FormMessage failure={failure} />
       </main>
     );
@@ -114,125 +234,139 @@ export const StoreDetail = ({ storeId }: Props) => {
   const missing = missingLabels(store);
 
   return (
-    <main>
-      <h1>{store.name}</h1>
-      <p data-testid="store-status">
-        <span className={styles.badge} data-status={store.status}>{STATUS_LABELS[store.status]}</span>
-      </p>
+    <main className={styles.page}>
+      <header className={`${styles.card} ${styles.detailHead}`}>
+        <Link href="/admin" className={styles.backLink}>
+          ← 店の一覧へ
+        </Link>
+        <div className={styles.cardHead}>
+          <h1>{store.name}</h1>
+          <p data-testid="store-status">
+            <span className={styles.badge} data-status={store.status}>{STATUS_LABELS[store.status]}</span>
+          </p>
+        </div>
+      </header>
 
-      <dl>
-        <dt>住所</dt>
-        <dd>{store.address ?? "まだありません"}</dd>
-        <dt>メールアドレス</dt>
-        <dd>{store.email ? <a href={`mailto:${store.email}`}>{store.email}</a> : "まだありません"}</dd>
-        <dt>ホームページ</dt>
-        <dd>{store.url ?? "まだありません"}</dd>
-        <dt>ジャンル</dt>
-        <dd>{store.genres.length > 0 ? store.genres.join("・") : "まだありません"}</dd>
-        <dt>おすすめメニュー</dt>
-        <dd>{store.menus.length > 0 ? store.menus.join("・") : "まだありません"}</dd>
-        <dt>予算の幅</dt>
-        <dd>{budgetText(store)}</dd>
-      </dl>
+      <div className={styles.detailGrid}>
+        <StoreFacts store={store} />
 
-      <p data-testid="license-status">
-        {store.license ? (
-          <a href={`/api/admin/stores/${store.id}/license`} target="_blank" rel="noreferrer">
-            営業許可書を開く
-          </a>
-        ) : (
-          "営業許可書はまだ上がっていません"
-        )}
-      </p>
-      <p data-testid="card-status">{store.cardRegistered ? "カードは登録済みです" : "カードはまだ登録されていません"}</p>
+        <div className={styles.detailSide}>
+          <StoreDocuments store={store} />
 
-      <section data-testid="form-temp-password">
-        <h2>パスワードを忘れた店への対応</h2>
-        {tempPassword === null ? (
-          <>
-            <button type="button" data-testid="btn-temp-password" onClick={() => setConfirmingTemp(true)}>
-              仮のパスワードを発行する
-            </button>
-            {confirmingTemp && (
-              <div data-testid="confirm-temp-password" role="group" aria-label="仮のパスワードを発行する前の確かめ">
-                <p>今のパスワードは使えなくなり、この店の開いている画面はすべてログアウトされます。仮のパスワードはここに1回だけ表示され、あなたのメールで店へ伝えます。発行しますか。</p>
-                <button type="button" data-testid="btn-confirm-temp-password" onClick={() => void issueTemp()}>
-                  発行する
+          <section className={styles.panel} aria-labelledby="store-actions-title">
+            <h2 id="store-actions-title" className={styles.panelTitle}>
+              操作
+            </h2>
+
+            {store.status === "pending" && (
+              <form
+                data-testid="form-approve"
+                className={`${styles.actionForm} ${styles.actionBlock}`}
+                noValidate
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void act("approve");
+                }}
+              >
+                <h2>承認</h2>
+                {missing.length > 0 ? (
+                  <p data-testid="approval-missing" className={styles.note}>{`${missing.join("と")}が揃うと承認できます。`}</p>
+                ) : (
+                  <p className={styles.actionLead}>書類とカードが揃っています。承認すると、この店はオファーを公開できるようになります。</p>
+                )}
+                <button type="submit" data-testid="btn-approve" disabled={missing.length > 0}>
+                  承認する
                 </button>
-                <button type="button" onClick={() => setConfirmingTemp(false)}>
-                  やめる
-                </button>
+                <FormMessage failure={failure} />
+              </form>
+            )}
+
+            {store.status === "approved" && (
+              <div data-testid="form-ban" className={styles.actionBlock}>
+                <h2>登録の取り消し</h2>
+                <p className={styles.actionLead}>戻せない操作です。押すと先に確かめが出ます。</p>
+                <div className={styles.btnRow}>
+                  <button type="button" data-testid="btn-ban" className={styles.dangerBtn} onClick={() => setConfirmingBan(true)}>
+                    登録を取り消す
+                  </button>
+                </div>
+                {confirmingBan && (
+                  <ConfirmBox
+                    testId="confirm-ban"
+                    label="登録を取り消す前の確かめ"
+                    text="公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます。登録を取り消しますか。"
+                    confirmLabel="登録を取り消す"
+                    danger
+                    onConfirm={() => void act("ban")}
+                    onCancel={() => setConfirmingBan(false)}
+                  />
+                )}
+                <FormMessage failure={failure} />
               </div>
             )}
-          </>
-        ) : (
-          <div data-testid="temp-password-issued">
-            <p>
-              仮のパスワード: <code data-testid="temp-password">{tempPassword}</code>
-            </p>
-            <p>この値はここにしか表示されません。{store.email ? <a href={`mailto:${store.email}`}>{store.email}</a> : "店"} へあなたのメールで伝えてください。店は次のログインで新しいパスワードを決めます。</p>
-          </div>
-        )}
-        <FormMessage failure={failure} />
-      </section>
 
-      {store.status === "pending" && (
-        <form
-          data-testid="form-approve"
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            void act("approve");
-          }}
-        >
-          {missing.length > 0 && <p data-testid="approval-missing">{`${missing.join("と")}が揃うと承認できます。`}</p>}
-          <button type="submit" data-testid="btn-approve" disabled={missing.length > 0}>
-            承認する
-          </button>
-          <FormMessage failure={failure} />
-        </form>
-      )}
+            {store.status === "banned" && (
+              <div data-testid="form-restore" className={styles.actionBlock}>
+                <h2>承認済みに戻す</h2>
+                <p className={styles.actionLead}>この店がもう一度オファーを公開できるようにします。</p>
+                <div className={styles.btnRow}>
+                  <button type="button" data-testid="btn-restore" onClick={() => setConfirmingRestore(true)}>
+                    承認済みに戻す
+                  </button>
+                </div>
+                {confirmingRestore && (
+                  /* 何が戻らないかを先に見せる（基準 25.10。止めるときと同じ、押す前に結果を知らせる形） */
+                  <ConfirmBox
+                    testId="confirm-restore"
+                    label="承認済みに戻す前の確かめ"
+                    text="終わったオファーと取り消されたお客さまの確保は戻りません。この店は公開し直せるようになります。戻しますか。"
+                    confirmLabel="承認済みに戻す"
+                    onConfirm={() => void act("restore")}
+                    onCancel={() => setConfirmingRestore(false)}
+                  />
+                )}
+                <FormMessage failure={failure} />
+              </div>
+            )}
 
-      {store.status === "approved" && (
-        <div data-testid="form-ban">
-          <button type="button" data-testid="btn-ban" onClick={() => setConfirmingBan(true)}>
-            登録を取り消す
-          </button>
-          {confirmingBan && (
-            <div data-testid="confirm-ban" role="group" aria-label="登録を取り消す前の確かめ">
-              <p>公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます。登録を取り消しますか。</p>
-              <button type="button" data-testid="btn-confirm" onClick={() => void act("ban")}>
-                登録を取り消す
-              </button>
-              <button type="button" onClick={() => setConfirmingBan(false)}>
-                やめる
-              </button>
-            </div>
-          )}
-          <FormMessage failure={failure} />
+            <section data-testid="form-temp-password" className={styles.actionBlock} aria-labelledby="store-temp-password-title">
+              <h2 id="store-temp-password-title">パスワードを忘れた店への対応</h2>
+              {tempPassword === null ? (
+                <>
+                  <p className={styles.actionLead}>仮のパスワードを発行して、あなたのメールで店へ伝えます。</p>
+                  <div className={styles.btnRow}>
+                    <button type="button" data-testid="btn-temp-password" onClick={() => setConfirmingTemp(true)}>
+                      仮のパスワードを発行する
+                    </button>
+                  </div>
+                  {confirmingTemp && (
+                    <ConfirmBox
+                      testId="confirm-temp-password"
+                      label="仮のパスワードを発行する前の確かめ"
+                      text="今のパスワードは使えなくなり、この店の開いている画面はすべてログアウトされます。仮のパスワードはここに1回だけ表示され、あなたのメールで店へ伝えます。発行しますか。"
+                      confirmTestId="btn-confirm-temp-password"
+                      confirmLabel="発行する"
+                      onConfirm={() => void issueTemp()}
+                      onCancel={() => setConfirmingTemp(false)}
+                    />
+                  )}
+                </>
+              ) : (
+                <div data-testid="temp-password-issued" className={styles.secret}>
+                  <p className={styles.secretLabel}>仮のパスワード</p>
+                  <code data-testid="temp-password" className={styles.secretCode}>
+                    {tempPassword}
+                  </code>
+                  <p className={styles.secretHint}>
+                    この値はここにしか表示されません。{store.email ? <a href={`mailto:${store.email}`}>{store.email}</a> : "店"} へあなたのメールで伝えてください。店は次のログインで新しいパスワードを決めます。
+                  </p>
+                </div>
+              )}
+              <FormMessage failure={failure} />
+            </section>
+          </section>
         </div>
-      )}
-
-      {store.status === "banned" && (
-        <div data-testid="form-restore">
-          <button type="button" data-testid="btn-restore" onClick={() => setConfirmingRestore(true)}>
-            承認済みに戻す
-          </button>
-          {confirmingRestore && (
-            <div data-testid="confirm-restore" role="group" aria-label="承認済みに戻す前の確かめ">
-              {/* 何が戻らないかを先に見せる（基準 25.10。止めるときと同じ、押す前に結果を知らせる形） */}
-              <p>終わったオファーと取り消されたお客さまの確保は戻りません。この店は公開し直せるようになります。戻しますか。</p>
-              <button type="button" data-testid="btn-confirm" onClick={() => void act("restore")}>
-                承認済みに戻す
-              </button>
-              <button type="button" onClick={() => setConfirmingRestore(false)}>
-                やめる
-              </button>
-            </div>
-          )}
-          <FormMessage failure={failure} />
-        </div>
-      )}
+      </div>
     </main>
   );
 };
