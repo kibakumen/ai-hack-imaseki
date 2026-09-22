@@ -121,3 +121,96 @@ describe("adapters/geocoding の逆方向", () => {
     expect(await createGeocoder({ apiKey: "k", fetch: throws }).reverse!({ lat: 35.6, lng: 139.7 }, {})).toEqual({ ok: false });
   });
 });
+
+// 場所の候補（2段構え）。2026-09-22 の実測で本番の鍵は Places を許可されていないため、
+// Places → Geocoding へ倒す筋と、拒否を10分覚える筋がいちばん大事。
+describe("adapters/geocoding の候補（Places → Geocoding の2段構え）", () => {
+  type Seen = { url: string; method: string; body: unknown; headers: Record<string, string>; signal: AbortSignal | null | undefined };
+  /** Places と Geocoding の答えを別々に決められる偽の fetch */
+  const fakeFetch = (places: () => Response | Promise<Response>, geocoding: () => Response | Promise<Response>) => {
+    const seen: Seen[] = [];
+    const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, method: init?.method ?? "GET", body: typeof init?.body === "string" ? JSON.parse(init.body) : null, headers: (init?.headers as Record<string, string>) ?? {}, signal: init?.signal });
+      return url.includes("places.googleapis.com") ? places() : geocoding();
+    }) as unknown as typeof globalThis.fetch;
+    return { fetchImpl, seen, placesCalls: () => seen.filter((s) => s.url.includes("places.googleapis.com")).length, geocodingCalls: () => seen.filter((s) => s.url.includes("maps.googleapis.com")).length };
+  };
+  const placesOk = (texts: string[]) => jsonResponse({ suggestions: texts.map((t) => ({ placePrediction: { text: { text: t } } })) });
+  const placesDenied = () => jsonResponse({ error: { code: 403, status: "PERMISSION_DENIED", message: "blocked" } }, 403);
+  const geocodingOk = (address: string) => jsonResponse({ status: "OK", results: [{ formatted_address: address, geometry: { location: { lat: 35.6, lng: 139.7 } } }] });
+
+  it("Places が返れば、その候補を最大5件（日本語・日本に絞り、鍵は見出しで送り、打ち切りの合図を渡す）", async () => {
+    const { fetchImpl, seen, geocodingCalls } = fakeFetch(() => placesOk(["渋谷駅", "渋谷区役所", "渋谷ヒカリエ", "渋谷スクランブルスクエア", "渋谷マークシティ", "渋谷ストリーム"]), () => geocodingOk("x"));
+    const controller = new AbortController();
+    const result = await createGeocoder({ apiKey: "key-3", fetch: fetchImpl }).suggest!("渋谷", { signal: controller.signal });
+
+    expect(result).toEqual({ ok: true, source: "places", suggestions: ["渋谷駅", "渋谷区役所", "渋谷ヒカリエ", "渋谷スクランブルスクエア", "渋谷マークシティ"] });
+    expect(geocodingCalls()).toBe(0);
+    expect(seen[0].method).toBe("POST");
+    expect(seen[0].headers["X-Goog-Api-Key"]).toBe("key-3");
+    expect(seen[0].body).toMatchObject({ input: "渋谷", languageCode: "ja", regionCode: "jp", includedRegionCodes: ["jp"] });
+    expect(seen[0].signal).toBe(controller.signal);
+    // 鍵を URL に載せない（見出しで送る）
+    expect(seen[0].url).not.toContain("key-3");
+  });
+
+  it("Places に断られたら Geocoding へ倒し、解決した1件を候補1件として返す（国名と郵便番号は落とす）", async () => {
+    const { fetchImpl, seen } = fakeFetch(placesDenied, () => geocodingOk("日本、〒150-0002 東京都渋谷区渋谷２丁目２４ 渋谷駅"));
+    const result = await createGeocoder({ apiKey: "k", fetch: fetchImpl }).suggest!("渋谷駅", {});
+
+    expect(result).toEqual({ ok: true, source: "geocoding", suggestions: ["東京都渋谷区渋谷２丁目２４ 渋谷駅"] });
+    const geo = seen.find((s) => s.url.includes("maps.googleapis.com"))!;
+    expect(geo.url).toContain(`address=${encodeURIComponent("渋谷駅")}`);
+    expect(geo.url).toContain("region=jp");
+    expect(geo.url).toContain("language=ja");
+  });
+
+  it("拒否は10分覚えて Places を飛ばし、10分たてばまた試す", async () => {
+    let nowMs = 1_000_000;
+    const { fetchImpl, placesCalls, geocodingCalls } = fakeFetch(placesDenied, () => geocodingOk("東京都渋谷区"));
+    const geocoder = createGeocoder({ apiKey: "k", fetch: fetchImpl, now: () => nowMs });
+
+    await geocoder.suggest!("渋谷", {});
+    expect(placesCalls()).toBe(1);
+    expect(geocodingCalls()).toBe(1);
+
+    nowMs += 9 * 60 * 1000;
+    await geocoder.suggest!("新宿", {});
+    expect(placesCalls()).toBe(1); // 覚えている間は呼ばない
+    expect(geocodingCalls()).toBe(2);
+
+    nowMs += 2 * 60 * 1000;
+    await geocoder.suggest!("池袋", {});
+    expect(placesCalls()).toBe(2); // 10分たったのでまた試す
+    expect(geocodingCalls()).toBe(3);
+  });
+
+  it("本文の status が REQUEST_DENIED でも拒否として扱う（旧 API の形）", async () => {
+    const { fetchImpl, placesCalls } = fakeFetch(() => jsonResponse({ status: "REQUEST_DENIED", predictions: [] }), () => geocodingOk("東京都"));
+    const geocoder = createGeocoder({ apiKey: "k", fetch: fetchImpl, now: () => 0 });
+    expect(await geocoder.suggest!("東京", {})).toEqual({ ok: true, source: "geocoding", suggestions: ["東京都"] });
+    await geocoder.suggest!("東京", {});
+    expect(placesCalls()).toBe(1);
+  });
+
+  it("Places が拒否でなく失敗した（通信・5xx）ときも Geocoding へ倒すが、覚えない（次はまた Places を試す）", async () => {
+    let nowMs = 0;
+    const { fetchImpl, placesCalls } = fakeFetch(() => new Response("bad gateway", { status: 502 }), () => geocodingOk("東京都渋谷区"));
+    const geocoder = createGeocoder({ apiKey: "k", fetch: fetchImpl, now: () => nowMs });
+    expect(await geocoder.suggest!("渋谷", {})).toEqual({ ok: true, source: "geocoding", suggestions: ["東京都渋谷区"] });
+    nowMs += 1000;
+    await geocoder.suggest!("渋谷", {});
+    expect(placesCalls()).toBe(2);
+  });
+
+  it("どちらも取れなければ候補なし（ok:true の空。断りにはしない）。空の文字は外へ聞かない", async () => {
+    const { fetchImpl, seen } = fakeFetch(placesDenied, () => jsonResponse({ status: "ZERO_RESULTS", results: [] }));
+    const geocoder = createGeocoder({ apiKey: "k", fetch: fetchImpl });
+    expect(await geocoder.suggest!("どこにもない", {})).toEqual({ ok: true, source: "geocoding", suggestions: [] });
+
+    const before = seen.length;
+    expect(await geocoder.suggest!("   ", {})).toEqual({ ok: true, source: "geocoding", suggestions: [] });
+    expect(seen.length).toBe(before);
+  });
+});

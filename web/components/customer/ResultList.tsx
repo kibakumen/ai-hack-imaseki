@@ -71,12 +71,12 @@ type ResultListProps = {
 /** 金額は3桁ごとに区切って出す（読み違えを減らすための表示だけの整形）。 */
 const yen = (amount: number): string => `${amount.toLocaleString("ja-JP")}円`;
 
-/** 結果が0件のときの次の手（基準 4.4・4.5）。人数・場所・時間の3つを必ず出す。 */
-const EmptyResult = () => (
-  <p className="offer-empty" data-testid="result-empty">
-    今の条件で入れるお店は見つかりませんでした。人数を減らすと見つかることがあります。場所を変える・少し時間を置いてもう一度探す、のも試せます。
-  </p>
-);
+/**
+ * 結果が0件のときの次の手の文（基準 4.4・4.5）。人数・場所・時間の3つを必ず含む。
+ * 描くのは `FetchForm`（「今すぐ探す」のすぐ下）——2026-09-22 の本人の指摘「下の方じゃなくて、
+ * すぐ見える上のほうでエラーメッセージとして表示してほしい」。文面はそのまま、置き場所だけを上へ移した。
+ */
+export const EMPTY_RESULT_TEXT = "今の条件で入れるお店は見つかりませんでした。人数を減らすと見つかることがあります。場所を変える・少し時間を置いてもう一度探す、のも試せます。";
 
 /**
  * 店の雰囲気の面（第1回の指摘「お店の画像もほしい」・第2回の指摘で実装。2026-09-22 移植）。
@@ -204,9 +204,8 @@ export const ResultList = ({ items, onReceive, refusal = null, onNextStep, holdi
     </h2>
 
     {holding ? <HoldNotice onBackToReservation={onBackToReservation} /> : null}
-    {items.length === 0 ? (
-      <EmptyResult />
-    ) : (
+    {/* 0件の文は `FetchForm` が「今すぐ探す」のすぐ下に出す（`EMPTY_RESULT_TEXT`）。ここには何も置かない */}
+    {items.length === 0 ? null : (
       <ul className="offer-cards">
         {items.map((item, index) => (
           <ResultCard

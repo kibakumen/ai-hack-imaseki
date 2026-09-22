@@ -18,7 +18,7 @@
 // 同じで、応答の `home` をそのまま使う（`applyHome`）。次の一手をどこへ繋ぐかはここが決め、
 // 断りの文とボタンの文は `RefusalNotice` が `domain/texts` から引く。
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { apiCall, isFailure, isNetworkFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
 import { usePolling } from "../../lib/client/usePolling";
@@ -62,8 +62,17 @@ export const CustomerApp = () => {
   const [loaded, setLoaded] = useState(false);
   const [stale, setStale] = useState(false);
   const [fetchResult, setFetchResult] = useState<FetchResult | null>(null);
-  // 人数の初めの値は置かない（要件3の補足。前回の人数が残ると人数の変化を見落とす）。
-  const [party, setParty] = useState("");
+  // 人数の初めの値は 1（2026-09-22 の本人の指摘「人数は最初からデフォルト値の1が埋まっている状態に」）。
+  // 旧: 空（要件3の補足「前回の人数が残ると人数の変化を見落とす」）——「前回の値」ではなく固定の 1 なので、
+  // その懸念（前回の人数の引きずり）とは別物。
+  const [party, setParty] = useState("1");
+  /**
+   * 結果が出たあとに条件を開き直したか（2026-09-22 の本人の指摘「オファーを受け取った時に場所やこだわり
+   * 条件のカードよりもオファーをみたいから…右下の方に条件を変えるボタンを設置」）。
+   * 結果が1件以上あるときは条件を畳み、右下の固定ボタンで開く。探し直すたびに閉じ直す。
+   */
+  const [conditionsOpen, setConditionsOpen] = useState(false);
+  const fetchScreenRef = useRef<HTMLElement | null>(null);
   const [refused, setRefused] = useState<RefusedReceive | null>(null);
   const [searching, setSearching] = useState(false);
   // 脇の画面（最近行った店・登録の確認と消去）と、通報が指している店。どちらも表示の種類とは別に持つ
@@ -183,6 +192,15 @@ export const CustomerApp = () => {
   const showResults = (result: FetchResult | null) => {
     setFetchResult(result);
     setRefused(null);
+    // 探し始め（`FetchForm` は探す前に必ず null を渡す）で閉じ直す。少しずつ届く結果の更新では触らない
+    // ——客が紹介文の届く途中で条件を開いていても、勝手に畳まない。
+    if (result === null) setConditionsOpen(false);
+  };
+  /** 右下の固定ボタン。開くときは条件が見える位置まで戻す（畳まれていた条件は画面の上に在る）。 */
+  const toggleConditions = () => {
+    const opening = !conditionsOpen;
+    setConditionsOpen(opening);
+    if (opening) fetchScreenRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
   const searchAgain = () => {
     setRefused(null);
@@ -204,6 +222,9 @@ export const CustomerApp = () => {
   const reservation = home.reservation;
   // 確保が載っていない表示の種類（応答の形は検査していない）でも、取得の画面なら出せる
   const onFetchScreen = home.kind === "fetch" || searching || reservation === undefined;
+  // 結果が1件以上あるときだけ条件を畳む（断られたとき・0件のときは畳まない——入れ直したい人が欄にたどり着けるように）
+  const hasItems = fetchResult !== null && fetchResult.items.length > 0;
+  const collapsed = hasItems && !conditionsOpen;
   /**
    * 確保中・完了済みの表示に置く通報ボタン（基準 26.1）。**その表示の囲いの中**に置くので、
    * 部品（`ReservationView`・`CompletedView`）の中身として渡す——囲い（`view-active`・
@@ -269,8 +290,20 @@ export const CustomerApp = () => {
       ) : null}
 
       {onFetchScreen ? (
-        <section>
-          <FetchForm profile={home.profile} party={party} onPartyChange={setParty} onResults={showResults} />
+        <section ref={fetchScreenRef} className={hasItems ? "fetch-screen fetch-screen--with-fab" : "fetch-screen"}>
+          <FetchForm
+            profile={home.profile}
+            party={party}
+            onPartyChange={setParty}
+            onResults={showResults}
+            noResults={fetchResult !== null && fetchResult.items.length === 0}
+            collapsed={collapsed}
+          />
+          {hasItems ? (
+            <button type="button" className="conditions-fab" data-testid="btn-change-conditions" aria-expanded={!collapsed} onClick={toggleConditions}>
+              {collapsed ? "条件を変える" : "条件を閉じる"}
+            </button>
+          ) : null}
           {fetchResult === null ? null : (
             <ResultList
               items={fetchResult.items}
