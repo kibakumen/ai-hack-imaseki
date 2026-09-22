@@ -93,12 +93,25 @@
   }
 }
 
+/* この2本は `app/globals.css` の `--color-*` と同じ理由で組になっている——
+   1本目は端末の設定に従う分（本人が「明るい」を選んでいる間は除く）、
+   2本目は本人が明示的に「暗い」を選んだ分（端末の設定に関係なく効く）。
+   どちらも同じ値を書く（`data-theme` の説明は `app/globals.css` を参照）。
+   ⚠️ `:not(.calm)` が要る——`:global(...)` を足すと `.pendingBanner` 単体より
+   `.pendingBanner.calm`（2クラス）より詳細度が高くなり、0件の静かな配色を
+   暗い設定の目立つ配色が上書きしてしまう（この2本を書いた際に一度その形で入れて直した）。 */
 @media (prefers-color-scheme: dark) {
-  .pendingBanner {
+  :global(:root:not([data-theme="light"])) .pendingBanner:not(.calm) {
     --warn-bg: #3a2c0f;
     --warn-border: #d99a1f;
     --warn-text: #f4d998;
   }
+}
+
+:global(:root[data-theme="dark"]) .pendingBanner:not(.calm) {
+  --warn-bg: #3a2c0f;
+  --warn-border: #d99a1f;
+  --warn-text: #f4d998;
 }
 
 .pendingBanner.calm {
@@ -237,22 +250,39 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  .badge[data-status="pending"] {
+  :global(:root:not([data-theme="light"])) .badge[data-status="pending"] {
     --badge-bg: #3a2c0f;
     --badge-text: #f4d998;
   }
-  .badge[data-status="approved"] {
+  :global(:root:not([data-theme="light"])) .badge[data-status="approved"] {
     --badge-bg: #143a20;
     --badge-text: #9fe0b2;
   }
-  .badge[data-status="banned"] {
+  :global(:root:not([data-theme="light"])) .badge[data-status="banned"] {
     --badge-bg: #3d1613;
     --badge-text: #f4b3ac;
   }
-  .badge[data-status="publishing"] {
+  :global(:root:not([data-theme="light"])) .badge[data-status="publishing"] {
     --badge-bg: #17304d;
     --badge-text: #a9cdf2;
   }
+}
+
+:global(:root[data-theme="dark"]) .badge[data-status="pending"] {
+  --badge-bg: #3a2c0f;
+  --badge-text: #f4d998;
+}
+:global(:root[data-theme="dark"]) .badge[data-status="approved"] {
+  --badge-bg: #143a20;
+  --badge-text: #9fe0b2;
+}
+:global(:root[data-theme="dark"]) .badge[data-status="banned"] {
+  --badge-bg: #3d1613;
+  --badge-text: #f4b3ac;
+}
+:global(:root[data-theme="dark"]) .badge[data-status="publishing"] {
+  --badge-bg: #17304d;
+  --badge-text: #a9cdf2;
 }
 
 /* 割合バー（AI の実費・所要時間・モデル別の比較）。外部ライブラリなし、幅 % だけで描く。 */

@@ -53,8 +53,14 @@
   --shadow-float: 0 16px 40px color-mix(in srgb, var(--color-text) 28%, transparent);
 }
 
+/* ---- 色（暗い設定） ----
+   本人が明暗を手で選べるボタン（`components/ui/ThemeToggle.tsx`）を足したので、
+   分岐は2つになる（どちらも同じ変数を上書きする。名前も値も揃える）:
+     1. `prefers-color-scheme: dark` かつ本人が「明るい」を選んでいない → 端末に合わせて暗く
+     2. 本人が明示的に「暗い」を選んだ（`<html data-theme="dark">`） → 端末の設定に関係なく暗く
+   この2つが無いと、手動の選択が OS の設定に負ける（本人の指摘の核）。 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --color-background: #17120e;
     --color-surface: #241b14;
     --color-text: #f6ece2;
@@ -70,6 +76,23 @@
     --color-highlight-edge: #a3690f;
     --color-success: #6ee7a8;
   }
+}
+
+:root[data-theme="dark"] {
+  --color-background: #17120e;
+  --color-surface: #241b14;
+  --color-text: #f6ece2;
+  --color-text-muted: #bda995;
+  --color-border: #3d3026;
+  --color-accent: #fb923c;
+  --color-accent-strong: #fdba74;
+  --color-accent-soft: #3b2415;
+  --color-accent-text: #25150a;
+  --color-danger: #ff9d8c;
+  --color-highlight: #3a2a12;
+  --color-highlight-text: #fde3a7;
+  --color-highlight-edge: #a3690f;
+  --color-success: #6ee7a8;
 }
 
 * {
@@ -431,6 +454,47 @@ form > button[type="submit"] {
   font-weight: 600;
   margin-top: 0.25rem;
   padding: 0.375rem 0.625rem;
+}
+
+/* ---------- 明暗の切り替えボタン（`components/ui/ThemeToggle.tsx`）----------
+   3画面（客・店・運営）の殻（layout.tsx）から届く固定位置の小さな丸ボタン。
+   本人が客の画面の演出にこだわっているので、主役を食わない大きさ・控えめな色にする
+   （地は surface、縁は border、差し色のオレンジは使わない）。
+   宝くじの演出（.offer-reveal, z-index 50）とファンファーレ（.claim-celebration, z-index 60）
+   より低い z-index にして、演出中は自然に隠れる（動きの主役を譲る）。 */
+.theme-toggle {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  font-size: 0.9375rem;
+  height: 2.25rem;
+  justify-content: center;
+  padding: 0;
+  position: fixed;
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  top: max(0.75rem, env(safe-area-inset-top, 0px));
+  transition: filter 140ms ease, transform 140ms ease;
+  width: 2.25rem;
+  z-index: 40;
+}
+
+.theme-toggle:hover:not(:disabled) {
+  filter: none;
+  transform: scale(1.05);
+}
+
+.theme-toggle:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  outline: none;
+}
+
+/* 運営の画面はいちばん上に横並びの入口（admin-nav）が在るので、その邪魔にならないよう
+   少し下げる（`app/admin/layout.tsx` の nav の高さぶん）。 */
+body:has([data-testid="admin-nav"]) .theme-toggle {
+  top: max(3.25rem, calc(env(safe-area-inset-top, 0px) + 3.25rem));
 }
 
 /* ---------- 表（運営の数字・店の結果） ---------- */
