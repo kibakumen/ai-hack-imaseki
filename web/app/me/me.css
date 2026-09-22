@@ -569,6 +569,16 @@
   padding: 0.5rem 0.875rem;
 }
 
+/* `ReservationActions` の外枠（`.claim-actions`）。以前はクラスも余白も持たない素の `<div>` で、
+   「人数を変える」の欄（`form-party`）と「確保を取り消す」の行（`form-cancel`）が直に接し、
+   確保の番号の札（`.claim-ticket`）にも貼り付いて見えていた
+   （2026-09-22 本人の指摘「確保を取り消すボタンがカードと近すぎます」）。
+   `.claim-view` と同じ語彙（`display: grid; gap: 0.875rem`）に揃える——この面の「囲い同士の間隔」の基準値。 */
+.claim-actions {
+  display: grid;
+  gap: 0.875rem;
+}
+
 /* 確保中の画面では、番号より目立つものを置かない（店頭でまず見るのは番号）。
    「人数を変える」は主な操作の大きさから一段落とす。 */
 [data-testid="form-party"] > button[type="submit"] {
