@@ -9,7 +9,7 @@ export default function LoginPage() {
     <main>
       <header className="auth-head">
         <p className="auth-head__eyebrow">お店・運営の方</p>
-        <h1 className="auth-head__title">AkI席</h1>
+        <h1 className="auth-head__title">イマセキ</h1>
       </header>
       <LoginForm />
       <p className="auth-foot">

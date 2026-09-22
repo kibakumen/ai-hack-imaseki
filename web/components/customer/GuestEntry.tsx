@@ -44,7 +44,14 @@ const PLACEHOLDER_PHONE = GUEST_PHONE_PLACEHOLDER;
  * あとに手の登録の画面を見る。**自動の登録は確かめが通ることに依っている**——守りを緩めて通す道は
  * 作らない（設計書「人かどうかの確かめ」: 確かめが取れないときも断る・本人選択）。
  */
-const HUMAN_TOKEN_WAIT_MS = 4000;
+const HUMAN_TOKEN_WAIT_MS = 15000;
+/**
+ * 1回目が空振りしたあと、遅れて届いた値でもう一度だけ登録を試す上限（2026-09-22 追加）。
+ * ⚠️ **4秒では足りなかった**——チームの人が README の URL を開いて**登録の画面を見た**。
+ * Turnstile の managed は、初回や回線によっては読み込みだけで数秒かかり、
+ * 対話の challenge が出れば人が押すまで値が来ない。**待ち切って諦めるより、遅れて来た値を拾う**。
+ */
+const LATE_TOKEN_WAIT_MS = 45000;
 /** 値が届いたかを見に行く間隔（AI判断。待ち時間の刻み）。 */
 const TOKEN_POLL_MS = 100;
 
@@ -97,19 +104,37 @@ export const GuestEntry = () => {
         await new Promise((resolve) => setTimeout(resolve, TOKEN_POLL_MS));
         if (!alive) return;
       }
-      const humanToken = tokenRef.current;
-      tokenRef.current = null;
-      await apiCall("POST", "/api/register/customer", {
-        nickname: guestNickname(),
-        phone: PLACEHOLDER_PHONE,
-        genres: [],
-        budgetMax: null,
-        humanToken,
-      });
+      const register = async (): Promise<boolean> => {
+        const humanToken = tokenRef.current;
+        tokenRef.current = null;
+        const answer = await apiCall("POST", "/api/register/customer", {
+          nickname: guestNickname(),
+          phone: PLACEHOLDER_PHONE,
+          genres: [],
+          budgetMax: null,
+          humanToken,
+        });
+        return !isFailure(answer);
+      };
+
+      if (await register()) {
+        if (!alive) return;
+        setPhase("ready");
+        return;
+      }
       if (!alive) return;
-      // 通ったかどうかで分けない——通れば `CustomerApp` が 200 のホームを受け取って取得の画面を出し、
-      // 通らなければ 401 のまま登録の入力が出る（受け皿）。判断はホームの1か所に任せる。
+
+      // 1回目が通らなかった。**画面は先に出す**——待たせ続けるより、手で登録できる状態を見せる。
+      // そのうえで裏で値の到着を待ち続け、遅れて届いたらもう一度だけ送る（2026-09-22）。
       setPhase("ready");
+      const lateUntil = Date.now() + LATE_TOKEN_WAIT_MS;
+      while (tokenRef.current === null && Date.now() < lateUntil) {
+        await new Promise((resolve) => setTimeout(resolve, TOKEN_POLL_MS));
+        if (!alive) return;
+      }
+      if (tokenRef.current === null) return;
+      // 通れば `CustomerApp` がホームを取り直して取得の画面へ変わる。通らなければ登録の入力のまま。
+      if (await register()) window.location.reload();
     })();
 
     return () => {
