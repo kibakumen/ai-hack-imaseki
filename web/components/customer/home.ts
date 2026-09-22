@@ -27,7 +27,11 @@ export type HomeDto = {
   /** まだ通知を許可していない客だけ true（要件22の基準 22.8・タスク19 が足した） */
   pushPromptDue?: boolean;
   kind: "fetch" | "active" | "expired" | "completed" | "store_cancelled" | "admin_cancelled";
-  profile?: { genres?: string[]; budgetMax?: number | null };
+  /**
+   * 登録の値。呼び名と電話番号は、取得の画面の電話番号の欄（任意・2026-09-22）が登録の変更の入口
+   * `PATCH /api/customer/profile` へ4項目まとめて送るために読む（送られなかった項目は残らない形のため）。
+   */
+  profile?: { nickname?: string; phone?: string; genres?: string[]; budgetMax?: number | null };
   reservation?: ReservationDto;
   expired?: ExpiredDto;
 };

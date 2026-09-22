@@ -14,6 +14,8 @@ import {
   FETCH_RATE_WINDOW_MS,
   LOGIN_FAILURE_LIMIT,
   LOGIN_LOCK_WINDOW_MS,
+  PLACE_SUGGEST_RATE_LIMIT,
+  PLACE_SUGGEST_RATE_WINDOW_MS,
   REGISTER_RATE_LIMIT,
   REGISTER_RATE_WINDOW_MS,
   REPORT_RATE_LIMIT,
@@ -48,6 +50,9 @@ const LOGIN_RULE: RateRule = { name: "login", limit: LOGIN_FAILURE_LIMIT, window
 // 店の画像の取得（2026-09-22 追加）。ここだけ**客の渡した URL へ Worker が自分から出ていく**ので、
 // 抑止が無いと外向きの取得を好きな回数踏ませられる。要件には無い（AI判断・要確認）。
 const STORE_IMAGE_RULE: RateRule = { name: "storeImage", limit: STORE_IMAGE_RATE_LIMIT, windowMs: STORE_IMAGE_RATE_WINDOW_MS, by: "customer", counts: "requests" };
+// 場所の候補（2026-09-22 追加）。打つたびに呼ぶ入口で、1回ごとに地図のサービスを呼ぶので、
+// 抑止が無いと客1人が外向きの問い合わせを好きな回数踏ませられる。要件には無い（AI判断・要確認）。
+const PLACE_SUGGEST_RULE: RateRule = { name: "placeSuggest", limit: PLACE_SUGGEST_RATE_LIMIT, windowMs: PLACE_SUGGEST_RATE_WINDOW_MS, by: "customer", counts: "requests" };
 
 /** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則）。ここに無い入口には1度も表を引かない。 */
 const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
@@ -60,6 +65,7 @@ const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
   ["POST /api/customer/reports", REPORT_RULE],
   ["POST /api/auth/login", LOGIN_RULE],
   ["GET /api/customer/store-image", STORE_IMAGE_RULE],
+  ["GET /api/customer/place-suggest", PLACE_SUGGEST_RULE],
 ]);
 
 export const rateRuleFor = (method: string, path: string): RateRule | null => RULES_BY_ROUTE.get(`${method} ${path}`) ?? null;

@@ -70,6 +70,15 @@ export type Geocoder = {
    * 探す筋（座標で探す）には要らない。
    */
   reverse?(point: { lat: number; lng: number }, opts: { signal?: AbortSignal }): Promise<{ ok: true; label: string } | { ok: false }>;
+  /**
+   * 打ちかけの文字から場所の候補を出す（入口 GET /api/customer/place-suggest・2026-09-22 の本人の指摘
+   * 「場所入力欄に渋谷駅などを打っても候補がでません」）。
+   *
+   * ⚠️ **任意**にしてある（`reverse` と同じ置き方）。この口を持たない場面（受け入れ検査の偽物）では
+   * 候補を出さずに空を返す——候補は入力の補助で、探す筋（文字か座標で探す）には要らない。
+   * `source` はどの経路で取れたか（実物は Places → Geocoding の2段構え）。**記録にだけ残し、客には見せない。**
+   */
+  suggest?(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; suggestions: string[]; source: "places" | "geocoding" } | { ok: false }>;
 };
 /**
  * 店のホームページから雰囲気画像の URL を取る口（読むだけ・実物は adapters/storeImage）。

@@ -23,17 +23,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiCall, getPublicConfig, isFailure } from "../../lib/client/api";
+import { GUEST_PHONE_PLACEHOLDER } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { CustomerApp } from "./CustomerApp";
 
 /** 自動で作る呼び名。`guest-` ＋ 6字（呼び名の上限20字に収まる）。 */
 const guestNickname = (): string => `guest-${Math.random().toString(36).slice(2, 8)}`;
 /**
- * 仮の電話番号（形の正本は `schemas/limits.ts` の `PHONE_PATTERN`＝0 で始まる10〜11桁）。
+ * 仮の電話番号（形の正本は `schemas/limits.ts` の `PHONE_PATTERN`＝0 で始まる10〜11桁。値は
+ * `GUEST_PHONE_PLACEHOLDER`——取得の画面の電話番号の欄が「仮のまま」を見分けるのに同じ値を読む）。
  * 実在しない番号を入れるのは、**客に聞かずに登録を済ませる**ため。店が本当に連絡したい場面は
  * 「来ない客への確認」で、そこは照合コードと来店の記録で足りる（本人の指摘）。
+ * 本物の番号は、取得の画面のこだわり条件のいちばん下から任意で入れられる（2026-09-22 本人の指摘）。
  */
-const PLACEHOLDER_PHONE = "0000000000";
+const PLACEHOLDER_PHONE = GUEST_PHONE_PLACEHOLDER;
 
 /**
  * 人かどうかの確かめの値を待つ上限。これを過ぎたら値なしで送る（＝断られて手の登録へ倒れる）。

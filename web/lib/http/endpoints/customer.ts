@@ -4,8 +4,10 @@
 
 import { customerRegisterSchema } from "../../schemas/customer";
 import { placeQuerySchema } from "../../schemas/place";
+import { placeSuggestQuerySchema } from "../../schemas/placeSuggest";
 import { customerHome } from "../../usecases/customerHome";
 import { placeLabel } from "../../usecases/placeLabel";
+import { placeSuggest } from "../../usecases/placeSuggest";
 import { registerCustomer } from "../../usecases/registerCustomer";
 import { CUSTOMER_COOKIE_MAX_AGE_SECONDS, CUSTOMER_COOKIE_NAME, serializeCookie } from "../cookies";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
@@ -53,4 +55,17 @@ const customerPlaceRoute = defineRoute({
   handler: async ({ input, deps }) => ({ status: 200, body: await placeLabel(deps, input) }),
 });
 
-export const customerRoutes: RouteDefinition[] = [registerCustomerRoute, customerHomeRoute, customerPlaceRoute];
+/**
+ * 打ちかけの文字から場所の候補を出す（読むだけ・2026-09-22 の本人の指摘「場所入力欄に渋谷駅などを
+ * 打っても候補がでません」）。地図の鍵を画面へ渡さないために挟む。取れなければ空の候補を返す
+ * （断りにはしない——候補は補助で、客は文字のまま探せる）。連打の抑止は `http/rateLimits` の表が掛ける。
+ */
+const customerPlaceSuggestRoute = defineRoute({
+  method: "GET",
+  path: "/api/customer/place-suggest",
+  auth: "customer",
+  input: placeSuggestQuerySchema,
+  handler: async ({ input, deps }) => ({ status: 200, body: await placeSuggest(deps, input) }),
+});
+
+export const customerRoutes: RouteDefinition[] = [registerCustomerRoute, customerHomeRoute, customerPlaceRoute, customerPlaceSuggestRoute];

@@ -8,6 +8,13 @@ export const NICKNAME_MAX = 20;
 export const PHONE_PATTERN = /^0\d{9,10}$/;
 /** 入力欄の補助の属性に使う桁数（正本は上の形。基準 1.3） */
 export const PHONE_MAX_LENGTH = 11;
+/**
+ * 自動の登録（`components/customer/GuestEntry`）が入れる**仮の電話番号**（2026-09-22）。
+ * 客に聞かずに登録を済ませるための、形だけを満たす実在しない番号。取得の画面の電話番号の欄は、
+ * 登録がこの値のままなら**空で見せ**、入れられたら本物に差し替える。1か所に置くのは、
+ * 「仮かどうか」の見分けを2つの部品が同じ値で行うため。
+ */
+export const GUEST_PHONE_PLACEHOLDER = "0000000000";
 export const CUSTOMER_GENRES_MAX = 12;
 export const BUDGET_MAX_MIN = 0;
 export const BUDGET_MAX_MAX = 100_000;
@@ -88,6 +95,20 @@ export const MENUS_MAX = 5;
 
 /** 地図のサービスの打ち切り（設計書「時間の割り振り」: 地図3秒）。差し替えた時計と AbortSignal の両方で使う */
 export const GEOCODE_TIMEOUT_MS = 3000;
+// 場所の候補（入口 GET /api/customer/place-suggest・2026-09-22 本人の指摘「場所入力欄に渋谷駅などを
+// 打っても候補がでません」）。値はどれも AI判断・要件に無い。
+/** 候補を聞きに行く最小の字数。これより短い文字では画面も入口も外へ聞かない */
+export const PLACE_SUGGEST_MIN_CHARS = 2;
+/** 返す候補の上限 */
+export const PLACE_SUGGEST_MAX = 5;
+/** 打つ手が止まってから聞きに行くまでの待ち（打鍵ごとに呼ばない） */
+export const PLACE_SUGGEST_DEBOUNCE_MS = 250;
+/**
+ * 同じ客の候補の問い合わせは1分に60回まで。打つたびに呼ぶ入口なので店の画像（30回）より多めに取る
+ * （1文字ごとに1回としても、1分に60文字は打たない見込み。実測の裏付けは無い）
+ */
+export const PLACE_SUGGEST_RATE_LIMIT = 60;
+export const PLACE_SUGGEST_RATE_WINDOW_MS = 60 * 1000;
 /**
  * 店のホームページから雰囲気画像を取る打ち切り（2026-09-22 移植。地図と同じ3秒・値は AI判断）。
  * 差し替えた時計と AbortSignal の両方で使う（usecases/storeImage）。
