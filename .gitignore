@@ -11,3 +11,7 @@ sprint/
 
 # デモ用の種データの本番SQL（パスワードのハッシュを含むので公開リポジトリへ入れない・2026-09-22）
 web/.seed-demo-prod.sql
+
+# 秘密の値の退避ファイル（2026-09-22・GitHub の push protection が検出）
+web/.dev.vars.bak
+*.dev.vars.bak
