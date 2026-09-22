@@ -31,6 +31,8 @@ export type StoreHomeView = {
   publishPrefill: PublishFormPrefill;
   coupons: PublishFormCoupon[];
   arrivals: ArrivalsListRow[];
+  /** 仮のパスワードで入っている（基準 14.14）。立っていれば新しいパスワードを決める画面へ案内する。 */
+  mustChangePassword?: boolean;
 };
 
 export const StoreHome = () => {
@@ -114,6 +116,14 @@ export const StoreHome = () => {
       </div>
 
       <StoreNav active="home" />
+
+      {/* 仮のパスワードで入った店への案内（基準 14.14）。`app/store/password` の注が「店のホームが
+          ここへ案内する」と言いながら、この道が無かった（2026-09-22 に足した）。 */}
+      {home.mustChangePassword && (
+        <p className="msg" role="alert" data-testid="must-change-password">
+          運営から受け取った仮のパスワードで入っています。<a href="/store/password">新しいパスワードを決めてください。</a>
+        </p>
+      )}
 
       <StatusBanner status={home.status} />
 

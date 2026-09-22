@@ -46,7 +46,10 @@ const PHONE_HINT = "数字10桁か11桁";
 const SUGGEST_LIST_ID = "fetch-place-suggestions";
 
 /** 取得が通ったときに親へ渡すもの（受け取りの入口が `fetchId` と人数を要るため）。 */
-export type FetchResult = { fetchId: string; items: ResultItem[]; party: number };
+/** 探した起点。座標か、客が打った場所の文字。地図の経路の出発地にそのまま渡せる（2026-09-22）。 */
+export type FetchOrigin = { lat: number; lng: number } | { place: string };
+
+export type FetchResult = { fetchId: string; items: ResultItem[]; party: number; from: FetchOrigin | null };
 
 type FetchOk = { fetchId: string; items: ResultItem[] };
 
@@ -256,11 +259,11 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
    * 少しずつ届く入口で探す（`init` で店のカードを先に出し、`pitch` が届くたびに紹介文だけを差し替える）。
    * この入口を持たないサーバーでは `STREAM_UNAVAILABLE` が返るので、呼ぶ側が普通の入口へ倒す。
    */
-  const searchByStream = async (payload: Record<string, unknown>): Promise<StreamOutcome> => {
+  const searchByStream = async (payload: Record<string, unknown>, from: FetchOrigin): Promise<StreamOutcome> => {
     let current: FetchResult | null = null;
     const outcome = await apiStream("/api/customer/fetch/stream", payload, (line: StreamLine) => {
       if (line.type === "init" && typeof line.fetchId === "string" && Array.isArray(line.items)) {
-        current = { fetchId: line.fetchId, items: line.items as ResultItem[], party: Number(party) };
+        current = { fetchId: line.fetchId, items: line.items as ResultItem[], party: Number(party), from };
         onResults(current);
         // カードが出た時点で「探しています…」を解く（紹介文は後から差し込まれる）
         setPending(false);
@@ -268,8 +271,13 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       }
       if (line.type === "pitch" && current !== null && typeof line.storeId === "string" && typeof line.reason === "string") {
         const { storeId, reason } = line;
+        // ⚠️ `source` も一緒に取り込む（2026-09-22 本人の指摘「文言が完成されているのにずっと待機モーションになっている」）。
+        // ここで `reason` だけ差し替えていたため、文は届いているのに `pitchSource` が `undefined` のまま残り、
+        // `OfferPitch` が待機の見た目（光の帯と「書いています…」）を出し続けていた。
+        // 入口が知らない値を送ってきたときは「決定論の文」側へ倒す——待機のまま固まるよりはよい。
+        const source = line.source === "persona" ? "persona" : "fallback";
         const shown: FetchResult = current;
-        current = { ...shown, items: shown.items.map((item) => (item.storeId === storeId ? { ...item, reason } : item)) };
+        current = { ...shown, items: shown.items.map((item) => (item.storeId === storeId ? { ...item, reason, pitchSource: source } : item)) };
         onResults(current);
       }
     });
@@ -288,7 +296,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       return;
     }
     const payload = { ...from, party: partyToSend(party), genres, budgetMax: budgetToSend(budgetMax) };
-    const streamed = await searchByStream(payload);
+    const streamed = await searchByStream(payload, from);
     if (streamed !== STREAM_UNAVAILABLE) {
       if (isFailure(streamed)) setFailure(streamed);
       return;
@@ -298,7 +306,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       setFailure(result);
       return;
     }
-    onResults({ fetchId: result.fetchId, items: result.items, party: Number(party) });
+    onResults({ fetchId: result.fetchId, items: result.items, party: Number(party), from });
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {

@@ -11,6 +11,8 @@ const ADMIN_PAGES = [
   { href: "/admin", label: "店の一覧" },
   { href: "/admin/reports", label: "通報" },
   { href: "/admin/metrics", label: "数字" },
+  // 2026-09-22 追加: 運営自身のメールアドレス・パスワードの変更。
+  { href: "/admin/account", label: "アカウント" },
 ];
 
 type AdminLayoutProps = Readonly<{ children: ReactNode }>;

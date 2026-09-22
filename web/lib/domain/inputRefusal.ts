@@ -20,6 +20,10 @@ export const INPUT_REFUSAL_KINDS = [
   "file_too_large",
   "card_setup_failed",
   "login_failed",
+  // アカウントの編集（メールアドレスの変更・運営のパスワードの変更）で、確かめのために入れさせた
+  // 今のパスワードが保存と合わない（2026-09-22 追加）。ログインの login_failed とは分ける——
+  // こちらはもう入っている本人に「今のパスワード」の欄だけを直させる文になる。
+  "password_mismatch",
   "place_unresolved",
   "report_not_allowed",
   // 28.5【最終日】登録を消せない（確保中の確保か、期限から20分以内の期限切れの確保がある）。

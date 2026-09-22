@@ -111,7 +111,9 @@ const OfferPitch = ({ reason, source }: { reason: string; source?: PitchSource }
           <span aria-hidden className="offer-pitch__sparkle">
             ✨
           </span>
-          常連が紹介文を書いています…
+          {/* 2026-09-22 本人の指摘「常連ではなく、AI と明記してほしい」。
+              人格は「アメリカ人の友人」だが、書いているのが AI であることは隠さない。 */}
+          AI が紹介文を書いています…
         </p>
         <span aria-hidden className="offer-pitch__shimmer" />
       </div>

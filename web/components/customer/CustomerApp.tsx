@@ -277,7 +277,9 @@ export const CustomerApp = () => {
    */
   const celebration =
     celebrating && reservation !== undefined && home.kind === "active" ? (
-      <ClaimedCelebration reservation={reservation} onClose={() => setCelebrating(false)} />
+      // ⚠️ 探したときの起点をそのまま経路の出発地へ渡す（2026-09-22 本人の指摘——現在地と違う場所で
+      // 探したのに、マップの開始地点が現在地になり徒歩7時間と出た）。渡さないとマップが現在地から引く。
+      <ClaimedCelebration reservation={reservation} from={fetchResult?.from ?? null} onClose={() => setCelebrating(false)} />
     ) : null;
 
   return (

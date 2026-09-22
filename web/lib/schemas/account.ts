@@ -34,6 +34,27 @@ export const loginSchema = z.object({
  */
 export const changePasswordSchema = z.object({ password: passwordSchema });
 
+/**
+ * 確かめのために入れさせる「今のパスワード」。ログインと同じく形と範囲の規則は当てない
+ * （前の規則で決めた値でも確かめられるように）。空と極端な長さだけを断る。
+ */
+const currentPasswordSchema = z.string().min(1).max(PASSWORD_MAX);
+
+/**
+ * メールアドレスの変更（2026-09-22 追加・店と運営の両方）。確認メールを送らない設計
+ * （要件12の補足）なので、代わりに**今のパスワードの再入力**を求める——セッションを盗まれただけでは
+ * ログインの ID を書き換えられないようにするため。
+ */
+export const changeEmailSchema = z.object({ email: emailSchema, currentPassword: currentPasswordSchema });
+
+/**
+ * 自分で決め直すパスワードの変更（2026-09-22 追加・運営の入口が使う）。仮のパスワードの場面と違い、
+ * 今のパスワードを覚えている前提なので、その再入力を求める。
+ */
+export const changeOwnPasswordSchema = z.object({ currentPassword: currentPasswordSchema, password: passwordSchema });
+
 export type StoreRegisterInput = z.infer<typeof storeRegisterSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
+export type ChangeOwnPasswordInput = z.infer<typeof changeOwnPasswordSchema>;

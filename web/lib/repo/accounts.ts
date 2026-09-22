@@ -46,6 +46,27 @@ export const findAccountByEmail = async (db: Db, email: string): Promise<Account
   return toRow(row as Record<string, unknown> | null);
 };
 
+/** アカウントの番号で1件。セッションが指す本人の保存を読む（今のパスワードの確かめ）。無ければ null。 */
+export const findAccountById = async (db: Db, accountId: string): Promise<AccountRow | null> => {
+  const row = await db.prepare(`SELECT id, email, password_hash, role, store_id, must_change_password FROM accounts WHERE id = ?1`).bind(accountId).first();
+  return toRow(row as Record<string, unknown> | null);
+};
+
+/**
+ * 書き込みの落ちが「メールアドレスがもう在る」かどうか。D1 は SQLite の文をそのまま伝えるので、
+ * 表と列の名前で見分ける（ほかの UNIQUE——例えばセッションの合言葉——と取り違えないため）。
+ * 登録（usecases/registerStore）とメールアドレスの変更（usecases/changeEmail）が共有する。
+ */
+export const isEmailTakenError = (error: unknown): boolean => {
+  const message = error instanceof Error ? `${error.message} ${(error.cause as Error | undefined)?.message ?? ""}` : String(error);
+  return /UNIQUE constraint failed:\s*accounts\.email/i.test(message);
+};
+
+/** メールアドレスだけを置き換える（2026-09-22 追加）。重複は表の UNIQUE が例外で教える（呼ぶ側が受ける）。 */
+export const updateAccountEmail = async (db: Db, accountId: string, email: string): Promise<void> => {
+  await db.prepare(`UPDATE accounts SET email = ?2 WHERE id = ?1`).bind(accountId, email).run();
+};
+
 /** 1つの文にまとめて流すための文（店の登録は店・アカウント・セッションを1度に書く）。 */
 export const insertAccountStatement = (db: Db, account: NewAccount) =>
   db.prepare(INSERT_ACCOUNT).bind(account.id, account.email, account.passwordHash, account.role, account.storeId);

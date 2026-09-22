@@ -3,7 +3,7 @@
 // （AI判断・タスク表）。役割は必ず store——入力に role が乗っていても見ない（基準 14.8）。
 
 import type { Deps } from "../ports";
-import { findAccountByEmail, insertAccountStatement } from "../repo/accounts";
+import { findAccountByEmail, insertAccountStatement, isEmailTakenError } from "../repo/accounts";
 import { insertSessionStatement } from "../repo/sessions";
 import { insertStoreStatement } from "../repo/stores";
 import type { StoreRegisterInput } from "../schemas/account";
@@ -15,14 +15,8 @@ export type RegisterStoreResult =
   | { ok: true; storeId: string; accountId: string; session: IssuedSession }
   | { ok: false; kind: "email_taken" };
 
-/**
- * 書き込みの落ちが「メールアドレスがもう在る」かどうか。D1 は SQLite の文をそのまま伝えるので、
- * 表と列の名前で見分ける（ほかの UNIQUE——例えばセッションの合言葉——と取り違えないため）。
- */
-const isEmailTakenError = (error: unknown): boolean => {
-  const message = error instanceof Error ? `${error.message} ${(error.cause as Error | undefined)?.message ?? ""}` : String(error);
-  return /UNIQUE constraint failed:\s*accounts\.email/i.test(message);
-};
+// 「メールアドレスがもう在る」の見分け（isEmailTakenError）は repo/accounts へ移した
+// （2026-09-22・メールアドレスの変更と共有するため）。判定の中身は変えていない。
 
 export const registerStore = async (deps: Deps, input: StoreRegisterInput): Promise<RegisterStoreResult> => {
   // 店と運営を通して重複を見る（基準 12.2）。表の UNIQUE（COLLATE NOCASE）が最後の砦で、

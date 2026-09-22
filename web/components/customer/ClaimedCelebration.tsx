@@ -54,19 +54,29 @@ const Confetti = () => {
   );
 };
 
-/** 経路を開くリンク（店名と住所で引く。出発地が分かっていれば渡す）。 */
-const routeHref = (reservation: ReservationDto, from: { lat: number; lng: number } | null): string | null => {
+/**
+ * 経路を開くリンク（店名と住所で引く。出発地が分かっていれば渡す）。
+ *
+ * ⚠️ **出発地を渡さないと、マップは端末の現在地から引く**（2026-09-22 の本人の指摘——
+ * 現在地と違う場所を入れて探したのに、経路の開始地点が現在地になり、徒歩7時間と出た）。
+ * 探した起点は座標のことも、客が打った場所の文字のこともある。マップの `origin` は
+ * **どちらの形でも受ける**ので、そのまま渡す。
+ */
+const routeHref = (reservation: ReservationDto, from: RouteOrigin | null): string | null => {
   const destination = [reservation.storeName, reservation.storeAddress].filter((part) => part !== "").join(" ");
   if (destination === "") return null;
   const params = new URLSearchParams({ api: "1", destination, travelmode: "walking" });
-  if (from !== null) params.set("origin", `${from.lat},${from.lng}`);
+  if (from !== null) params.set("origin", "place" in from ? from.place : `${from.lat},${from.lng}`);
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 };
+
+/** 経路の出発地。探したときの起点をそのまま使う（座標か、客が打った場所の文字）。 */
+export type RouteOrigin = { lat: number; lng: number } | { place: string };
 
 type ClaimedCelebrationProps = {
   reservation: ReservationDto;
   /** 分かっている出発地（無ければマップ側が現在地から引く）。 */
-  from?: { lat: number; lng: number } | null;
+  from?: RouteOrigin | null;
   onClose: () => void;
 };
 
@@ -89,34 +99,60 @@ export const ClaimedCelebration = ({ reservation, from = null, onClose }: Claime
     >
       <Confetti />
       <div className="claimed-celebration-inner" style={{ position: "relative" }}>
-        <p className="claimed-mark" aria-hidden>
-          🎉
-        </p>
-        <h2>受け取りました！</h2>
-        <p className="claimed-code-label">確保番号</p>
-        <p className="reservation-code" data-testid="claimed-code">
-          {reservation.code}
-        </p>
-        <p>お店でこの番号を見せてください。</p>
-        <h3>{reservation.storeName}</h3>
-        <p>{reservation.storeAddress}</p>
-        <p>{reservation.party}名</p>
-        {/* 2026-09-22 の本人の指摘「クーポンがカードで分離されていない箇所がある」——ここだけ素のリストで
-            出ており、3枚あると全部もらえるように見えていた。一覧・確保中の表示と同じ1枚ずつの札へ揃える。 */}
-        <ul className="coupon-list offer-coupons">
-          {reservation.coupons.map((coupon, index) => (
-            <li className="offer-coupon" key={`${coupon.name}-${index}`}>
-              <span aria-hidden className="offer-coupon__mark">
-                🎟️
-              </span>
-              <span className="offer-coupon__body">
-                <span className="offer-coupon__name">{coupon.name}</span>
-                {coupon.note === "" ? null : <span className="offer-coupon__note">（{coupon.note}）</span>}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <CouponPickNote count={reservation.coupons.length} />
+        <p className="claimed-eyebrow">席を確保しました</p>
+        <h2 className="claimed-title">
+          <span aria-hidden className="claimed-mark">
+            🎉
+          </span>
+          受け取りました！
+        </h2>
+
+        {/* 番号を主役に置く（2026-09-22 本人の指摘「8桁番号を目立たせてほしい。これを一番に見せたい」）。
+            店頭で見せる半券に見立てて、白い札の上に大きく出す——橙の地の上で番号だけが抜ける。 */}
+        <div className="claimed-ticket">
+          <p className="claimed-ticket__label">確保番号</p>
+          <p className="claimed-ticket__code" data-testid="claimed-code">
+            {reservation.code}
+          </p>
+          <p className="claimed-ticket__hint">お店でこの番号を見せてください</p>
+          <dl className="claimed-ticket__facts">
+            <div>
+              <dt>店</dt>
+              <dd>{reservation.storeName}</dd>
+            </div>
+            <div>
+              <dt>場所</dt>
+              <dd>{reservation.storeAddress}</dd>
+            </div>
+            <div>
+              <dt>人数</dt>
+              <dd>{reservation.party}名</dd>
+            </div>
+          </dl>
+        </div>
+
+        {reservation.coupons.length === 0 ? null : (
+          <div className="claimed-coupons">
+            <p className="claimed-coupons__label">使えるクーポン</p>
+            {/* 2026-09-22 の本人の指摘2件——「カードで分離されていない」「クーポン内容が白飛びしてます」。
+                札の形は一覧・確保中と揃え、**橙の地の上で読める配色**を `.claimed-coupons` の中だけで当てる。 */}
+            <ul className="coupon-list offer-coupons">
+              {reservation.coupons.map((coupon, index) => (
+                <li className="offer-coupon" key={`${coupon.name}-${index}`}>
+                  <span aria-hidden className="offer-coupon__mark">
+                    🎟️
+                  </span>
+                  <span className="offer-coupon__body">
+                    <span className="offer-coupon__name">{coupon.name}</span>
+                    {coupon.note === "" ? null : <span className="offer-coupon__note">（{coupon.note}）</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <CouponPickNote count={reservation.coupons.length} />
+          </div>
+        )}
+
         {href === null ? null : (
           <a className="claimed-route" data-testid="link-route" href={href} target="_blank" rel="noreferrer">
             Googleマップで経路を開く

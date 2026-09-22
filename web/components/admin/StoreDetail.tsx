@@ -55,6 +55,21 @@ export const StoreDetail = ({ storeId }: Props) => {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [confirmingBan, setConfirmingBan] = useState(false);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
+  const [confirmingTemp, setConfirmingTemp] = useState(false);
+  /** 発行した仮のパスワード。入口が見せるただ1回（基準 14.13）なので、この画面を離れると消える。 */
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+
+  /** 【最終日】仮のパスワードの発行（基準 14.10〜14.13）。2026-09-22 に足した——入口は在ったが画面から呼ぶ道が無かった。 */
+  const issueTemp = async () => {
+    const result = await apiCall<{ tempPassword: string }>("POST", `/api/admin/stores/${storeId}/temp-password`, {});
+    if (isFailure(result)) {
+      setFailure(result);
+      return;
+    }
+    setFailure(null);
+    setConfirmingTemp(false);
+    setTempPassword(result.tempPassword);
+  };
 
   const load = useCallback(async () => {
     const result = await apiCall<{ store: StoreDetailDto }>("GET", `/api/admin/stores/${storeId}`);
@@ -130,6 +145,36 @@ export const StoreDetail = ({ storeId }: Props) => {
         )}
       </p>
       <p data-testid="card-status">{store.cardRegistered ? "カードは登録済みです" : "カードはまだ登録されていません"}</p>
+
+      <section data-testid="form-temp-password">
+        <h2>パスワードを忘れた店への対応</h2>
+        {tempPassword === null ? (
+          <>
+            <button type="button" data-testid="btn-temp-password" onClick={() => setConfirmingTemp(true)}>
+              仮のパスワードを発行する
+            </button>
+            {confirmingTemp && (
+              <div data-testid="confirm-temp-password" role="group" aria-label="仮のパスワードを発行する前の確かめ">
+                <p>今のパスワードは使えなくなり、この店の開いている画面はすべてログアウトされます。仮のパスワードはここに1回だけ表示され、あなたのメールで店へ伝えます。発行しますか。</p>
+                <button type="button" data-testid="btn-confirm-temp-password" onClick={() => void issueTemp()}>
+                  発行する
+                </button>
+                <button type="button" onClick={() => setConfirmingTemp(false)}>
+                  やめる
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div data-testid="temp-password-issued">
+            <p>
+              仮のパスワード: <code data-testid="temp-password">{tempPassword}</code>
+            </p>
+            <p>この値はここにしか表示されません。{store.email ? <a href={`mailto:${store.email}`}>{store.email}</a> : "店"} へあなたのメールで伝えてください。店は次のログインで新しいパスワードを決めます。</p>
+          </div>
+        )}
+        <FormMessage failure={failure} />
+      </section>
 
       {store.status === "pending" && (
         <form
