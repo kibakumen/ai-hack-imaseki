@@ -10,6 +10,8 @@
 import type { Deps } from "../ports";
 import { deleteRateCounter, findRateCounter, saveRateCounter, type RateCounterRow } from "../repo/rateCounters";
 import {
+  EMAIL_VERIFY_RATE_LIMIT,
+  EMAIL_VERIFY_RATE_WINDOW_MS,
   FETCH_RATE_LIMIT,
   FETCH_RATE_WINDOW_MS,
   LOGIN_FAILURE_LIMIT,
@@ -54,6 +56,10 @@ const STORE_IMAGE_RULE: RateRule = { name: "storeImage", limit: STORE_IMAGE_RATE
 // 抑止が無いと客1人が外向きの問い合わせを好きな回数踏ませられる。要件には無い（AI判断・要確認）。
 const PLACE_SUGGEST_RULE: RateRule = { name: "placeSuggest", limit: PLACE_SUGGEST_RATE_LIMIT, windowMs: PLACE_SUGGEST_RATE_WINDOW_MS, by: "customer", counts: "requests" };
 
+// 確認メールの送り直し（2026-09-22 追加・feat/email-verify）。外へメールを出す入口なので、抑止が無いと
+// 店1つが送信元の評判を好きなだけ削れる。店のアカウントで数える鍵が無いので接続元で数える。要件には無い（AI判断）。
+const EMAIL_VERIFY_RULE: RateRule = { name: "emailVerify", limit: EMAIL_VERIFY_RATE_LIMIT, windowMs: EMAIL_VERIFY_RATE_WINDOW_MS, by: "ip", counts: "requests" };
+
 /** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則）。ここに無い入口には1度も表を引かない。 */
 const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
   ["POST /api/customer/fetch", FETCH_RULE],
@@ -66,6 +72,8 @@ const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
   ["POST /api/auth/login", LOGIN_RULE],
   ["GET /api/customer/store-image", STORE_IMAGE_RULE],
   ["GET /api/customer/place-suggest", PLACE_SUGGEST_RULE],
+  ["POST /api/store/email/verify", EMAIL_VERIFY_RULE],
+  ["POST /api/admin/email/verify", EMAIL_VERIFY_RULE],
 ]);
 
 export const rateRuleFor = (method: string, path: string): RateRule | null => RULES_BY_ROUTE.get(`${method} ${path}`) ?? null;

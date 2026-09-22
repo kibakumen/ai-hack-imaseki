@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiCall, isFailure } from "../../lib/client/api";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
 import { ArrivalsList, type ArrivalsListRow } from "./ArrivalsList";
+import { EmailVerifyBanner } from "./EmailVerifyBanner";
 import { playNotifyBeep } from "./beep";
 import { PublishForm, type PublishFormCoupon, type PublishFormPrefill } from "./PublishForm";
 import { OfferPanel, type OfferPanelOffer } from "./OfferPanel";
@@ -33,6 +34,11 @@ export type StoreHomeView = {
   arrivals: ArrivalsListRow[];
   /** 仮のパスワードで入っている（基準 14.14）。立っていれば新しいパスワードを決める画面へ案内する。 */
   mustChangePassword?: boolean;
+  /**
+   * メールアドレスを確認済みか（feat/email-verify）。**メールを送る口が無い公開先では項目そのものが来ない**
+   * （undefined）ので、帯を出すのは `false` のときだけ。何もブロックしない。
+   */
+  emailVerified?: boolean | null;
 };
 
 export const StoreHome = () => {
@@ -126,6 +132,9 @@ export const StoreHome = () => {
       )}
 
       <StatusBanner status={home.status} />
+
+      {/* メールアドレスの確認（feat/email-verify）。`false` のときだけ——項目が無い（鍵を入れていない）なら出ない。 */}
+      {home.emailVerified === false && <EmailVerifyBanner endpoint="/api/store/email/verify" />}
 
       {home.status === "pending" && <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />}
 

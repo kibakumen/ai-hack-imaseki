@@ -14,6 +14,7 @@ import { createStoreImageFetcher } from "./storeImage";
 import { createCardRegistrar } from "./stripe";
 import { createHumanCheck } from "./turnstile";
 import { createHasher, createRng } from "./webcrypto";
+import { createMailer } from "./resend";
 import { createPushSender } from "./webpush";
 
 /**
@@ -40,6 +41,9 @@ export const createDeps = (env: RawEnv): Deps => {
     push: createPushSender({ publicKey: config.vapidPublicKey, privateKey: secrets.vapidPrivateKey, contactEmail: config.contactEmail }),
     card: createCardRegistrar({ secretKey: secrets.stripeSecretKey }),
     human: createHumanCheck({ secretKey: secrets.turnstileSecretKey }),
+    // メールを送る口（任意・機能フラグ）。秘密 RESEND_API_KEY と MAIL_FROM の**両方**が在るときだけ組む。
+    // 無いときは項目そのものを置かない——確認の入口は 404・画面は確認の UI を出さず、ほかの動きは1バイトも変わらない。
+    ...(secrets.resendApiKey && secrets.mailFrom ? { mailer: createMailer({ apiKey: secrets.resendApiKey, from: secrets.mailFrom }) } : {}),
     logger: createLogger(),
     clock: createClock(),
     rng: createRng(),

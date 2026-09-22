@@ -48,6 +48,14 @@ export type RouteConfig<TInput, TAuth extends RouteAuth> = {
   human?: boolean;
   /** 入力のスキーマ。無ければ検査はしない（GET で入力を持たない入口など）。 */
   input?: ZodType<TInput>;
+  /**
+   * 機能フラグ（2026-09-22 追加・feat/email-verify）。渡すと、見分けの**後**・本文を読む**前**に呼び、
+   * false なら経路が無いのと同じ 404 `{ ok:false, error:{ kind:"invalid_input" } }` を返す。
+   * 見分けを先にするのは、未ログイン 401・役割違い 403 の見え方を、ほかの入口と揃えるため
+   * （役割ごとの入口の横断の検査が、店のセッションで運営の入口は 403 と見る）。
+   * 渡さなければ何も変わらない（既存の入口の動きは1バイトも変えない）。
+   */
+  enabled?: (deps: Deps) => boolean;
   handler: (args: RouteHandlerArgs<TInput, TAuth>) => Promise<RouteHandlerResult>;
 };
 
@@ -193,6 +201,11 @@ export const defineRoute = <TInput, TAuth extends RouteAuth>(config: RouteConfig
         ctx = { auth: "admin", accountId: session.accountId };
       }
       renewCookies = await renewSession(deps, session);
+    }
+
+    // 機能フラグが降りている入口は、経路が無いのと同じ 404（lib/http/app の当たらない応答と同じ形）。
+    if (config.enabled && !config.enabled(deps)) {
+      return jsonResponse(404, { ok: false, error: { kind: "invalid_input" as InputRefusalKind } }, renewCookies);
     }
 
     const raw = await parseBody(req);

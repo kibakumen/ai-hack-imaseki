@@ -6,7 +6,7 @@ import { z } from "zod";
 import { EMAIL_MAX, EMAIL_PATTERN, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN } from "./limits";
 
 /** メールアドレス: @ をちょうど1つ、その前後に1字以上、254字以内（基準 12.4）。 */
-const emailSchema = z.string().max(EMAIL_MAX).regex(EMAIL_PATTERN);
+export const emailSchema = z.string().max(EMAIL_MAX).regex(EMAIL_PATTERN);
 
 /** パスワード: 8字以上128字以内。文字の種類は問わない（基準 12.3）。 */
 const passwordSchema = z.string().min(PASSWORD_MIN).max(PASSWORD_MAX);
@@ -53,8 +53,15 @@ export const changeEmailSchema = z.object({ email: emailSchema, currentPassword:
  */
 export const changeOwnPasswordSchema = z.object({ currentPassword: currentPasswordSchema, password: passwordSchema });
 
+/**
+ * 確認メールの送り直し（2026-09-22 追加・feat/email-verify）。今のアドレスをそのまま入れさせる——
+ * 入口は保存と比べ、違えば 400 で断る（別のアドレスへ送る道にしない）。
+ */
+export const emailVerifySchema = z.object({ email: emailSchema });
+
 export type StoreRegisterInput = z.infer<typeof storeRegisterSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
 export type ChangeOwnPasswordInput = z.infer<typeof changeOwnPasswordSchema>;
+export type EmailVerifyInput = z.infer<typeof emailVerifySchema>;

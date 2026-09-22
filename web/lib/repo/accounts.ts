@@ -62,9 +62,13 @@ export const isEmailTakenError = (error: unknown): boolean => {
   return /UNIQUE constraint failed:\s*accounts\.email/i.test(message);
 };
 
-/** メールアドレスだけを置き換える（2026-09-22 追加）。重複は表の UNIQUE が例外で教える（呼ぶ側が受ける）。 */
+/**
+ * メールアドレスだけを置き換える（2026-09-22 追加）。重複は表の UNIQUE が例外で教える（呼ぶ側が受ける）。
+ * 置き換えると「確認した時刻」（移行 0003 の列）は NULL に戻す——新しいアドレスはまだ確認していない。
+ * メールを送る口の有無にかかわらず書く（列が在れば害は無い・feat/email-verify）。
+ */
 export const updateAccountEmail = async (db: Db, accountId: string, email: string): Promise<void> => {
-  await db.prepare(`UPDATE accounts SET email = ?2 WHERE id = ?1`).bind(accountId, email).run();
+  await db.prepare(`UPDATE accounts SET email = ?2, email_verified_at = NULL WHERE id = ?1`).bind(accountId, email).run();
 };
 
 /** 1つの文にまとめて流すための文（店の登録は店・アカウント・セッションを1度に書く）。 */

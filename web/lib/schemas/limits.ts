@@ -201,3 +201,17 @@ export const PUSH_KEY_MAX = 255;
  * 上限そのものなので、**これより長くしない**（値は基準のまま・AI判断ではない）。
  */
 export const ARRIVALS_REFRESH_MS = 30_000;
+
+// メールアドレスの確認（2026-09-22 追加・feat/email-verify・要件に無い。値はどれも AI判断）
+/** 確認のリンクに載せる乱数の長さ（16バイト→base64url 22字。セッションの値と同じ） */
+export const EMAIL_VERIFY_TOKEN_BYTES = 16;
+/** 確認のリンクの期限（24時間） */
+export const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+/** リンクの token として受ける値の長さの上限（断るためではなく、長すぎる値を早く切るため） */
+export const EMAIL_VERIFY_TOKEN_MAX_LENGTH = 128;
+/**
+ * 同じ接続元からの確認メールの送り直しは1時間に5回まで。外へメールを出す入口なので、
+ * 抑止が無いと店1つが送信元の評判を好きなだけ削れる（実測の裏付けは無い）。
+ */
+export const EMAIL_VERIFY_RATE_LIMIT = 5;
+export const EMAIL_VERIFY_RATE_WINDOW_MS = 60 * 60 * 1000;

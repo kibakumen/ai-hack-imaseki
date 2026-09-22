@@ -41,6 +41,9 @@ const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   store_banned: () => "運営に止められているため、完了済みにできません。",
   human_check_failed: () => "人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください。",
   rate_limited: () => "しばらく待ってからお試しください。",
+  // メールアドレスの確認（2026-09-22 追加）。期限切れ・使用済み・無い、のどれでも同じ文（在る無しを教えない）。
+  verification_failed: () => "この確認のリンクは使えません。店の画面から確認メールを送り直してください。",
+  mail_not_sent: () => "確認メールを送れませんでした。しばらくしてからお試しください。",
   location_required: () => "場所を文字で入れてください。",
   network: () => "通信に失敗しました。もう一度お試しください。",
 };
@@ -183,4 +186,13 @@ const RESERVATION_STATUS_LABELS: Record<string, string> = {
 export const RESERVATION_STATUS_TEXTS = {
   /** 知らない語が来ても表示を止めない（黙って空欄にせず、分からないことを出す）。 */
   label: (status: string): string => RESERVATION_STATUS_LABELS[status] ?? "状態が分かりません",
+} as const;
+
+// ---------- メールの文（2026-09-22 追加・メールアドレスの確認） ----------
+// 送る文もここに置く（決まった文のただ1つの置き場）。手続き usecases/emailVerification が読む。
+export const MAIL_TEXTS = {
+  emailVerification: (link: string): { subject: string; text: string } => ({
+    subject: "【AkI席】メールアドレスの確認",
+    text: ["AkI席 に登録したメールアドレスの確認です。", "次のリンクを開くと確認が完了します（24時間まで有効）。", "", link, "", "このメールに覚えがない場合は、そのまま捨ててください。"].join("\n"),
+  }),
 } as const;

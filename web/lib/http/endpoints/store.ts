@@ -3,6 +3,7 @@
 // ⚠️ 店の情報・クーポン・許可書・カード・オファーの入口は、タスク5以降がこのまとまりへ足す。
 
 import { registerStore } from "../../usecases/registerStore";
+import { isEmailVerified } from "../../usecases/emailVerification";
 import { storeHome } from "../../usecases/storeHome";
 import { storeRegisterSchema } from "../../schemas/account";
 import { SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, serializeCookie } from "../cookies";
@@ -37,8 +38,11 @@ const storeHomeRoute = defineRoute({
     const home = await storeHome(deps, ctx.storeId);
     // 見分けの直後に店が消えた場合だけ null。店のデータは返さない。
     if (!home) return { status: 401, body: { ok: false, error: { kind: "invalid_input" } } };
+    // メールアドレスの確認（feat/email-verify）: メールを送る口が在るときだけ `emailVerified` を足す。
+    // 無いときは項目そのものを足さない＝応答の形は前と1バイトも変わらない（鍵を外せば表示が消えるだけ）。
+    const verified = deps.mailer ? { emailVerified: await isEmailVerified(deps, ctx.accountId) } : {};
     // 【最終日】仮のパスワードで入った店には、新しいパスワードを決めるよう画面が求める（基準 14.14）。
-    return { status: 200, body: { ...home, mustChangePassword: ctx.mustChangePassword } };
+    return { status: 200, body: { ...home, mustChangePassword: ctx.mustChangePassword, ...verified } };
   },
 });
 

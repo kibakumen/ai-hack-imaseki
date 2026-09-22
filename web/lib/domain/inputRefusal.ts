@@ -37,6 +37,12 @@ export const INPUT_REFUSAL_KINDS = [
   "store_banned",
   "human_check_failed",
   "rate_limited",
+  // メールアドレスの確認（2026-09-22 追加・feat/email-verify）。
+  // verification_failed … 確認のリンクが期限切れ・もう使われた・そもそも無い。**3つを同じ語で返す**
+  //                        （在る無しを教えない）。文に「不正」「誤り」「無効」を含めない（domain/texts の方針）。
+  // mail_not_sent … 確認メールを外へ送れなかった（Resend が断った・通信の失敗）。
+  "verification_failed",
+  "mail_not_sent",
   // 画面の側だけで作る2つ（client/geolocation・client/api が返す）
   "location_required",
   "network",
