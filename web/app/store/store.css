@@ -49,8 +49,12 @@
   text-decoration: none;
 }
 
-.store-tab:hover {
-  color: var(--color-text);
+/* 縁だけ（soft）のホバー——地と文字の決めは `app/globals.css` の --hover-soft-* */
+@media (hover: hover) {
+  .store-tab:hover {
+    background: var(--hover-soft-bg);
+    color: var(--hover-soft-text);
+  }
 }
 
 .store-tab[aria-current="page"] {

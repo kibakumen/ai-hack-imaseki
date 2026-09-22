@@ -694,10 +694,36 @@
   font-weight: 700;
   padding: 0.55rem 1.1rem;
 }
-/* 欄の中身が現在地から離れたとき、いつでも戻せることを示す（本人の指摘） */
+/* 欄の中身が現在地から離れたとき、いつでも戻せることを示す（本人の指摘）。
+   2026-09-22 本人の指摘「波打つ演出がうるさい」で控えめに変更:
+   ①無限ループを2回だけに絞る（変化した瞬間に気づけば十分・入力中ずっと動かさない）
+   ②振れ幅を縁の広がり7px→4px・不透明度45%→30%に縮める（脈自体を小さく）
+   ③2回終わったあとは下の静的な box-shadow（4px・22%）に自然に戻り、
+     「いつでも戻せる」ことは動きでなく縁の色で示し続ける（状態で見せる） */
 .use-location-away {
-  animation: attention-pulse 1.8s ease-in-out infinite;
+  animation: location-away-pulse 1.8s ease-in-out 2;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+/* 2026-09-22 本人の指摘「波打つ演出がうるさい」への対応。
+   globals.css の共有 `attention-pulse`（縁 7px・不透明度45%・infinite）は他の担当が
+   同時に触っている可能性があるため触らず、ここに専用の控えめな脈を独立定義した:
+   ①無限ループをやめ2回だけ ②縁の広がり 7px→4px ③不透明度 45%→30%。
+   2回鳴った後は上の静的な box-shadow（4px・22%）に戻り、以後は動きでなく
+   縁の色で「戻せる」ことを示し続ける（状態で見せる・完全に消してはいない） */
+@keyframes location-away-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .use-location-away {
+    animation: none;
+  }
 }
 .locate-status {
   font-size: 0.8rem;
@@ -736,10 +762,17 @@
   line-height: 1.4;
   padding: 0.55rem 0.75rem;
 }
-/* キーボードで選んでいる行と、指している行を同じ見せ方に */
-.place-suggest__item[aria-selected="true"],
-.place-suggest__item:hover {
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-background));
+/* キーボードで選んでいる行と、指している行を同じ見せ方に（縁だけ soft の決め＝`app/globals.css` の --hover-soft-*。
+   地だけ変えて文字を置き去りにしない。hover の側だけ `@media (hover: hover)` で囲う） */
+.place-suggest__item[aria-selected="true"] {
+  background: var(--hover-soft-bg);
+  color: var(--hover-soft-text);
+}
+@media (hover: hover) {
+  .place-suggest__item:hover {
+    background: var(--hover-soft-bg);
+    color: var(--hover-soft-text);
+  }
 }
 
 /* 電話番号（任意・こだわり条件のいちばん下）。注記は本文より小さく淡く */

@@ -100,7 +100,7 @@ const CancelButton = ({ reservationId, onChanged }: { reservationId: string; onC
         確保を取り消す
       </button>
       {confirming && (
-        <div data-testid="confirm-cancel" role="group" aria-label="取り消す前の確かめ">
+        <div className="claim-confirm" data-testid="confirm-cancel" role="group" aria-label="取り消す前の確かめ">
           <p>この確保を取り消すと、コードは使えなくなります。取り消しますか。</p>
           <button
             type="button"
@@ -122,8 +122,11 @@ const CancelButton = ({ reservationId, onChanged }: { reservationId: string; onC
   );
 };
 
+// ⚠️ ここは以前**クラスも余白も持たない素の `<div>`** で、人数の変更と取り消しが
+// 確保の札に貼り付いて見えていた（2026-09-22 の本人の指摘「確保を取り消すボタンがカードと近すぎます」）。
+// 余白は `me.css` の `.claim-actions` が持つ。
 export const ReservationActions = ({ reservation, onChanged }: { reservation: ReservationActionsReservation; onChanged: OnChanged }) => (
-  <div>
+  <div className="claim-actions">
     <PartyForm reservationId={reservation.id} party={reservation.party} onChanged={onChanged} />
     <CancelButton reservationId={reservation.id} onChanged={onChanged} />
   </div>

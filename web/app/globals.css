@@ -51,6 +51,22 @@
   --shadow-card: 0 6px 18px color-mix(in srgb, var(--color-accent) 14%, transparent);
   --shadow-raised: 0 10px 28px color-mix(in srgb, var(--color-accent) 22%, transparent);
   --shadow-float: 0 16px 40px color-mix(in srgb, var(--color-text) 28%, transparent);
+
+  /* ---- ホバーの決め（2026-09-22 本人の指摘「ホバーしたときに内容の文字が見えなくなる」）----
+     地と文字は必ず一緒に動かす。ホバーの見せ方は次の2種類だけで、各画面の CSS は
+     この変数を使う（同じ計算を別ファイルに書き写さない）:
+       塗り（filled）  : 地が濃く文字が --color-accent-text のもの（button・.entry__primary）。
+                         地を「少し濃く」する。薄くしない——薄くすると白い文字が沈む。
+                         filter なので勾配の地にもそのまま効き、文字の色は変わらない。
+       縁だけ（soft）  : 地が薄く文字が濃いもの（nav の札・タブ・候補の行・押されていない絞り込み）。
+                         地に差し色をほんの少し混ぜ、文字は --hover-soft-text で明示する。
+     どちらも --color-* から導くので、暗い設定では自動で暗い側の値になる（下の分岐で上書きしない）。
+     暗い設定では差し色が明るい橙・文字が濃い茶なので、塗りを 0.92 倍に暗くしても文字は読める。
+     hover の規則は全部 `@media (hover: hover)` の中に置く——指で触る端末で押した後に色が貼り付くのを防ぐ。 */
+  --hover-filled-filter: brightness(0.92) saturate(1.08);
+  --hover-soft-bg: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  --hover-soft-border: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  --hover-soft-text: var(--color-text);
 }
 
 /* ---- 色（暗い設定） ----
@@ -163,8 +179,12 @@ a {
   text-underline-offset: 0.2em;
 }
 
-a:hover {
-  color: var(--color-accent-strong);
+/* 文字だけのリンク。`:where` で詳細度を落とす——class を1つ持つ部品（.entry__primary 等）が
+   自分のホバーを書いたとき、ここに負けないようにする。 */
+@media (hover: hover) {
+  :where(a):hover {
+    color: var(--color-accent-strong);
+  }
 }
 
 nav {
@@ -184,9 +204,15 @@ nav > a {
   text-decoration: none;
 }
 
-nav > a:hover {
-  background: var(--color-accent-soft);
-  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+/* 縁だけ（soft）の札。`nav > a:hover` のままだと詳細度 (0,1,2) で `.entry__primary` (0,1,0) に勝ち、
+   塗りの主ボタンの地だけを薄い色へ塗り替えて「白地に白文字」にしていた（本人の指摘の実体）。
+   `:where(a)` で (0,1,1) に落とし、`.entry__primary:hover` (0,2,0) が勝つようにする。 */
+@media (hover: hover) {
+  nav > :where(a):hover {
+    background: var(--hover-soft-bg);
+    border-color: var(--hover-soft-border);
+    color: var(--color-accent-strong);
+  }
 }
 
 /* ---------- 入力の面 ---------- */
@@ -330,8 +356,11 @@ button {
   transition: filter 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 
-button:hover:not(:disabled) {
-  filter: brightness(1.06);
+/* 塗り（filled）。地を少し濃くするだけで、文字（--color-accent-text）はそのまま */
+@media (hover: hover) {
+  button:hover:not(:disabled) {
+    filter: var(--hover-filled-filter);
+  }
 }
 
 button:active:not(:disabled) {
@@ -410,9 +439,13 @@ form > button[type="submit"] {
   text-decoration: none;
 }
 
-.entry__primary:hover {
-  color: var(--color-accent-text);
-  filter: brightness(1.06);
+/* 塗り。`nav > a` の soft ホバーより詳細度が高い（(0,2,0) > (0,1,1)）ので、地も文字もここが決める */
+@media (hover: hover) {
+  .entry__primary:hover {
+    background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 50%, var(--color-accent)));
+    color: var(--color-accent-text);
+    filter: var(--hover-filled-filter);
+  }
 }
 
 .entry__secondary {
@@ -481,9 +514,14 @@ form > button[type="submit"] {
   z-index: 40;
 }
 
-.theme-toggle:hover:not(:disabled) {
-  filter: none;
-  transform: scale(1.05);
+/* 縁だけ（soft）。中身は絵文字なので文字色は関係ないが、塗りの filter は打ち消して soft の地にする */
+@media (hover: hover) {
+  .theme-toggle:hover:not(:disabled) {
+    background: var(--hover-soft-bg);
+    border-color: var(--hover-soft-border);
+    filter: none;
+    transform: scale(1.05);
+  }
 }
 
 .theme-toggle:focus-visible {
