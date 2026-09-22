@@ -133,7 +133,9 @@ export const StoreHome = () => {
 
       {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={reload} />}
 
-      {home.offer ? <OfferPanel offer={home.offer} trend={trend} onChanged={reload} /> : null}
+      {/* `key` はオファーの番号——クーポンを選び直して公開し直すと別のオファーになるので、
+          ダイヤルと選択を新しいオファーの値から作り直す（同じオファーの取り直しでは残す） */}
+      {home.offer ? <OfferPanel key={home.offer.id} offer={home.offer} coupons={home.coupons} trend={trend} onChanged={reload} /> : null}
     </main>
   );
 };

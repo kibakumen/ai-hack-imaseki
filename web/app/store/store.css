@@ -631,9 +631,10 @@
 }
 
 @media (hover: hover) {
-  .store-coupon:not(.store-coupon--static):hover {
+  .store-coupon:hover {
     background: var(--hover-soft-bg);
     border-color: var(--hover-soft-border);
+    filter: none;
   }
 }
 
@@ -643,12 +644,24 @@
   border-style: solid;
 }
 
-.store-coupon--static {
-  cursor: default;
+/* 公開中のカードの札は `<button role="checkbox">`（受け入れ検査 19.11 が input[type=checkbox] を
+   数えるため）。`globals.css` の button の塗りを外して、ラベルの札と同じ見た目にする */
+.store-coupon--toggle {
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  width: 100%;
 }
 
-.store-coupon:has(.store-coupon__input:focus-visible) {
+.store-coupon--toggle:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.store-coupon:has(.store-coupon__input:focus-visible),
+.store-coupon--toggle:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  outline: none;
 }
 
 /* 本物のチェックボックスは目に出さない（DOM には残す） */
@@ -893,39 +906,31 @@
   padding: 0.625rem 1.125rem;
 }
 
-.store-two-col {
+/* カードの中身——左が「数を変える」（主役・広い列）、右が「今日の動き」。狭い画面では縦に積む
+   （2026-09-22 3回目の指摘: 表示だけの札4枚を撤去し、今の値は「数を変える」の中で読む） */
+.store-offer__body {
+  align-items: start;
   display: grid;
   gap: 1rem;
 }
 
-@media (min-width: 48rem) {
-  .store-two-col {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+@media (min-width: 52rem) {
+  .store-offer__body {
+    grid-template-columns: minmax(0, 1.6fr) minmax(14rem, 1fr);
   }
 }
 
-.store-col {
-  display: grid;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.store-col--aside {
-  align-content: start;
+.store-offer__aside {
   background: color-mix(in srgb, var(--color-surface) 70%, var(--color-background));
   border: 1px solid var(--color-border);
   border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
   padding: 0.75rem;
 }
 
-/* 今の中身の4項目。「残り」は橙の地に白抜きでいちばん大きい */
-.store-facts {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
-}
-
+/* 「今日の動き」の凡例の2枠（受け取られた・配信数） */
 .store-fact {
   background: var(--color-background);
   border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
@@ -934,24 +939,6 @@
   gap: 0.125rem;
   padding: 0.625rem 0.75rem;
   position: relative;
-}
-
-.store-fact--hero {
-  background: linear-gradient(150deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 80%, var(--color-text)));
-  border-color: transparent;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--color-accent) 30%, transparent);
-  color: var(--color-accent-text);
-}
-
-.store-fact--hero .store-fact__label,
-.store-fact--hero .store-fact__unit {
-  color: var(--color-accent-text);
-  opacity: 0.85;
-}
-
-/* 変える前と後が分かるように、変えた項目は縁を橙の点線に */
-.store-fact--changed {
-  border: 1.5px dashed var(--color-accent);
 }
 
 .store-fact__label {
@@ -975,28 +962,6 @@
   margin: 0;
 }
 
-.store-fact--hero .store-fact__value {
-  color: var(--color-accent-text);
-  font-size: 2.5rem;
-}
-
-.store-fact__value--time {
-  font-size: 1.5rem;
-}
-
-.store-fact__unit {
-  color: var(--color-text-muted);
-  font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.store-fact__next {
-  color: var(--color-accent);
-  font-size: 1rem;
-  font-weight: 800;
-}
-
 /* ---------- 数を変える札（回して決めて、更新する1つで一括） ---------- */
 
 .store-tune {
@@ -1005,16 +970,64 @@
   border-radius: 1rem;
   display: grid;
   gap: 1rem;
+  min-width: 0;
   padding: 1rem;
 }
 
+/* 見出しの行——左に見出しと注、右に「残り」の札（操作できない値はこれ1つだけ） */
 .store-tune__head {
-  display: grid;
-  gap: 0.125rem;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
 }
 
-.store-tune__head > h3 {
+.store-tune__title {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.store-tune__title > h3 {
   margin: 0;
+}
+
+/* 「残り」——橙の地に白抜き。店がいちばん見る数なので、いちばん濃く・大きく */
+.store-remaining {
+  align-items: baseline;
+  background: linear-gradient(150deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 80%, var(--color-text)));
+  border-radius: 0.875rem;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  color: var(--color-accent-text);
+  display: inline-flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+}
+
+.store-remaining__label {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.store-remaining__value {
+  align-items: baseline;
+  display: inline-flex;
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  gap: 0.25rem;
+  line-height: 1;
+}
+
+.store-remaining__unit {
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  opacity: 0.85;
 }
 
 .store-tune__dials {
@@ -1102,6 +1115,32 @@
 .store-tune__arrow {
   color: var(--color-accent);
   font-weight: 800;
+}
+
+/* 見せるクーポン——登録してある全部を横並びの札に。選び直した間は縁が橙の点線（ダイヤルと同じ印） */
+.store-tune__coupons {
+  border: 1.5px solid transparent;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.5rem;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.store-tune__coupons-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.store-empty--coupons {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
 }
 
 .store-tune__foot {
