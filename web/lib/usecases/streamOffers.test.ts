@@ -2,8 +2,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Deps, PitchResult } from "../ports";
 
-const SELECTION = JSON.stringify({ selections: [{ storeId: "store-1", reason: "近くて好みに合います" }] });
-
 /** 取得の手続きを偽物にして、この層（配信）だけを見る */
 vi.mock("./fetchOffers", () => ({
   fetchOffers: async () => ({
@@ -60,11 +58,12 @@ describe("少しずつ届ける取得", () => {
     expect(lines[1]).toEqual({ type: "pitch", storeId: "store-1", reason: "近くて好みに合います", source: "fallback" });
   });
 
-  it("選定の出力の検査を通った文だけが客へ出る（AI の本文をそのまま流さない）", async () => {
-    expect(SELECTION).toContain("近くて好みに合います");
+  it("紹介文が決定論のガードに2回落ちたら、書き手の本文は客へ出さず、選定の理由（決まった文）へ倒れる", async () => {
+    // 以前はこの検査の名前が「選定の出力の検査」で、中身は自分の定数を確かめていただけだった（設計-04）
     const result = await buildOffersStream(makeDeps({ write: async () => ok("口コミでも人気です"), judge: async () => ok('{"ok":true,"reason":""}') }), "c1", { party: 2 });
     const lines = result.ok ? await readLines(result.stream) : [];
     // 決定論のガードに2回落ちるので、決まった文へ倒れる
     expect(lines[1]).toMatchObject({ source: "fallback", reason: "近くて好みに合います" });
+    expect(JSON.stringify(lines)).not.toContain("口コミ");
   });
 });

@@ -1,11 +1,12 @@
 // テストの準備（vitest.config.ts の setupFiles にこのファイルを置く。実行者が設定を書く）。
 // 1. fetch を「外へ出たら落とす」関数に差し替える（基準 31.3）。手元の loopback だけは通す（miniflare の内部通信のため）。
 // 2. 着手済みで未完了のタスクに、その番号を名乗る受け入れ検査のブロックが0件なら例外を投げる（第7周の本人判断の受け皿）。
+//    タスクごとの絞りを効かせる実行（`ACCEPTANCE_TASK_GATE=1`）だけで見る（_tasks.ts の注）。
 //    ブロックが別のタスクの番号を名乗って skip される抜け道を、静的な走査で塞ぐ。
 import fs from "node:fs";
 import path from "node:path";
 import { vi } from "vitest";
-import { RUNS_DIR, taskStates } from "./_tasks";
+import { RUNS_DIR, taskGateEnabled, taskStates } from "./_tasks";
 
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 120_000 });
 
@@ -37,7 +38,7 @@ const blocksByTask = (): Map<string, number> => {
   return counts;
 };
 
-if (fs.existsSync(RUNS_DIR)) {
+if (taskGateEnabled()) {
   const states = taskStates();
   const counts = blocksByTask();
   const missing: string[] = [];

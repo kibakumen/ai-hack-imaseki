@@ -15,5 +15,5 @@
     "types": ["node", "vitest/globals"]
   },
   "include": ["web/**/*.ts", "web/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "acceptance-globals.d.ts"],
-  "exclude": ["node_modules", "demo", "sprint", "tests/acceptance/v2/r11-expiry.ui.test.tsx", "tests/acceptance/v2/r26-report.ui.test.tsx"]
+  "exclude": ["node_modules", "demo", "sprint"]
 }

@@ -17,6 +17,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FetchForm } from "./FetchForm";
+import { replyToResponse, streamOfResult, type FakeReply } from "../../../tests/acceptance/v2/_fakes";
 
 /** 現在地は取れない場面にしておく（欄が自動で埋まらないので、打つ検査が素直になる） */
 vi.mock("../../lib/client/geolocation", () => ({
@@ -24,7 +25,7 @@ vi.mock("../../lib/client/geolocation", () => ({
 }));
 
 type Call = { method: string; url: URL; body: Record<string, unknown> | null };
-type Answer = { status?: number; json?: unknown };
+type Answer = FakeReply;
 
 const installFetch = (respond: (method: string, url: URL) => Answer | Promise<Answer>) => {
   const calls: Call[] = [];
@@ -34,13 +35,13 @@ const installFetch = (respond: (method: string, url: URL) => Answer | Promise<An
     const method = (init?.method ?? "GET").toUpperCase();
     calls.push({ method, url, body: typeof init?.body === "string" ? JSON.parse(init.body) : null });
     const out = await respond(method, url);
-    return new Response(JSON.stringify(out.json ?? { ok: true }), { status: out.status ?? 200, headers: { "content-type": "application/json" } });
+    return replyToResponse(out);
   }) as typeof fetch;
   return { calls, restore: () => { globalThis.fetch = previous; } };
 };
 
 const suggestCalls = (calls: Call[]) => calls.filter((c) => c.url.pathname === "/api/customer/place-suggest");
-const fetchCalls = (calls: Call[]) => calls.filter((c) => c.method === "POST" && c.url.pathname === "/api/customer/fetch");
+const fetchCalls = (calls: Call[]) => calls.filter((c) => c.method === "POST" && (c.url.pathname === "/api/customer/fetch" || c.url.pathname === "/api/customer/fetch/stream"));
 
 const SIX = ["東京都渋谷区渋谷２丁目２４ 渋谷駅", "渋谷区役所", "渋谷ヒカリエ", "渋谷スクランブルスクエア", "渋谷マークシティ", "渋谷ストリーム"];
 
@@ -60,7 +61,8 @@ describe("場所の欄の候補", () => {
   const renderForm = (respond?: (q: string) => Answer | Promise<Answer>) => {
     fake = installFetch((method, url) => {
       if (url.pathname === "/api/customer/place-suggest") return respond ? respond(url.searchParams.get("q") ?? "") : { json: { suggestions: SIX } };
-      if (url.pathname === "/api/customer/fetch/stream") return { status: 404, json: { ok: false } };
+      // 取得は本番と同じく少しずつ届く入口（NDJSON）で返す（2026-09-25 設計-03。以前はわざと 404 にして普通の入口へ倒していた）
+      if (method === "POST" && url.pathname === "/api/customer/fetch/stream") return { stream: streamOfResult({ fetchId: "f1", items: [] }) };
       if (method === "POST" && url.pathname === "/api/customer/fetch") return { json: { ok: true, fetchId: "f1", items: [] } };
       return { status: 404, json: { ok: false } };
     });

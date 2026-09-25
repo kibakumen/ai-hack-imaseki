@@ -13,19 +13,20 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CustomerApp } from "./CustomerApp";
+import { replyToResponse, streamOfResult, type FakeReply } from "../../../tests/acceptance/v2/_fakes";
 
 vi.mock("../../lib/client/geolocation", () => ({
   currentLocation: async () => ({ ok: false, error: { kind: "location_required", fields: [{ name: "place", reason: "required" }] } }),
 }));
 
-type Answer = { status?: number; json?: unknown };
+type Answer = FakeReply;
 
 const installFetch = (respond: (method: string, path: string) => Answer) => {
   const previous = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://localhost");
     const out = respond((init?.method ?? "GET").toUpperCase(), url.pathname);
-    return new Response(JSON.stringify(out.json ?? { ok: true }), { status: out.status ?? 200, headers: { "content-type": "application/json" } });
+    return replyToResponse(out);
   }) as typeof fetch;
   return () => {
     globalThis.fetch = previous;
@@ -43,17 +44,28 @@ describe("取得の画面の入れ物", () => {
     restore = null;
   });
 
-  const renderApp = async (items: unknown[]) => {
+  /**
+   * 取得は本番と同じく少しずつ届く入口（NDJSON）で返す（2026-09-25 設計-03。以前はわざと 404 にして普通の入口へ倒していた）。
+   * `streamMissing` は、少しずつ届く入口を持たないサーバー（404）の場面——普通の入口へ倒れる道を見るときだけ使う。
+   */
+  const renderApp = async (items: unknown[], opts: { streamMissing?: boolean } = {}) => {
+    const calls: Array<{ method: string; path: string }> = [];
     restore = installFetch((method, path) => {
+      calls.push({ method, path });
       if (path === "/api/config/public") return { json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } };
       if (path === "/api/customer/home") return { json: HOME };
-      if (path === "/api/customer/fetch/stream") return { status: 404, json: { ok: false } };
+      if (method === "POST" && path === "/api/customer/fetch/stream") {
+        if (opts.streamMissing) return { status: 404, json: { ok: false, error: { kind: "not_found" } } };
+        return { stream: streamOfResult({ fetchId: "f1", items: items as Array<{ storeId: string; reason: string }> }) };
+      }
       if (method === "POST" && path === "/api/customer/fetch") return { json: { ok: true, fetchId: "f1", items } };
       return { status: 404, json: { ok: false } };
     });
     render(<CustomerApp />);
     await screen.findByTestId("btn-fetch");
+    return calls;
   };
+  const postsTo = (calls: Array<{ method: string; path: string }>, path: string) => calls.filter((c) => c.method === "POST" && c.path === path).length;
 
   it("人数は最初から 1 が入っている", async () => {
     await renderApp([]);
@@ -102,5 +114,23 @@ describe("取得の画面の入れ物", () => {
     // 探し直すと閉じ直す
     fireEvent.click(screen.getByTestId("btn-fetch"));
     await waitFor(() => expect(screen.getByTestId("form-fetch").className).toContain("fetch-form--collapsed"));
+  });
+
+  it("少しずつ届く入口が無い（404）サーバーでは、普通の入口へ1回だけ倒れて結果のカードが出る", async () => {
+    const calls = await renderApp([ITEM], { streamMissing: true });
+    fireEvent.change(screen.getByTestId("field-place"), { target: { value: "渋谷" } });
+    fireEvent.click(screen.getByTestId("btn-fetch"));
+    await screen.findByTestId("result-o1");
+    expect(postsTo(calls, "/api/customer/fetch/stream")).toBe(1);
+    expect(postsTo(calls, "/api/customer/fetch")).toBe(1);
+  });
+
+  it("少しずつ届く入口が働くサーバーでは、普通の入口を呼ばない", async () => {
+    const calls = await renderApp([ITEM]);
+    fireEvent.change(screen.getByTestId("field-place"), { target: { value: "渋谷" } });
+    fireEvent.click(screen.getByTestId("btn-fetch"));
+    await screen.findByTestId("result-o1");
+    expect(postsTo(calls, "/api/customer/fetch/stream")).toBe(1);
+    expect(postsTo(calls, "/api/customer/fetch")).toBe(0);
   });
 });

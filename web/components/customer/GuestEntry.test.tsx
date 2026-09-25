@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
 // 「開いた瞬間に今すぐ探すボタンを押せる」ことの検査（2026-09-22 の本人の指摘）。
 //
-// ⚠️ **なぜ単体の検査を置いたか**: 受け入れ検査 `r01-customer-register.ui.test.tsx` は
-// 「ホームが 401 なら登録の入力を出す」（基準 1.10・1.11）を **`CustomerApp` に対して**見ており、
-// 部品の描き方はそのまま正しい。変えたのは「実際のアプリが 401 のままにならないこと」だけで、
-// それを担うのが `GuestEntry`。受け入れ検査がこの1枚を描かないので、ここで振る舞いを固定する。
+// 受け入れ検査 `r01-customer-register.ui.test.tsx` も本番の入口としてこの1枚を描く（2026-09-25 設計-03）。
+// こちらは部品の細部（呼び名と仮の値の形・二重に送らないこと）を見る。
 //
 // 見るのは4つ:
 //   1. 識別子が無ければ、客に何も聞かずに登録を送る（呼び名は自動・電話番号は仮の値）
@@ -16,6 +14,7 @@ import React from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { GuestEntry } from "./GuestEntry";
+import { unauthorized as unauthorizedReply } from "../../../tests/acceptance/v2/_fakes";
 
 type FakeResponse = { status?: number; json?: unknown };
 
@@ -34,7 +33,8 @@ const installFetch = (respond: (method: string, path: string) => FakeResponse) =
   return { calls, restore: () => { globalThis.fetch = previous; } };
 };
 
-const unauthorized: FakeResponse = { status: 401, json: { ok: false, error: { kind: "unauthorized" } } };
+/** 未ログインの 401（形は受け入れ検査の道具の1か所・入口の実物と同じ） */
+const unauthorized: FakeResponse = unauthorizedReply();
 const publicConfig: FakeResponse = { json: { turnstileSiteKey: "site-key-test", vapidPublicKey: "v", contactEmail: null } };
 /** 取得の画面を出すホーム（客は登録済み）。 */
 const homeFetch: FakeResponse = { json: { kind: "fetch", profile: { nickname: "guest-abc123", phone: "0000000000", genres: [], budgetMax: null } } };

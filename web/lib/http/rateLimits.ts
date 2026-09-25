@@ -70,6 +70,9 @@ const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
 
 export const rateRuleFor = (method: string, path: string): RateRule | null => RULES_BY_ROUTE.get(`${method} ${path}`) ?? null;
 
+/** 抑止を掛ける入口の一覧（`<METHOD> <path>`）。表の経路が実在の入口と一致するかを検査が見張る */
+export const rateLimitedRoutes = (): string[] => [...RULES_BY_ROUTE.keys()];
+
 /** 鍵を作るのに要る材料。defineRoute が見分けと入力の検査を終えた時点の値を渡す。 */
 export type RateKeySource = {
   /** Cloudflare が付ける接続元（実行者への契約: 連打の抑止は cf-connecting-ip で数える） */

@@ -83,7 +83,7 @@ describeTask("24", "運営の数字の入口（33.4）", () => {
     expect(m.json.reservations).toEqual({ total: 2, expiredRate: 0.5 });
     expect(a.reservation.id).toBeTruthy();
     ctx.ai.respond(() => ({ ok: false, error: "down" }));
-    await fetchOffers(a.customer.api, { party: 2 });
+    await fetchOffers(a.customer.api, { party: 2, ...a.at });
     const m2 = await ctx.admin!.api.get("/api/admin/metrics");
     expect(m2.json.fetch.fellBack).toBe(m.json.fetch.fellBack + 1);
     expect(m2.json.ai.failed).toBe(m.json.ai.failed + 1);

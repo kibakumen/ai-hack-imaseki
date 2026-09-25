@@ -1,7 +1,7 @@
 // 要件27 提示と選択の記録。27.1・27.2・27.5・27.6 はタスク11、27.3・27.4 はタスク13（r08 にもある）、27.7 はタスク24。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { approvedStore, fetchOffers, makeCtx, north, one, publishOffer, receivedScene, registerCustomer, rows, selectionText, SHIBUYA, tables, type Ctx } from "./_fakes";
+import { approvedStore, fetchOffers, makeCtx, north, one, publishOffer, receive, receivedScene, registerCustomer, requireInResults, rows, selectionText, SHIBUYA, tables, type Ctx } from "./_fakes";
 
 describeTask("11", "取得の記録（27.1・27.2・27.5・27.6）", () => {
   let ctx: Ctx;
@@ -85,8 +85,10 @@ describeTask("24", "記録は追加だけ（27.7）", () => {
     for (const t of LOG_TABLES) before[t] = await rows(ctx.db, `SELECT * FROM "${t}" ORDER BY rowid`);
     await s.customer.api.post(`/api/customer/reservations/${s.reservation.id}/party`, { party: 3 });
     await s.customer.api.post(`/api/customer/reservations/${s.reservation.id}/cancel`, {});
-    const f = await fetchOffers(s.customer.api, { party: 2 });
-    await s.customer.api.post("/api/customer/reservations", { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId });
+    // 取り消したあとの受け取り直しも、店の場所で探して結果に出たオファーを受け取る（_types.ts の約束7）
+    const f = await fetchOffers(s.customer.api, { party: 2, ...s.at });
+    requireInResults(f, s.offer.id);
+    expect((await receive(s.customer.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId })).status).toBe(200);
     await s.store.api.post("/api/store/offers/current/stop", {});
     await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
     await ctx.admin!.api.get("/api/admin/metrics");

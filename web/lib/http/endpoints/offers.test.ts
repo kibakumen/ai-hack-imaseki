@@ -7,10 +7,8 @@
 // 店の情報・許可書・カード・承認の入口（タスク5・6・7・8）を通る。この検査は**店の行を直接置いて**
 // 同じ筋を見るので、それらが揃う前でも走る。揃ったあとも、公開の手続きだけを狭く見る検査として残す。
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { fakeClock, openDb } from "../../../../tests/acceptance/v2/_fakes";
 import { createHasher, createRng } from "../../adapters/webcrypto";
 import type { Deps } from "../../ports";
 import { createApp } from "../app";
@@ -31,29 +29,11 @@ type Result = { status: number; json: any };
 let db: Db;
 let dispose: () => Promise<void>;
 let app: App;
-let clockNow = new Date(T0);
+/** 偽の時計（受け入れ検査の道具と同じもの・設計-19。写しを作らない） */
+const clock = fakeClock(T0);
 let seq = 0;
 
 const hasher = createHasher();
-
-const openDb = async () => {
-  const { getPlatformProxy } = await import("wrangler");
-  const web = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
-  const persist = fs.mkdtempSync(path.join(os.tmpdir(), "ai-hack-offers-"));
-  const proxy = await getPlatformProxy<{ DB: Db }>({ configPath: path.join(web, "wrangler.jsonc"), persist: { path: persist } });
-  const dir = path.join(web, "migrations");
-  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    const sql = fs.readFileSync(path.join(dir, file), "utf8").replace(/--[^\n]*/g, "");
-    for (const statement of sql.split(";").map((s) => s.trim()).filter(Boolean)) await proxy.env.DB.prepare(statement).run();
-  }
-  return {
-    db: proxy.env.DB,
-    dispose: async () => {
-      await proxy.dispose();
-      fs.rmSync(persist, { recursive: true, force: true });
-    },
-  };
-};
 
 const rows = async (sql: string, ...params: unknown[]): Promise<any[]> => ((await db.prepare(sql).bind(...params).all()).results ?? []) as any[];
 const one = async (sql: string, ...params: unknown[]): Promise<any> => (await rows(sql, ...params))[0] ?? null;
@@ -108,7 +88,7 @@ const seedStore = async (over: { status?: string; profile?: boolean; coupons?: s
     .run();
   await db
     .prepare(`INSERT INTO sessions (token_hash, account_id, expires_at) VALUES (?1, ?2, ?3)`)
-    .bind(await hasher.sha256Hex(token), `account-${n}`, new Date(clockNow.getTime() + 25 * 60 * 60 * 1000).toISOString())
+    .bind(await hasher.sha256Hex(token), `account-${n}`, new Date(clock.now().getTime() + 25 * 60 * 60 * 1000).toISOString())
     .run();
 
   const couponIds: string[] = [];
@@ -116,7 +96,7 @@ const seedStore = async (over: { status?: string; profile?: boolean; coupons?: s
     const couponId = `coupon-${n}-${index}`;
     await db
       .prepare(`INSERT INTO coupons (id, store_id, name, note, created_at) VALUES (?1, ?2, ?3, '', ?4)`)
-      .bind(couponId, id, name, new Date(clockNow.getTime() + index).toISOString())
+      .bind(couponId, id, name, new Date(clock.now().getTime() + index).toISOString())
       .run();
     couponIds.push(couponId);
   }
@@ -134,7 +114,7 @@ beforeAll(async () => {
   dispose = opened.dispose;
   const deps = {
     db,
-    clock: { now: () => clockNow, after: () => new Promise<void>(() => {}) },
+    clock,
     rng: createRng(),
     hasher,
   } as unknown as Deps;
@@ -147,7 +127,7 @@ afterAll(async () => {
 
 describe("POST /api/store/offers（公開）", () => {
   it("17.1・17.2・18.10 公開でき、ホームに5項目が出る。クーポン0個の店も公開できる", async () => {
-    clockNow = new Date(jst("15:00"));
+    clock.set(jst("15:00"));
     const store = await seedStore({ coupons: ["生ビール", "デザート"] });
     const published = await publish(store, { couponIds: [store.couponIds[0]], capacity: 5, partyMax: 6, until: "22:30" });
     expect(published.status).toBe(201);
@@ -186,7 +166,7 @@ describe("POST /api/store/offers（公開）", () => {
   });
 
   it("17.5・17.6 何時まで: 今以前は in_past、枠の外は over_window、日付をまたぐ時刻は通る", async () => {
-    clockNow = new Date(jst("15:00"));
+    clock.set(jst("15:00"));
     const cases: Array<[string, string | null]> = [
       ["15:00", "in_past"],
       ["14:59", "over_window"],
@@ -212,7 +192,7 @@ describe("POST /api/store/offers（公開）", () => {
   });
 
   it("17.9 公開中があると offer_exists。止めたあとは公開できる", async () => {
-    clockNow = new Date(jst("15:00"));
+    clock.set(jst("15:00"));
     const store = await seedStore();
     expect((await publish(store)).status).toBe(201);
     const second = await publish(store);
@@ -246,7 +226,7 @@ describe("POST /api/store/offers（公開）", () => {
 
 describe("POST /api/store/offers/current/stop（停止）", () => {
   it("17.12・17.13 止めると終わり（end_reason stopped）。2度目は offer_ended", async () => {
-    clockNow = new Date(jst("15:00"));
+    clock.set(jst("15:00"));
     const store = await seedStore();
     const offerId = (await publish(store)).json.offer.id;
     expect((await stop(store)).status).toBe(200);
@@ -260,11 +240,11 @@ describe("POST /api/store/offers/current/stop（停止）", () => {
   });
 
   it("17.14 「何時まで」を過ぎると操作なしで終わる（書き込みは起きない）", async () => {
-    clockNow = new Date(jst("15:00"));
+    clock.set(jst("15:00"));
     const store = await seedStore();
     const offerId = (await publish(store, { until: "15:10" })).json.offer.id;
     expect((await home(store)).offer.id).toBe(offerId);
-    clockNow = new Date(jst("15:11"));
+    clock.set(jst("15:11"));
     expect((await home(store)).offer).toBeNull();
     expect((await one("SELECT ended_at FROM offers WHERE id = ?1", offerId)).ended_at).toBeNull();
   });
@@ -272,22 +252,22 @@ describe("POST /api/store/offers/current/stop（停止）", () => {
 
 describe("公開中のクーポンの読み口（要件16の基準 16.5 の材料・断るのはタスク6）", () => {
   it("公開中のオファーが見せているクーポンだけが「使われている」。止めたあとは使われていない", async () => {
-    clockNow = new Date(jst("15:00"));
+    clock.set(jst("15:00"));
     const { isCouponInUse } = await import("../../repo/offers");
     const store = await seedStore({ coupons: ["見せる", "見せない"] });
     const [shown, hidden] = store.couponIds;
     await publish(store, { couponIds: [shown] });
-    const nowIso = clockNow.toISOString();
+    const nowIso = clock.now().toISOString();
     expect(await isCouponInUse(db, store.id, shown, nowIso)).toBe(true);
     expect(await isCouponInUse(db, store.id, hidden, nowIso)).toBe(false);
     await stop(store);
-    expect(await isCouponInUse(db, store.id, shown, clockNow.toISOString())).toBe(false);
+    expect(await isCouponInUse(db, store.id, shown, clock.now().toISOString())).toBe(false);
   });
 });
 
 describe("GET /api/store/home（公開のフォームの初めの値）", () => {
   it("17.17・17.20 前回の値が出て、削除したクーポンは外れる", async () => {
-    clockNow = new Date(jst("15:00"));
+    clock.set(jst("15:00"));
     const store = await seedStore({ coupons: ["a", "b"] });
     await publish(store, { capacity: 4, partyMax: 2, until: "21:00", couponIds: store.couponIds });
     await stop(store);
@@ -301,15 +281,15 @@ describe("GET /api/store/home（公開のフォームの初めの値）", () => 
   });
 
   it("17.18・17.19 前回の「何時まで」は、今を起点にした枠に在れば入り、外れれば空欄", async () => {
-    clockNow = new Date(jst("15:00"));
+    clock.set(jst("15:00"));
     const store = await seedStore();
     await publish(store, { until: "16:00" });
     await stop(store);
     // 15:30 の時点では、16:00 はまだ今より後で枠の内＝そのまま入る（基準 17.18）。
-    clockNow = new Date(jst("15:30"));
+    clock.set(jst("15:30"));
     expect((await home(store)).publishPrefill.until).toBe("16:00");
     // 16:30 まで進むと、16:00 は翌日と読まれて枠（翌 04:30 まで）の外＝空欄（基準 17.19）。
-    clockNow = new Date(jst("16:30"));
+    clock.set(jst("16:30"));
     expect((await home(store)).publishPrefill.until).toBeNull();
   });
 });

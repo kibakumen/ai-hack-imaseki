@@ -1,30 +1,27 @@
 // 場所の候補の入口 `GET /api/customer/place-suggest` が、入口として効くことの検査（2026-09-22）。
 //
-// ⚠️ **なぜここに置いたか**: 受け入れ検査（`tests/acceptance/v2/`）は凍結されていて1文字も変えられない。
-// この入口は要件3の外側に足した「入力の補助」なので、`web/tests/`（凍結の外）に置く。
+// この入口は要件3の外側に足した「入力の補助」なので、受け入れ検査ではなく `web/tests/` に置く。
 // 見るのは5つ:
 //   1. 客として呼ぶと、差し替え口の候補がそのまま返る（最大5件）
 //   2. 識別子が無ければ 401（客の入口）
 //   3. 短すぎる文字は入力の断り（400・invalid_input）で、外へ聞かない
-//   4. 候補の口を持たない差し替え（受け入れ検査の偽物のまま）では 200 の空
+//   4. 候補の口を持たない差し替えでは 200 の空
 //   5. 連打の抑止: 1分に60回を超えると 429（外の地図のサービスを客1人に好きなだけ踏ませない）
 //   6. 記録に打った文字が残らない（場所は個人データ）
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { fakeGeocoder, makeCtx, registerCustomer, type Ctx } from "../../tests/acceptance/v2/_fakes";
+import { fakeGeocoder, makeCtx, registerCustomer, type Ctx, type CtxWith } from "../../tests/acceptance/v2/_fakes";
 import type { Geocoder } from "../lib/ports";
 import { PLACE_SUGGEST_RATE_LIMIT } from "../lib/schemas/limits";
 
-/**
- * 受け入れ検査の契約（`_types.ts` の `Geocoder`）は凍結されていて `suggest` を知らない。
- * 実物の型（`lib/ports`）で組んでから、場面の道具へ渡すときだけ契約の型へ寄せる。
- */
+/** 実物の型（`lib/ports`）で組んでから、場面の道具へ渡すときだけ契約の型へ寄せる。 */
 type ContractGeocoder = Ctx["deps"]["geocoder"];
 
 const SUGGESTED = ["東京都渋谷区渋谷２丁目２４ 渋谷駅", "渋谷区役所", "渋谷ヒカリエ", "渋谷スクランブルスクエア", "渋谷マークシティ", "渋谷ストリーム"];
 
 describe("入口 GET /api/customer/place-suggest", () => {
-  let ctx: Ctx;
+  // 地図の口を偽物でない物（候補の口を足した写し）に替えた場面なので、偽の地図の道具（ctx.geocoder）は無い
+  let ctx: CtxWith<{ geocoder: ContractGeocoder }>;
   const asked: string[] = [];
 
   beforeAll(async () => {
@@ -68,8 +65,8 @@ describe("入口 GET /api/customer/place-suggest", () => {
     expect(asked.length).toBe(before);
   });
 
-  it("候補の口を持たない差し替え（受け入れ検査の偽物）では 200 の空——候補は補助で、断りにしない", async () => {
-    const plain = await ctx.withDeps({ geocoder: fakeGeocoder() });
+  it("候補の口を持たない差し替えでは 200 の空——候補は補助で、断りにしない", async () => {
+    const plain = await ctx.withDeps({ geocoder: fakeGeocoder({ suggest: false }) });
     const { api } = await registerCustomer(plain);
     const r = await api.get(`/api/customer/place-suggest?q=${encodeURIComponent("渋谷駅")}`);
     expect(r.status).toBe(200);

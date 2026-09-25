@@ -4,7 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { componentOf, installFakeApi, refusal, type FakeApi } from "./_fakes";
+import { componentOf, installFakeApi, refusal, unauthorized, type FakeApi } from "./_fakes";
 import { TID } from "./_types";
 
 const storeDetail = (over: Record<string, unknown> = {}) => ({
@@ -158,4 +158,12 @@ describeTask("28", "モデル別の表（第4周の追記）", () => {
     expect(table.textContent).toMatch(/33\s*%/);
     expect(screen.getByTestId("fallback-count").textContent).toMatch(/1/);
   });
+
+  it.fails("既知の不具合（横断-01）: 運営の店の一覧を開いてログインが切れていたら（401）、ログインへ戻る道が出る", async () => {
+    api = installFakeApi({ "GET /api/admin/stores": unauthorized });
+    const StoreList = await componentOf("components/admin/StoreList", "StoreList");
+    const { container } = render(<StoreList />);
+    await waitFor(() => expect(container.querySelector('a[href^="/login"]')).toBeTruthy(), { timeout: 2_000 });
+  });
 });
+

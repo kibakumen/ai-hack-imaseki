@@ -22,6 +22,10 @@ export default defineConfig({
   ],
   test: {
     environment: "node",
+    // 受け入れ検査は1ファイルごとに手元の D1（miniflare）を立て、1本あたり約0.5GB を使う。既定（CPU の数−1）で
+    // 全部を並べると、手元（メモリ10GB）では負荷で打ち切りに当たる検査が出て、main が赤のまま積まれていた（設計-02）。
+    // 速い機械では VITEST_MAX_WORKERS で広げる。
+    maxWorkers: Number(process.env.VITEST_MAX_WORKERS ?? 2),
     include: ["web/**/*.test.{ts,tsx}", "tests/acceptance/v2/**/*.test.{ts,tsx}"],
     // `acceptance-globals.ts` は、直下の `acceptance-globals.d.ts` が型で宣言している
     // 場面の準備の5つを、実行時にも globalThis へ置く（2026-09-22 タスク25 が足した）。

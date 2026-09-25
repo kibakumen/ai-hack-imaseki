@@ -26,6 +26,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FetchForm } from "./FetchForm";
+import { replyToResponse, streamOfResult, type FakeReply } from "../../../tests/acceptance/v2/_fakes";
 
 const HERE = { lat: 35.6595, lng: 139.7005 };
 const LABEL = "東京都渋谷区道玄坂1-1";
@@ -36,7 +37,7 @@ const LOCATION_REQUIRED = { ok: false, error: { kind: "location_required", field
 let located: unknown = { ok: true, ...HERE };
 vi.mock("../../lib/client/geolocation", () => ({ currentLocation: async () => located }));
 
-type FakeResponse = { status?: number; json?: unknown };
+type FakeResponse = FakeReply;
 
 type Call = { method: string; path: string; body: Record<string, unknown> | null; url: URL };
 
@@ -48,21 +49,22 @@ const installFetch = (respond: (method: string, path: string) => FakeResponse) =
     const method = (init?.method ?? "GET").toUpperCase();
     calls.push({ method, path: url.pathname, body: typeof init?.body === "string" ? JSON.parse(init.body) : null, url });
     const out = respond(method, url.pathname);
-    return new Response(JSON.stringify(out.json ?? { ok: true }), { status: out.status ?? 200, headers: { "content-type": "application/json" } });
+    return replyToResponse(out);
   }) as typeof fetch;
   return { calls, restore: () => { globalThis.fetch = previous; } };
 };
 
-/** 少しずつ届く入口は持たない場面（普通の入口へ倒れる）。 */
+/** 取得は少しずつ届く入口（NDJSON）が0件を返す場面。普通の入口は、倒れたときの受け皿として同じ0件を返す。 */
 const routes = (method: string, path: string): FakeResponse => {
   if (path === "/api/customer/place") return { json: { label: LABEL } };
-  if (path === "/api/customer/fetch/stream") return { status: 404, json: { ok: false } };
+  // 取得は本番と同じく少しずつ届く入口（NDJSON）で返す（2026-09-25 設計-03。以前はわざと 404 にして普通の入口へ倒していた）
+  if (method === "POST" && path === "/api/customer/fetch/stream") return { stream: streamOfResult({ fetchId: "f1", items: [] }) };
   if (method === "POST" && path === "/api/customer/fetch") return { json: { ok: true, fetchId: "f1", items: [] } };
   return { status: 404, json: { ok: false } };
 };
 
 const fetchBody = (calls: Call[]): Array<Record<string, unknown>> =>
-  calls.filter((c) => c.method === "POST" && c.path === "/api/customer/fetch").map((c) => c.body ?? {});
+  calls.filter((c) => c.method === "POST" && (c.path === "/api/customer/fetch" || c.path === "/api/customer/fetch/stream")).map((c) => c.body ?? {});
 
 describe("場所の欄と現在地", () => {
   let fake: ReturnType<typeof installFetch> | null = null;

@@ -1,7 +1,7 @@
 // 要件13 営業許可書とカードの登録（手続き・入口）。画面は r13-license-card.ui.test.tsx。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { GIF_BYTES, JPEG_BYTES, loadWeb, makeCtx, one, PDF_BYTES, PNG_BYTES, registerCustomer, registerStore, seedAdmin, uploadLicense, type Ctx } from "./_fakes";
+import { GIF_BYTES, JPEG_BYTES, loadWeb, makeCtx, one, PDF_BYTES, PNG_BYTES, registerCardAsPage, registerCustomer, registerStore, seedAdmin, uploadLicense, type Ctx } from "./_fakes";
 
 describeTask("7", "営業許可書とカード", () => {
   let ctx: Ctx;
@@ -82,7 +82,11 @@ describeTask("7", "営業許可書とカード", () => {
     const setup = await s.api.post("/api/store/card/setup", {});
     expect(setup.status).toBe(200);
     expect(setup.json.url).toMatch(/^https:\/\//);
-    const sessionId = setup.json.url.split("/").pop();
+    // 店が Stripe の画面で入力を終える。番号は Stripe の側の控えから取る（「番号を知っているだけの要求」を作るため。画面の道は下の既知の不具合の検査が見る）
+    ctx.card.complete(setup.json.url);
+    const sessionId = ctx.card.sessionIdOf(setup.json.url);
+    expect(sessionId).toBeTruthy();
+    expect(setup.json.url).not.toContain(sessionId);
     const wrong = await other.api.post("/api/store/card/confirm", { sessionId });
     expect(wrong.status).toBe(409);
     expect(wrong.json.error.kind).toBe("card_setup_failed");
@@ -99,5 +103,23 @@ describeTask("7", "営業許可書とカード", () => {
     const home = await s.api.get("/api/store/home");
     expect(JSON.stringify(home.json)).not.toMatch(/cs_test_|stripe\.test|4242/);
     expect((await one(ctx.db, "SELECT card_registered_at FROM stores WHERE id = ?", s.id)).card_registered_at).toBeTruthy();
+  });
+
+  it("13.9 Stripe の画面で入力を終えていない番号では登録済みにならない", async () => {
+    const s = await registerStore(ctx);
+    const setup = await s.api.post("/api/store/card/setup", {});
+    const sessionId = ctx.card.sessionIdOf(setup.json.url);
+    const early = await s.api.post("/api/store/card/confirm", { sessionId });
+    expect(early.status).toBe(409);
+    expect((await s.api.get("/api/store/home")).json.checklist.card).toBe(false);
+  });
+
+  // 画面と同じ道（開始 → Stripe で入力を終える → 戻り先へ戻る → 画面が確かめを送る）で登録済みになること。
+  // 今は戻り先に番号が載らず、控えた番号で確かめる入口も無いので、画面から登録が完了しない。
+  it.fails("既知の不具合（不具合-01）: 画面と同じ道（開始 → Stripe で入力 → 戻り先へ戻る → 確かめ）で、カードが登録済みになる", async () => {
+    const s = await registerStore(ctx);
+    const { confirm } = await registerCardAsPage(s.api);
+    expect(confirm.status).toBe(200);
+    expect((await s.api.get("/api/store/home")).json.checklist.card).toBe(true);
   });
 });

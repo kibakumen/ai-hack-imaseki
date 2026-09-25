@@ -4,7 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { describeTask } from "./_tasks";
-import { componentOf, CUSTOMER, homeFetch, installFakeApi, invalidInput, loadWeb, refusal, type FakeApi } from "./_fakes";
+import { componentOf, CUSTOMER, homeFetch, installFakeApi, invalidInput, isFetchCall, loadWeb, refusal, type FakeApi } from "./_fakes";
 import { TID } from "./_types";
 
 const publicConfig = () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } });
@@ -36,7 +36,8 @@ describeTask("12", "取得の画面", () => {
     render(<CustomerApp />);
     await screen.findByTestId(TID.btn("fetch"));
   };
-  const fetchCalls = () => api.calls.filter((c) => c.method === "POST" && c.path === "/api/customer/fetch");
+  // 取得の要求（本番の画面は少しずつ届く入口を先に使う。普通の入口へ倒れても1回と数える）
+  const fetchCalls = () => api.calls.filter(isFetchCall);
 
   it("3.13・3.12 初めの値が登録の値で、変えた値が要求に載る", async () => {
     installGeolocation({ mode: "ok", coords: { latitude: 35.1, longitude: 139.1 } });

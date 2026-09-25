@@ -5,7 +5,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { componentOf, installFakeApi, loadWeb, refusal, type FakeApi } from "./_fakes";
+import { componentOf, installFakeApi, loadWeb, refusal, unauthorized, type FakeApi } from "./_fakes";
 import { TID } from "./_types";
 
 const publicConfig = (siteKey: string) => () => ({ json: { turnstileSiteKey: siteKey, vapidPublicKey: "vapid-public-test", contactEmail: null } });
@@ -34,7 +34,7 @@ describeTask("3", "客の登録のフォームと人かどうかの確かめの�
     for (const siteKey of ["site-key-A", "site-key-B"]) {
       api = installFakeApi({
         "GET /api/config/public": publicConfig(siteKey),
-        "GET /api/customer/home": () => ({ status: 401, json: { ok: false } }),
+        "GET /api/customer/home": () => (unauthorized()),
         "POST /api/register/customer": () => refusal("human_check_failed"),
       });
       const CustomerApp = await componentOf("components/customer/CustomerApp", "CustomerApp");
@@ -65,7 +65,7 @@ describeTask("3", "客の登録のフォームと人かどうかの確かめの�
     const { TEXTS } = await loadWeb("lib/domain/texts");
     api = installFakeApi({
       "GET /api/config/public": () => ({ status: 500, json: { ok: false } }),
-      "GET /api/customer/home": () => ({ status: 401, json: { ok: false } }),
+      "GET /api/customer/home": () => (unauthorized()),
       "POST /api/register/customer": () => refusal("human_check_failed"),
     });
     const CustomerApp = await componentOf("components/customer/CustomerApp", "CustomerApp");

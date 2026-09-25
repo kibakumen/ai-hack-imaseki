@@ -9,6 +9,12 @@
 //    待ち時間（打ち切り）は `deps.clock.after(ms)` と AbortSignal の両方で書く。検査は偽の時計で after を進める。
 // 5. Cookie: 客の識別子とセッションは Set-Cookie で配る。名前は自由（検査は Set-Cookie の先頭の `name=value` をそのまま返す）。
 // 6. 画面の部品: data-testid の約束は末尾の TID。断りの文の出し口は `msg-<項目名>`（項目の直下）と `msg-form`（操作の直下）。
+// 7. 本番と同じ道を通る（2026-09-25 設計-03）: 検査の偽物と場面づくりは、本番が通る道を近道しない。
+//    - 画面の検査は、**本番の入口の部品**を描く（客は GuestEntry・/me の入口。中の部品だけを描いて入口の筋を飛ばさない）
+//    - 画面の偽の API は、取得を**少しずつ届く入口**（NDJSON）で返すのを既定にする（本番の画面がそちらを使う）
+//    - 偽の差し替え口は、本番の Deps が持つ口（紹介文・店の画像・逆引き・候補）を全部持つ
+//    - 場面づくりは、画面が知りえない値（外のサービスの番号など）を使わない。受け取りは、その取得の結果に出たオファーだけ
+//    近道を塞いで赤くなった未修正の不具合は、`it.fails` で「既知の不具合（<ID>）:」と名乗って残す。
 
 export type RouteInfo = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -37,8 +43,31 @@ export type AiSelector = { select(input: AiSelectInput, opts: { signal?: AbortSi
 /** AI の出力の本文（文字列の JSON）の形 */
 export type AiSelectionText = { selections: Array<{ storeId: string; reason: string }> };
 
-export type Geocoder = { geocode(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; lat: number; lng: number } | { ok: false }> };
-export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
+export type Geocoder = {
+  geocode(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; lat: number; lng: number } | { ok: false }>;
+  /** 位置 → 地名（任意の口。本番は持つ） */
+  reverse?(point: { lat: number; lng: number }, opts: { signal?: AbortSignal }): Promise<{ ok: true; label: string } | { ok: false }>;
+  /** 打ちかけの文字 → 場所の候補（任意の口。本番は持つ） */
+  suggest?(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; suggestions: string[]; source: "places" | "geocoding" } | { ok: false }>;
+};
+/** 紹介文の書き手と検査官（任意の口。本番は持つ・web/lib/ports.ts の PitchWriter と同じ形） */
+export type PitchStore = { name: string; genres: string[]; menus: string[]; walkMinutes: number; budgetMin: number; budgetMax: number; couponName: string | null; couponNote: string | null };
+export type PitchInput = { party: number; genres: string[]; budgetMax: number | null; store: PitchStore; charLimit: number; critique: string | null };
+export type PitchJudgeInput = { text: string; store: Pick<PitchStore, "name" | "genres" | "menus" | "couponName"> };
+export type PitchResult =
+  | { ok: true; text: string; costUsd: number | null; truncated: boolean; resolvedModel?: string | null; requestId?: string | null; fallbackLevel?: number | null }
+  | { ok: false; error: string; costUsd?: number | null };
+export type PitchWriter = {
+  write(input: PitchInput, opts: { signal?: AbortSignal }): Promise<PitchResult>;
+  judge(input: PitchJudgeInput, opts: { signal?: AbortSignal }): Promise<PitchResult>;
+};
+/** 店のホームページから画像の URL を取る口（任意の口。本番は持つ） */
+export type StoreImageFetcher = { fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; imageUrl: string } | { ok: false }> };
+/**
+ * Web プッシュの送信。`signal` は打ち切りの合図（任意）——応答しない配信先で呼ぶ側の応答が止まらないよう、
+ * 手続きは送信を打ち切れる（通知の送信の打ち切りの件（不具合-08）。ほかの外向きの口と同じ形）。
+ */
+export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number; signal?: AbortSignal }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
 export type CardRegistrar = {
   createSetupSession(input: { storeId: string; returnUrl: string }): Promise<{ ok: true; url: string; sessionId: string } | { ok: false }>;
   confirmSetup(sessionId: string): Promise<{ ok: true; clientReference: string } | { ok: false }>;
@@ -55,7 +84,9 @@ export type Deps = {
   db: any; // D1Database（wrangler の getPlatformProxy が返す束縛 DB）
   files: FileStore;
   ai: AiSelector;
+  pitch?: PitchWriter;
   geocoder: Geocoder;
+  storeImage?: StoreImageFetcher;
   push: PushSender;
   card: CardRegistrar;
   human: HumanCheck;

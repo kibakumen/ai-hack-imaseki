@@ -7,9 +7,9 @@ import { describeTask } from "./_tasks";
 // import されておらず、実行時に ReferenceError で落ちていた。型検査が通っていたのは acceptance-globals.d.ts が
 // グローバルとして宣言していたためで、実行時にそれらを定義する場所はどこにも無い。ほかの受け入れ検査55ファイルは
 // 全部 _fakes から明示 import しており、このファイルだけが取りこぼしていた。検査の意図は1文字も変えていない。
-import { approvedStore, fetchOffers, loadWeb, makeCtx, one, publishOffer, receive, receivedScene, registerCustomer, WEB, type Ctx } from "./_fakes";
+import { approvedStore, fetchOffers, loadWeb, makeCtx, one, publishOffer, PUSH_SUBSCRIPTION, receive, receivedScene, registerCustomer, settledWithin, WEB, type Ctx } from "./_fakes";
 
-const SUBSCRIPTION = { endpoint: "https://push.example.test/sub/1", keys: { p256dh: "BPUB", auth: "AUTH" } };
+const SUBSCRIPTION = PUSH_SUBSCRIPTION;
 
 describeTask("19", "Web プッシュを送る場面と送らない場面", () => {
   let ctx: Ctx;
@@ -155,5 +155,31 @@ describeTask("21", "運営の停止で客へ送る（22.2）", () => {
     await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
     expect(ctx.push.calls.length).toBe(before + 1);
     expect((await s.customer.api.get("/api/customer/push-message")).json.scene).toBe("admin_cancelled");
+  });
+
+  // 運営の停止は客の数だけ送る。1人ずつ順に待つと、応答しない配信先の客が並ぶほど運営の画面が戻らない。
+  // 偽の時計を1回（5.1秒）進めるだけで応答することを見る——順に待つ形では、2人目の打ち切りの合図が
+  // 1人目の打ち切りのあとに作られるので、1回では足りない。
+  it.fails("既知の不具合（不具合-08）: 購読のある客2人の送信が返らなくても、運営の停止は偽の時計の数秒で応答する（1人ずつ順に待たない）", async () => {
+    const s = await receivedScene(ctx, { capacity: 3 });
+    expect((await s.customer.api.post("/api/customer/push-subscription", { subscription: SUBSCRIPTION })).status).toBe(200);
+    const second = await registerCustomer(ctx, { nickname: "ふたりめ", phone: "08031310002" });
+    const f = await fetchOffers(second.api, { party: 2, ...s.at });
+    expect((await receive(second.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId })).status).toBe(200);
+    expect((await second.api.post("/api/customer/push-subscription", { subscription: { ...SUBSCRIPTION, endpoint: "https://push.example.test/sub/2" } })).status).toBe(200);
+    ctx.push.result = "hang";
+    try {
+      const armed = ctx.clock.armed();
+      const pending = ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+      await armed;
+      // 並べて送る形なら、2人目の送信もこの間に始まって打ち切りの合図を作る
+      await settledWithin(pending, 200);
+      await ctx.clock.advance(5_100);
+      const r = await settledWithin(pending, 1_000);
+      expect(r?.status).toBe(200);
+      expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", s.store.id)).status).toBe("banned");
+    } finally {
+      ctx.push.result = { ok: true };
+    }
   });
 });

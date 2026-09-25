@@ -96,7 +96,7 @@ flowchart LR
 | --- | --- |
 | 型検査 | `["pnpm","exec","tsc","--noEmit","-p","tsconfig.json"]` |
 | lint | `["pnpm","--dir","web","exec","eslint","."]` |
-| テスト | `["pnpm","exec","vitest","run"]` |
+| テスト | `["env","ACCEPTANCE_TASK_GATE=1","pnpm","exec","vitest","run"]`（2026-09-25 設計-02 の直しで `env ACCEPTANCE_TASK_GATE=1` を前に足した。下の「受け入れ検査をタスクごとに走らせる」） |
 
 - 直下の `tsconfig.json` は `web/**` と `tests/**` の両方を型検査の対象にする（`demo/`・`sprint/`・生成物は除く）。`web/tsconfig.json` は Next.js のビルド用に別に持つ
 - 直下の `vitest.config.ts` は、`web/**/*.test.{ts,tsx}`（実行者が足す単体テスト）と `tests/acceptance/v2/**/*.test.{ts,tsx}`（受け入れ検査）の両方を走らせる。画面の部品の検査は、ファイルの先頭の `// @vitest-environment jsdom` で jsdom に切り替える。**受け入れ検査は、着手済みのタスクのぶんだけが走る**（下の「受け入れ検査をタスクごとに走らせる」）
@@ -113,6 +113,7 @@ flowchart LR
 - **受け入れ検査の1つ1つのブロックは、それを実現するタスクの番号を名乗る。走るかどうかは、そのタスクが着手済みかで決まる。** 着手済みかどうかは、進行役が `record.mjs start` で作る着手の記録 **`.dev/runs/v2/task-<番号>.json` が在るか**で見る（着手の記録は /dev の道具が作るもので、`.dev/**` は設計者も実行者も書けない場所・確実〔`lib/config.mjs` の `INFRA_DENY`〕）
 - 作りは `tests/acceptance/v2/_tasks.ts`（設計者がタスク分割の段で書く）の1つの関数 **`describeTask(タスク番号, 名前, 本体)`** ＝ `describe.skipIf(着手していない)(…)`（`skipIf` は Vitest に在る・高確率。無ければ `describe.skip` と `describe` を条件で選ぶだけ）。飛ばしたブロックは Vitest の出力に skipped として数が出るので、飛ばしたことは隠れない。受け入れ検査のファイルの最上位のブロックは**全部これを通す**（素の `describe` を最上位に置かない）。1つのファイルに、違うタスクのブロックが並んでよい（`structure.test.ts` の行や `r33-metrics.test.ts` の「第4周の追記」の部分は、本体と別のタスクを名乗る）
 - **着手の記録のフォルダ `.dev/runs/v2/` そのものが無いときは、全部走らせる**（`.dev/` は git の対象外なので、README を見て動かす他のメンバーの手元〔基準 34.7〕や提出の前の確かめ〔段3〕では、飛ばす理由が無い）
+- **2026-09-25 の直し（監査の 設計-02・AI判断）: 絞りは、環境変数 `ACCEPTANCE_TASK_GATE=1` を立てた実行だけに効く。** 立てるのは /dev のゲート（上の表のテストのコマンド）だけで、手元の `pnpm exec vitest run` は立てないので、着手の記録のフォルダが在っても全部走る。直した理由: 並列の作業ツリーで実装したタスクの着手の記録が本体の `.dev` に無く、手元の実行で横断の安全の検査を含む約70件が黙って飛んでいた（フォルダの有無は、実行する人が意図して決めたものではない）。選ばなかった案: `.dev/runs/v2` を退避する（次に /dev を回すとまた同じ形で飛ぶ）
 - タスクの番号は `tasks.md` の番号と同じ文字列（数字だけ。`1` や `1.2`。/dev の `assertTaskId` の決まり・確実）。第4周の申し送りで `A-1`〜`A-4` と呼んだ3点セットのタスクも、タスク表では数字の番号になる
 
 **なぜこの形か**（進行役の案との比べ）:

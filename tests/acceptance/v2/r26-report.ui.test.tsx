@@ -4,7 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { componentOf, homeFetch, installFakeApi, invalidInput, loadWeb, refusal, reservationDto, type FakeApi } from "./_fakes";
+import { componentOf, homeFetch, installFakeApi, invalidInput, loadWeb, refusal, reservationDto, type FakeApi, type FakeRoute } from "./_fakes";
 import { TID, type HomeDto } from "./_types";
 
 describeTask("23", "通報の入口と最近行った店（画面）", () => {
@@ -14,7 +14,7 @@ describeTask("23", "通報の入口と最近行った店（画面）", () => {
     api?.restore();
   });
 
-  const renderApp = async (home: HomeDto, routes: Record<string, any> = {}) => {
+  const renderApp = async (home: HomeDto, routes: Record<string, FakeRoute> = {}) => {
     api = installFakeApi({ "GET /api/config/public": () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } }), "GET /api/customer/home": () => ({ json: home }), "GET /api/customer/recent": () => ({ json: { items: [] } }), ...routes });
     const CustomerApp = await componentOf("components/customer/CustomerApp", "CustomerApp");
     render(<CustomerApp />);

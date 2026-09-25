@@ -1,6 +1,12 @@
 // 受け入れ検査のブロックは、それを実現するタスクの番号を名乗る（設計書「受け入れ検査をタスクごとに走らせる」）。
 // 走るかどうかは、進行役が record.mjs start で作る着手の記録 `.dev/runs/v2/task-<番号>.json` の有無で決める。
-// 記録のフォルダそのものが無い手元（他のメンバー・提出前の確かめ）では全部走る。
+//
+// ⚠️ **絞りは環境変数 `ACCEPTANCE_TASK_GATE=1` を立てた実行（/dev の実装の段）だけに効く**（2026-09-25 設計-02）。
+// 以前は「記録のフォルダが在れば絞る」だったため、並列の作業ツリーで実装したタスクの着手記録が
+// main の `.dev` に無く、手元の `vitest run` で約70件（横断の安全の検査を含む）が**黙って飛んでいた**。
+// 立てなければ全部走る——飛ばすかどうかを、置き忘れたファイルではなく実行する側の意思で決める。
+// 立てるのは /dev のゲート（`dev.config.json` の `gate.test` が `env ACCEPTANCE_TASK_GATE=1 pnpm exec vitest run`）。
+// 手元の `pnpm exec vitest run`・README の手順・提出の前の確かめは立てないので、全部走る。
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,9 +16,11 @@ export const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 export const RUNS_DIR = path.join(REPO, ".dev", "runs", "v2");
 export const TASKS_MD = path.join(REPO, "docs", "specs", "v2", "tasks.md");
 
-/** 着手の記録のフォルダが無ければ「全部走る」 */
-export const isStarted = (task: string): boolean =>
-  !fs.existsSync(RUNS_DIR) || fs.existsSync(path.join(RUNS_DIR, `task-${task}.json`));
+/** タスクごとの絞りを効かせる実行か（/dev のゲート＝`dev.config.json` の `gate.test` が `ACCEPTANCE_TASK_GATE=1` を立てる） */
+export const taskGateEnabled = (): boolean => process.env.ACCEPTANCE_TASK_GATE === "1" && fs.existsSync(RUNS_DIR);
+
+/** 絞りが効いていなければ「全部走る」。効いていれば、着手の記録が在るタスクだけ走る */
+export const isStarted = (task: string): boolean => !taskGateEnabled() || fs.existsSync(path.join(RUNS_DIR, `task-${task}.json`));
 
 /** tasks.md を読んで、タスク番号 → 完了かどうか・名前・担当（AI／本人） */
 export const taskStates = (): Map<string, { done: boolean; title: string; owner: string }> => {

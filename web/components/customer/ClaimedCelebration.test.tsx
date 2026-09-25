@@ -21,13 +21,14 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CustomerApp } from "./CustomerApp";
+import { replyToResponse, streamOfResult, type FakeReply } from "../../../tests/acceptance/v2/_fakes";
 
 // ⚠️ ブラウザの位置の仕組みは差し替え口ごと偽物にする（`navigator` を直に触らない）。構造の検査
 // （`structure.test.ts` の 3.9）は `web/` の中でその呼び出しの名前が `lib/client/geolocation.ts`
 // だけに在ることを見張っており、**検査のファイルも `web/` の中**なので直に触ると落ちる。
 vi.mock("../../lib/client/geolocation", () => ({ currentLocation: async () => ({ ok: true, lat: 35.6, lng: 139.7 }) }));
 
-type FakeResponse = { status?: number; json?: unknown };
+type FakeResponse = FakeReply;
 
 const RESERVATION = {
   id: "res-1",
@@ -50,7 +51,7 @@ const installFetch = (respond: (method: string, path: string) => FakeResponse) =
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "http://localhost").pathname;
     const out = respond((init?.method ?? "GET").toUpperCase(), path);
-    return new Response(JSON.stringify(out.json ?? { ok: true }), { status: out.status ?? 200, headers: { "content-type": "application/json" } });
+    return replyToResponse(out);
   }) as typeof fetch;
   return { restore: () => { globalThis.fetch = previous; } };
 };
@@ -110,7 +111,8 @@ describe("受け取ったあとの演出", () => {
         return { json: held ? { kind: "active", profile: {}, reservation } : { kind: "fetch", profile: {} } };
       }
       if (path === "/api/customer/place") return { json: { label: null } };
-      if (path === "/api/customer/fetch/stream") return { status: 404, json: { ok: false } };
+      // 取得は本番と同じく少しずつ届く入口（NDJSON）で返す（2026-09-25 設計-03。以前はわざと 404 にして普通の入口へ倒していた）
+      if (method === "POST" && path === "/api/customer/fetch/stream") return { stream: streamOfResult({ fetchId: "f1", items: [ITEM] }) };
       if (method === "POST" && path === "/api/customer/fetch") return { json: { ok: true, fetchId: "f1", items: [ITEM] } };
       if (method === "POST" && path === "/api/customer/reservations") {
         held = true;

@@ -25,13 +25,15 @@ const uploadRoute = defineRoute({
   handler: async ({ input }) => ({ status: 200, body: { ok: true, input } }),
 });
 
-// ROUTE_DEFINITIONS は「各タスクが自分の入口を足す」置き場（routes.ts の注）なので、
-// この検査も同じやり方で試しの入口を足し、毎回空に戻す。
+// 試しの入口だけを持つ app で見る。ROUTE_DEFINITIONS は全部の入口の置き場（routes.ts）で、ファイルをまたいで
+// 共有されるので、**元の一覧を必ず戻す**（2026-09-25 設計-19。以前は毎回空にしていて、ファイルごとの分離を
+// 切ると後から走る検査の入口が全部 404 になった）。
+const original = [...ROUTE_DEFINITIONS];
 const useRoutes = (...routes: RouteDefinition[]): void => {
-  ROUTE_DEFINITIONS.push(...routes);
+  ROUTE_DEFINITIONS.splice(0, ROUTE_DEFINITIONS.length, ...routes);
 };
 afterEach(() => {
-  ROUTE_DEFINITIONS.length = 0;
+  ROUTE_DEFINITIONS.splice(0, ROUTE_DEFINITIONS.length, ...original);
 });
 
 /** この検査が通る道は deps に触らない（入口に当たる前・本文を読む所で終わる）。 */

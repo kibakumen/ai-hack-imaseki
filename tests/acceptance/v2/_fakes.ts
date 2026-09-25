@@ -4,25 +4,37 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { REPO } from "./_tasks";
-import type {
-  AiSelectInput,
-  AiSelectResult,
-  AiSelector,
-  CardRegistrar,
-  Clock,
-  Deps,
-  FileStore,
-  Geocoder,
-  HumanCheck,
-  Logger,
-  PushSender,
-  Rng,
-} from "./_types";
+import type { Deps } from "./_types";
+import {
+  cardOfCheckout,
+  fakeAi,
+  fakeCard,
+  fakeClock,
+  fakeFiles,
+  fakeGeocoder,
+  fakeHuman,
+  fakeLogger,
+  fakePitch,
+  fakePush,
+  fakeStoreImage,
+  isFake,
+  MIN,
+  type FakeAi,
+  type FakeCard,
+  type FakeClock,
+  type FakeFiles,
+  type FakeGeocoder,
+  type FakeHuman,
+  type FakeLogger,
+  type FakePitch,
+  type FakePush,
+  type FakeStoreImage,
+} from "./_fakePorts";
+
+export * from "./_fakePorts";
 
 export const WEB = path.join(REPO, "web");
 export const ORIGIN = "https://app.test";
-/** 2026-09-22 15:00 JST（06:00Z）。偽の時計の起点 */
-export const T0 = "2026-09-22T06:00:00.000Z";
 export const SHIBUYA = { lat: 35.6595, lng: 139.7005 };
 
 const EARTH_R = 6371000;
@@ -55,205 +67,64 @@ export const componentOf = async (rel: string, name: string) => {
   return comp;
 };
 
-// ---------- 偽の時計 ----------
-export type FakeClock = Clock & { advance(ms: number): Promise<void>; set(iso: string): void };
-const flush = async () => {
-  for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
-};
-export const fakeClock = (startIso = T0): FakeClock => {
-  let t = new Date(startIso).getTime();
-  const waiters: Array<{ at: number; resolve: () => void }> = [];
-  const fire = () => {
-    for (const w of [...waiters]) {
-      if (w.at <= t) {
-        waiters.splice(waiters.indexOf(w), 1);
-        w.resolve();
-      }
-    }
-  };
-  return {
-    now: () => new Date(t),
-    after: (ms) => new Promise<void>((resolve) => waiters.push({ at: t + ms, resolve })),
-    advance: async (ms) => {
-      t += ms;
-      fire();
-      await flush();
-    },
-    set: (iso) => {
-      t = new Date(iso).getTime();
-      fire();
-    },
-  };
-};
-export const MIN = 60_000;
-export const HOUR = 60 * MIN;
-
-// ---------- 偽の差し替え口 ----------
-export type FakeAi = AiSelector & {
-  calls: AiSelectInput[];
-  /** 返し方を差し替える。"hang" は永遠に返らない */
-  respond: (fn: (input: AiSelectInput) => AiSelectResult | "hang" | Promise<AiSelectResult>) => void;
-};
-export const selectionText = (items: Array<{ storeId: string; reason: string }>) => JSON.stringify({ selections: items });
-export const fakeAi = (): FakeAi => {
-  let responder: (input: AiSelectInput) => AiSelectResult | "hang" | Promise<AiSelectResult> = (input) => ({
-    ok: true,
-    text: selectionText(input.stores.slice(0, 5).map((s) => ({ storeId: s.id, reason: `${s.genres[0] ?? "お店"}で好みに合います` }))),
-    costUsd: 0.0012,
-  });
-  const ai: FakeAi = {
-    calls: [],
-    respond: (fn) => {
-      responder = fn;
-    },
-    select: async (input, opts) => {
-      ai.calls.push(JSON.parse(JSON.stringify(input)));
-      const r = responder(input);
-      if (r === "hang") {
-        return new Promise<AiSelectResult>((resolve) => {
-          opts?.signal?.addEventListener("abort", () => resolve({ ok: false, error: "aborted" }));
-        });
-      }
-      return r;
-    },
-  };
-  return ai;
-};
-
-export type FakeGeocoder = Geocoder & {
-  calls: string[];
-  set: (text: string, result: { lat: number; lng: number } | "none" | "fail" | "hang") => void;
-};
-export const fakeGeocoder = (): FakeGeocoder => {
-  const table = new Map<string, { lat: number; lng: number } | "none" | "fail" | "hang">();
-  const g: FakeGeocoder = {
-    calls: [],
-    set: (text, result) => {
-      table.set(text, result);
-    },
-    geocode: async (text, opts) => {
-      g.calls.push(text);
-      const r = table.get(text) ?? "none";
-      if (r === "none") return { ok: false };
-      if (r === "fail") throw new Error("geocoder failure");
-      if (r === "hang") {
-        return new Promise((resolve) => {
-          opts?.signal?.addEventListener("abort", () => resolve({ ok: false }));
-        });
-      }
-      return { ok: true, lat: r.lat, lng: r.lng };
-    },
-  };
-  return g;
-};
-
-export type FakePush = PushSender & { calls: Array<{ subscription: unknown; ttlSeconds: number }>; result: { ok: true } | { ok: false; gone: boolean } | "throw" };
-export const fakePush = (): FakePush => {
-  const p: FakePush = {
-    calls: [],
-    result: { ok: true },
-    send: async (subscription, opts) => {
-      p.calls.push({ subscription, ttlSeconds: opts.ttlSeconds });
-      if (p.result === "throw") throw new Error("push failure");
-      return p.result;
-    },
-  };
-  return p;
-};
-
-export type FakeCard = CardRegistrar & { sessions: Map<string, string>; setupOk: boolean; confirmOk: boolean };
-export const fakeCard = (): FakeCard => {
-  let n = 0;
-  const c: FakeCard = {
-    sessions: new Map(),
-    setupOk: true,
-    confirmOk: true,
-    createSetupSession: async ({ storeId }) => {
-      if (!c.setupOk) return { ok: false };
-      const sessionId = `cs_test_${++n}`;
-      c.sessions.set(sessionId, storeId);
-      return { ok: true, url: `https://checkout.stripe.test/${sessionId}`, sessionId };
-    },
-    confirmSetup: async (sessionId) => {
-      const ref = c.sessions.get(sessionId);
-      if (!c.confirmOk || !ref) return { ok: false };
-      return { ok: true, clientReference: ref };
-    },
-  };
-  return c;
-};
-
-export type FakeHuman = HumanCheck & { mode: "human" | "bot" | "fail" | "hang"; tokens: Array<string | null> };
-export const fakeHuman = (): FakeHuman => {
-  const h: FakeHuman = {
-    mode: "human",
-    tokens: [],
-    verify: async (token, opts) => {
-      h.tokens.push(token);
-      if (h.mode === "fail") return { ok: false };
-      if (h.mode === "hang") {
-        return new Promise((resolve) => {
-          opts?.signal?.addEventListener("abort", () => resolve({ ok: false }));
-        });
-      }
-      return { ok: true, human: h.mode === "human" };
-    },
-  };
-  return h;
-};
-
-export type FakeFiles = FileStore & { store: Map<string, { body: Uint8Array; contentType: string }> };
-export const fakeFiles = (): FakeFiles => {
-  const store = new Map<string, { body: Uint8Array; contentType: string }>();
-  return {
-    store,
-    put: async (key, body, contentType) => {
-      store.set(key, { body: new Uint8Array(body), contentType });
-    },
-    get: async (key) => store.get(key) ?? null,
-    delete: async (key) => {
-      store.delete(key);
-    },
-  };
-};
-
-export type FakeLogger = Logger & { entries: unknown[] };
-export const fakeLogger = (): FakeLogger => {
-  const l: FakeLogger = { entries: [], log: (entry) => l.entries.push(entry) };
-  return l;
-};
-
-/** 決め打ちの乱数（コードの引き直しの検査など） */
-export const fakeRng = (sequence: Uint8Array[]): Rng & { calls: number } => {
-  let i = 0;
-  const r = {
-    calls: 0,
-    bytes: (n: number) => {
-      r.calls++;
-      const next = sequence[Math.min(i, sequence.length - 1)];
-      i++;
-      const out = new Uint8Array(n);
-      out.set(next.subarray(0, n));
-      return out;
-    },
-  };
-  return r;
-};
-
 // ---------- 手元の D1 ----------
 export type Db = { prepare(sql: string): any; batch(stmts: any[]): Promise<any[]>; exec(sql: string): Promise<any> };
+/**
+ * SQL の文を1つずつに分ける。行の注（`--`）を落とし、文字列の中の `;` と、トリガーの本文
+ * （`BEGIN … END`）の中の `;` では切らない。
+ */
+export const splitSql = (sql: string): string[] => {
+  const out: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  let depth = 0;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "-" && sql[i + 1] === "-") {
+      while (i < sql.length && sql[i] !== "\n") i++;
+      current += "\n";
+      continue;
+    }
+    if (ch === "'" || ch === '"') quote = ch;
+    if (/[A-Za-z_]/.test(ch) && !/[A-Za-z0-9_]/.test(sql[i - 1] ?? "")) {
+      const word = /^[A-Za-z_][A-Za-z0-9_]*/.exec(sql.slice(i))![0].toUpperCase();
+      if (word === "BEGIN" && /\bTRIGGER\b/i.test(current)) depth++;
+      else if (word === "CASE" && depth > 0) depth++;
+      else if (word === "END" && depth > 0) depth--;
+    }
+    if (ch === ";" && depth === 0) {
+      if (current.trim()) out.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+};
+/**
+ * `web/migrations/*.sql` を番号順に流す。**migration を流す道具はここ1つ**（2026-09-25 設計-19）——
+ * 以前は同じ `split(";")` が3か所に写されていて、`;` を含む文やトリガーを足すと写しのどれかだけが壊れた。
+ * web/ の単体の検査も `openDb` かこの関数を使う。
+ */
+export const applyMigrations = async (db: Db): Promise<void> => {
+  const dir = path.join(WEB, "migrations");
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    for (const statement of splitSql(fs.readFileSync(path.join(dir, file), "utf8"))) await db.prepare(statement).run();
+  }
+};
 export const openDb = async (): Promise<{ db: Db; dispose: () => Promise<void> }> => {
   const { getPlatformProxy } = await import("wrangler");
   const persist = fs.mkdtempSync(path.join(os.tmpdir(), "ai-hack-v2-"));
   const proxy = await getPlatformProxy<{ DB: Db }>({ configPath: path.join(WEB, "wrangler.jsonc"), persist: { path: persist } });
   const db = proxy.env.DB;
   if (!db) throw new Error("web/wrangler.jsonc に D1 の束縛 DB がありません");
-  const dir = path.join(WEB, "migrations");
-  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    const sql = fs.readFileSync(path.join(dir, file), "utf8").replace(/--[^\n]*/g, "");
-    const stmts = sql.split(";").map((s) => s.trim()).filter(Boolean);
-    for (const s of stmts) await db.prepare(s).run();
-  }
+  await applyMigrations(db);
   return {
     db,
     dispose: async () => {
@@ -284,14 +155,21 @@ export const dbContains = async (db: Db, needle: string): Promise<boolean> => (a
 
 // ---------- 入口の呼び出し ----------
 export type ApiResult = { status: number; json: any; text: string; headers: Headers; setCookies: string[] };
+type Send = (path: string, body?: unknown, init?: RequestInit) => Promise<ApiResult>;
 export type Api = {
   get(path: string, init?: RequestInit): Promise<ApiResult>;
-  post(path: string, body?: unknown, init?: RequestInit): Promise<ApiResult>;
-  put(path: string, body?: unknown, init?: RequestInit): Promise<ApiResult>;
-  patch(path: string, body?: unknown, init?: RequestInit): Promise<ApiResult>;
-  del(path: string, body?: unknown, init?: RequestInit): Promise<ApiResult>;
+  post: Send;
+  put: Send;
+  patch: Send;
+  /** DELETE。HTTP の方法の名前（小文字）でも引けるように `delete` も同じもの（r29 が `api[method.toLowerCase()]` で引く） */
+  del: Send;
+  delete: Send;
   raw(req: Request): Promise<ApiResult>;
+  /** 本文を読まずに応答そのものを返す（少しずつ届く入口を1行ずつ読むため） */
+  open(method: string, path: string, body?: unknown, init?: RequestInit): Promise<Response>;
   cookie: string | null;
+  /** この呼び出し口の接続元（cf-connecting-ip） */
+  ip: string;
 };
 const setCookiesOf = (headers: Headers): string[] => {
   const h = headers as Headers & { getSetCookie?: () => string[] };
@@ -306,8 +184,12 @@ const nextIp = () => {
   const n = ++ipSeq;
   return `10.${(n >> 16) & 255}.${(n >> 8) & 255}.${n & 255}`;
 };
-export const apiClient = (app: { fetch(req: Request): Promise<Response> }, cookie: string | null = null): Api => {
-  const ip = nextIp();
+/**
+ * 入口を呼ぶ口。接続元は既定で呼び出し口ごとに別（`opts.ip` で指定できる——同じ接続元から
+ * 何人もが送る場面や、連打の抑止を接続元で数える検査のため・2026-09-25 設計-04）。
+ */
+export const apiClient = (app: { fetch(req: Request): Promise<Response> }, cookie: string | null = null, opts: { ip?: string } = {}): Api => {
+  const ip = opts.ip ?? nextIp();
   const raw = async (req: Request): Promise<ApiResult> => {
     const res = await app.fetch(req);
     const text = await res.text();
@@ -319,98 +201,134 @@ export const apiClient = (app: { fetch(req: Request): Promise<Response> }, cooki
     }
     return { status: res.status, json, text, headers: res.headers, setCookies: setCookiesOf(res.headers) };
   };
-  const call = (method: string) => (p: string, body?: unknown, init?: RequestInit) => {
+  const request = (method: string, p: string, body?: unknown, init?: RequestInit): Request => {
     const headers = new Headers(init?.headers ?? {});
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
     if (body !== undefined && !isForm && !headers.has("content-type")) headers.set("content-type", "application/json");
     if (method !== "GET" && !headers.has("origin")) headers.set("origin", ORIGIN);
     if (cookie && !headers.has("cookie")) headers.set("cookie", cookie);
     if (!headers.has("cf-connecting-ip")) headers.set("cf-connecting-ip", ip);
-    return raw(new Request(ORIGIN + p, { ...init, method, headers, body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body) }));
+    return new Request(ORIGIN + p, { ...init, method, headers, body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body) });
   };
-  return { get: (p, init) => call("GET")(p, undefined, init), post: call("POST"), put: call("PUT"), patch: call("PATCH"), del: call("DELETE"), raw, cookie };
+  const call = (method: string): Send => (p, body, init) => raw(request(method, p, body, init));
+  const del = call("DELETE");
+  return {
+    get: (p, init) => call("GET")(p, undefined, init),
+    post: call("POST"),
+    put: call("PUT"),
+    patch: call("PATCH"),
+    del,
+    delete: del,
+    raw,
+    open: (method, p, body, init) => app.fetch(request(method, p, body, init)),
+    cookie,
+    ip,
+  };
 };
 
 // ---------- 場面（コンテキスト） ----------
-export type Ctx = {
-  app: { fetch(req: Request): Promise<Response>; routes: any[] };
-  deps: Deps;
-  db: Db;
+/** 場面の手元に置く偽物の道具（`ctx.<名前>`）。どれも app に渡った差し替え口そのもの */
+type FakeTools = {
   clock: FakeClock;
   ai: FakeAi;
+  pitch: FakePitch;
   geocoder: FakeGeocoder;
+  storeImage: FakeStoreImage;
   push: FakePush;
   card: FakeCard;
   human: FakeHuman;
   files: FakeFiles;
   logger: FakeLogger;
-  api: (cookie?: string | null) => Api;
-  /** 一部の差し替え口を替えた別の app（同じ D1） */
-  withDeps: (over: Partial<Deps>) => Promise<Ctx>;
+};
+type ToolName = keyof FakeTools;
+const TOOL_NAMES: readonly ToolName[] = ["clock", "ai", "pitch", "geocoder", "storeImage", "push", "card", "human", "files", "logger"];
+
+/**
+ * 差し替え口の一部を替えた場面。**替えた口が偽物でなければ、その欄の偽物の道具は無い**——型の上でも
+ * 実行時にも undefined（2026-09-25 設計-02 のレビュー。以前は `deps.logger as FakeLogger` と型だけ偽物にしていて、
+ * 偽物でない Logger を渡すと、型は FakeLogger なのに `.entries` が実行時に黙って undefined だった）。
+ * 替えなかった口は親と同じ偽物。`CtxWith<{}>`（何も替えない）＝ `Ctx`。
+ */
+export type CtxWith<O extends Partial<Deps> = {}> = {
+  app: { fetch(req: Request): Promise<Response>; routes: any[] };
+  deps: Deps;
+  db: Db;
+  api: (cookie?: string | null, opts?: { ip?: string }) => Api;
+  /**
+   * 一部の差し替え口を替えた別の app（同じ D1）。替えなかった口は**親と同じ偽物**で、
+   * `next.geocoder === next.deps.geocoder` のように、場面の手元の偽物と app に渡る偽物が常に同じ物になる。
+   * 替えた口は、渡した物が偽物ならそれが `next.<名前>` になり、偽物でなければ `next.<名前>` は undefined。
+   */
+  withDeps: <P extends Partial<Deps>>(over: P) => Promise<CtxWith<Omit<O, keyof P> & P>>;
   dispose: () => Promise<void>;
   admin: { cookie: string; api: Api; email: string; password: string } | null;
-};
+} & { [K in ToolName]: K extends keyof O ? (O[K] extends FakeTools[K] ? FakeTools[K] : undefined) : FakeTools[K] };
+/** 差し替え口が全部偽物の場面（makeCtx() の既定） */
+export type Ctx = CtxWith;
 
-export const makeCtx = async (opts: { clockStart?: string; deps?: Partial<Deps> } = {}): Promise<Ctx> => {
+export const makeCtx = async <O extends Partial<Deps> = {}>(opts: { clockStart?: string; deps?: O } = {}): Promise<CtxWith<O>> => {
   const { db, dispose } = await openDb();
-  return buildCtx(db, dispose, opts);
+  return buildCtx<O>(db, dispose, opts);
 };
 
-const buildCtx = async (db: Db, dispose: () => Promise<void>, opts: { clockStart?: string; deps?: Partial<Deps> }): Promise<Ctx> => {
-  const clock = (opts.deps?.clock as FakeClock) ?? fakeClock(opts.clockStart);
-  const ai = fakeAi();
-  const geocoder = fakeGeocoder();
-  const push = fakePush();
-  const card = fakeCard();
-  const human = fakeHuman();
-  const files = fakeFiles();
-  const logger = fakeLogger();
+/**
+ * 場面を組む。渡された口（opts.deps）があればそれを使い、無い口だけ新しい偽物を作る。
+ * **場面の手元の偽物（ctx.geocoder など）と、app に渡る偽物（ctx.deps.geocoder）は常に同じ物**
+ * （2026-09-25 設計-02。以前は withDeps が新しい偽物を ctx に置きながら app には親の偽物を渡していて、
+ * `ctx.geocoder.set(…)` がどこにも繋がらず d01 の場面が作れなかった）。
+ */
+const buildCtx = async <O extends Partial<Deps>>(db: Db, dispose: () => Promise<void>, opts: { clockStart?: string; deps?: O }): Promise<CtxWith<O>> => {
+  const given: Partial<Deps> = opts.deps ?? {};
   const webcrypto = await loadWeb("lib/adapters/webcrypto");
   const deps: Deps = {
     db,
-    files,
-    ai,
-    geocoder,
-    push,
-    card,
-    human,
-    logger,
-    clock,
-    rng: webcrypto.createRng(),
-    hasher: webcrypto.createHasher(),
-    config: { turnstileSiteKey: "site-key-test", vapidPublicKey: "vapid-public-test", contactEmail: null, orcarouterModel: "orcarouter/auto" },
-    ...opts.deps,
+    files: given.files ?? fakeFiles(),
+    ai: given.ai ?? fakeAi(),
+    pitch: "pitch" in given ? given.pitch : fakePitch(),
+    geocoder: given.geocoder ?? fakeGeocoder(),
+    storeImage: "storeImage" in given ? given.storeImage : fakeStoreImage(),
+    push: given.push ?? fakePush(),
+    card: given.card ?? fakeCard(),
+    human: given.human ?? fakeHuman(),
+    logger: given.logger ?? fakeLogger(),
+    clock: given.clock ?? fakeClock(opts.clockStart),
+    rng: given.rng ?? webcrypto.createRng(),
+    hasher: given.hasher ?? webcrypto.createHasher(),
+    config: given.config ?? { turnstileSiteKey: "site-key-test", vapidPublicKey: "vapid-public-test", contactEmail: null, orcarouterModel: "orcarouter/auto" },
   };
   const { createApp } = await loadWeb("lib/http/app");
   const app = createApp(deps);
-  const ctx: Ctx = {
+  // 手元の道具は、app に渡した物そのもの。偽物でない物が渡った口は undefined（型の CtxWith と同じ読み）
+  const tools = Object.fromEntries(TOOL_NAMES.map((name) => [name, isFake(deps[name]) ? deps[name] : undefined]));
+  const ctx = {
     app,
     deps,
     db,
-    clock,
-    ai,
-    geocoder,
-    push,
-    card,
-    human,
-    files,
-    logger,
-    api: (cookie = null) => apiClient(app, cookie),
-    withDeps: async (over) => {
+    ...tools,
+    api: (cookie: string | null = null, apiOpts: { ip?: string } = {}) => apiClient(app, cookie, apiOpts),
+    withDeps: async (over: Partial<Deps>) => {
       const next = await buildCtx(db, async () => {}, { deps: { ...deps, ...over } });
       next.admin = ctx.admin;
       return next;
     },
     dispose,
     admin: null,
-  };
+  } as unknown as CtxWith<O>;
   return ctx;
 };
 
 // ---------- 場面の準備 ----------
+// 場面の道具は、使う欄だけを受け取る（差し替え口を替えた場面 CtxWith も、使う偽物が揃っていれば渡せる。
+// 使う偽物を偽物でない物に替えた場面は、型の検査で弾かれる）
+/** 入口を呼べる場面 */
+type ApiScene = Pick<Ctx, "api">;
+/** 運営を作れる場面 */
+type AdminScene = Pick<Ctx, "api" | "deps" | "admin">;
+/** 承認済みの店を作れる場面（店の住所を偽の地図に置くので、偽の地図が要る） */
+type StoreScene = Pick<Ctx, "api" | "deps" | "admin" | "geocoder">;
 export const CUSTOMER = { nickname: "たなか", phone: "09012345678", genres: ["和食", "居酒屋"], budgetMax: 4000 };
 
-export const registerCustomer = async (ctx: Ctx, over: Partial<typeof CUSTOMER> & { humanToken?: string } = {}) => {
+export const registerCustomer = async (ctx: ApiScene, over: Partial<typeof CUSTOMER> & { humanToken?: string } = {}) => {
   const r = await ctx.api().post("/api/register/customer", { ...CUSTOMER, humanToken: "tok-ok", ...over });
   if (![200, 201].includes(r.status)) throw new Error(`客の登録に失敗: ${r.status} ${r.text}`);
   const cookie = cookieOf(r);
@@ -418,7 +336,7 @@ export const registerCustomer = async (ctx: Ctx, over: Partial<typeof CUSTOMER> 
   return { cookie, api: ctx.api(cookie), response: r };
 };
 
-export const seedAdmin = async (ctx: Ctx, input: { email?: string; password?: string } = {}) => {
+export const seedAdmin = async (ctx: AdminScene, input: { email?: string; password?: string } = {}) => {
   const email = input.email ?? "admin@example.com";
   const password = input.password ?? "admin-pass-1234";
   const { seedAdmin: seed } = await loadWeb("lib/usecases/seedAdmin");
@@ -432,7 +350,7 @@ export const seedAdmin = async (ctx: Ctx, input: { email?: string; password?: st
 };
 
 let storeSeq = 0;
-export const registerStore = async (ctx: Ctx, over: { name?: string; email?: string; password?: string; humanToken?: string } = {}) => {
+export const registerStore = async (ctx: ApiScene, over: { name?: string; email?: string; password?: string; humanToken?: string } = {}) => {
   const n = ++storeSeq;
   const input = { name: over.name ?? `店${n}`, email: over.email ?? `store${n}-${Date.now()}@example.com`, password: over.password ?? "store-pass-1234", humanToken: over.humanToken ?? "tok-ok" };
   const r = await ctx.api().post("/api/register/store", input);
@@ -463,19 +381,41 @@ export const uploadLicense = async (api: Api, bytes: Uint8Array, name = "license
   return api.post("/api/store/license", fd);
 };
 
-export const registerCard = async (api: Api) => {
+/**
+ * 店がカードを登録する——**画面と同じ道**: 開始 → Stripe の画面で入力を終える → 戻り先（success_url）へ戻る
+ * → 画面が確かめを送る。戻り先に `session_id` が載っていればそれを送り、無ければ本文なしで送る
+ * （サーバーが控えた番号で確かめる形）。番号を URL から切り出すような、画面にできないことはしない。
+ */
+export const registerCardAsPage = async (api: Api) => {
   const setup = await api.post("/api/store/card/setup", {});
   if (setup.status !== 200) throw new Error(`カードの登録の開始に失敗: ${setup.status} ${setup.text}`);
-  const url: string = setup.json.url;
-  const sessionId = url.split("/").pop()!;
-  const confirm = await api.post("/api/store/card/confirm", { sessionId });
-  if (confirm.status !== 200) throw new Error(`カードの登録の確かめに失敗: ${confirm.status} ${confirm.text}`);
-  return confirm;
+  const checkoutUrl: string = setup.json.url;
+  const back = cardOfCheckout(checkoutUrl).complete(checkoutUrl);
+  const sessionId = new URL(back, ORIGIN).searchParams.get("session_id");
+  const confirm = await api.post("/api/store/card/confirm", sessionId ? { sessionId } : {});
+  return { checkoutUrl, back, confirm };
+};
+
+/**
+ * 場面づくりのカードの登録。まず画面と同じ道（registerCardAsPage）を歩く。
+ *
+ * ⚠️ **既知の不具合（不具合-01）の迂回**: 今の実装は、戻り先に番号を載せず、控えた番号で確かめる入口も無いので、
+ *    画面の道では登録済みにならない。承認済みの店を作れないと、ほかの全部の場面が作れなくなるため、
+ *    その時だけ Stripe の側の控え（偽物の sessions）から番号を取って確かめる。画面の道が直ったかどうかは、
+ *    r13 の「既知の不具合（不具合-01）」の検査が見る。**不具合-01 を直してその検査を it に戻すとき、この迂回も消す。**
+ */
+export const registerCard = async (api: Api) => {
+  const { checkoutUrl, confirm } = await registerCardAsPage(api);
+  if (confirm.status === 200) return confirm;
+  const sessionId = cardOfCheckout(checkoutUrl).sessionIdOf(checkoutUrl);
+  const bypass = await api.post("/api/store/card/confirm", { sessionId });
+  if (bypass.status !== 200) throw new Error(`カードの登録の確かめに失敗: ${bypass.status} ${bypass.text}`);
+  return bypass;
 };
 
 /** 承認済みの店を1つ作る（登録→店の情報→許可書→カード→運営が承認） */
 export const approvedStore = async (
-  ctx: Ctx,
+  ctx: StoreScene,
   over: Partial<StoreProfile> & { lat?: number; lng?: number; coupons?: Array<{ name: string; note: string }>; email?: string; password?: string } = {},
 ) => {
   if (!ctx.admin) await seedAdmin(ctx);
@@ -504,37 +444,205 @@ export const publishOffer = async (api: Api, over: { couponIds?: string[]; capac
   return r.json.offer as { id: string; capacity: number; remaining: number; partyMax: number; untilAt: string; publishedAt: string };
 };
 
-export const fetchOffers = async (api: Api, over: { lat?: number; lng?: number; place?: string; party?: number; genres?: string[]; budgetMax?: number | null } = {}) => {
+const fetchBody = (over: { lat?: number; lng?: number; place?: string; party?: number; genres?: string[]; budgetMax?: number | null } = {}) => {
   const body: any = { party: 2, genres: [], budgetMax: null, ...over };
   if (!over.place) {
     body.lat = over.lat ?? SHIBUYA.lat;
     body.lng = over.lng ?? SHIBUYA.lng;
   }
-  return api.post("/api/customer/fetch", body);
+  return body;
+};
+/** 場面の道具で行った取得 → その結果に出たオファー（受け取りの道具が、結果に出たものだけを受け取るよう見張る） */
+const shownByFetch = new Map<string, string[]>();
+const rememberShown = (fetchId: unknown, items: unknown) => {
+  if (typeof fetchId === "string" && Array.isArray(items)) shownByFetch.set(fetchId, items.map((i: { offerId: string }) => i.offerId));
+};
+export const fetchOffers = async (api: Api, over: Parameters<typeof fetchBody>[0] = {}) => {
+  const r = await api.post("/api/customer/fetch", fetchBody(over));
+  if (r.status === 200) rememberShown(r.json?.fetchId, r.json?.items);
+  return r;
 };
 
-export const receive = async (api: Api, input: { offerId: string; party: number; fetchId: string }) => api.post("/api/customer/reservations", input);
+/**
+ * 受け取り（客の画面と同じ要求）。**その取得の結果に出たオファーだけ**を受け取る——場面の道具で取得した
+ * fetchId に、結果に出ていないオファーを組み合わせたら、要求を送らずに落とす（2026-09-25 設計-03）。
+ * 結果に無い店の受け取りの件（不具合-12）を確かめる検査のように、わざと組み合わせるときは入口を直に呼ぶ。
+ */
+export const receive = async (api: Api, input: { offerId: string; party: number; fetchId: string }) => {
+  const shown = shownByFetch.get(input.fetchId);
+  if (shown && !shown.includes(input.offerId)) {
+    throw new Error(`場面の近道: 取得 ${input.fetchId} の結果に出ていないオファー ${input.offerId} を受け取ろうとしました（出たもの: ${shown.join(", ") || "なし"}）。店の場所（spot）で探してから受け取る`);
+  }
+  return api.post("/api/customer/reservations", input);
+};
 
-/** 客1人が受け取りまで済ませた場面 */
-export const receivedScene = async (ctx: Ctx, over: { capacity?: number; partyMax?: number; party?: number; coupons?: Array<{ name: string; note: string }>; storeName?: string } = {}) => {
-  const store = await approvedStore(ctx, { name: over.storeName ?? "受け取りの店", coupons: over.coupons ?? [] });
+let spotSeq = 0;
+/**
+ * 場面ごとに別の場所（隣とは約3km＝探す範囲 800m より十分に離す）。同じ ctx に店が溜まっても、
+ * その場所で探せば、その場面の店だけが候補になる（結果の順に場面が左右されない・2026-09-25 設計-03）。
+ */
+export const spot = (): { lat: number; lng: number } => {
+  const n = ++spotSeq;
+  return { lat: SHIBUYA.lat + 0.03 * ((n % 20) + 1), lng: SHIBUYA.lng + 0.03 * (Math.floor(n / 20) + 1) };
+};
+
+/** 取得の結果にそのオファーが出ていること（受け取れるのは、その取得で見せた店だけ——結果に無い店の受け取りの件（不具合-12）） */
+export const requireInResults = (fetched: ApiResult, offerId: string): void => {
+  if (fetched.status !== 200) throw new Error(`取得に失敗: ${fetched.status} ${fetched.text}`);
+  const shown = (fetched.json.items ?? []).map((i: { offerId: string }) => i.offerId);
+  if (!shown.includes(offerId)) throw new Error(`受け取るオファー ${offerId} が取得の結果に出ていません（出たもの: ${shown.join(", ") || "なし"}）。場面は結果に出たオファーだけを受け取る`);
+};
+
+/**
+ * 客1人が受け取りまで済ませた場面。店は場面ごとに別の場所（spot）に置き、客はそこで探して、
+ * **結果に出たことを確かめてから**受け取る（本番の客と同じ順）。`at` はその場所（続けて探す検査が使う）。
+ */
+export const receivedScene = async (ctx: StoreScene, over: { capacity?: number; partyMax?: number; party?: number; coupons?: Array<{ name: string; note: string }>; storeName?: string } = {}) => {
+  const at = spot();
+  const store = await approvedStore(ctx, { name: over.storeName ?? "受け取りの店", coupons: over.coupons ?? [], ...at });
   const offer = await publishOffer(store.api, { capacity: over.capacity ?? 3, partyMax: over.partyMax ?? 4, couponIds: store.coupons.map((c) => c.id) });
   const customer = await registerCustomer(ctx);
-  const f = await fetchOffers(customer.api, { party: over.party ?? 2 });
-  if (f.status !== 200) throw new Error(`取得に失敗: ${f.status} ${f.text}`);
+  const f = await fetchOffers(customer.api, { party: over.party ?? 2, ...at });
+  requireInResults(f, offer.id);
   const r = await receive(customer.api, { offerId: offer.id, party: over.party ?? 2, fetchId: f.json.fetchId });
   if (r.status !== 200) throw new Error(`受け取りに失敗: ${r.status} ${r.text}`);
-  return { store, offer, customer, reservation: r.json.reservation as { id: string; code: string }, fetchId: f.json.fetchId as string };
+  return { store, offer, customer, at, reservation: r.json.reservation as { id: string; code: string }, fetchId: f.json.fetchId as string };
 };
 
+/**
+ * 少しずつ届く取得の入口（本番の客の画面が使う道・NDJSON）を最後まで読む。
+ * 紹介文の着手のずらしと全体の蓋は `deps.clock` で待つので、届き終わるまで偽の時計を少しずつ進める
+ * （進めた分は最大で全体の蓋の 25 秒）。
+ */
+export const fetchOffersStream = async (ctx: Pick<Ctx, "clock">, api: Api, over: Parameters<typeof fetchBody>[0] = {}) => {
+  const res = await api.open("POST", "/api/customer/fetch/stream", fetchBody(over));
+  if (!(res.headers.get("content-type") ?? "").includes("ndjson") || !res.body) {
+    const text = await res.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+    return { status: res.status, json, lines: [] as any[] };
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const lines: any[] = [];
+  let buffer = "";
+  let finished = false;
+  const pump = (async () => {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const parts = buffer.split("\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) if (part.trim()) lines.push(JSON.parse(part));
+    }
+    finished = true;
+  })();
+  void pump.then(() => {
+    const init = lines.find((l) => l.type === "init");
+    if (init) rememberShown(init.fetchId, init.items);
+  });
+  for (let i = 0; i < 200 && !finished; i++) await ctx.clock.advance(150);
+  await pump;
+  return { status: res.status, json: null, lines };
+};
+
+/**
+ * 約束が実時間 `ms` のうちに決まればその値、決まらなければ null（待ち続けない）。
+ * 「偽の時計を進めたら応答が返る」を確かめる検査が、返らなかったときに検査の打ち切り（30秒）まで止まらないよう使う。
+ */
+export const settledWithin = async <T>(pending: Promise<T>, ms: number): Promise<T | null> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+  try {
+    return await Promise.race([pending, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** 客の端末の Web プッシュの購読（偽物。配信先は偽の口が受けるので外へは出ない） */
+export const PUSH_SUBSCRIPTION = { endpoint: "https://push.example.test/sub/1", keys: { p256dh: "BPUB", auth: "AUTH" } };
+
 // ---------- 画面の検査（jsdom）用の偽の fetch ----------
-export type FakeRoute = (input: { method: string; path: string; body: any; url: URL }) => { status?: number; json?: unknown } | Promise<{ status?: number; json?: unknown }>;
+/**
+ * 少しずつ届く応答（NDJSON）。`lines` を1行ずつ送る。`holdAfter` 行を送ったら `release` を待ってから残りを送る
+ * （紹介文が後から届く・遅れて届く形）。`end` は終わり方: "close"（既定）／"cut"（途中で通信が切れる）／"hang"（閉じない）。
+ */
+export type FakeStream = { lines: unknown[]; holdAfter?: number; release?: Promise<void>; end?: "close" | "cut" | "hang" };
+export type FakeReply = { status?: number; json?: unknown; stream?: FakeStream };
+export type FakeRoute = (input: { method: string; path: string; body: any; url: URL }) => FakeReply | Promise<FakeReply>;
 export type FakeApi = { calls: Array<{ method: string; path: string; body: any }>; on: (method: string, path: string, handler: FakeRoute) => void; restore: () => void };
-/** 画面の部品の検査で、client/api が呼ぶ fetch を偽物にする */
+
+const FETCH_PATH = "/api/customer/fetch";
+const FETCH_STREAM_PATH = "/api/customer/fetch/stream";
+/** 取得の要求か（普通の入口と少しずつ届く入口のどちらでも1回と数える） */
+export const isFetchCall = (c: { method: string; path: string }): boolean => c.method === "POST" && (c.path === FETCH_PATH || c.path === FETCH_STREAM_PATH);
+
+/** 取得の結果を、本番の少しずつ届く入口と同じ行に直す（init → 店ごとの紹介文 → done） */
+export const streamOfResult = (result: { fetchId: string; items: Array<{ storeId: string; reason: string }> }, opts: Omit<FakeStream, "lines"> = {}): FakeStream => ({
+  lines: [
+    { type: "init", fetchId: result.fetchId, items: result.items },
+    ...result.items.map((item) => ({ type: "pitch", storeId: item.storeId, reason: item.reason, source: "persona" })),
+    { type: "done" },
+  ],
+  ...opts,
+});
+
+const jsonResponse = (status: number, json: unknown) => new Response(JSON.stringify(json), { status, headers: { "content-type": "application/json" } });
+/** 偽の返し方を応答にする（部品の検査が自前の偽の fetch から使ってもよい） */
+export const replyToResponse = (reply: FakeReply): Response => (reply.stream ? ndjsonResponse(reply.stream) : jsonResponse(reply.status ?? 200, reply.json ?? { ok: true }));
+const ndjsonResponse = (s: FakeStream): Response => {
+  const encoder = new TextEncoder();
+  const hold = s.holdAfter ?? s.lines.length;
+  let sent = 0;
+  // 読む側が求めたときに1行ずつ渡す（先に全部積んでから切ると、切った時に積んだ行ごと捨てられるため）
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull: async (controller) => {
+        if (sent === hold && sent < s.lines.length) await s.release;
+        if (sent < s.lines.length) {
+          controller.enqueue(encoder.encode(`${JSON.stringify(s.lines[sent++])}\n`));
+          return;
+        }
+        if (s.end === "cut") controller.error(new TypeError("network connection was lost"));
+        else if (s.end === "hang") await new Promise<never>(() => {});
+        else controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return new Response(body, { status: 200, headers: { "content-type": "application/x-ndjson; charset=utf-8" } });
+};
+
+/**
+ * 画面の部品の検査で、client/api が呼ぶ fetch を偽物にする。
+ *
+ * **取得は、少しずつ届く入口を既定にする**（2026-09-25 設計-03。本番の画面は
+ * `POST /api/customer/fetch/stream` を先に使い、普通の入口へは倒れたときだけ行く）。
+ * 検査が普通の入口 `POST /api/customer/fetch` の返し方だけを決めた場合は、その結果を本番と同じ行
+ * （init → 紹介文 → done）にして少しずつ届く入口からも返す。普通の入口へ倒れる道を見たい検査は、
+ * 少しずつ届く入口に 404 を返すよう明示する。
+ */
 export const installFakeApi = (routes: Record<string, FakeRoute> = {}): FakeApi => {
   const table = new Map<string, FakeRoute>(Object.entries(routes));
   const prev = globalThis.fetch;
   const calls: FakeApi["calls"] = [];
+  const find = (method: string, pathname: string): FakeRoute | undefined => table.get(`${method} ${pathname}`) ?? [...table.entries()].find(([k]) => matchRoute(k, method, pathname))?.[1];
+  const derivedStream: FakeRoute = async (input) => {
+    const plain = find("POST", FETCH_PATH);
+    if (!plain) return { status: 404, json: { ok: false, error: { kind: "not_found" } } };
+    const out = await plain({ ...input, path: FETCH_PATH });
+    const json = out.json as { ok?: boolean; fetchId?: string; items?: Array<{ storeId: string; reason: string }> } | undefined;
+    if ((out.status ?? 200) !== 200 || !json?.ok || !json.fetchId || !Array.isArray(json.items)) return out;
+    return { stream: streamOfResult({ fetchId: json.fetchId, items: json.items }) };
+  };
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://localhost");
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
@@ -548,10 +656,9 @@ export const installFakeApi = (routes: Record<string, FakeRoute> = {}): FakeApi 
       }
     } else if (raw) body = raw;
     calls.push({ method, path: url.pathname, body });
-    const handler = table.get(`${method} ${url.pathname}`) ?? [...table.entries()].find(([k]) => matchRoute(k, method, url.pathname))?.[1];
-    if (!handler) return new Response(JSON.stringify({ ok: false, error: { kind: "not_found" } }), { status: 404, headers: { "content-type": "application/json" } });
-    const out = await handler({ method, path: url.pathname, body, url });
-    return new Response(JSON.stringify(out.json ?? { ok: true }), { status: out.status ?? 200, headers: { "content-type": "application/json" } });
+    const handler = find(method, url.pathname) ?? (method === "POST" && url.pathname === FETCH_STREAM_PATH ? derivedStream : undefined);
+    if (!handler) return jsonResponse(404, { ok: false, error: { kind: "not_found" } });
+    return replyToResponse(await handler({ method, path: url.pathname, body, url }));
   }) as typeof fetch;
   return {
     calls,
@@ -571,6 +678,12 @@ const matchRoute = (key: string, method: string, pathname: string) => {
 };
 
 export const invalidInput = (fields: Array<{ name: string; reason: string }>) => ({ status: 400, json: { ok: false, error: { kind: "invalid_input", fields } } });
+/**
+ * 見分けの断り（401 未ログイン・ログイン切れ／403 役割違い）の応答。**形はここ1か所**（2026-09-25 設計-04。
+ * 以前は入口の検査と画面の検査で3通りに食い違っていた）。入口の実物（web/lib/http/defineRoute.ts）と同じ形。
+ */
+export const unauthorized = () => ({ status: 401, json: { ok: false, error: { kind: "invalid_input" } } });
+export const forbidden = () => ({ status: 403, json: { ok: false, error: { kind: "invalid_input" } } });
 export const refusal = (kind: string, extra: Record<string, unknown> = {}) => ({ status: 409, json: { ok: false, error: { kind, ...extra } } });
 
 export const homeFetch = (over: Partial<import("./_types").HomeDto> = {}): import("./_types").HomeDto => ({ kind: "fetch", profile: { ...CUSTOMER }, ...over });

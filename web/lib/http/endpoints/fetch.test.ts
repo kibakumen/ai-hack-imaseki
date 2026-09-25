@@ -1,114 +1,22 @@
 // 取得の入口の検査（要件3〜7・27・33）。
 //
-// ⚠️ なぜ受け入れ検査とは別に置くか: 受け入れ検査 r03・r04・r05・r07・r27・r33 が場面を作るのに使う
-// 入口（店の情報・許可書・カード・クーポン・承認・公開）は別のタスクの持ち場で、並行作業の作業ツリーには
-// まだ無い。ここでは D1 に直に行を入れて、取得の入口だけを歩く。統合後は受け入れ検査が同じことを
-// 場面ごと見るので、この検査はその下敷き（速く回る方）として残す。
+// ⚠️ 受け入れ検査 r03・r04・r05・r07・r27・r33 との関係: あちらは店の登録から承認・公開までの入口を
+// 通って場面を作る。こちらは D1 に直に行を入れて取得の入口だけを歩く、速く回る下敷き。
+// 道具（偽の時計・AI・地図・D1）は受け入れ検査のものを使い、写しを持たない（2026-09-25 設計-19）。
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+// 偽の時計・偽の AI・偽の地図・偽のログ・手元の D1 は受け入れ検査の道具をそのまま使う（写しを作らない・設計-19）
+import { fakeAi, fakeClock, fakeGeocoder, fakeLogger, north as northOf, openDb, ORIGIN, selectionText, SHIBUYA, T0, type FakeAi, type FakeClock, type FakeGeocoder } from "../../../../tests/acceptance/v2/_fakes";
 import { createHasher, createRng } from "../../adapters/webcrypto";
 import { TEXTS } from "../../domain/texts";
-import type { AiSelectInput, AiSelectResult, Clock, Deps, Geocoder, Logger } from "../../ports";
+import type { Deps } from "../../ports";
 import { CUSTOMER_COOKIE_NAME } from "../cookies";
 import { createApp } from "../app";
 
-const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const ORIGIN = "https://app.test";
-const T0 = "2026-09-22T06:00:00.000Z";
-const SHIBUYA = { lat: 35.6595, lng: 139.7005 };
-const EARTH_R = 6_371_000;
-/** 起点から北へ meters 進んだ点 */
-const north = (meters: number) => ({ lat: SHIBUYA.lat + (meters / EARTH_R) * (180 / Math.PI), lng: SHIBUYA.lng });
+/** 渋谷から北へ meters 進んだ点 */
+const north = (meters: number) => northOf(SHIBUYA, meters);
 
-// ---------- 偽の差し替え口 ----------
-type FakeClock = Clock & { advance(ms: number): Promise<void> };
-const fakeClock = (): FakeClock => {
-  let t = new Date(T0).getTime();
-  const waiters: Array<{ at: number; resolve: () => void }> = [];
-  return {
-    now: () => new Date(t),
-    after: (ms) => new Promise<void>((resolve) => waiters.push({ at: t + ms, resolve })),
-    advance: async (ms) => {
-      t += ms;
-      for (const w of [...waiters]) {
-        if (w.at <= t) {
-          waiters.splice(waiters.indexOf(w), 1);
-          w.resolve();
-        }
-      }
-      for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
-    },
-  };
-};
-
-const selectionText = (items: Array<{ storeId: string; reason: string }>) => JSON.stringify({ selections: items });
-
-type Responder = (input: AiSelectInput) => AiSelectResult | Promise<AiSelectResult>;
-type FakeAi = Deps["ai"] & { calls: AiSelectInput[]; respond: (fn: Responder) => void };
-const fakeAi = (): FakeAi => {
-  let responder: Responder = (input) => ({ ok: true, text: selectionText(input.stores.slice(0, 5).map((s) => ({ storeId: s.id, reason: `${s.genres[0] ?? "お店"}で好みに合います` }))), costUsd: 0.0012 });
-  const ai: FakeAi = {
-    calls: [],
-    respond: (fn) => {
-      responder = fn;
-    },
-    select: async (input) => {
-      ai.calls.push(JSON.parse(JSON.stringify(input)) as AiSelectInput);
-      return responder(input);
-    },
-  };
-  return ai;
-};
-
-type GeocodeAnswer = { lat: number; lng: number } | "none" | "fail" | "hang";
-type FakeGeocoder = Geocoder & { set: (text: string, result: GeocodeAnswer) => void };
-const fakeGeocoder = (): FakeGeocoder => {
-  const table = new Map<string, GeocodeAnswer>();
-  return {
-    set: (text, result) => {
-      table.set(text, result);
-    },
-    geocode: async (text, opts) => {
-      const found = table.get(text) ?? "none";
-      if (found === "none") return { ok: false };
-      if (found === "fail") throw new Error("geocoder failure");
-      // 打ち切りの合図が来るまで返らない（受け入れ検査の偽の地図と同じ振る舞い）
-      if (found === "hang") return new Promise<{ ok: false }>((resolve) => opts?.signal?.addEventListener("abort", () => resolve({ ok: false })));
-      return { ok: true, lat: found.lat, lng: found.lng };
-    },
-  };
-};
-
-const fakeLogger = (): Logger & { entries: unknown[] } => {
-  const entries: unknown[] = [];
-  return { entries, log: (entry) => entries.push(entry) };
-};
-
-// ---------- 手元の D1 ----------
 type Db = Deps["db"];
-const openDb = async (): Promise<{ db: Db; dispose: () => Promise<void> }> => {
-  const { getPlatformProxy } = await import("wrangler");
-  const persist = fs.mkdtempSync(path.join(os.tmpdir(), "task11-fetch-"));
-  const proxy = await getPlatformProxy<{ DB: Db }>({ configPath: path.join(WEB, "wrangler.jsonc"), persist: { path: persist } });
-  const db = proxy.env.DB;
-  const dir = path.join(WEB, "migrations");
-  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    const sql = fs.readFileSync(path.join(dir, file), "utf8").replace(/--[^\n]*/g, "");
-    for (const statement of sql.split(";").map((s) => s.trim()).filter(Boolean)) await db.prepare(statement).run();
-  }
-  return {
-    db,
-    dispose: async () => {
-      await proxy.dispose();
-      fs.rmSync(persist, { recursive: true, force: true });
-    },
-  };
-};
-
 const rows = async (db: Db, sql: string, ...params: unknown[]): Promise<Record<string, unknown>[]> => ((await db.prepare(sql).bind(...params).all()).results ?? []) as Record<string, unknown>[];
 const one = async (db: Db, sql: string, ...params: unknown[]): Promise<Record<string, unknown> | null> => (await rows(db, sql, ...params))[0] ?? null;
 
@@ -238,15 +146,19 @@ describe("取得の入口 POST /api/customer/fetch", () => {
     }
   });
 
-  it("3.5 返らない地図のサービスを、要求の外から時計を進めた場合（受け入れ検査と同じ形）でも打ち切って断る", async () => {
+  it("3.5 返らない地図のサービスを、偽の時計の3秒で打ち切って断る（実時計の打ち切りを待たない）", async () => {
     geocoder.set("返らない場所", "hang");
     const before = (await rows(db, "SELECT id FROM fetch_logs")).length;
     const calls = ai.calls.length;
-    // ⚠️ この進め方は、手続きが合図を作るより先に「今」を動かす（見分けの問い合わせの途中で進む）。
-    // 差し替えた時計の合図はもう鳴らないので、実時計の打ち切り（AbortSignal.timeout）だけが残る。
+    // 手続きが打ち切りの合図を作ってから時計を進める。以前は作る前に進めていて、差し替えた時計の合図が鳴らず、
+    // 実時計の打ち切り（AbortSignal.timeout の3秒）で緑になっていた（設計-19）
+    const armed = clock.armed();
     const pending = search({ place: "返らない場所" });
+    await armed;
+    const startedAt = performance.now();
     await clock.advance(3_100);
     const refused = await pending;
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
     expect(refused.status).toBe(400);
     expect(refused.json).toMatchObject({ error: { kind: "place_unresolved" } });
     expect((await rows(db, "SELECT id FROM fetch_logs")).length).toBe(before);

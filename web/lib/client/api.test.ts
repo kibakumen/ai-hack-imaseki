@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { apiCall, apiStream, STREAM_UNAVAILABLE, type ApiFailure } from "./api";
+import { unauthorized } from "../../../tests/acceptance/v2/_fakes";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -41,10 +42,11 @@ describe("client/api が応答の形を確かめてから返す", () => {
     expect(failureOf(await apiCall<Ok>("POST", "/api/store/reservations/r1/complete")).current?.state).toBe("customer_cancelled");
   });
 
-  it("中身を持たない断り（未ログインの 401）もそのまま返る", async () => {
-    respondWith(401, { ok: false });
+  it("未ログインの 401 は、入口が返す形のまま断りとして返る（形は受け入れ検査の道具の1か所に揃える）", async () => {
+    const { status, json } = unauthorized();
+    respondWith(status, json);
     const failure = failureOf(await apiCall<Ok>("GET", "/api/customer/home"));
-    expect(failure.error).toBeUndefined();
+    expect(failure).toEqual(json);
   });
 
   it("アプリの外が返した既定の応答（2xx でなく ok:false も持たない）は kind network に倒す", async () => {

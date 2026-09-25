@@ -22,7 +22,7 @@ describeTask("16", "期限切れと受け取り直し", () => {
     const rowBefore = await one(ctx.db, "SELECT * FROM reservations WHERE id = ?", s.reservation.id);
     at(ctx, 20);
     const other = await registerCustomer(ctx, { nickname: "つぎ", phone: "08055550001" });
-    const f = await fetchOffers(other.api, { party: 2 });
+    const f = await fetchOffers(other.api, { party: 2, ...s.at });
     expect(f.json.items.map((i: any) => i.offerId)).toContain(s.offer.id);
     expect((await receive(other.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId })).status).toBe(200);
     expect(await one(ctx.db, "SELECT * FROM reservations WHERE id = ?", s.reservation.id)).toEqual(rowBefore);
@@ -98,7 +98,7 @@ describeTask("16", "期限切れと受け取り直し", () => {
     const s = await receivedScene(ctx, { capacity: 1, party: 2 });
     at(ctx, 25);
     const taker = await registerCustomer(ctx, { nickname: "よこどり", phone: "08055550002" });
-    const f = await fetchOffers(taker.api, { party: 2 });
+    const f = await fetchOffers(taker.api, { party: 2, ...s.at });
     expect((await receive(taker.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId })).status).toBe(200);
     const full = await s.customer.api.post("/api/customer/reservations", { retryOf: s.reservation.id });
     expect(full.status).toBe(409);

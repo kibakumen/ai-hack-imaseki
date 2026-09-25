@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { expect, it } from "vitest";
-import { describeTask, REPO, TASKS_MD, taskStates } from "./_tasks";
+import { describeTask, isStarted, REPO, RUNS_DIR, TASKS_MD, taskStates } from "./_tasks";
 
 const WEB = path.join(REPO, "web");
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -110,6 +110,34 @@ describeTask("1", "骨組み: 34.1・34.5・34.6・31.2・受け入れ検査の�
       expect(named.length, `${file}: describeTask が無い`).toBeGreaterThan(0);
       for (const n of named) expect(states.has(n), `${file}: タスク ${n} は ${path.relative(REPO, TASKS_MD)} に無い`).toBe(true);
     }
+  });
+});
+
+describeTask("1", "31.2 検査が黙って飛ばない", () => {
+  const withGate = (value: string | undefined, fn: () => void) => {
+    const saved = process.env.ACCEPTANCE_TASK_GATE;
+    if (value === undefined) delete process.env.ACCEPTANCE_TASK_GATE;
+    else process.env.ACCEPTANCE_TASK_GATE = value;
+    try {
+      fn();
+    } finally {
+      if (saved === undefined) delete process.env.ACCEPTANCE_TASK_GATE;
+      else process.env.ACCEPTANCE_TASK_GATE = saved;
+    }
+  };
+
+  it("着手の記録による絞りは ACCEPTANCE_TASK_GATE=1 の実行（/dev の実装の段）だけ。立てなければ、着手の記録が在っても全部走る", () => {
+    // 以前は .dev/runs/v2 が在るだけで絞っていて、並列の作業ツリーで実装したタスクの検査（横断の安全の検査を含む約70件）が
+    // 手元の vitest run で黙って飛んでいた（設計-02）
+    withGate(undefined, () => expect(isStarted("99999")).toBe(true));
+    withGate("0", () => expect(isStarted("99999")).toBe(true));
+    withGate("1", () => expect(isStarted("99999")).toBe(!fs.existsSync(RUNS_DIR)));
+  });
+
+  it("型の検査（tsconfig.json）は受け入れ検査を1本も外していない", () => {
+    const tsconfig = JSON.parse(read(path.join(REPO, "tsconfig.json")));
+    const excluded: string[] = tsconfig.exclude ?? [];
+    expect(excluded.filter((e) => e.includes("tests/"))).toEqual([]);
   });
 });
 
@@ -353,3 +381,20 @@ describeTask("34", "明暗の両対応: 色は変数でだけ指す", () => {
     }
   });
 });
+
+describeTask("25", "応答の見出し（既知の不具合）", () => {
+  // セキュリティ用の応答の見出しが1つも無い。next.config.ts の headers() で全部の経路に付ける（設計-04 が挙げた、確かめる検査の無い約束）。
+  it.fails("既知の不具合（安全-24）: 全部の経路の応答に CSP・X-Frame-Options・Referrer-Policy・Permissions-Policy・X-Content-Type-Options が付き、X-Powered-By を出さない", async () => {
+    const { pathToFileURL } = await import("node:url");
+    const config = (await import(/* @vite-ignore */ pathToFileURL(path.join(WEB, "next.config.ts")).href)).default as {
+      poweredByHeader?: boolean;
+      headers?: () => Promise<Array<{ source: string; headers: Array<{ key: string; value: string }> }>>;
+    };
+    expect(config.poweredByHeader).toBe(false);
+    const rules = (await config.headers?.()) ?? [];
+    const everyPath = rules.filter((r) => r.source === "/(.*)" || r.source === "/:path*");
+    const keys = everyPath.flatMap((r) => r.headers.map((h) => h.key.toLowerCase()));
+    for (const key of ["content-security-policy", "x-frame-options", "referrer-policy", "permissions-policy", "x-content-type-options"]) expect(keys, key).toContain(key);
+  });
+});
+
