@@ -198,6 +198,20 @@ describe("公開の文書: 私的な文書と開発ハーネスの内部（安�
     const unredacted = privateQuotes.filter((e) => !REDACTED_QUOTE.test(e.quote));
     expect(unredacted.map((e) => `${e.file}: ${e.path}`)).toEqual([]);
   });
+
+  // 2026-09-26 の第2周のレビュー（安全-26 の残り）: 引用の欄を伏せたあとも、intent.md と、監査記録の本文・注・引用に、
+  // チームの話し合いの記録（非公開）の中身の言い換え（決定事項・詳細・例・助言・理由・次のステップの引き写し）が残っていた。
+  // 記録があること（出どころの名札）と、採った決めの帰属（「ミーティングの反映」＝本人の注文メモの節）は書いてよい。
+  it("仕様と監査記録は、チームの話し合いの記録（非公開）の中身を引き写さない", () => {
+    const MEETING_CONTENT = /(議事録|チームの話し合いの記録)(（06）)?(の|に|にも|では|で)(「|『|決定事項|詳細|理由|例|助言|目的|次のステップ|除外)|元の議事録/;
+    const specFiles = tracked.filter((f) => /^docs\/specs\/[^/]+\/(intent|requirements|design)\.md$/.test(f));
+    expect(specFiles.length).toBeGreaterThan(0);
+    const hits = [
+      ...specFiles.filter((f) => MEETING_CONTENT.test(read(f))),
+      ...auditStrings.filter((s) => MEETING_CONTENT.test(s.text)).map((s) => `${s.file}: ${s.text.slice(0, 40)}`),
+    ];
+    expect(hits).toEqual([]);
+  });
 });
 
 describe("公開の文書: AI まわりの守りの中身（安全-25）", () => {
