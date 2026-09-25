@@ -3,7 +3,8 @@
 // 位置を追い続ける呼び出し（常時の追跡）は使わない——構造の検査が、その呼び出しの名前がこのファイル
 // にも無いことと、ほかのどのソースにも位置の呼び出しが無いことを見る（検査の割り当ての 3.9 の行）。
 //
-// 取れなかった3つ（客が許可を断った・呼び出しが失敗した・5秒返らなかった）は、どれも**同じ語の断り**
+// 取れなかった4つ（客が許可を断った・呼び出しが失敗した・許可のあと5秒で決まらなかった・探すときに上限まで
+// 何も返らなかった）は、どれも**同じ語の断り**
 // （`location_required`・基準 3.7・3.8）にする——場所の欄の直下に出す文は「場所を文字で入れてください」で
 // 同じだから。ただ、許可を断った客には「空のままなら今いる場所で探します」と案内しても取れないので、
 // 断りに `denied` の印を付け、画面が案内の文を替えられるようにする（2026-09-25 監査の指摘 客-09）。
@@ -11,6 +12,11 @@
 // **打ち切りはブラウザに任せる**（客-09）。以前は呼んだ瞬間から自前のタイマーで5秒を数えていたので、
 // 初めての客が許可のダイアログを読んでいる時間まで数えられ、6秒後に「許可」を押すと、届いた位置を捨てて
 // 「取れませんでした」と出していた。`getCurrentPosition` の `timeout` は許可が出てから数える。
+//
+// ただしブラウザが**成功も失敗も返さない**ことがある（許可のダイアログに答えないまま放置された・閉じても
+// 呼び戻さないブラウザ）。「今すぐ探す」はその間「探しています…」のまま押せないので、探す経路にだけ
+// 長めの受け皿（`bounded`・`LOCATION_WAIT_LIMIT_MS`）を置く（2026-09-25 レビューの指摘）。
+// 「現在地を使う」と開いた瞬間の取得には置かない——遅れて許可されても、届いた位置で欄を埋められるように。
 
 import type { ApiFailure } from "./api";
 import { GEOLOCATION_TIMEOUT_MS } from "../schemas/limits";
@@ -44,18 +50,50 @@ export const LOCATION_DENIED: ApiFailure = {
 };
 
 /**
- * 今の現在地を1回だけ取る。許可が出てから5秒（`GEOLOCATION_TIMEOUT_MS`）でブラウザが打ち切り、
- * 取れなければ断りを返す。位置の仕組みを持たないブラウザも「取れなかった」と同じに扱う
- * （客は場所を文字で入れれば先へ進める）。
+ * ブラウザが位置の問い合わせに何も返さないとき、探す操作を止めたままにしない上限（AI判断の値）。
+ * 許可のダイアログを読む時間は数えたくないので、ブラウザの打ち切り（`GEOLOCATION_TIMEOUT_MS`）より十分に長くする。
  */
-export const currentLocation = async (): Promise<CurrentLocation | ApiFailure> => {
-  const geo = typeof navigator === "undefined" ? undefined : navigator.geolocation;
-  if (!geo) return LOCATION_REQUIRED;
-  return new Promise<CurrentLocation | ApiFailure>((resolve) => {
+export const LOCATION_WAIT_LIMIT_MS = 30_000;
+
+/** 位置の問い合わせの頼み方。 */
+export type LocateOptions = {
+  /**
+   * 真なら、ブラウザが成功も失敗も返さないまま `LOCATION_WAIT_LIMIT_MS` 過ぎたところで、取れなかったものとして
+   * 場所を文字で求める（基準 3.8）。探す経路（「今すぐ探す」）だけが真にする。
+   */
+  bounded?: boolean;
+};
+
+/** ブラウザへ1回だけ問い合わせる。許可が出てから5秒（`GEOLOCATION_TIMEOUT_MS`）でブラウザが打ち切る。 */
+const askBrowser = (geo: Geolocation): Promise<CurrentLocation | ApiFailure> =>
+  new Promise<CurrentLocation | ApiFailure>((resolve) => {
     geo.getCurrentPosition(
       (position) => resolve({ ok: true, lat: position.coords.latitude, lng: position.coords.longitude }),
       (error) => resolve(error?.code === PERMISSION_DENIED ? LOCATION_DENIED : LOCATION_REQUIRED),
       { timeout: GEOLOCATION_TIMEOUT_MS, maximumAge: GEOLOCATION_MAX_AGE_MS },
     );
   });
+
+/** 上限まで何も返らなければ、取れなかった断りで決着させる（届かなかった問い合わせの答えは捨てる）。 */
+const withinWaitLimit = async (asked: Promise<CurrentLocation | ApiFailure>): Promise<CurrentLocation | ApiFailure> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const giveUp = new Promise<ApiFailure>((resolve) => {
+    timer = setTimeout(() => resolve(LOCATION_REQUIRED), LOCATION_WAIT_LIMIT_MS);
+  });
+  try {
+    return await Promise.race([asked, giveUp]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
+ * 今の現在地を1回だけ取る。取れなければ断りを返す。位置の仕組みを持たないブラウザも「取れなかった」と
+ * 同じに扱う（客は場所を文字で入れれば先へ進める）。`bounded` は探す経路の受け皿（`LocateOptions`）。
+ */
+export const currentLocation = async ({ bounded = false }: LocateOptions = {}): Promise<CurrentLocation | ApiFailure> => {
+  const geo = typeof navigator === "undefined" ? undefined : navigator.geolocation;
+  if (!geo) return LOCATION_REQUIRED;
+  const asked = askBrowser(geo);
+  return bounded ? withinWaitLimit(asked) : asked;
 };

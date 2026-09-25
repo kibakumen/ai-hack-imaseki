@@ -83,10 +83,13 @@ export const useHereLocation = (onLabel: (label: string) => void) => {
     void (async () => apply(await currentLocation()))();
   };
 
-  /** 「今すぐ探す」の起点に使う座標。持っていなければその場で取る（地名は問い合わせない＝地図のサービスへは送らない）。 */
+  /**
+   * 「今すぐ探す」の起点に使う座標。持っていなければその場で取る（地名は問い合わせない＝地図のサービスへは送らない）。
+   * ブラウザが何も返さないまま「探しています…」で止まらないよう、上限つきで待つ（2026-09-25 レビューの指摘）。
+   */
   const pointForSearch = async (): Promise<Point | ApiFailure> => {
     if (here !== null) return here;
-    const located = await currentLocation();
+    const located = await currentLocation({ bounded: true });
     if (isFailure(located)) {
       setLocate(failedState(located));
       return located;

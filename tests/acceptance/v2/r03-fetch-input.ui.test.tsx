@@ -17,8 +17,9 @@ const publicConfig = () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v"
  *   deny   … 許可を断られる（code 1）
  *   hang   … 許可は出ているが位置が決まらない（timeout で打ち切られる・code 3）
  *   prompt … 許可のダイアログに `promptMs` かけてから許可し、すぐ取れる（許可を待つ間は数えない）
+ *   silent … 成功も失敗も一度も呼び戻さない（許可のダイアログに答えないまま放置された・閉じても呼び戻さないブラウザ）
  */
-type Geo = { mode: "ok" | "deny" | "hang" | "prompt"; coords?: { latitude: number; longitude: number }; promptMs?: number };
+type Geo = { mode: "ok" | "deny" | "hang" | "prompt" | "silent"; coords?: { latitude: number; longitude: number }; promptMs?: number };
 const installGeolocation = (geo: Geo) => {
   Object.defineProperty(navigator, "geolocation", {
     configurable: true,
@@ -117,6 +118,28 @@ describeTask("12", "取得の画面", () => {
     await waitFor(() => expect(fetchCalls()).toHaveLength(1));
     expect(fetchCalls()[0].body).toMatchObject({ lat: 35.3, lng: 139.3 });
     expect(screen.queryByTestId(TID.msg("place"))).toBeNull();
+  });
+
+  // 2026-09-25 レビューの指摘: 客-09 で自前の5秒の打ち切りを外したので、ブラウザが何も返さないと
+  // 「探しています…」のままボタンが押せず、場所を打っても探せなくなっていた。受け皿は探す経路にだけ置く。
+  it("3.8（受け皿）ブラウザが位置の問い合わせに答えないままでも、待ちの上限で場所を文字で求め、場所を入れれば探せる（偽の時計）", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    installGeolocation({ mode: "silent" });
+    const { LOCATION_WAIT_LIMIT_MS } = await loadWeb("lib/client/geolocation");
+    await renderApp();
+    fireEvent.change(screen.getByTestId(TID.field("party")), { target: { value: "2" } });
+    fireEvent.click(screen.getByTestId(TID.btn("fetch")));
+    // 許可のダイアログを読んでいる間は責めない（上限の手前では断りを出さない）
+    await vi.advanceTimersByTimeAsync(LOCATION_WAIT_LIMIT_MS - 1_000);
+    expect(screen.queryByTestId(TID.msg("place"))).toBeNull();
+    await vi.advanceTimersByTimeAsync(1_500);
+    await waitFor(() => expect(screen.getByTestId(TID.msg("place"))).toBeTruthy());
+    expect(fetchCalls()).toHaveLength(0);
+    expect((screen.getByTestId(TID.btn("fetch")) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.change(screen.getByTestId(TID.field("place")), { target: { value: "渋谷駅" } });
+    fireEvent.click(screen.getByTestId(TID.btn("fetch")));
+    await waitFor(() => expect(fetchCalls()).toHaveLength(1));
+    expect(fetchCalls()[0].body.place).toBe("渋谷駅");
   });
 
   it("3.3〜3.6・3.11 断りの応答（place too_long／party required・out_of_range・not_integer／place_unresolved）で、場所か人数の欄の直下に文が出て、入れた内容が残り、取得の画面のまま、結果の一覧は出ない。fields と kind を変えると出る欄と文が変わる", async () => {
