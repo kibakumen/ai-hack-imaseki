@@ -15,6 +15,7 @@ phase: design
 > **第4周のあとの追記（2026-09-21）**: 指摘の直しではなく、**本人の決定による追記**。`04_v2の注文.md` の23節（審査基準と OrcaRouter 活用度の見直し・本人選択／選択肢は AI提示）の A〜C と、20節（構成図に `lib/ports.ts` の箱を足す・本人選択。第3周の直しで漏れていた）を入れた。要件は1文字も変えていない。どこに何を足したかは末尾の「第4周のあとの追記」の節にまとめ、タスク分割の段への申し送りもそこに書いた。
 > **第5周のあとの直し（2026-09-21）**: `04_v2の注文.md` の24節（本人選択・AI提示）で本人が直すと決めた3つ——①部品・画面・`lib/client` が `lib/domain` の判断関数を import することを止める lint と構造の検査が無い（監査役 F2）②毎タスクのゲートが受け入れ検査の全部を走らせ、未実装のぶんが最後のタスクまで落ち続ける（反論役の見落とし a）③VAPID の公開鍵と Turnstile のサイトキーの置き場所とブラウザまでの経路が無い（反論役の見落とし b）——を直した。同じ周に進行役の指示で、OrcaRouter の管理画面の**実物の設定**（23節: Named Router `ai-sekitori`・Guardrails・予算上限つきの鍵。本人が作成）にも揃えた。どこをどう直したかは末尾の「第5周のあとの直し」の節。要件は変えていない。
 > **第6周のあとの直し（2026-09-21）**: `04_v2の注文.md` の25節（本人選択・AI提示）で本人が直すと決めた2つ——①「入力の誤りを示す」18基準の**画面の側**がどこにも無い（反論役の見落とし a。店の公開中の操作の断り〔監査役 F1〕はこれに吸収）②「何時まで」の解釈では基準 19.9（今以前の時刻）の状態が作れず、店の意図と逆向きの案内が出る（反論役の見落とし b）——を直した。①は**1つの一般の規則「入力の断り」と1つの部品**（「画面と入口」の「入力の誤りの出し方」）、②は `domain/until.ts` の解釈の変更（「店の画面」の「何時まで」の項）。どこをどう直したかは末尾の「第6周のあとの直し」の節。要件は変えていない。第5周で直した3件（`lib/domain` の境界・`describeTask`・公開値の経路）は第6周で通過したので、その形は崩していない。
+> **2026-09-25 の監査の直し（2026-09-25〜26）**: 公開したあとの監査で見つかった133件を、本人の承認（2026-09-25「133件を全部直す。選択肢のあるものは、指摘の中で勧められた案、無ければ最初の案で直す」）のもとで直した。実装が先に変わったので、この文書を実物に揃えた。各節の中の食い違いはその場で直して「2026-09-25 監査の直しで変更（<ID>）」の注を付け、まとまった決めは末尾の節「2026-09-25 の監査の直し」に書いた。帰属は、印の無いかぎり **AI判断**（本人の一括承認のもとで AI が選んだ）。要件の変更の一覧と、承認の取り直しが要ることは `CHANGES-2026-09-25.md`。
 
 ## 概要
 
@@ -99,7 +100,7 @@ flowchart LR
 | テスト | `["env","ACCEPTANCE_TASK_GATE=1","pnpm","exec","vitest","run"]`（2026-09-25 設計-02 の直しで `env ACCEPTANCE_TASK_GATE=1` を前に足した。下の「受け入れ検査をタスクごとに走らせる」） |
 
 - 直下の `tsconfig.json` は `web/**` と `tests/**` の両方を型検査の対象にする（`demo/`・`sprint/`・生成物は除く）。`web/tsconfig.json` は Next.js のビルド用に別に持つ
-- 直下の `vitest.config.ts` は、`web/**/*.test.{ts,tsx}`（実行者が足す単体テスト）と `tests/acceptance/v2/**/*.test.{ts,tsx}`（受け入れ検査）の両方を走らせる。画面の部品の検査は、ファイルの先頭の `// @vitest-environment jsdom` で jsdom に切り替える。**受け入れ検査は、着手済みのタスクのぶんだけが走る**（下の「受け入れ検査をタスクごとに走らせる」）
+- 直下の `vitest.config.ts` は、`web/**/*.test.{ts,tsx}`（実行者が足す単体テスト）と `tests/acceptance/v2/**/*.test.{ts,tsx}`（受け入れ検査）の両方を走らせる。画面の部品の検査は、ファイルの先頭の `// @vitest-environment jsdom` で jsdom に切り替える。**受け入れ検査は、着手済みのタスクのぶんだけが走る**（環境変数 `ACCEPTANCE_TASK_GATE=1` を立てた実行のときだけ。立てなければ全部走る・2026-09-25 監査の直しで変更（設計-02）。下の「受け入れ検査をタスクごとに走らせる」）。並列数の既定は2（受け入れ検査は1ファイルごとに手元の D1 を立てて約0.5GB を使う。`VITEST_MAX_WORKERS` で広げる）
 - テストの準備（`tests/acceptance/v2/_setup.ts`・設計者がタスク分割の段で書く）は、`fetch` を「外へ出たら落とす」関数に差し替える（基準 31.3）
 - lint には、フォルダの境界（下の「ファイル構成の計画」の向き）を `no-restricted-imports` で入れる。**フォルダの粒度に加えて、`lib/schemas` と `lib/domain` の2つはファイルの粒度で絞る**（部品・画面・`lib/client` が値として読めるのは `schemas/limits.ts` と `domain/texts.ts` だけ。「依存の向き」の注）
 - **lint は今のまま `web/` の中だけに掛ける**（本人選択・2026-09-20・18節）。第1周の監査が「受け入れ検査のフォルダ `tests/acceptance/v2/` が lint の対象に無い」と指摘したが、本人が今のままでよいと決めた。理由: lint に載せた役目は `web/` の中の依存の向きの強制だけで、`tests/` には強制する境界が無い（型検査とテストは `tests/` も見ている）。選ばなかった案: 直下にも eslint の設定を置いて `tests/` にも掛ける
@@ -139,7 +140,7 @@ flowchart LR
 | 載せ方は OpenNext | `demo/` と `sprint/` が同じ版で公開できている（確実） | vinext（Cloudflare が今推す載せ方・beta。`docs/architecture.md` の注記）。提出まで2日で、beta の不具合を引いたときの戻り道が無い。`app/` は素の App Router で書くので、後から載せ方だけ替えられる |
 | 期限と終わりは時刻から導く。定期の処理は置かない | チーム案の「クエリ時に判定する」と同じ考え（AI 生成物・未検証だが、SQL の条件で書けることは自明）。v1 の負債「誰も画面を開いていないと進まない」は起きない——読む側がいつ読んでも、期限の時刻を境に結果が変わるため（基準 11.2） | Cron Triggers で毎分切り替える（OpenNext の Worker に定期の入口を足す作りが増え、最大1分のずれが出る）／Durable Objects の alarm（部品が1つ増える） |
 | 残りの数は保存せず導く | 数え方は「データと状態」の節。カウンタと確保の行が食い違う余地が無い。店が取り消したぶんも、募集する組数を動かさずに表せる（意図の申し送りへの答え） | `remaining` の列を持って増減する（期限切れで戻す「その時」が無いので、読むたびに清算する処理が要る。清算を忘れた経路が1つあるだけで数が狂う） |
-| 状態の変化は10秒ごとの取り直しで映す（値は AI判断） | 基準 9.9・20.4 の30秒は上限。10秒なら、取り直しが1回失敗しても30秒に収まる。画面が隠れている間は止め、戻った時に1回取り直す（基準 9.8） | Server-Sent Events・WebSocket・Durable Objects（常時つなぐ部品が増える。1日数十組の規模に合わない） |
+| 状態の変化は10秒ごとの取り直しで映す（値は AI判断） | 基準 9.9・20.4 の30秒は上限。10秒なら、取り直しが1回失敗しても30秒に収まる。画面が隠れている間は止め、戻った時に1回取り直す（基準 9.8。**店のホームは隠れても止めない**——厨房の合間に別のアプリを開いている間も新しい客を知らせるため・2026-09-25 監査の直しで変更（店-08））。前の回の応答を待ってから次を送り、回ごとの番号で古い応答を捨てる（末尾の節の「客の画面」・不具合-17） | Server-Sent Events・WebSocket・Durable Objects（常時つなぐ部品が増える。1日数十組の規模に合わない） |
 | 取り直しは自前の小さなフック（`usePolling`） | 偽の時計で段1 の検査が書ける。通信の失敗を捕まえて端末に残した内容へ倒す所（基準 9.10・9.11）を同じ場所に置ける | SWR（Next.js での慣習。依存が1つ増え、通信の失敗と401の切り分けを外から差し込む形になる） |
 | 客の識別子は、サーバーが Set-Cookie する Cookie（`HttpOnly`・`Secure`・`SameSite=Lax`・400日。日数は AI判断）に置く | 画面のコードから読めないので、画面に出ることも URL に載ることも構造として起きない（基準 2.6・2.8）。Safari はスクリプトから書いた保存領域を7日で消すことがあり（高確率）、S1 の9歩目「翌週」に登録が消える恐れがある。サーバーが置いた Cookie はその対象外（高確率） | localStorage に置いて要求のヘッダーで送る（上の7日の恐れ。XSS で読める） |
 | 店と運営のログインは自前の最小のセッション（Cookie とD1 の `sessions`） | 100行ほどで済む。パスワードは Web Crypto の PBKDF2-SHA256 と店ごとの塩で、元に戻せない形にする（基準 14.4）。Web Crypto を呼ぶのは差し替え口 `Hasher` の実物（`adapters/webcrypto.ts`）だけで、保存する値の形を組む・解く・比べるのは副作用の無い `domain/password.ts`（「依存の向き」の節の注）。繰り返しの回数は値と一緒に保存し、実測で決める（Workers の上限は100,000・高確率） | Auth.js・better-auth（D1 と OpenNext の組み合わせの相性を2日で確かめきれない）／署名つきトークンだけでサーバーに状態を持たない形（仮のパスワードを発行した時に、開いているセッションを切れない） |
@@ -207,19 +208,19 @@ flowchart LR
   - **置き場所**: `web/wrangler.jsonc` の `vars`——名前は `VAPID_PUBLIC_KEY`・`TURNSTILE_SITE_KEY`（名前は AI判断）。本人がメモした値を、実行者が骨組みのタスクで書く（**22節**——節は本人発案、「公開してよい値は本人がメモし、骨組みのタスクで `web/wrangler.jsonc` に書く」は進行役の手順書の決め。ここはそれに揃えた）。`vars` は git が追跡するファイルに載るが、この2つは公開してよい値なので「リポジトリには入れない」と両立する（メールアドレスと違うのはここ）。手元の実行でも同じ `vars` が読まれる（高確率。「裏を取っていない事実」の表）。`web/.dev.vars.example` には載せない（秘密ではないので）
   - **読む場所**: `adapters/env.ts` だけ（束縛と秘密を読むただ1つの場所、のまま）。画面と部品と `lib/client` は `adapters/env.ts` を読めない（依存の向きの表）ので、名前の文字列も持たない
   - **画面までの経路は入口1本**: `GET /api/config/public`（登録の入口＝無記名・読むだけ）が `{ turnstileSiteKey, vapidPublicKey }` を返す。**運営の連絡先のメールアドレス（基準 14.17・【最終日】）もこの入口の `contactEmail` として返す**——前の版の `GET /api/auth/contact` は、この入口に吸収して置かない（公開してよい値を返す入口を1本にする・AI判断。3つとも「`adapters/env.ts` が読み、画面が入口から受け取る」で同じ経路なので、分ける理由が無い）。応答に載せてよい項目はこの3つだけで、応答のスキーマ（`schemas/config.ts`）がそれを閉じる
-  - **画面の側**: `client/api.ts` の `getPublicConfig()` が1回取って、ページの生きている間はメモリに持つ（取り直さない・AI判断）。3つのフォーム（客の登録・店の登録・ログイン）は取れた `turnstileSiteKey` を部品 `components/ui/HumanCheck` に渡す。取れる前・取れなかったときは部品を描かず、送るボタンは押せるままにして、押せば入口が確かめの値なしで断り、同じ決まった文が出る（「画面と入口」の Turnstile の注と同じ振る舞い。経路が1つ増えても断り方は増えない）。`client/push.ts` は購読を作るとき（`pushManager.subscribe` の `applicationServerKey`）に `vapidPublicKey` を使う——はじめての受け取りの直後（基準 22.8）なので、登録のフォームより後で、取り直しの機会は十分ある
+  - **画面の側**: `client/api.ts` の `getPublicConfig()` が取る。**メモリに持たない**（呼ぶたびに入口を読む。2026-09-25 監査の直しで実物に揃えた（設計-06）——前の版は「1回取ってページの生きている間はメモリに持つ」だったが、タスク3の実装が、画面の検査がサイトキーを変えて描き直すたびに今の値を求めるためメモ化を外していた。2026-09-22 に本人へ報告済みで、どちらに揃えるかの返事は無いまま、AI判断で実物へ揃えた）。3つのフォーム（客の登録・店の登録・ログイン）は取れた `turnstileSiteKey` を部品 `components/ui/HumanCheck` に渡す。取れる前・取れなかったときは部品を描かず、送るボタンは押せるままにして、押せば入口が確かめの値なしで断り、同じ決まった文が出る（「画面と入口」の Turnstile の注と同じ振る舞い。経路が1つ増えても断り方は増えない）。`client/push.ts` は購読を作るとき（`pushManager.subscribe` の `applicationServerKey`）に `vapidPublicKey` を使う——はじめての受け取りの直後（基準 22.8）なので、登録のフォームより後で、取り直しの機会は十分ある
   - **選ばなかった案**: 組み込みのときに `NEXT_PUBLIC_*` として埋め込む（Next.js の慣習だが、値は `next build` のときの環境変数から取られ、Worker の `vars` は組み込みのときには無い〔高確率〕。だから `web/.env*` にも同じ値を置くことになり、置き場所が2つに割れる。しかも `.env`・`.env.*` は直下の `.gitignore` で対象外なので、22節の「`web/wrangler.jsonc` に書く」と両立しない）／画面の殻をサーバーで描いて値を埋め込む（「画面と入口」の「殻は静的で、データはすべて API から取る」に反し、`/me` を Service Worker が保存できなくなる）
   - **秘密が混ざらない見張り**: `web/wrangler.jsonc` の `vars` に在ってよい名前は `ORCAROUTER_MODEL`・`VAPID_PUBLIC_KEY`・`TURNSTILE_SITE_KEY` の3つだけで、名前に `SECRET`・`PRIVATE`・`API_KEY`・`PASSWORD`・`EMAIL` を含む項目が `vars` に無いことを、秘密情報の走査（基準 34.6 の行）に足した。Turnstile のサイトキーと秘密鍵は見た目の形が同じ（どちらも `0x4AAAAAAA…` で始まる・高確率）なので、値の形では見分けられず、**名前で見る**。入口 `GET /api/config/public` の応答に秘密の値が無いことは、「要件に基準が無い、設計の決めの検査」の表の行で見る
 - **本番に置く OrcaRouter の鍵は、1日の予算上限つきのスコープ付き API キー**（本人選択・2026-09-21・23節の C。**管理画面で作成済み**・本人・コード0）。実物の設定（鍵の名前・予算の額・紐付け・期限）（中身は公開の文書に書かない・2026-09-25 の監査の指摘 安全-25。実物の設定は本人の手元の控えと OrcaRouter の管理画面）。public のリポジトリと公開デプロイなので、鍵が漏れたときの最悪が**1日の予算上限で止まる**。大会後に鍵を無効化して代える（AI提示・本人了承・23節）。ほかの鍵は本番では使わない。手元の `web/.dev.vars` に置く鍵も同じ鍵でよい（別の鍵を作ればなお良い）。選ばなかった案: 素の鍵（23節）。コードは鍵の種類を知らない——`ORCAROUTER_API_KEY` の値が変わるだけ。Worker の秘密へ入れるのは骨組みのタスク（22節の `scripts/v2-keys.sh put`）。前の版の設計者の案（期限は審査が終わる日まで・額は数ドル）は、実物に置き換えた
 - **運営の連絡先のメールアドレス（基準 14.17・【最終日】）も、上の鍵と同じ置き方にする**（AI判断。第2周の見落としの指摘「置き場所が両立しない」への答え）: 名前は `ADMIN_CONTACT_EMAIL`。本番は `wrangler secret put`、手元は `web/.dev.vars`、`web/.dev.vars.example` には名前だけ。秘密だからではない（ログインの画面に出す値）——Worker の設定の変数（`vars`）の置き場である `web/wrangler.jsonc` は git が追跡するファイルで、そこへ書くと「リポジトリには入れない」と両立しないため。読むのは `adapters/env.ts` だけで、ログインの画面へは入口 `GET /api/config/public` の `contactEmail`【最終日】が返す（画面は `lib/adapters` を読めないため。第5周の直しで、前の版の `GET /api/auth/contact` は公開値の入口に吸収した——上の項）。`web/wrangler.jsonc` にメールアドレスの形の値が無いことは、秘密情報の走査（基準 34.6 の行）に足した。選ばなかった案: `vars` に置く（public のリポジトリに運営のメールアドレスが載る）
 - **git の対象外にする手当て——誰がどのファイルに書くか**（第1周の監査の持ち越し）: 直下の `.gitignore` は、/dev のどの役割（設計者・実行者・図解役）も書けない場所にある。だから **v2 の計画は、直下の `.gitignore` に行を足す作業を含まない**。要る行は、今の実物にもう在る（2026-09-20 に設計者が実物を読んで確かめた・確実）——6行目 `.dev.vars` と7行目 `*.local`（この2行は同日に**本人が手で足した**・18節）、4〜5行目 `.env`・`.env.*`、3行目 `node_modules/`、10行目 `sprint/`。秘密の行（`.dev.vars`・`*.local`・`.env`・`.env.*`）は、先頭にも途中にも `/` が無い書き方なので、`web/` の下にも効く（確実・gitignore の書式）。これで `web/.dev.vars` は対象外になる。ビルドの生成物（`.next/`・`.open-next/`・`.wrangler/`）の行は直下に無いので、**実行者が骨組みのタスクで `web/.gitignore` に書く**（`web/.gitignore` は実行者が書ける場所・確実）。あとで直下に足りない行が見つかったら、実行者は書き換えずに報告し、本人の手に回す。選ばなかった案: 秘密の行も `web/.gitignore` で済ませる（本人が直下に足したので、同じ行を2か所に持つことになる）
 - **R2 は束縛で読む**ので、R2 の API の鍵は要らない（負債 S7 で会話に貼られた R2 の秘密鍵は、使わないまま無効にする）
-- **Google の鍵**は Geocoding API だけに使えるよう絞り、1日の上限を GCP の側で置く（Workers は出口の IP が決まらないので IP では絞れない・高確率）
+- **Google の鍵**は Geocoding API と Places API（場所の候補・2026-09-22 に足した）だけに使えるよう絞り、1日の割り当てと予算アラートを GCP の側で置く（Workers は出口の IP が決まらないので IP では絞れない・高確率。コードの抑止は客ごと・接続元ごとなので、客を大量に作られたときの実費の天井はコードの外で止める・2026-09-25 監査の直しで追記（安全-03））
 - **運営のアカウント**は `web/scripts/seed-admin.mjs` が手元で入力を受けてハッシュ入りの SQL を作り、wrangler で流す。作った SQL は git の対象外——ファイル名を `seed-admin.sql.local` にして、直下の `.gitignore` の `*.local` の行に当てる（AI判断）（基準 14.8・34.6）
-- **ログ**に、要求の本文・電話番号・呼び名・メールアドレス・客の識別子を出さない。出すのは出来事の名前と内部の番号だけ。**守らせ方**（AI判断。第1周の監査の指摘「この方針に検査の割り当てが無い」への答え）: ログの出口を差し替え口 `Logger` の1つにし、`console.*` を呼ぶのは `adapters/logger.ts` だけにする（`web/` のほかの場所は、lint の `no-console` と構造の検査で止める）。`Logger` が受け取る項目の型は、出来事の名前（決まった語）・内部の番号・所要時間・誤りの種類（決まった語）だけで、文字列を自由に渡せる項目を持たない。例外を捕まえた所（`defineRoute`）は、例外のメッセージも要求の本文も渡さず、誤りの種類だけを渡す。検査は「要件ごとの検査の割り当て」の終わりの「要件に基準が無い、設計の決めの検査」の表。Workers が自動で残す要求の記録には URL が入るが、客の識別子・客の電話番号・呼び名を URL に載せる入口は無い（全部 Cookie か要求の本文）。URL に載るのは運営の検索の語（店名・住所・店のメールアドレスの一部）だけで、運営が自分で打った語（承知のうえ・AI判断）
+- **ログ**に、要求の本文・電話番号・呼び名・メールアドレス・客の識別子を出さない。出すのは出来事の名前と内部の番号だけ（2026-09-25 から、運営の操作の1行には操作した運営のアカウントの内部の番号 `actor` も載る・運営-01。想定外の例外は `event: unhandled_error`・`id`: 入口の鍵〔例 `"GET /api/store/home"`、Deps を組む所の落ちは `"app"`〕・`errorKind`: 例外の種類〔`type_error`・`d1_error`・`response_shape_error` など〕の1行で、例外の文は出さない・設計-15）。**守らせ方**（AI判断。第1周の監査の指摘「この方針に検査の割り当てが無い」への答え）: ログの出口を差し替え口 `Logger` の1つにし、`console.*` を呼ぶのは `adapters/logger.ts` だけにする（`web/` のほかの場所は、lint の `no-console` と構造の検査で止める）。`Logger` が受け取る項目の型は、出来事の名前（決まった語）・内部の番号・所要時間・誤りの種類（決まった語）だけで、文字列を自由に渡せる項目を持たない。例外を捕まえた所（`defineRoute`）は、例外のメッセージも要求の本文も渡さず、誤りの種類だけを渡す。検査は「要件ごとの検査の割り当て」の終わりの「要件に基準が無い、設計の決めの検査」の表。Workers が自動で残す要求の記録には URL が入るが、客の識別子・客の電話番号・呼び名を URL に載せる入口は無い（全部 Cookie か要求の本文）。URL に載るのは運営の検索の語（店名・住所・店のメールアドレスの一部）だけで、運営が自分で打った語（承知のうえ・AI判断）
 - **AI に渡す型**（`AiSelectInput`）には呼び名と電話番号の項目が無い。渡す文を組む関数はこの型しか受け取らない（基準 28.3）。店が書いた文（おすすめメニューなど）は AI にとって外から来た文なので、出力は検査（基準 7.3・7.4）を通ったものだけを使い、並びは AI の順ではなく点数順（基準 4.12）
 - **AI まわりの守り——3段で書く**（第4周の追記。3段に書き分けて見せることは本人選択・2026-09-21・23節の B。選ばなかった案: 前の版の1文「Guardrails はコードの側では当てにしない」のまま——設計は正しいが、審査員や記事の読み手に何がどう守られているかが伝わらない）。中身はどれも前の版の設計から変えていない（設計が既に持っていた守りを、層ごとに名前を付けて並べ直したもの）:
-  1. **AI の権限は最小**。AI は道具（tool）を1つも持たず、書き込みの権限も無く、出力として通るのは「渡した店の識別子の部分集合・5件以下・重複なし・理由60字以内」だけで（基準 7.3・7.4）、**並び順すら AI から取らない**（基準 4.12・点数順）。店が書いた文に命令を仕込んでも（プロンプト注入）、起きうる最悪は「選ぶ店が偏る」で、その下には点数順の倒し込み（基準 7.7・7.8）がある。**注入されても、押せるボタンが無い**
+  1. **AI の権限は最小**。AI は道具（tool）を1つも持たず、書き込みの権限も無く、出力として通るのは「渡した店の識別子の部分集合・5件以下・重複なし・理由60字以内」だけで（基準 7.3・7.4）、**並び順すら AI から取らない**（基準 4.12・点数順）。店が書いた文に命令を仕込んでも（プロンプト注入）、選定で起きうる最悪は「選ぶ店が偏る」で、その下には点数順の倒し込み（基準 7.7・7.8）がある。**注入されても、押せるボタンが無い**。ただし紹介文の層（要件7の補足）は AI の書いた文を客に出すので、「最悪でも選ぶ店が偏るだけ」ではない——紹介文と選定の理由には、決定論のガード・語の検査（`domain/claims`・不具合-07）・別ベンダーの検査官を掛け、店が書いた文はデータとして区切って渡す（安全-11。守りの細部は公開の文書に書かない・安全-25）。2026-09-25 監査の直しで追記
   2. **拡張時の唯一の入口**。AI を呼ぶのは `adapters/orcarouter.ts` だけ（基準 34.4・7.12）。将来 AI に道具を持たせるならここが唯一の入口で、そのときは OrcaRouter Firewall（道具の呼び出しを allow／deny／承認待ちで統制する。要点は `01_要件.md` の45〜50行）が出番になる。**今の v2 では AI が道具を持たないので Firewall は使わない**——使っていないものを使っていると書かない
   3. **Guardrails は多層防御の外側**。本人が OrcaRouter の管理画面で作った Guardrails（2026-09-21・本人・23節。コードは変わらない・公式）。**ルールの中身（中身は公開の文書に書かない・2026-09-25 の監査の指摘 安全-25。実物の設定は本人の手元の控えと OrcaRouter の管理画面）**——列挙すると、それを避けた言い回しの手引きになる。信頼できない文（店が書いた文）を区切ってデータとして扱わせる手当ては、コードの側（`adapters/orcarouter.ts`）に入っている（監査の指摘 安全-11）。弾かれると HTTP 400 `guardrail_blocked`・課金なし（公式）で、これは**基準 7.6 の「AI の呼び出しが失敗した」と同じ道**に入って点数順に倒れる＝**外側の層が落ちても、内側（1）だけで安全**。逆に、外側が無くても内側は同じに動くので、Guardrails を付け忘れても要件は満たす。検査は「要件に基準が無い、設計の決めの検査」の表の2行（`tools` が無いことの構造の検査・`guardrail_blocked` を通る振る舞いの検査）
 - **営業許可書**は、種類を先頭のバイト列（PDF・JPEG・PNG）で確かめてから R2 に置く。読む入口は2つ（上げた店・運営）だけで、応答には `Cache-Control: private, no-store` と `X-Content-Type-Options: nosniff` を付ける（基準 13.5）
@@ -279,13 +280,14 @@ flowchart LR
    │  │                                  error.ts が入力の断りの応答の形（全部の入口が共有・第6周の直し）
    │  ├─ repo/                           D1 の SQL。sqlFragments.ts が「公開中」「枠を押さえている確保」の条件のただ1つの置き場
    │  ├─ usecases/                       手続き（1つの操作＝1つの関数。Deps を引数で受ける）
-   │  ├─ ports.ts                        差し替え口の型（AiSelector・Geocoder・PushSender・CardRegistrar・FileStore・HumanCheck・Logger・Clock・Rng・Hasher）
+   │  ├─ ports.ts                        差し替え口の型（AiSelector・Geocoder・PushSender・CardRegistrar・FileStore・HumanCheck・Logger・Clock・Rng・Hasher。
+   │  │                                  2026-09-22〜25 に足した任意の口: PitchWriter〔紹介文〕・StoreImageFetcher〔店の画像〕・Geocoder の reverse と suggest・Deps.defer〔応答のあとの仕事〕）
    │  ├─ adapters/                       orcarouter.ts・geocoding.ts・webpush.ts・stripe.ts・files.ts・turnstile.ts・webcrypto.ts（Rng と Hasher の実物。乱数・SHA-256・PBKDF2 のために `crypto` を呼ぶ場所）・logger.ts（console を呼ぶただ1つの場所）・env.ts（束縛と秘密を読むただ1つの場所）
    │  ├─ http/                           defineRoute.ts（入力の検査・見分け・Origin・人かどうかの確かめ・連打の抑止。zod の落ちを「入力の断り」の応答の形へ直すただ1つの場所）・guards.ts・cookies.ts
    │  └─ client/                         api.ts（画面が fetch を呼ぶただ1つの場所。応答を zod で検査し、断りは例外にせず型のついた値で返す。getPublicConfig() が公開値を1回取ってメモリに持つ）・usePolling.ts・reservationCache.ts・geolocation.ts・push.ts
    ├─ public/sw.js                       Service Worker（プッシュの受信と、/me の保存）
-   ├─ migrations/0001_init.sql           テーブル
-   ├─ scripts/                           seed-admin.mjs・gen-vapid.mjs
+   ├─ migrations/0001〜0011              テーブル（0005 は欠番。0003 以降は 2026-09-25 の監査の直しで足した・README の6.2）
+   ├─ scripts/                           seed-admin.mjs・seed-demo.mjs・print-sql.mjs・make-app-icons.mjs（2026-09-25 に実物へ揃えた。gen-vapid.mjs は作らず scripts/v2-keys.sh vapid を使った）
    └─ wrangler.jsonc・open-next.config.ts・next.config.ts・eslint.config.mjs・.dev.vars.example・.gitignore（ビルドの生成物の行。実行者が書く）
 ```
 
@@ -316,7 +318,7 @@ flowchart LR
 | 絞り込み・点数・徒歩の分数 | `domain/filter.ts`・`domain/score.ts`・`domain/geo.ts` | 取得（要件4〜6） |
 | AI の出力の検査と、点数順への倒し方 | `domain/selection.ts` | 取得（要件7） |
 | 客の画面でまず何を出すか | `domain/customerHome.ts` | `/api/customer/home`。部品はこの結果を描くだけ。受け取りと受け取り直しの応答にも同じ結果を載せる（下の行） |
-| **受け取りが断られた理由（閉じた5種）と、理由ごとの次の一手** | 理由の種類と、断りの理由を場合分けする関数・次の一手を決める関数は `domain/receiveRefusal.ts`。人が読む文は `domain/texts.ts`（理由の識別子は機械が読むもの、文は人が読むものとして**分けて持つ**。画面が文字列を解析しない。根拠: RFC 9457 Problem Details の設計——`type` は機械・`title`/`detail` は人。AI提示） | `usecases/receiveOffer`（受け取り・受け取り直しの両方）が理由と**次の一手（`nextStep`・第5周の直しで応答に載せる形にした）**を返し、**断りを描く部品はただ1つ `components/customer/RefusalNotice`**（受け取った理由と次の一手を `domain/texts` の文にして描くだけ）。結果の一覧（`ResultList`）と期限切れの表示（`ExpiredView`）の両方がそれを使う（本人選択・2026-09-20。「画面と入口」の客の画面の注） |
+| **受け取りが断られた理由（閉じた6種。2026-09-25 に `results_stale` を足した・安全-06）と、理由ごとの次の一手** | 理由の種類と、断りの理由を場合分けする関数・次の一手を決める関数は `domain/receiveRefusal.ts`。人が読む文は `domain/texts.ts`（理由の識別子は機械が読むもの、文は人が読むものとして**分けて持つ**。画面が文字列を解析しない。根拠: RFC 9457 Problem Details の設計——`type` は機械・`title`/`detail` は人。AI提示） | `usecases/receiveOffer`（受け取り・受け取り直しの両方）が理由と**次の一手（`nextStep`・第5周の直しで応答に載せる形にした）**を返し、**断りを描く部品はただ1つ `components/customer/RefusalNotice`**（受け取った理由と次の一手を `domain/texts` の文にして描くだけ）。結果の一覧（`ResultList`）と期限切れの表示（`ExpiredView`）の両方がそれを使う（本人選択・2026-09-20。「画面と入口」の客の画面の注） |
 | 公開してよい設定の値（Turnstile のサイトキー・VAPID の公開鍵・【最終日】運営の連絡先） | `adapters/env.ts` が読み、入口 `GET /api/config/public` が返す（第5周の直し） | `client/api.ts` の `getPublicConfig()`。3つのフォームの `HumanCheck`・`client/push`・【最終日】ログインの画面 |
 | 店のホームに何を出すか（承認の状況・足りないもの・公開のフォームの初めの値・一覧の行と、行ごとに押せるボタン） | `domain/storeHome.ts` | `/api/store/home` |
 | 自動の登録の仮の値（仮の電話番号・`guest-…` の呼び名）と、仮かどうかの見分け（2026-09-25 監査の指摘 横断-02 とそのレビュー） | `domain/guest.ts`。部品が要る2つの定数だけ `schemas/limits.ts` に写しを置き、写しと部品の見分け（取得の画面の電話番号の欄）が正本と同じ答えを出すことを `tests/domain/guest.test.ts` が場合を並べて固定する（`domain/genres.ts` と `texts.ts` の関係と同じ形。AI判断） | 店の一覧（`domain/storeHome` が仮の値を null にして渡す）・自動の登録（`GuestEntry` が値を作る）・取得の画面の電話番号の欄（`FetchForm`） |
@@ -331,10 +333,10 @@ flowchart LR
 
 | 見分け | 入口 |
 | --- | --- |
-| 登録の入口 | `POST /api/register/customer`・`POST /api/register/store`（同意した店向けの利用規約の版 `agreedTermsVersion` が要る。今の版でなければ断り、通れば版と時刻を残す・基準 12.11）・`POST /api/auth/login`・`POST /api/auth/logout`・**`GET /api/config/public`**（公開してよい設定の値を返すだけ——`turnstileSiteKey`・`vapidPublicKey`・【最終日】`contactEmail`〔基準 14.17〕。第5周の直し。前の版の【最終日】`GET /api/auth/contact` はこれに吸収した。「秘密情報と個人データの扱い」の公開値の項）。**`POST` の4つのうち `logout` を除く3つは、人かどうかの確かめ（Turnstile）つき**——`defineRoute` の指定1つで入り、入力の検査のあと・手続きの前に確かめる。通らなければ、D1 に何も書かずに断る |
-| 客の入口 | `GET /api/customer/home`（表示の種類と確保。取り直しもこれ）・`POST /api/customer/fetch`（取得）・`POST /api/customer/reservations`（受け取り・受け取り直し。**応答の形は下の注**）・`POST /api/customer/reservations/[id]/cancel`・`POST /api/customer/reservations/[id]/party`・`GET /api/customer/recent`（最近行った店）・`POST /api/customer/reports`・`POST /api/customer/push-subscription`・`GET /api/customer/push-message`・【最終日】`PATCH /api/customer/profile`・`DELETE /api/customer`・`GET /api/customer/history` |
-| 店の入口 | `GET /api/store/home`・`GET`/`PUT /api/store/profile`・`GET`/`POST /api/store/coupons`・`PUT`/`DELETE /api/store/coupons/[id]`・`GET`/`POST /api/store/license`・`DELETE /api/store/license`（承認の前の店だけが自分の営業許可書を取り下げる。承認済みの店は 409 で今の状況を返す・2026-09-25 監査の指摘 安全-20）・`POST /api/store/card/setup`・`POST /api/store/card/confirm`・`POST /api/store/offers`（公開）・`POST /api/store/offers/current/stop`・`…/add`・`…/reduce`・`…/party-max`・`…/until`・`…/coupons`（見せるクーポンの選び直し・要件19の基準 19.11・2026-09-25 監査の指摘 不具合-03）・`POST /api/store/reservations/[id]/complete`・`POST /api/store/reservations/[id]/cancel`・`GET /api/store/results`・【最終日】`POST /api/store/password` |
-| 運営の入口 | `GET /api/admin/stores`（絞り込み・検索・集計）・`GET /api/admin/stores/[id]`・`GET /api/admin/stores/[id]/license`（`?version=approved` で承認した時点の写し）・`POST /api/admin/stores/[id]/approve`・`…/ban`・`…/restore`・**`…/note`**（運営のメモと「連絡済み」の印・監査の指摘 運営-05）・**`…/acknowledge`**（承認後の変更を確かめて写しを取り直す・運営-02）・`GET /api/admin/reports`・`GET /api/admin/metrics`・【最終日】`POST /api/admin/stores/[id]/temp-password`（運営自身の今のパスワードが要る・運営-01）。2026-09-25 の監査の指摘で足した約束: `ban` と `restore` は理由（`reason`・空白だけは断る）が要る。`approve` と `acknowledge` は運営が見た店名・住所・許可書を上げた時刻（`seen`・任意。画面は必ず載せる）を受け取り、今と違えば 409 の今の状況に `changed: true` を添えて断る。どれも「誰が・いつ・なぜ」を追加だけの表 `admin_actions` に残す（migration 0011）。`ban` は営業許可書のファイル（今の分と承認の写し）と承認の写しを消し（安全-20）、`restore` は戻した先を `status`（`approved`／`pending`）で返す——承認の写しが無い店（止めたときに消した店）は承認待ちへ戻り、店の上げ直しと承認のやり直しを求める（安全-20 のレビュー・基準 25.9） |
+| 登録の入口 | `POST /api/register/customer`・`POST /api/register/store`（同意した店向けの利用規約の版 `agreedTermsVersion` が要る。今の版でなければ断り、通れば版と時刻を残す・基準 12.11）・`POST /api/auth/login`・`POST /api/auth/logout`・**`GET /api/config/public`**（公開してよい設定の値を返すだけ——`turnstileSiteKey`・`vapidPublicKey`・【最終日】`contactEmail`〔基準 14.17〕。第5周の直し。前の版の【最終日】`GET /api/auth/contact` はこれに吸収した。「秘密情報と個人データの扱い」の公開値の項）。`POST /api/register/customer` は、有効な客の Cookie が付いた要求には客を増やさず Set-Cookie も出さずに 200 `{ok:true}` を返す（画面の取り違えで今の Cookie を上書きしない・2026-09-25 監査の直しで追加（不具合-02））。**`POST` の4つのうち `logout` を除く3つは、人かどうかの確かめ（Turnstile）つき**——`defineRoute` の指定1つで入り、入力の検査のあと・手続きの前に確かめる。通らなければ、D1 に何も書かずに断る |
+| 客の入口 | `GET /api/customer/home`（表示の種類と確保。取り直しもこれ。2026-09-25 から取得の画面のときは `previousCompleted` も載る・不具合-18）・`POST /api/customer/fetch`（取得）・**`POST /api/customer/fetch/stream`**（同じ取得を NDJSON で少しずつ返す。画面はこちらを使い、紹介文を後から差し込む・2026-09-21 に足した）・**`GET /api/customer/place`**（現在地を地名に直す）・**`GET /api/customer/place-suggest`**（場所の候補）・**`GET /api/customer/store-image`**（`?storeId=`・承認済みの店の画像のバイトを返す。JSON でない応答・`nosniff`・CSP `default-src 'none'; sandbox`・`private, max-age=3600`。承認前・画像の無い店・無い番号は 404・安全-12・安全-19）・`POST /api/customer/reservations`（受け取り・受け取り直し。**応答の形は下の注**）・`POST /api/customer/reservations/[id]/cancel`・`POST /api/customer/reservations/[id]/party`・`GET /api/customer/recent`（最近行った店）・`POST /api/customer/reports`・`POST /api/customer/push-subscription`・`GET /api/customer/push-message`・【最終日】`PATCH /api/customer/profile`・`DELETE /api/customer`・`GET /api/customer/history` |
+| 店の入口 | `GET /api/store/home`・`GET`/`PUT /api/store/profile`・`GET`/`POST /api/store/coupons`・`PUT`/`DELETE /api/store/coupons/[id]`・`GET`/`POST /api/store/license`・`DELETE /api/store/license`（承認の前の店だけが自分の営業許可書を取り下げる。承認済みの店は 409 で今の状況を返す・2026-09-25 監査の指摘 安全-20）・`POST /api/store/card/setup`・`POST /api/store/card/confirm`（本文なし。サーバーが控えた `card_setup_session_id` を Stripe に照会する。Checkout の戻り先は `/store/documents?card=returned`・2026-09-25 監査の直しで変更（不具合-01））・`POST /api/store/offers`（公開）・`POST /api/store/offers/current/stop`・`…/add`・`…/reduce`・`…/party-max`・`…/until`・`…/coupons`（見せるクーポンの選び直し・要件19の基準 19.11・2026-09-25 監査の指摘 不具合-03）・`POST /api/store/reservations/[id]/complete`・`POST /api/store/reservations/[id]/cancel`・`GET /api/store/results`・【最終日】`POST /api/store/password`（本文に `currentPassword`〔省略可〕。仮のパスワードの直後でない店が省いたら 400 `invalid_input`〔`currentPassword`・`required`〕、合わなければ 403 `password_mismatch`・安全-07）・**`POST /api/store/email`**（メールアドレスの変更・今のパスワードの確かめつき。通ったら今のほかのセッションを切る・安全-08） |
+| 運営の入口 | `GET /api/admin/stores`（絞り込み・検索・集計）・`GET /api/admin/stores/[id]`・`GET /api/admin/stores/[id]/license`（`?version=approved` で承認した時点の写し）・`POST /api/admin/stores/[id]/approve`・`…/ban`・`…/restore`・**`…/note`**（運営のメモと「連絡済み」の印・監査の指摘 運営-05）・**`…/acknowledge`**（承認後の変更を確かめて写しを取り直す・運営-02）・`GET /api/admin/reports`・`GET /api/admin/metrics`・【最終日】`POST /api/admin/stores/[id]/temp-password`（運営自身の今のパスワードが要る・運営-01）・**`POST /api/admin/email`**・**`POST /api/admin/password`**（運営自身のメールアドレスとパスワードの変更・今のパスワードの確かめつき・2026-09-22 に足した。通ったら今のほかのセッションを切る・安全-08）。2026-09-25 の監査の指摘で足した約束: `ban` と `restore` は理由（`reason`・空白だけは断る）が要る。`approve` と `acknowledge` は運営が見た店名・住所・許可書を上げた時刻（`seen`・任意。画面は必ず載せる）を受け取り、今と違えば 409 の今の状況に `changed: true` を添えて断る。どれも「誰が・いつ・なぜ」を追加だけの表 `admin_actions` に残す（migration 0011）。`ban` は営業許可書のファイル（今の分と承認の写し）と承認の写しを消し（安全-20）、`restore` は戻した先を `status`（`approved`／`pending`）で返す——承認の写しが無い店（止めたときに消した店）は承認待ちへ戻り、店の上げ直しと承認のやり直しを求める（安全-20 のレビュー・基準 25.9） |
 
 確保の期限を延ばす入口・完了済みを戻す入口・終わったオファーを再開する入口・運営のアカウントを作る入口・承認を断る入口は**無い**（基準 11.4・20.10・17.15・14.8・25.3。入口の一覧そのものを構造の検査で見る）。
 
@@ -342,14 +344,14 @@ flowchart LR
 
 - 入力は、受け取りならオファーの番号と人数、受け取り直しなら元の確保の番号（人数は元の確保から取る。基準 11.10）。どちらも同じ手続き `usecases/receiveOffer` に入り、同じ WHERE つきの1つの INSERT（受け取れる状態／人数が「何名まで」以下／その客に確保中の確保が無い）を通る
 - **通ったとき**: `{ ok: true, reservation, home }`。`home` は `GET /api/customer/home` と同じ形（`domain/customerHome` の結果。確保中の表示になっている）
-- **断られたとき**: 状態 409 で `{ ok: false, refusal: { kind, partyMax?, nextStep }, home }`。`kind` は `domain/receiveRefusal.ts` の閉じた5種のどれか、`partyMax` は「何名まで」が下がっていたときだけ、その時点の値。**`nextStep` は次の一手の識別子**（第5周の直しで応答に載せた。閉じた4種・名前は AI判断: `search_again`〔探し直す〕・`search_again_with_party`〔◯名で探し直す。`partyMax` の値を使う〕・`back_to_reservation`〔確保中の表示へ戻る〕・`retry_same_party`〔同じ人数で受け取り直す〕）で、手続きが `domain/receiveRefusal.nextStep(kind, home)` で決める。**`home` はその時点の客のホームの状態**（同じ形）で、画面はこれで自分を作り直す（往復は1回のまま。理由と新しい状態と次の一手を1つの応答で返す）。断りの文も次の一手の文も載せない——画面は `kind` と `nextStep` を `domain/texts.ts` で文に直す（画面が文字列を解析しない・部品は判断しない）
+- **断られたとき**: 状態 409 で `{ ok: false, refusal: { kind, partyMax?, nextStep }, home }`。`kind` は `domain/receiveRefusal.ts` の閉じた6種（2026-09-25 に `results_stale`「この検索の結果からは、もう受け取れません。もう一度探してください。」・次の一手は探し直す、を足した・安全-06）のどれか、`partyMax` は「何名まで」が下がっていたときだけ、その時点の値。**`nextStep` は次の一手の識別子**（第5周の直しで応答に載せた。閉じた4種・名前は AI判断: `search_again`〔探し直す〕・`search_again_with_party`〔◯名で探し直す。`partyMax` の値を使う〕・`back_to_reservation`〔確保中の表示へ戻る〕・`retry_same_party`〔同じ人数で受け取り直す〕）で、手続きが `domain/receiveRefusal.nextStep(kind, home)` で決める。**`home` はその時点の客のホームの状態**（同じ形）で、画面はこれで自分を作り直す（往復は1回のまま。理由と新しい状態と次の一手を1つの応答で返す）。断りの文も次の一手の文も載せない——画面は `kind` と `nextStep` を `domain/texts.ts` で文に直す（画面が文字列を解析しない・部品は判断しない）
 - 理由の場合分けは、INSERT が0行だったあとに手続きがオファー・残り・その客の確保中の確保を読み直し、`domain/receiveRefusal.classify` に渡して決める（AI判断。読み直しの間に状態がさらに動きうるので、理由は「断った直後の見立て」であって、確保を作らなかった事実そのものは INSERT の WHERE が保証する）。読み直しても5種のどれにも当たらないとき（同時の操作で、読み直した時点ではもう受け取れる状態に戻っていた場合など）は「満席になった」として返す（AI判断・最も起こりやすい理由に倒す）
 - 客の入口のほかの断り（取り消し・人数の変更が断られたとき）の応答の形は変えない（基準 10.3・10.7 は今の状態を返す形のまま）
 
 **入力の断りの応答の形——全部の入口で1つ**（第6周の直し。反論役の見落とし a・25節で本人が直すと決めた。形の細部は AI判断）:
 
 - 入力の検査（zod）に落ちたとき、または手続きが**項目や操作に帰せる規則**で断ったとき、応答は状態 400（形・範囲の誤り）か 409（今の状態との衝突）で、本文は `{ ok: false, error: { kind, fields?: [{ name, reason }] } }`。`kind` は `domain/inputRefusal.ts` の閉じた語、`fields[].name` は入力のスキーマの項目名（`nickname`・`phone`・`until` など）、`fields[].reason` は同じファイルの閉じた語。**人が読む文は載せない**（受け取りの断りと同じ考え——機械が読む識別子と人が読む文を分ける。画面が `domain/texts` で文に直す）
-- `kind` の語（AI判断・本人が覆せる）: `invalid_input`（形・範囲。`fields` 必須）／`party_over_max`（10.7・人数を増やして「何名まで」を超えた。文は前の版のまま）／`email_taken`（12.2・`fields` は `email`）／`limit_reached`（15.7 のおすすめメニュー6件目・16.2 のクーポン4つ目）／`coupon_in_use`（16.5）／`address_unresolved`（15.10・`fields` は `address`）／`profile_incomplete`（17.11・`fields` に足りない項目）／`offer_exists`（17.9）／`offer_ended`（19.12）／`until_in_past`（19.9）／`until_over_window`（19.13。最長の時刻は応答に載せない——`storeHome` が公開中のカードの項目として `latestUntil`〔公開から12時間〕を返しており、画面はその値を文に使う・AI判断）／`approval_missing`（25.2・`fields` に足りないもの）／`file_unsupported`・`file_too_large`（13.3・`fields` は `file`）／`card_setup_failed`（13.9）／`login_failed`（14.2）／`place_unresolved`（3.4〜3.6・`fields` は `place`）／`report_not_allowed`（26.18・26.19・その店へは通報できない）／`human_check_failed`（Turnstile・`d02` の断り）／【最終日】`rate_limited`（30.1〜30.4）。**画面の側だけで作る語が2つ**: `location_required`（3.7・現在地が取れなかった。`client/geolocation` が返す）と `network`（通信の失敗。`client/api` が包む）——どちらも `domain/inputRefusal.ts` の一覧に在り、`lib/client` は型として読む
+- `kind` の語（AI判断・本人が覆せる）: `invalid_input`（形・範囲。`fields` 必須）／`party_over_max`（10.7・人数を増やして「何名まで」を超えた。文は前の版のまま）／`email_taken`（12.2・`fields` は `email`）／`limit_reached`（15.7 のおすすめメニュー6件目・16.2 のクーポン4つ目）／`coupon_in_use`（16.5）／`address_unresolved`（15.10・`fields` は `address`）／`profile_incomplete`（17.11・`fields` に足りない項目）／`offer_exists`（17.9）／`offer_ended`（19.12）／`until_in_past`（19.9）／`until_over_window`（19.13。最長の時刻は応答に載せない——`storeHome` が公開中のカードの項目として `latestUntil`〔公開から12時間〕を返しており、画面はその値を文に使う・AI判断）／`approval_missing`（25.2・`fields` に足りないもの）／`file_unsupported`・`file_too_large`（13.3・`fields` は `file`）／`card_setup_failed`（13.9）／`login_failed`（14.2）／`place_unresolved`（3.4〜3.6・`fields` は `place`）／`report_not_allowed`（26.18・26.19・その店へは通報できない）／`human_check_failed`（Turnstile・`d02` の断り）／【最終日】`rate_limited`（30.1〜30.4）。**2026-09-25 に足した語**（横断-01・設計-13・設計-15・安全-07・安全-13・AI判断）: `unauthenticated`（401・未ログインとログインの切れ）／`forbidden`（403・役割違いと書き込みの Origin の不一致。前はどちらも本文が `invalid_input` だった）／`not_found`（404・経路が無い／番号が無い／別の店や客のもの。在る無しを区別して見せない）／`password_mismatch`（403・確かめのために入れた今のパスワードが合わない）／`body_too_large`（413・本文が大きすぎる）／`internal`（500・想定外の例外）。**語 → 状態コードの対応は `lib/http/refusals.ts` の表1つが持ち**、手続き（`usecases`）は状態コードを持たず種類だけを返す**画面の側だけで作る語が2つ**: `location_required`（3.7・現在地が取れなかった。`client/geolocation` が返す）と `network`（通信の失敗。`client/api` が包む）——どちらも `domain/inputRefusal.ts` の一覧に在り、`lib/client` は型として読む
 - `reason` の語（AI判断）: `required`・`too_short`・`too_long`・`out_of_range`・`not_integer`・`bad_format`・`not_allowed`・`too_many`・`min_over_max`（15.8 の最低が最高より上）・`over_capacity`（19.2）・`over_remaining`（19.5）・`in_past`・`over_window`（17.6 の「何時まで」）
 - **zod の落ちを語へ直すのは `http/defineRoute.ts` の1か所**（`too_small` → `too_short`／`out_of_range`、`too_big` → `too_long`／`out_of_range`、`invalid_type` → `required`／`not_integer`、`invalid_string` → `bad_format`、`invalid_enum_value` → `not_allowed`。型が文字列か数かで分ける）。手続きが規則で断るときは、同じ形を `domain/inputRefusal` の語で直接返す（`usecases/changeOffer` が `until_in_past` を返す、など）
 - **この形を通らない断りは2つだけ**（境界を明記する）: ①受け取り・受け取り直しの断り（上の `refusal`＋`home`。画面を作り直す必要があり、次の一手を持つので別の形のまま。描くのは `RefusalNotice`）②確保への操作の断り（基準 10.3・20.19・21.5 など。今の状態を返し、行の中に今の状態の文を出して一覧を取り直す形のまま）。それ以外の断りは全部この形で、描くのは `components/ui/InputRefusal` だけ（「画面と入口」の「入力の誤りの出し方」）
@@ -361,16 +363,17 @@ flowchart LR
 
 | テーブル | 主な列 | 補足 |
 | --- | --- | --- |
-| `accounts` | id・email（大文字小文字を区別しない一意）・password_hash・role（store／admin）・store_id・must_change_password・failed_count・locked_until | 店と運営を1つの表に置くので、1つのメールアドレスが指すアカウントは常に1つ（基準 12.2）。後ろの3列は【最終日】 |
-| `sessions` | token_hash・account_id・expires_at | Cookie には乱数の値、表にはその SHA-256 だけ。期間は25時間・残り1時間未満のアクセスで自動延長するスライディングウィンドウ（本人選択・AI提示 2026-09-21。旧: 14日〔AI判断〕。25時間の根拠: r20/r18/r19 の既存受け入れ検査が最大24時間1分の間隔を想定しており、それを壊さない最小限の余裕） |
-| `stores` | id・name・address・lat・lng・url・genres・menus・budget_min・budget_max・status（pending／approved／banned）・license_key・license_mime・card_registered_at・stripe_customer_id・card_setup_session_id・terms_version・terms_agreed_at（同意した店向けの利用規約の版と時刻・migration 0010・基準 12.11） | カードの番号・有効期限・セキュリティコードの列は無い（基準 13.7） |
+| `accounts` | id・email（大文字小文字を区別しない一意）・password_hash・role（store／admin）・store_id・must_change_password・failed_count・locked_until | 店と運営を1つの表に置くので、1つのメールアドレスが指すアカウントは常に1つ（基準 12.2）。must_change_password は【最終日】。**failed_count・locked_until は使っていない**（予約・未使用。ログインの失敗は `rate_counters` が数える・2026-09-25 設計-12。0001 は本番に当たっているので列は消さない） |
+| `sessions` | token_hash・account_id・expires_at・created_at（作った時刻・migration 0008・2026-09-25 安全-08。作った時刻から14日で必ず切れ、延ばす先と Cookie の Max-Age もその内に収める。作った時刻の無い・読めない行は切れたものとして断る） | Cookie には乱数の値、表にはその SHA-256 だけ。期間は25時間・残り1時間未満のアクセスで自動延長するスライディングウィンドウ（本人選択・AI提示 2026-09-21。旧: 14日〔AI判断〕。25時間の根拠: r20/r18/r19 の既存受け入れ検査が最大24時間1分の間隔を想定しており、それを壊さない最小限の余裕） |
+| `stores` | id・name・address・lat・lng・url・genres・menus・budget_min・budget_max・status（pending／approved／banned）・license_key・license_mime・card_registered_at・stripe_customer_id（**使っていない**・予約・未使用・2026-09-25 設計-12）・card_setup_session_id（カードの登録を始めたときの Stripe の手続きの番号の控え。確かめの入口がこれを照会する・不具合-01）・terms_version・terms_agreed_at（同意した店向けの利用規約の版と時刻・migration 0010・基準 12.11）・geocoded_at（住所を Google で位置に直した時刻・migration 0009・設計-20）・approved_at・approved_name・approved_address・approved_license_key・approved_license_mime・license_uploaded_at・admin_note・contacted_at（承認した時点の写し・許可書を上げた時刻・運営のメモと連絡済みの印・migration 0011・運営-02・運営-05） | カードの番号・有効期限・セキュリティコードの列は無い（基準 13.7） |
 | `coupons` | id・store_id・name・note・created_at | 並びは作った順（基準 4.8） |
 | `offers` | id・store_id・capacity（募集する組数）・initial_capacity（公開のとき入れた値）・party_max・published_at・until_at・until_set（店が「何時まで」を入れたか。0 なら until_at は公開から12時間の自動の終わり・要件17の基準 17.24・`migrations/0007`）・coupon_ids（公開中は `…/coupons` が1文で差し替える・基準 19.11）・ended_at・end_reason（stopped／banned） | 「何時まで」で終わったことは保存しない（時刻から導く）。`ended_at` に書くのは店が止めた時と運営が店を止めた時だけ |
 | `customers` | id（内部の番号）・token_hash・nickname・phone・genres・budget_max・deleted_at | 下の「客の識別子」を見る |
-| `reservations` | id・offer_id・store_id・customer_id・fetch_id・party・code（全期間で一意）・created_at・expires_at・status・status_at・holds_slot・completed_after_expiry・coupons_json | `coupons_json` は受け取った時点のクーポンの名前と特記事項の写し（基準 16.6・9.1） |
+| `reservations` | id・offer_id・store_id・customer_id・fetch_id（取得の記録を指すが外部の鍵の制約は無い）・party・code（全期間で一意）・created_at・expires_at・status・status_at・holds_slot・completed_after_expiry・coupons_json・customer_phone（受け取った時点の客の電話番号の写し。店の一覧はこれだけを読み、登録の消去で空にする・migration 0004・2026-09-25 安全-17 の案1） | `coupons_json` は受け取った時点のクーポンの名前と特記事項の写し（基準 16.6・9.1） |
 | `push_subscriptions` | customer_id（一意）・subscription_json | 客1人に1つ（端末1台＝客1人のため） |
-| `fetch_logs`・`fetch_items`・`selections`・`reservation_events`・`ai_calls` | 要件27・33 の項目どおり。**`ai_calls` は、基準 33.1 の実費（`cost_usd`）・所要時間（`duration_ms`）・成功か失敗か（`succeeded`）に並べて、`resolved_model`・`request_id`・`fallback_level`（応答ヘッダーから。無ければ NULL）と `validation_failed`（出力が基準 7.3・7.4 に落ちたか）を持つ**（第4周の追記。3列は本人選択・23節、列の名前と `validation_failed` は AI判断。「OrcaRouter の使い方」の③④） | **追加だけ**。`lib/repo/logs.ts` には insert の関数しか置かず、この5つの表に対する UPDATE と DELETE の文がリポジトリに無いことを構造の検査で見る（基準 27.7） |
+| `fetch_logs`・`fetch_items`・`selections`・`reservation_events`・`ai_calls` | 要件27・33 の項目どおり。`fetch_logs.origin_kind`（起点の種類 `here`／`place`・古い行は NULL・migration 0006・2026-09-25 客-11）を足した。確保の応答の経路の出発地（`origin`）は、打った場所で探した取得のときだけ座標を返し、現在地で探したときは null（マップが今の現在地から引く）、NULL の古い行は座標を返す。**`ai_calls` は、基準 33.1 の実費（`cost_usd`）・所要時間（`duration_ms`）・成功か失敗か（`succeeded`）に並べて、`resolved_model`・`request_id`・`fallback_level`（応答ヘッダーから。無ければ NULL）と `validation_failed`（出力が基準 7.3・7.4 に落ちたか）を持つ**（第4周の追記。3列は本人選択・23節、列の名前と `validation_failed` は AI判断。「OrcaRouter の使い方」の③④） | **追加だけ**。`lib/repo/logs.ts` には insert の関数しか置かず、この5つの表に対する UPDATE と DELETE の文がリポジトリに無いことを構造の検査で見る（基準 27.7） |
 | `reports` | id・store_id・customer_id・reason・at | — |
+| `admin_actions`（2026-09-25 運営-01） | id・actor_account_id（操作した運営のアカウントの内部の番号）・action（approve／ban／restore／temp_password／view_license／note／acknowledge）・store_id・reason・detail・at | **追加だけ**（migration 0011 のトリガーが UPDATE と DELETE を止める）。店の詳細の操作の履歴 |
 | `rate_counters`【最終日】 | key（主キー）・window_start・count | 固定の窓で数える。Cloudflare の連打の抑止の束縛は窓が60秒までなので（高確率）、1時間の窓（基準 30.2）には使えない。**数えは `INSERT … ON CONFLICT(key) DO UPDATE … RETURNING` の1文で原子的に足す**（2026-09-25 の監査の指摘 安全-02・`0003_rate_counters_atomic.sql` で主キーを key だけにした）。鍵の前半が規則の名前（`fetch:`・`registerCustomer:`・`registerStore:`・`report:`・`login:<メールアドレス>\|<接続元>`・`loginIp:<接続元>` など・正本は `http/rateLimits.ts` の表）。同じ表に、ログインに通った端末の印（`loginDevice:<メールアドレス>\|<印の SHA-256>`・`repo/loginDevices.ts`）と、店の画像の埋め戻しの1日1回の数え（`storeImageBackfill:<店>`）も置く |
 
 ### 客の識別子（要件2）
@@ -393,6 +396,8 @@ flowchart LR
 | 店が取り消す | 確保中 | 店が取り消した | — | 戻らない。募集する組数も変わらない（本人発案） | 送る |
 | 運営が店を止める | 確保中 | 運営に取り消された | — | 1戻る（オファーは同時に終わる） | 送る |
 
+**状態を変える文と記録は1つの `db.batch` で書く**（2026-09-25 監査の直しで変更（不具合-13〜16）・AI判断）。記録（`selections`・`reservation_events`）は、その状態・時刻に変わったときだけ足す条件つきの追加で、`reservation_events` の番号は「確保の番号:状態」、`selections` は確保の行から写す。`repo/logs.ts` は文を返す関数（`selectionStatement`・`reservationEventStatement`）を持つ。受け取りの INSERT の条件には、上の表の3つに加えて、客が登録を消していない・受け取り直しなら元の確保がまだ期限切れで20分以内・同じ客の同じオファーの確保が2件に届いていない（要件8の基準 8.12）・その取得の結果にその店が出ている、を入れる（`repo/reservationReceive.ts` の `receiveReservation`）。取得から60分以内か（基準 8.13）は、INSERT の前に手続きが取得の記録の時刻で確かめる。人数の変更の UPDATE には「何名まで」の条件を、登録の消去の UPDATE には保持の条件（確保中・期限切れ20分以内が無い）を入れる。運営の停止の知らせの相手は、取り消す前に読むのでなく、取り消した UPDATE の `RETURNING` から決める。確保の状態の条件（期限切れ・20分以内）は `repo/sqlFragments.ts` の `expiredReservationCondition`・`expiredWithinGraceCondition` だけが持ち、repo のほかのファイルに手で書かない（単体の検査が見張る）
+
 表に無い組み合わせの要求は、**状態も残りも変えずに断り、今の状態を返す**（基準 10.3・20.19・21.5・21.6）。状態を変える操作はどれも「前の状態を WHERE に入れた1つの UPDATE」で、変わった行が0なら断る。D1 は書き込みを直列に扱う（高確率）ので、同時に来た出来事は1つずつ順に扱われ、後の出来事は先の出来事を反映した状態に当たる（基準 20.22）。
 
 **残り ＝ 募集する組数（`capacity`）− 枠を押さえている確保の数。** 枠を押さえているのは次の3つ:
@@ -403,7 +408,7 @@ flowchart LR
 
 これで、**店が決めた募集する組数は、店が「追加で出す」「残りの募集を減らす」を押したとき以外は動かない**（意図の申し送りへの答え）。店が確保を取り消しても組数は変わらず、残りも戻らない。期限切れの確保を残り0で完了済みにしても、組数も残りも動かない。「残りの募集を減らす」と「追加で出す」は `capacity` を同じ数だけ増減する1つの UPDATE で、減らす側は「減らしたあとの残りが0以上」を WHERE に入れる。
 
-**期限切れの記録**（基準 27.4）: 期限切れは書き込みを伴わないので、状態の変化の記録は、客の画面・店のホーム・運営の数字の画面の手続きの先頭で、まだ記録の無い期限切れを `INSERT OR IGNORE` で足す（時刻は読んだ時ではなく**期限の時刻**）。誰も読まない間は記録が遅れて付くが、中身は変わらない（AI判断・承知のうえの形）。
+**期限切れの記録**（基準 27.4）: 期限切れは書き込みを伴わないので、状態の変化の記録は、客の画面・店のホーム・運営の数字の画面の手続きの先頭で、まだ記録の無い期限切れを `INSERT OR IGNORE` で足す（店のホームの足し込みは、店の一覧と同じ24時間〔`status_at`〕より新しい確保だけを見る。客のホームは下限なし・2026-09-25 監査の直しで変更（設計-08）——店の画面が取り直しのたびに全期間を読み直していた。索引は migration 0004）（時刻は読んだ時ではなく**期限の時刻**）。誰も読まない間は記録が遅れて付くが、中身は変わらない（AI判断・承知のうえの形）。
 
 ### オファーの状態
 
@@ -467,26 +472,26 @@ flowchart LR
 
 | 順 | 条件 | 出す表示 |
 | --- | --- | --- |
-| 1 | 識別子が無い、または受け付けられない（401） | 登録の入力（基準 1.10・1.11） |
+| 1 | 識別子が無い、または受け付けられない（401） | **裏で客の登録を済ませて取得の画面**（入口の部品 `GuestEntry`。通らなかったときだけ受け皿の登録の入力・基準 1.10・1.11。2026-09-25 監査の直しで実物に揃えた（設計-03・客-02）。自動の登録は 2026-09-22 の本人発案） |
 | 2 | 確保中の確保がある | **確保中の表示**（基準 9.1） |
 | 3 | いちばん新しい確保が期限切れで、期限から20分以内 | **期限切れの表示（コードつき）**。コード・店名・人数と「店に着いているなら、この画面を店の人に見せてください」。受け取れる状態なら「同じ人数で受け取り直す」、そうでなければ「探し直す」（基準 11.5〜11.9） |
 | 4 | いちばん新しい確保が、店に取り消された／運営に取り消された／期限から20分を過ぎた期限切れで、**その変化から3時間以内、かつ、そのあと1回も取得を押していない** | **取り消しの表示**（理由の文と「探し直す」。基準 9.6・9.7） |
-| 5 | いちばん新しい確保が完了済みで、**完了済みから3時間以内**、かつ次の確保を作っていない | **完了済みの表示**（店名・通報ボタン・「最近行った店」の入口） |
+| 5 | いちばん新しい確保が完了済みで、**完了済みから30分以内**（2026-09-25 に実物の30分へ揃えた・3時間へ戻すかは本人の判断待ち・不具合-18）、かつ次の確保を作っていない | **完了済みの表示**（店名・通報ボタン・「最近行った店」の入口） |
 | 6 | 上のどれでもない | **取得の画面** |
 
 - 優先の順の4を3時間で切るのは AI判断（要件は長さを決めていない。3時間を過ぎて開いた客には、取り消しの表示の「探し直す」の行き先である取得の画面を、はじめから出す）
-- 「来店を終えた直後」の幅は**3時間**（AI判断）。食事の間と店を出た直後に開いた客には完了済みの表示（通報の入口）が出て、翌日以降に開いた客は探しに来ているので取得の画面が出る。3時間を過ぎても、次の確保を作るまでは、取得の画面の上に「前回: ◯◯（完了済み）を開く」の1行が出て、完了済みの表示を開ける（基準 9.4）
+- 「来店を終えた直後」の幅は**30分**（AI判断。`domain/customerHome` の `COMPLETED_VIEW_MS`）。前の版は3時間だったが、受け入れ検査 r20 が完了済みから60分後のホームを取得の画面と決めていたので、実装で30分にしていた（2026-09-25 監査の直しで設計書を実物に揃えた・設計-06・不具合-18。**3時間へ戻すかは本人の判断待ち**、戻すなら r20 のその行も直す）。店を出た直後に開いた客には完了済みの表示（通報の入口）が出る。30分を過ぎても、次の確保を作るまでは、`GET /api/customer/home`（`kind` は `fetch`）に `previousCompleted`（`ReservationDto`）が載り、取得の画面の上の「前回: ◯◯（完了済み）を開く」の1行から完了済みの表示を開ける（基準 9.4。入口は 2026-09-25 に足した——それまでは注だけが「開ける」と書いていた）
 - 4の「取得を押していない」は取得の記録（要件27）から分かるので、新しい状態を持たない。探し直して0件だった客が開き直しても、取り消しの表示には戻らない
 
 | 表示 | 出るもの | ここから行ける先 |
 | --- | --- | --- |
-| 登録の入力 | 呼び名・電話番号・ジャンルのチェック12個・予算の上限（任意）。自由記述とアレルギーの欄は無い。人かどうかの確かめの部品（下の注。客が打つ欄は4つのまま） | 登録 → 取得の画面 |
-| 取得の画面 | 場所の欄（いつも出ている。空なら現在地。「駅名や住所」）・人数・その回のジャンルと予算（登録の値が入っている）・電話番号（任意。入れると登録の変更の入口で登録へ保存する・基準 1.9）・「今入れる店を探す」 | 結果／最近行った店（過去の受け取りもその中）／【最終日】登録の消去 |
+| 登録の入力（受け皿） | 裏の登録が通らなかったときだけ出る（2026-09-25 監査の直しで変更（設計-03・客-02））。呼び名は自動で作った `guest-xxxxxx` が入っていて、電話番号は任意（空なら仮の番号を送る）・ジャンルのチェック12個・予算の上限（任意）。自由記述とアレルギーの欄は無い。人かどうかの確かめの部品（下の注） | 登録 → 取得の画面 |
+| 取得の画面 | 先頭に「声で入れる」（基準 3.16・音声認識の無いブラウザでは出さない）・場所の欄（いつも出ている。空なら現在地。「駅名や住所」。打つと候補が出る。一度「現在地を使う」を押した端末では、開いた瞬間に現在地の地名が入る）・人数（−/＋ つき・既定1名。「今すぐ探す」の直前に置き、ボタンの文言に人数を載せる・客-07）・「今すぐ探す」・その下にその回のジャンルと予算の上限（予算はチップ・客-15。登録の値が入っている）・電話番号（任意。入れると登録の変更の入口で登録へ保存する・基準 1.9） | 結果／最近行った店（過去の受け取りもその中）／【最終日】登録の消去 |
 | 結果 | 店ごとのカード: 店名・徒歩◯分・予算の幅・理由1文・◯名まで・クーポンの名前と特記事項（無ければ空）・ホームページを開く・**「この店に行く（20分間 席を確保）」**。クーポンを選ぶ操作は無い。0件のときは、人数を減らす・場所を変える・時間を置く、の次の手。**押した瞬間に受け取れなかったとき（基準 8.6）は、そのカードの中に、受け取れなかった理由の文と次の一手が1つ出て（`RefusalNotice`・下の注）、画面は応答に載った新しい状態で自分を作り直す**（一覧は取り直さない。カードの「◯名まで」は応答の値に直る） | 確保中の表示／取得の画面へ戻る（断られたときの次の一手からも取得の画面へ。人数を下げれば取れるときは、その人数を入れた取得の画面へ） |
-| 確保中の表示 | **コード（大きく）**・店名・住所・人数・期限の時刻・クーポン・ホームページ・「人数を変える」・通報ボタン・「ほかの店を探す」・いちばん下に「確保を取り消す」 | 取得の画面（「ほかの店を探す」からは確保を持ったまま。「確保を取り消す」のあとも）→ 結果（確保を持ったままの間は、受け取りは選べない。下の注）／最近行った店 |
+| 確保中の表示 | **コード（大きく）**・店名・住所・人数・期限の時刻と「あと◯分」（5分を切ったら目立たせる）と期限を過ぎたときの扱いの1文（客-06）・経路の案内・クーポン・ホームページ・「人数を変える」・通報ボタン・「ほかの店を探す」・いちばん下に「確保を取り消す」 | 取得の画面（「ほかの店を探す」からは確保を持ったまま。「確保を取り消す」のあとも）→ 結果（確保を持ったままの間は、受け取りは選べない。下の注）／最近行った店 |
 | 期限切れ・取り消し・完了済みの表示 | 上の優先の順の表のとおり。**期限切れの表示から「同じ人数で受け取り直す」を押して断られたときは、結果のカードと同じ断りの部品（`RefusalNotice`）が操作の場所に出て、表示は応答に載った新しい状態で自分を作り直す**（下の注） | 取得の画面／受け取り直し |
 | 最近行った店 | 完了済みから7日以内の行（店名・日時・通報ボタン）。コード・住所・URL は出さない。**その下に【最終日】過去の受け取りの一覧**（受け取った全部の確保の店名・日時・状態・コード・住所・ホームページ。通報ボタンは置かない・基準 8.11・2026-09-25 監査の指摘 客-13 の案A） | 通報の入力（理由は必須・500字まで）／「もう一度探す」で取得の画面 |
-| 通知の説明（はじめての受け取りの直後に1回だけ） | 「確保が、お店か運営の都合で取り消されたときだけ通知します」「端末によっては届きません。届かなくても、この画面を開けば分かります」→「通知を受け取る」／「受け取らない」 | 確保中の表示 |
+| 通知の説明（確保中の表示の中・札と経路とクーポンの下に1行） | 「確保が、お店か運営の都合で取り消されたときだけ通知します」→「通知を受け取る」／「今はしない」。「端末によっては届きません。届かなくても、この画面を開けば分かります」の注は畳む（2026-09-25 監査の直しで変更（客-05）） | 確保中の表示 |
 
 - **人かどうかの確かめ（Turnstile）**（有効にすることは本人発案・18節。3つの入口に置くことと、取れないときも断ることは本人選択・19節。文と部品の振る舞いは AI判断）: 客の登録・店の登録・ログインの3つのフォームに、確かめの部品が入る。**部品に渡すサイトキーは、フォームが `client/api.ts` の `getPublicConfig()`（入口 `GET /api/config/public`）から受け取る**（第5周の直し。「秘密情報と個人データの扱い」の公開値の項。取れる前・取れなかったときは部品を描かず、送るボタンは押せるままにする——押せば下と同じ断りが出る）。ふつうは何も押さずに通る（高確率）。通らなかったとき・部品が読み込めなかったときは、入れた内容を消さずに「人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください」と出す。送るボタンは押せるままにしておく（押しても何も起きない、という形にせず、断られた理由が必ず出るようにする）。**出し方は「入力の誤りの出し方」の一般の規則の1事例**（`kind: human_check_failed`・送るボタンの直下の `FormMessage`・第6周の直し）
 - **承知のうえの穴**（本人選択・19節）: 確かめの部品が読み込めない端末（部品の読み込みを止める拡張・回線）では、読み込み直しても同じ断りが返り、**客は登録を終えられない**——利用シーン S1 の2歩目で先へ進めない。店の登録とログインも同じ。サーバーが「取れないときも断る」のは、守りが外のサービスの調子で黙って外れないようにするためで、本人はこの穴を承知のうえで守りの強さを選んだ。検査（`d02`）が見るのは、断られた理由が出て入れた内容が残る所までで、その端末で登録を終えられることは見ない
@@ -498,8 +503,8 @@ flowchart LR
   3. **理由ごとに次の一手が1つくっつく**（`domain/receiveRefusal.nextStep`。対応は AI判断。**呼ぶのは手続き `usecases/receiveOffer` で、結果は応答の `refusal.nextStep` に載る**——第5周の直し。前の版は部品が呼んでいた）: 満席になった・公開が終わった・店が停止→「探し直す」（取得の画面へ。入れた条件はそのまま）／「何名まで」が下がった→「◯名で探し直す」（取得の画面へ、人数をその値にして。人数を減らせば取れる客を、探し直しの振り出しへ送らない）／すでに確保を持っている→「確保中の表示へ戻る」。根拠: Nielsen Norman Group のエラーメッセージの指針——問題を述べるだけでは足りず回復の手立てを添える・利用者を責めない・**問題の起きた場所の近くに出す**（AI提示）。だから結果ではカードの中、期限切れの表示では押した操作の場所に出し、全体の帯や別の画面へ飛ばさない
   4. **断りの応答が新しい状態を連れてきて、その場で画面を作り直す**（本人選択）。応答の `home`（「入口の一覧」の注）を `CustomerApp` がそのまま受け取り、優先の順の表のとおりに表示を作り直す。ホームが取得の画面のままなら結果の一覧は残り、押したカードだけが「受け取れない」に変わって中に断りが出る。ホームが確保中の表示（すでに確保を持っていた）・取り消しの表示・完了済みの表示なら、その表示に切り替わる（新しい表示そのものが答えなので、断りの部品は重ねない）。**「誰かに先を越された（作り直す）」と「あなたの確保が失効した（同じ人数でもう一度提示する）」を混ぜない**——期限切れの表示が描くときの分岐（受け取れる状態かつ人数が「何名まで」以下なら「同じ人数で受け取り直す」、そうでなければ「探し直す」）を、`nextStep` は理由と新しい `home` の両方から決める。断られた直後の `home` が「もう一度受け取り直せる」と言うなら（同時に別の客が取り消した、など）、次の一手は理由の対応表より優先して「同じ人数で受け取り直す」になる。取れるのに取れないと言うと、利用者は不具合と読む（AI提示）
   5. **同じ規則を通る入口は、同じ断りの部品を通す**。`RefusalNotice` は `refusal`（`kind`・`partyMax`・`nextStep`）を受け取って、`domain/texts` の文（理由の文と次の一手のボタンの文）にして描くだけ（自分では判断しない。「概要」の芯の1。**`lib/domain` から値として読むのは `domain/texts` だけ**——第5周の直しで、`nextStep` の決定を手続きへ移した）。`ResultList` はカードの受け取りボタンの場所に、`ExpiredView` は「同じ人数で受け取り直す」の場所に置く。受け取りの断りを描く部品がこの1つしか無いことは構造の検査で見る（「要件に基準が無い、設計の決めの検査」の表。入力の断りは別の1部品 `components/ui/InputRefusal`——境界は「入口の一覧」の注・第6周の直し）。**この手本は既に設計の中にある**——上の 10.7・10.8 の「この店では受け入れられません。確保を取り消して探し直せます」は、文＋次の一手＋部品の検査が揃っている。それと対になる形で、8.6 にも文（2）・次の一手（3）・部品の検査（検査の割り当ての表の 8.6 の行と 11.5〜11.9 の行）を揃えた
-- **通知の説明の出し分け**（基準 22.10 の端末ごとの案内・AI判断）: プッシュの仕組みが無いブラウザ（iPhone の Safari でホーム画面に追加していない場合など）では、許可を求めるボタンを出さず、「このブラウザには通知が届きません。iPhone は、ホーム画面に追加して開いた場合だけ届きます（追加した側では登録をやり直します）」とだけ伝える。答えたかどうかは端末に覚え、二度は聞かない（基準 22.11）。「通知を受け取る」を押したとき `client/push.ts` が購読を作る——そのとき要る VAPID の公開鍵は `getPublicConfig()`（入口 `GET /api/config/public`）から受け取る（第5周の直し。取れなかったときは購読を作らず、確保中の表示へ戻る。通知は無くても開けば分かる〔基準 22.9〕ので、断りの文は出さない・AI判断）
-- **電波が切れたとき**: ホームの取り直しが成功するたびに、確保中の表示の内容を localStorage に残す。取り直しが通信の失敗に終わったら、残した内容と「最新の状態を確かめられていません」を出す（401 とは区別する）。`/me` の殻と部品のファイルは Service Worker が保存するので、機内モードで開き直しても同じ表示が出る（基準 9.10〜9.12）
+- **通知の説明の出し分け**（基準 22.10 の端末ごとの案内・AI判断。2026-09-25 監査の直しで変更（客-05・不具合-11・客-04））: プッシュの仕組みが無いブラウザ（iPhone の Safari でホーム画面に追加していない場合など）では、許可を求めるボタンを出さず、「このブラウザには通知が届きません。iPhone は、ホーム画面に追加して開いた場合だけ届きます（追加した側では登録をやり直します）」と伝えて「閉じる」を置く。iPhone の案内は「今の確保はこの画面（Safari）で見てください」を既定にし、ホーム画面への追加は確保が無いときに勧める。端末の印は「今はしない」「閉じる」を押したときだけ付け、二度は聞かない（基準 22.11）。許可済みの端末には説明を出さない。「通知を受け取る」を押したら**その直後に許可の問いを出し**（公開値を読む前）、それから `client/push.ts` が購読を作る——そのとき要る VAPID の公開鍵は `getPublicConfig()`（入口 `GET /api/config/public`）から受け取る（第5周の直し。取れなかったときは購読を作らず、確保中の表示へ戻る。通知は無くても開けば分かる〔基準 22.9〕ので、断りの文は出さない・AI判断）。許可済みで購読が無い、またはサーバーが無いと言うときは、`/me` を開いたときに黙って作り直す。Service Worker は `pushsubscriptionchange` で購読を預け直す
+- **電波が切れたとき**: ホームの取り直しが成功するたびに、確保中の表示の内容を localStorage に残す。取り直しが通信の失敗に終わったら、残した内容と「最新の状態を確かめられていません」を出す（401 とは区別する）。`/me` の殻と部品のファイルは Service Worker が保存するので、機内モードで開き直しても同じ表示が出る（基準 9.10〜9.12）。**Service Worker は `/me` を開いたときに、通知の許可に関わらず範囲 `/me` で登録する**（前の `/` の範囲の登録は外す）。殻として保存するのは `/me` の 2xx の応答だけで、保存に失敗しても取れた応答を返す。保存の版は v2 で、入れ替わるときに古い保存を消す（2026-09-25 監査の直しで変更（不具合-05））
 - プッシュを開くと `/me` が開き、優先の順の4で取り消しの表示が出る（基準 22.12）
 
 ### 店の画面（`/store`・スマホ）
@@ -508,11 +513,11 @@ flowchart LR
 
 **店のホーム（`/store`）** は上から順に:
 
-1. **承認の状況の帯**。未承認:「運営の承認を待っています。承認されるまでオファーは公開できません」と、足りないもののチェックリスト（営業許可書・カード・店の情報〔店名・住所・ジャンル・予算の幅〕。それぞれの画面へのリンクつき。クーポンは任意）。止められている:「運営に登録を取り消されているため、オファーは公開できません。」
+1. **承認の状況の帯**。未承認:「運営の承認を待っています。承認されるまでオファーは公開できません」と、足りないもののチェックリスト（営業許可書・カード・店の情報〔店名・住所・ジャンル・予算の幅〕。それぞれの画面へのリンクつき。クーポンは任意）。止められている:「運営に登録を取り消されているため、オファーは公開できません。」。2026-09-25 監査の直しで変更（店-12・店-14）: 上部はタブだけにし、承認済みは小さな札、未承認と止められているときだけ色つきの帯を出す。未承認の帯には「運営が営業許可書を確かめてから承認します」、止められた帯には「向かっていた客の確保は取り消され、客に通知済み。期限切れの行も完了済みにできません」を足し、どちらにも運営の連絡先を出す
 2. **公開中のオファーが無いとき**（承認済みのときだけ）: 公開のフォーム。クーポンのチェック（0個なら「クーポンを見せないオファーとして公開されます」）・募集する組数・何名まで（2名・4名・6名のボタンと数の入力）・何時まで（時刻・任意。「終了タイマー」の裏に畳み、入れなければ公開から12時間で自動で終わる・要件17の基準 17.24・2026-09-25 監査の指摘 店-05）・「公開する」。前回の値が入っている。始まりの欄と曜日の欄は無い
 3. **公開中のとき**: オファーのカード（募集する組数・残り・何名まで・何時まで・見せているクーポン）と、操作4つ——「追加で出す」「残りの募集を減らす」（数を入れる）・「何名までを変える」・「何時までを変える」——と、見せるクーポンの選び直し（札を押して「更新する」。入口 `…/coupons` の1文で、同じオファーのまま差し替える・要件19の基準 19.11・2026-09-25 に改めた）と、離して置いた「公開を止める」。残りを直接打つ欄は無い。**4つの操作が断られたときは、その欄の直下かそのボタンの直下に文が出て、カードとフォームの内容は残る**（「入力の誤りの出し方」の一般の規則の表の 19 の行・第6周の直し）。「何時まで」の欄の横に「{published} 公開・最長 {max} まで」
-4. **向かっている客**（オファーが終わったあとも、出す行がある間は出る）: 期限の近い順。行ごとに呼び名・電話番号（押すと電話が掛かる）・人数・コード・期限。確保中の行に「完了済み」「取り消す」、期限切れの行（20分）に「期限切れ」の印と「完了済み」、店が取り消した行（20分）に印と電話番号、完了済みの行（24時間）に印。「完了済み」は呼び名・人数・コードを出して確かめてから、「取り消す」は「お客さんに通知が送られます」と確かめてから。断られたときは、その確保の今の状態（例:「お客さんが取り消していました」）を出して一覧を取り直す
-5. 下のナビ: ホーム／店舗情報／クーポン／書類（営業許可書とカード）／実績
+4. **向かっている客**（オファーが終わったあとも、出す行がある間は出る）: 期限の近い順。行ごとに呼び名・電話番号（押すと電話が掛かる。客が決めていない値〔`guest-…` と仮の番号〕と消した客は「お客さま」「電話番号の登録なし（確保番号で照合）」で、発信のリンクは付けない・電話番号は受け取った時点の写し・2026-09-25 監査の直しで変更（横断-02・安全-17））・人数・コード・期限。確保中の行に「完了済み」「取り消す」、期限切れの行（20分）に「期限切れ」の印と「完了済み」、店が取り消した行（20分）に印と電話番号、完了済みの行（24時間）に印。「完了済み」は呼び名・人数・コードを出して確かめてから、「取り消す」は「お客さんに通知が送られます」と確かめてから。断られたときは、その確保の今の状態（例:「お客さんが取り消していました」）を出して一覧を取り直す
+5. タブ（画面の上・1段の横スクロール。2026-09-25 監査の直しで変更（店-14・横断-12・安全-09））: オファー／クーポン／店舗情報／書類（営業許可書とカード）／実績／アカウント、右端にログアウト。前の版は下のナビで「ホーム」だった（本人の第2回の UI 指摘で「オファー」に改名し、店舗情報を右へ）
 
 **「何時まで」の入力と解釈（第6周の直し）**: 入力は時刻だけ（例 `02:00`）で変えない。解釈を変えた——**公開した時刻（分の頭に切り下げる）を起点に、その時刻以後で最初にその時分に当たる時点**へ直し（`domain/until.ts`）、3つに分ける:
 
@@ -540,9 +545,11 @@ flowchart LR
 ### 運営の画面（`/admin`・PC）
 
 - **ホーム**: いちばん上に「オファー公開数」と未承認の店の数。その下に店の一覧（店名・住所・メールアドレス・承認の状況）と、絞り込み（オファー公開中・承認済み・未承認・登録取り消し済み）と検索の欄。重ねて使える
-- **店の詳細（`/admin/stores/[id]`）**: 店の情報・おすすめメニュー・予算の幅・営業許可書を開くリンク・カードが登録済みかどうか・メールアドレス（`mailto:` のリンク。理由は運営が自分のメールで伝える）・「承認する」（許可書かカードが無ければ押せず、足りないものが出る）・「登録を取り消す」（確かめつき）・「承認済みに戻す」・【最終日】「仮のパスワードを発行する」。承認を断るボタンは無い
-- **通報（`/admin/reports`）**: 新しい順。行から店の詳細へ移れる。客の呼び名と電話番号は出ない
-- **数字（`/admin/metrics`）**: AI の1回あたりの実費・取得の所要時間・点数順に倒れた割合・確保のうち自動で取り消された割合。**その下に「モデル別の表」**（第4周の追記・本人選択・23節。置き場所は AI判断）: 実際に答えたモデル（`resolved_model`）ごとに、件数・平均実費・平均所要時間・検査に落ちた率・点数順に倒れた率。表の上に、受け皿が答えた件数と割合（`fallback_level` ≥ 1 の数）を1行。中身の決め方は「OrcaRouter の使い方」の④
+- **店の詳細（`/admin/stores/[id]`）**: 店の情報・おすすめメニュー・予算の幅・営業許可書を開くリンク・カードが登録済みかどうか・メールアドレス（`mailto:` のリンク。理由は運営が自分のメールで伝える）・「承認する」（許可書かカードが無ければ押せず、足りないものが出る）・「登録を取り消す」（確かめつき）・「承認済みに戻す」・【最終日】「仮のパスワードを発行する」（運営自身の今のパスワードの再入力つき・運営-01）。承認を断るボタンは無い。2026-09-25 監査の直しで足したもの（運営-02・運営-03・運営-05・運営-06・運営-07）: 向かっている組数・その店への通報（件数と直近の3件）・登録と許可書と承認の日時・似た登録の数・運営のメモと「連絡済み」の印・承認した時点の写しと今の違い（「承認後に変更あり」と確かめのボタン）・操作の履歴。「登録を取り消す」と「承認済みに戻す」は理由を入れてから確かめる
+- **通報（`/admin/reports`）**: 新しい順。行から店の詳細へ移れる。客の呼び名と電話番号は出ない。行ごとに、通報した客の短い印とその店への件数を出す（2026-09-25 監査の直しで追加（運営-09））
+- **ホームの一覧**（2026-09-25 監査の直しで追加（運営-06・運営-07・運営-10・運営-11））: ジャンルでも絞れ、集計に `awaiting`（連絡済みを除いた承認待ち）と `total`（全部の店の数）を出す。行ごとに「承認後に変更あり」・連絡済み・店が取り消した回数と割合。絞り込み・検索・並び順は URL に載り、詳細から戻っても残る。既定の並びは登録の新しい順、絞り込みの既定は「すべて」（本人の第2回の UI 指摘）
+- **ナビ**: 運営の殻のナビにログアウトを置く（安全-09）。ログインが切れたら「ログインが切れました。もう一度ログインしてください。」と「ログインし直す」を出す（横断-01）
+- **数字（`/admin/metrics`）**: AI の1回あたりの実費・取得の所要時間・点数順に倒れた割合・確保のうち自動で取り消された割合。2026-09-25 監査の直しで変更（不具合-10・運営-08）: 「AI の1回あたり」は店の選定の呼び出しだけを数え（紹介文は用途別の表）、点数順に倒れた取得は候補が1件以上あるのに点数順になった取得だけ（候補0件は `fetch.noCandidates` で別に返し、割合の分母は候補のあった取得）。自動で取り消された割合の分母は、もう終わった確保。数えた時刻（`at`）・実費の合計と回数（全期間と今日＝日本時間）・受け皿が答えた割合（`fallbackRate`）を足し、画面には1行の説明と「読み直す」を置く。「倒れた」「受け皿」の言い方は画面に出さない。**その下に「モデル別の表」**（第4周の追記・本人選択・23節。置き場所は AI判断）: 実際に答えたモデル（`resolved_model`）ごとに、件数・平均実費・平均所要時間・検査に落ちた率・点数順に倒れた率。表の上に、受け皿が答えた件数と割合（`fallback_level` ≥ 1 の数）を1行。中身の決め方は「OrcaRouter の使い方」の④
 
 ### 利用シーンを画面の上で歩く
 
@@ -602,7 +609,7 @@ flowchart LR
 
 | 歩 | 誰が・どの画面で・何を |
 | --- | --- |
-| 1 | 店のホームを開く（セッションは25時間・アクセスごとに自動延長。切れていれば `/login` へ送られ、ログインのあとホームへ戻る） |
+| 1 | 店のホームを開く（セッションは25時間・アクセスごとに自動延長。ただし作ってから14日で必ず切れる・2026-09-25 安全-08。切れていれば「ログインが切れました」とログインし直す入口が出て、ログインのあとホームへ戻る） |
 | 2・3 | 公開のフォームでクーポン2つにチェック・組数3・4名まで・17:00 →「公開する」。あとは触らない |
 | 4 | 「向かっている客」に行が増える（10秒以内）。オファーのカードの残りが2に |
 | 5 | 客の画面のコードと行を見比べ、「完了済み」→ 確かめ → 押す |
@@ -729,7 +736,7 @@ flowchart LR
 | カードの登録の方式・テスト用の環境で足りるか | Stripe の Checkout（setup モード・AI判断）。テスト用の鍵で提出する（本人選択・18節） |
 | 営業許可書の置き場 | R2 の非公開のバケット。読む入口は2つだけ |
 | 確保中の表示の更新のしかた・店の一覧の更新 | 10秒ごとの取り直し（`usePolling`） |
-| Web プッシュの方式 | 中身を載せないプッシュ。v1 のデモに Web プッシュの作りは無い（`demo/DEBT.md` の F1）ので借りるものは無い。iPhone の案内は通知の説明の出し分け。送信は応答を返したあと（`waitUntil`）に行い、失敗しても取り消しは成立する（基準 22.6）。配信元が「もう無い」と返した購読は消す。プッシュの寿命（TTL）は確保の期限と同じ20分（AI判断。それより後に届いても意味が無い）。Service Worker が文面を取りに行って通信に失敗したときは、2つの場面に共通の決まった文「確保が取り消されました。開いて確かめてください」を出す（AI判断。通知を出さずに終わると、iPhone は購読を取り消すことがある・高確率） |
+| Web プッシュの方式 | 中身を載せないプッシュ。v1 のデモに Web プッシュの作りは無い（`demo/DEBT.md` の F1）ので借りるものは無い。iPhone の案内は通知の説明の出し分け。送信は**応答の前に済ませる**（2026-09-25 監査の直しで変更（不具合-08）——前の版は「応答を返したあと〔`waitUntil`〕」で、Workers では応答のあとの仕事が打ち切られうるため、要件22.1 を保って応答の前に送る形にした）。1回4秒で打ち切り、打ち切りと例外は届かなかったものとして扱い（購読は消さない）、失敗しても取り消しは成立する（基準 22.6）。運営の停止では並べて送る。配信元が「もう無い」と返した購読は消す。プッシュの寿命（TTL）は確保の期限と同じ20分（AI判断。それより後に届いても意味が無い）。Service Worker が文面を取りに行って通信に失敗したときは、2つの場面に共通の決まった文「確保が取り消されました。開いて確かめてください」を出す（AI判断。通知を出さずに終わると、iPhone は購読を取り消すことがある・高確率） |
 | 店が取り消した確保と、期限切れの完了済みの、残りの中での数え方 | 「データと状態」の「残りの数え方」 |
 | 期限切れの行を一覧から消す時刻の判定 | 時刻から導く（`domain/storeHome.ts`） |
 | OrcaRouter の Guardrails | 多層防御の外側。本人が管理画面で作った（23節。ルールの中身（中身は公開の文書に書かない・2026-09-25 の監査の指摘 安全-25。実物の設定は本人の手元の控えと OrcaRouter の管理画面））。弾かれたら基準 7.6 の道で点数順に倒れ、コードは変わらない——内側（AI に道具が無い・閉じた出力・並びは点数順）だけで安全（「秘密情報と個人データの扱い」の3段・第4周の追記） |
@@ -752,9 +759,9 @@ flowchart LR
 
 - Cloudflare: 新しい D1 と R2 のバケットを作る（R2 は支払い方法の登録が要る・高確率）。Worker の秘密を入れる
 - Cloudflare: **Workers を有料プラン（月5ドル）へ上げる**（本人選択・18節）。ログインを載せた版を最初に公開する前に
-- Cloudflare: **Turnstile のサイトキーと秘密鍵を作る**（管理画面。許すホスト名に、公開先と `localhost` を入れる）。有効にすることは本人発案・18節。**秘密鍵は Worker の秘密 `TURNSTILE_SECRET_KEY`、サイトキーは本人がメモして骨組みのタスクで実行者が `web/wrangler.jsonc` の `vars` の `TURNSTILE_SITE_KEY` に書く**（22節・第5周の直し）
+- Cloudflare: **Turnstile のサイトキーと秘密鍵を作る**（管理画面。許すホスト名には公開先だけを入れ、`localhost` は入れない——本番のサイトキーが手元でも使えると、自前のページで解いた値を本番へ流せる。手元は Cloudflare の試験用の鍵を使う・2026-09-25 監査の直しで変更（安全-23））。有効にすることは本人発案・18節。**秘密鍵は Worker の秘密 `TURNSTILE_SECRET_KEY`、サイトキーは本人がメモして骨組みのタスクで実行者が `web/wrangler.jsonc` の `vars` の `TURNSTILE_SITE_KEY` に書く**（22節・第5周の直し）
 - VAPID の鍵の組を作る（22節の `scripts/v2-keys.sh vapid` が在るならそれで。無ければ `web/scripts/gen-vapid.mjs`——**両方は持たない**。骨組みのタスクで実行者が 22節の道具の有無を見て決める・AI判断）。**秘密の側は Worker の秘密 `VAPID_PRIVATE_KEY`、公開の側は本人がメモして骨組みのタスクで `web/wrangler.jsonc` の `vars` の `VAPID_PUBLIC_KEY` に書く**（22節・第5周の直し）
-- Google Cloud: Geocoding API を有効にした鍵（API の絞り込みと1日の上限つき）
+- Google Cloud: Geocoding API と Places API を有効にした鍵（API の絞り込みと1日の割り当てつき）。予算アラートも置く（2026-09-25 監査の直しで追記（安全-03））
 - Stripe: テスト用の鍵（テスト用でよい、は本人選択・18節）
 - 運営の連絡先のメールアドレス（Worker の秘密 `ADMIN_CONTACT_EMAIL` として入れる。使うのは【最終日】のログインの画面なので、それまででよい）と、運営のアカウントのメールアドレスとパスワード（手元でスクリプトに入れる）
 - 直下の `.gitignore`: **済み**（`.dev.vars` と `*.local` の行は本人が手で足した・18節）。あとで足りない行が見つかったら、/dev の役割は書けないので、また本人の手に回る
@@ -973,3 +980,108 @@ flowchart LR
 **変えていない節**: 概要と構成図／技術構成とゲートの3つのコマンド／受け入れ検査をタスクごとに走らせる（`describeTask`）／比べた案の表／OrcaRouter の使い方／秘密情報と個人データの扱い（公開値の経路を含む）／裏を取っていない事実／依存の向きの表とその注（`lib/domain` の境界）／テーブルと確保の状態と残りの数え方／客の画面の優先の順と受け取りの断り（`RefusalNotice`・`refusal`＋`home` の形はそのまま。入力の断りとの境界は「入口の一覧」の注に明記）／運営の画面／持ち越しの扱い／第1〜5周の節／撤退しやすさ／本人の手が要るもの。
 
 設計者が置いた細部（AI判断・本人が覆せる）: 応答の封筒の名前 `error`（`refusal` と分けたこと）と 400／409 の使い分け／`kind`・`reason` の語の一覧と名前／文の雛形と項目ごとの補足の文言／通信の失敗を `kind: "network"` で同じ形に包むこと／文は次に送るまで残し、入力を変えただけでは消さないこと／画面は送る前に自分で検査しないこと（入力欄の属性は補助）／`offer_ended` のときだけホームを取り直すこと／店の登録の断りでパスワードだけ残さないこと／「何時まで」の欄の横に公開した時刻と最長の時刻を出すこと／時刻の解釈を日本時間で固定すること／起点を公開した時刻の分の頭に切り下げること／公開した時刻より前の時分を翌日と読む承知のうえの穴。
+
+## 2026-09-25 の監査の直し
+
+公開したあとの監査（2026-09-25）が見つけた133件を、本人の承認（2026-09-25「133件を全部直す。選択肢のあるものは、指摘の中で勧められた案、無ければ最初の案で直す」）のもとで、領域ごとの並列の作業（レーン）で直した。ここは、直しで変わった設計の決めのまとめ。各節の中の食い違いはその場で直して注を付けた。**帰属は、印の無いかぎり AI判断**（本人の一括承認のもとで AI が選び、本人は案を名指ししていない）。要件の変更の一覧と承認の取り直しは `CHANGES-2026-09-25.md`、本人の判断が残るものは要件の末尾「本人が決めること」。
+
+### 入口と応答の形（横断-01・設計-07・設計-09・設計-13・設計-14・設計-15）
+
+- **断りの語 → 状態コードの表は `lib/http/refusals.ts` の1つ**。手続き（`usecases`）は状態コードを持たず、断りの種類だけを返す。足した語は `unauthenticated`（401）・`forbidden`（403）・`not_found`（404）・`password_mismatch`（403）・`body_too_large`（413）・`internal`（500）（「入口の一覧」の `kind` の語）。401/403/404 の本文は、それまでの `invalid_input` ではなくこの語になる
+- **成功した応答も形を確かめる**（設計-07 の案A）: 入口ごとの成功の形は `lib/schemas/responses.ts` の `RESPONSES`（入口の鍵 → 形）。画面の呼び出しは全部 `callApi(入口の鍵, …)` を通り、サーバーは `respond(入口の鍵, 本文)`（`lib/http/respond.ts`）で成功を返す——返す前にも形を確かめ、崩れは 500・記録は `response_shape_error`。構造の検査は「部品が `apiCall` を使わず `callApi` を通る」を見る（要件29の基準 29.4）
+- **想定外の例外**は `lib/http/unhandled.ts` が 500 `internal` にし、ログに `event: unhandled_error`・`id`（入口の鍵。Deps を組む所の落ちは `"app"`）・`errorKind`（例外の種類）の1行だけを出す。例外の文は出さない（「秘密情報と個人データの扱い」のログの項）
+- **依存の向きの足し**（設計-07・設計-09）: `lib/client` だけは `lib/schemas/responses` を値として読める。画面の束に入るファイル（`components`・`app`・`lib/client`・`schemas/responses`）は zod の大きい版を読まず、`zod/mini` から名前を指定して読む（束の大きさのため）。部品は応答の型を `lib/client/api` の型（`ResponseOf`・`StoreHomeDto` など）で名乗る。repo の D1 の型と小さな読み口（`parseStringList`・`parseJsonArray`・`changedRows`）は `lib/repo/d1.ts` の1つ。承認・停止・戻す・店の登録の D1 の操作は repo の関数（`approvePendingStore`・`banApprovedStore`・`restoreBannedStore`・`insertStoreWithAccountAndSession`）、客の Cookie の見分けは `repo/customers` の `findCustomerIdByTokenHash`（入口が SQL を持たない・設計-13・設計-14）
+- **読み込みの4つの出し分け**（横断-01）: 店と運営の画面の読み込みは、読み込み中／読めなかった（断りの文と「もう一度読み込む」）／0件／中身の4つで出し分け（`components/ui/LoadState`・`lib/client/useLoad`）、読めなかったときに0件の文を出さない。店のホームは読めなくても見出しとタブを出し、取り直しが失敗している間は「最終更新 HH:MM・更新できていません」の帯を出す。店と運営の殻は、ログインが切れたら「ログインが切れました。もう一度ログインしてください。」と「ログインし直す」（→ `/login`）を出す（`components/ui/SessionExpired`・`lib/client/useSessionExpired`・`lib/client/session`）
+- **本文の大きさの上限**（安全-13）: `defineRoute` の `maxBodyBytes`（既定16KB・営業許可書の入口だけ10MB＋64KB）。読む前に `content-length` を見て、名乗らない本文は読みながら打ち切る。店の情報の `menus` は入力の形として50件まで（件数の上限5件の `too_many` は今までどおり手続き）
+- **応答の見出し**（安全-24）: 全部の経路に CSP・`X-Frame-Options: DENY`・`X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`・`Permissions-Policy` を返し、`X-Powered-By` を出さない（`web/next.config.ts`）。CSP が許すものと理由: Next のインラインのスクリプトと明暗の初期化のための `script-src 'unsafe-inline'`・Turnstile の読み込みと確かめの枠のための `challenges.cloudflare.com`・React の `style` 属性のための `style-src 'unsafe-inline'`・運営が開く営業許可書（PDF）のための `object-src 'self'`。nonce へ締めるには、要求ごとに nonce を作って全部の画面を動的に描く必要がある（nonce か hash を1つでも足すとブラウザは `'unsafe-inline'` を無視して画面が立ち上がらない・`web/tests/securityHeaders.test.ts` が見張る）。公開した環境での確かめは README 6.2 の手順9
+
+### 連打の抑止と上限（安全-02・安全-03・安全-06・安全-10・安全-12・安全-19・安全-22・不具合-04）
+
+- **数え**は `rate_counters`（migration 0003 で主キーを `key` だけへ）への `INSERT … ON CONFLICT(key) DO UPDATE … RETURNING` の1文。手続きより前に1回ぶんを足し、上限を超えた回だけ断る。落ちた要求だけを数える規則は、通ったら取り消す（`reset`＝消す／`refund`＝1回ぶん戻す）。上限に届いた回で窓を貼り直し、超えた回は窓を延ばさない
+- **規則の表**は `lib/http/rateLimits.ts` の1つ（入口の定義に書かない。外のサービスを呼ぶ入口が全部載っていることを `rateLimits.test.ts` が入口の定義から辿って見張る）。基準 30.1〜30.4 の変更と、足した規則は要件30の補足の表。客の登録と店の登録は別に数え、人かどうかの確かめが通った要求だけを数える。接続元は IPv6 を /64 に丸める。ログインは「メールアドレス × 接続元」の鍵と、接続元ごとの失敗の上限（前にその端末で入ったアカウントは数えない・端末の印の Cookie）
+- **アプリ全体の1日の AI の上限**（安全-03）: その日（日本時間）の `ai_calls` の実費か回数が上限（`schemas/limits.ts` の `AI_DAILY_BUDGET_USD`・`AI_DAILY_CALL_LIMIT`）に届いたら、取得は点数順・紹介文は決まった文に倒し、記録に `ai_daily_budget_reached` を残す。数える索引は migration 0003。`web/wrangler.jsonc` で `observability` を有効にした（本番の500・連打・上限到達を Workers Logs で追う。有効にするかは設計-15 で本人の判断に上げられていたが、安全-03 のレーンが有効にし、公開の手順の検査も有効を求める。費用と保存の扱いで戻すなら本人が決める）
+- **店の画像**（安全-12・安全-19）: `GET /api/customer/store-image` は `?storeId=` を受け、承認済みの店の画像のバイトを自分のオリジンから返す。画像は `PUT /api/store/profile` のときに店の URL から1回だけ取り、2MB 以下・先頭のバイトで JPEG/PNG/GIF/WebP のものだけ R2 の `store-images/<店の番号>` に置く。まだ置いていない承認済みの店だけ、客が開いたときに店の登録の URL から店ごとに1日1回まで取って置く（埋め戻し）。客の渡した URL は取りに行かない。`StoreImageFetcher` は画像のバイトまで返す口
+- **受け取りの繰り返し**（安全-06）: 要件8の基準 8.12・8.13。受け取りの断りに `results_stale` を足して6種。使い切った期限切れの表示では `canRetry` を false にする
+- **混み合いの断りの画面**（不具合-04）: 客の画面の自動の登録は、確かめの値が無いまま送らない。登録が 429 のときは受け皿へ落とさず「ただいま混み合っています…開き直してください」と開き直すボタン
+
+### ログインとセッション（安全-01・安全-07・安全-08・安全-09・安全-21・安全-23）
+
+- `sessions.created_at`（migration 0008）。作った時刻から14日（`SESSION_ABSOLUTE_MAX_SECONDS`）で必ず切れ、延ばす先と Cookie の Max-Age もその内に収める。作った時刻の無い・読めない行は切れたものとして断る。パスワードの変更（店・運営）とメールアドレスの変更が通ったら、今のセッション以外のそのアカウントのセッションを全部切る（要件14の基準 14.18・14.19）
+- `POST /api/store/password` の `currentPassword`（安全-07・基準 14.20）。`/store/password` はホームの印で今のパスワードの欄を出し分ける。仮のパスワードのまま入った店は、`GET /api/store/home` と `POST /api/store/password`（とログアウト）以外を 403 `forbidden` で断り、ログインの直後は `/store/password` へ直行する。ホームは決める画面への案内だけを出す（安全-21 の案1・基準 14.14）
+- ログアウトのボタンを店のタブの右端・運営の殻のナビ・`/store/password` に置く。入口が通ってから `/login` へ移り、落ちたら文を出して移らない（安全-09・基準 14.21）
+- **Turnstile**（安全-23）: 本番のウィジェットの許すホスト名から `localhost` を外し、手元は Cloudflare の試験用の鍵を使う。入口は答えの `hostname` を要求のホスト名と、`action` を入口の用途（`login`・`register-store`・`register-customer`・`schemas/limits.ts` の `HUMAN_CHECK_ACTIONS`）と照らし、`remoteip` に `cf-connecting-ip` を渡す。部品は用途を名乗る。試験用の秘密鍵のときだけ場所と用途を見ない（`adapters/turnstile.ts`）。鍵の道具 `scripts/v2-keys.sh` は、試験用の秘密鍵と手元にだけ置く値を本番の Worker へ送らない
+- **運営のアカウントの取り返し**（安全-01）: `seed-admin` は書く前に今いる運営の一覧を出し、別の運営がいれば止める（`--add` で2人目を足す）。`--account-id <番号>` で、メールアドレスを変えられた運営をメールとパスワードごと取り返し、そのセッションを全部切る。`--print` は一覧を出す文を先頭に出す（入れ替えは番号を指す）。手順は README の5.3
+
+### データと状態（設計-08・設計-10・不具合-13〜16・安全-17・横断-02）
+
+- `reservations.customer_phone`（受け取った時点の客の電話番号の写し）と、読み取りの索引（`reservations(store_id, status_at)`・`fetch_items(store_id)`・`fetch_logs(customer_id, at)`・公開中のオファーの部分索引2本・`stores(lat, lng)`）は migration 0004。店のホームの足し込みは24時間より新しい確保だけを見る（「データと状態」の期限切れの記録の項）
+- 状態を変える文と記録を1つの `db.batch` で書く・受け取りの INSERT の条件・人数の変更と登録の消去の UPDATE の条件・運営の停止の知らせの相手を `RETURNING` から決めることは「確保の状態と、残りの数え方」の項
+- クーポン（要件16）: 「3つまで」と「公開中が見せているものは変えない」は、書く文の WHERE で確かめる。公開は、その時点で店に在るクーポンだけを付ける。クーポンの読み口は `repo/coupons` の `listCoupons` の1本（`repo/offers` の `listStoreCoupons`・`isCouponInUse` は撤去・設計-10）
+- 入力の断りの `profile_incomplete`（要件17の基準 17.11）の `fields` の予算は `budget` の1項目（`budgetMin`・`budgetMax` ではない）で、店のホームの `missingProfile` と同じ判定 `missingProfileFields` を通る（設計-10 の①）
+- 呼び名と電話番号（要件20の基準 20.1）: 客が決めていない値（`guest-…` と仮の番号）と消した客は `ArrivalRow` で null。仮の値の見分けの正本は `domain/guest.ts` の `isPlaceholderPhone`・`isGuestNickname` の1か所で、部品が要る定数（`GUEST_PHONE_PLACEHOLDER`・`GUEST_NICKNAME_PREFIX`）だけ `schemas/limits.ts` に写しを置く（「どの判断をどこに置くか」の表）
+- 取得の候補の前段の四角形は `domain/geo.ts` の `searchBounds`（索引 `stores(lat, lng)` で切ってから距離の式で800m を測る）
+
+### AI まわり（設計-05・設計-17・設計-18・設計-20・不具合-07・不具合-08・安全-11）
+
+- 呼び出しの回数の上限（要件7の基準 7.2）: 選定1回、紹介文は1店につき書き手と検査官を合わせて4回まで、取得1回の合計21回まで。数はコードの `PITCH_CALLS_PER_STORE_MAX`・`AI_CALLS_PER_FETCH_MAX`（`usecases/writePitch`）
+- 選定の理由にも紹介文と同じ語の検査を掛ける（`domain/claims.ts` が禁止語の一覧の唯一の正本・不具合-07）。店の文言は入口で改行・制御文字などを断り（安全-11 の案A）、AI へはデータとして区切って渡す（案B。細部は公開の文書に書かない・安全-25）
+- **`Deps.defer`**（任意・設計-17）: 応答のあとの仕事の口。本物は `ctx.waitUntil` で、`adapters/env` の `loadWorkerContext` が渡す。紹介文の仕事・Google の座標の手入れ・営業許可書の掃除を預けるので、応答を閉じたあとも記録が揃う。無い場面（受け入れ検査・単体の検査）では預けずにそのまま走らせる
+- **客が閉じたとき**（設計-18 の案B）: 少しずつ届ける取得で、読み手の `cancel` か `req.signal` が鳴ったら、書きかけの書き手と検査官を止める。止めた呼び出しも失敗として記録に残る（実費は空）。`web/wrangler.jsonc` の互換の指定に `enable_request_signal` を足した（OpenNext 越しに効くかは未実測・本人がプレビューで確かめる）
+- **通知の送信**（不具合-08）: 応答の前に済ませる（「前の段の申し送りへの答え」の Web プッシュの行）。取得の記録3つは1つの `db.batch` で書く
+- **Google の利用条件**（設計-20 の案1）: 店の座標を Google で直した時刻（`stores.geocoded_at`・migration 0009）を残し、1時間に1回まで、取得の応答のあとに（`defer`）25日を過ぎた座標を住所から取り直す（1回に5件）。取り直せないまま30日を過ぎたら座標を消す。場所の候補と地名の横に「Google Maps」の帰属の表示（`components/customer/PlaceField`）。取得の記録の起点（`fetch_logs.origin_lat/lng`）は丸めない——レビューで、記録の表を書き換えない（基準 27.7 の本人選択を緩めない）形に直した。要件27の基準 27.7 と28.10 は変えていない（要件15の補足）
+
+### 客の画面（客-02〜16・不具合-02・不具合-05・不具合-06・不具合-11・不具合-17・不具合-18・横断-07・安全-15・安全-18）
+
+- **入口**（`GuestEntry`・要件1の基準 1.10・1.11）: 開いた瞬間に裏で登録する。待ち方と受け皿は要件1の補足
+- **取得の結果**（不具合-06・不具合-21）: 1回の取得に止めの合図を1つ持ち、探し直し・画面を離れたときに前の取得を止めて行を捨てる。断りの知らせを消すのは探し始めと `fetchId` が変わったときだけ。ストリームが切れた・紹介文が揃わない・普通の入口へ倒れたときは、紹介文を決まった文として確定させる。結果の1件に店の住所（`storeAddress`・無ければ null）を足した（POST `/api/customer/fetch` と stream の `init` 行・客-12）
+- **現在地**（客-09・客-10・安全-18）: 5秒は許可が出てから数える。開いた瞬間に現在地を取るのは一度「現在地を使う」を押した端末だけ（localStorage に覚える）。許可を断られたときの案内と、地名を問い合わせている間の表示（要件3の補足）
+- **声で入れる**（客-16・要件3の基準 3.16）: `components/customer/VoiceInput`・`lib/client/speech`・決まった規則の読み取りは `lib/client/voiceConditions`
+- **確保を持ったまま探す**（客-03）: 条件の上に「確保中の表示へ戻る」を常に出し、その間に確保が確保中でなくなったら探すのをやめてその表示を出す。探している取得の画面・演出・前回の完了済み・最近行った店・通報の欄は、端末の戻る操作で閉じる（URL は `/me` のまま履歴を積む・`lib/client/useBackLayer`）
+- **取り直しの順番**（不具合-17）: `usePolling` は前の回の応答を待ってから次を送り、止まった回は間隔の2回ぶんで見切る。回ごとの番号で古い応答を捨て、操作の応答で作り直したら `invalidate()`、読み直しは `refreshNow()`。店のホームの `useLoad` も、後から送った回があれば前の回の答えを捨てる
+- **読み上げと焦点**（客-08）: `main` の先頭に `role=status` の領域を1つ置き、結果の件数・確保の成立と番号・状態の変化をそこへ入れる。結果が届いたら結果の見出しへ焦点を移す。演出は `aria-modal` で、開いたら見出し、閉じたら確保番号へ焦点を移し、Esc で閉じる
+- **期限切れの表示**（客-06・横断-07 の案A）: 猶予の間は住所と経路のボタンを出し、店名は猶予を過ぎても出す。「何名まで」が下がっていれば、その人数を出して探し直すときの人数に入れる（要件11）
+- **登録の消去**（安全-15）: 客の画面の下端の「この端末の登録を消す」の1つ（確かめを挟む）。消すと通知の宛先も消える（要件28）
+- **送信先の一覧**（安全-18）: `/privacy`（送信先と個人情報の扱い）を画面の一覧に足し、全画面の下からリンクする（`components/ui/SiteFooter`）。外の送信先を足したら、この画面の表も直す
+- **ホーム画面に追加**（客-04 の案A）: `app/manifest.ts`（`start_url` は `/me`・`standalone`）と `public/icon.svg`。PNG のアイコンは `web/scripts/make-app-icons.mjs` が `build` と `dev` の前に作り、追跡しない。iPhone の案内は「今の確保は Safari で見る。ホーム画面への追加は確保が無いときに勧め、追加した側では登録をやり直す」
+- **通知の説明と Service Worker**（客-05・不具合-05・不具合-11）: 「画面と入口」の通知の説明の出し分け・電波が切れたときの項
+
+### 店の画面（店-01〜21・不具合-01・不具合-03・不具合-09・横断-08）
+
+- **タブと上部**（店-14）: 上部はタブだけ（1段の横スクロール）。承認済みの帯は小さな札、未承認と止められているときは色つきの帯（「画面と入口」の店のホームの1・5）
+- **公開中のカード**（店-03・店-06・店-09・店-15・店-16・不具合-03）: 残りと「受付を締める」、配信数と何名までの2列のダイヤル（配信数の範囲は受け取り済みの数から「残りが20になるまで」）、畳んだ終了タイマー、折り返しのクーポンの札、変えた間だけ画面の下に貼り付く「更新する」、残りが0なら満席のバッジ。クーポンの選び直しは `POST /api/store/offers/current/coupons`（本文 `{couponIds}`・応答 `{ok, offer}`・終わっていれば `offer_ended`）の1文で、同じオファーのまま差し替える（要件19の基準 19.11）。「公開を止める」とクーポンの削除は確かめを1段挟む。今日の動きは15分ごとの2本の線とプログレスバー（`GET /api/store/home` の `trend`：15分ごとの `{at, shown, received}`・公開中が無ければ空）
+- **「何時まで」**（店-05・不具合-09）: 任意。入れなければ公開から12時間の自動の終わり（`offers.until_set`・migration 0007・`OfferDto.untilSet`）。前回の値は日付ごと今と比べ、今より後で今から12時間以内のときだけ初めの値に入れる。前回が自動の終わりなら空欄（「画面と入口」の「何時まで」を入れずに公開したとき）
+- **向かっている客**（店-01・店-02・店-07・店-08・店-10・店-11・横断-08・要件20）: 取り直しは10秒（`schemas/limits.ts` の `ARRIVALS_REFRESH_MS`・上限30秒のまま）で、画面に戻ったらすぐ取り直し、隠れても止めない。「最終更新」と「今すぐ更新」。客が取り消した行は10分、「客が取り消しました」として操作なし・電話番号なしで開いた並びに残す（`ArrivalRow` の `kind` に `customer_cancelled`。運営の取り消しは出さない）。期限切れで完了にできる行は「遅れている客（HH:MM まで完了にできます）」として開いたまま。断りの文は完了と取り消しで分け、押したカードの中に出す。止められた店の完了の断りは `error.kind=store_banned`、客が確保し直した期限切れは `current.newerReservation=true`。人数が変わった行には印を付けて音を鳴らす
+- **実績**（店-13）: `GET /api/store/results` の各行に `capacity`・`initialCapacity`・`partyMax`・`untilAt`・`untilSet`・`endedAt`・`endReason`（`live`／`stopped`／`time_up`／`banned`）・`coupons`（名前）・`couponCount` を、応答に `summary`（`today`・`week` の `offers`／`shown`／`received`／`completed`／`cancelled`）を足した
+- **カードの登録**（不具合-01）: 「入口の一覧」の `card/confirm` の注と要件13の補足。`GET /api/store/home` に `cardSetupPending`（必須の項目）。`CARD_SESSION_ID_MAX` は消した（画面から番号を受け取らないため）
+- **営業許可書**（安全-20 の案1）: 「秘密情報と個人データの扱い」の営業許可書を消す時の項。`DELETE /api/store/license`（承認の前の店だけ・承認済みは 409・`current.state=approved`、無ければ 404）。書類の画面に、使い道・消す時・連絡先を出す
+- **店の情報の保存**（店-18・店-17）: 保存済みの住所と同じで位置もあるなら、地図へ問い合わせず前の位置と `geocoded_at` のまま住所以外を保存する（住所が読んだときのままのときだけ）。住所を変えたとき・位置が消されているときは、今までどおり直せなければ何も保存しない。おすすめメニューの欄の Enter は1件足す
+- **クーポンの編集**（店-19）: 1枚を保存・削除しても、ほかの行の書きかけは残す。保存が通った行に「保存しました」
+- **登録**（店-20・店-21）: パスワードの欄の字数の案内と「パスワードを表示」。店向けの利用規約のページ `/store/terms` と、登録の入口の同意の版の確かめ（要件12の基準 12.11・migration 0010）
+
+### 運営の画面（運営-01〜11・横断-09）
+
+- 入口と応答: `POST /api/admin/stores/:id/note`（`{note, contacted}`）・`POST /api/admin/stores/:id/acknowledge`・`ban` と `restore` の本文の `reason`（必須・空白だけは断る・500字まで）・`temp-password` の本文の `currentPassword`（今のパスワードの確かめの抑止で数える）・`GET /api/admin/stores/:id/license?version=approved`。`GET /api/admin/stores/:id` の応答は `{store, reports, history}`。表 `admin_actions`（追加だけ・トリガー）と `stores` の承認の写し・運営のメモの列は migration 0011。ログの1行に `actor`（アカウントの内部の番号）が載る
+- 画面の中身は「画面と入口」の運営の画面の項。数字の数え方は同じ項の数字（要件33の補足）
+- 通報の受け付け（横断-09 の案A）: 店に取り消された確保も、取り消しから7日は通報を受け付け、客の「店の都合で取り消されました」の表示にも通報ボタンを置く（要件26の基準 26.1・26.18。16節の本人選択を一部覆すので本人が確かめる）
+
+### 画面の共通の作法（横断-03〜06・横断-10〜13・設計-11・設計-16）
+
+- **送る操作**（横断-03）: `components/ui` の `useSubmit`・`SubmitButton`・`DoneNotice`（`components/ui/Submit.tsx`・`useSubmit.ts`）を使う。送っている間は止めて「送っています…」（受け取りは「席を確保しています…」、許可書は「上げています…」）、済んだら `role=status` の1行。客の取り消しと人数の変更は、画面の上に済んだ知らせを出す。通報は送れたら欄を畳む。運営の `useAdminAction` は消した
+- **入力の誤りの結びつけ**（横断-05）: 項目の断りの文は、欄の id から決まる id（`${inputId}-refusal`）を持ち、欄は `aria-invalid` と `aria-describedby` でその文を指す（`components/ui/InputRefusal` の `fieldAria`）。赤枠は `[aria-invalid="true"]` で付ける（ダイヤルは `:has`）
+- **色と大きさ**（横断-04・横断-06・横断-10・横断-13）: 塗りのボタンと橙の文字は `--color-accent-strong`、`--color-accent` は文字を載せない飾りだけ。`--color-success` は `#166534`。手で選んだ明暗には `color-scheme` を合わせる。焦点の輪は2pxの実線＋すき間。押す部品は最小の高さ `2.75rem`（`--tap-min`）。明暗の切り替えは 44px で、置く画面は `main` の上をあける。`.css` も色の値を直接持たない（要件32の基準 32.3・客-01）
+- **ページの骨組み**（横断-12）: 各ページは `metadata.title` を持ち、殻が「%s | イマセキ」にする。どの画面も h1 を1つ持つ（客の画面は目に出さない h1）。`/store/password` は、自分で変えに来た店にタブを出す
+- **語**（横断-11）: 画面の語の正本は `domain/texts.ts` の `TERMS`（「画面と入口」の画面に出す語）
+- **分けたファイル**（設計-16・設計-11）: `repo/reservations.ts` を `reservations`・`reservationReceive`・`reservationsOfStore` の3つに、`repo/adminStores.ts` から `adminStoreActions.ts` を、`adapters/orcarouter.ts` から `orcarouterPitch.ts`（紹介文の書き手と検査官）を分けた。客の画面は `useCustomerHome`・`useFetchResults`・`useReceiveFlow`・`CustomerFetchScreen`・`CustomerReservationScreen`・`CustomerSidePanels`・`CustomerMain` に、公開中のカードは `useOfferTuning`・`OfferDials` に分けた。CSS は globals（`globals`・`controls`・`motion`）・me（5つ）・store（6つ）に分けた。紙吹雪は `components/ui/Confetti` の1つ。CSS の class・`@keyframes` と `components` の部品が使われていることは構造の検査が見る（設計-11）
+
+### 受け入れ検査の走り方と、本番と同じ道（設計-02・設計-03・設計-04）
+
+- タスクごとの絞りは `ACCEPTANCE_TASK_GATE=1` のときだけ（「受け入れ検査をタスクごとに走らせる」の2026-09-25 の項）
+- **受け入れ検査は本番と同じ道を通る**（設計-03・`tests/acceptance/v2/_types.ts` の約束7）: ①画面の検査は本番の入口の部品を描く（客は `GuestEntry`）②取得は少しずつ届く入口（NDJSON）が既定 ③偽の差し替え口は本番の Deps の口（紹介文・店の画像・逆引き・候補）を全部持つ（口が無い形は `fakeGeocoder({ reverse: false, suggest: false })` や `pitch: undefined` で作る）④場面づくりは、画面が知りえない値を使わず、結果に出たオファーだけを受け取る ⑤近道を塞いで赤くなった未修正の不具合は、`it.fails` で「既知の不具合（<ID>）:」と名乗って残し、直したら普通の `it` に戻す。検査が緑でも、本番の中核の流れを何も保証していなかったため
+- 受け入れ検査は本人の承認（2026-09-25）で書き換えてよくなった。ただし検査を正直にする方向と、決めた振る舞いの変更に合わせる方向だけ（r12・r16・r17・r19・r20・r23 などを振る舞いの変更に合わせて書き換えた。弱めてはいない）
+- 公開の手順の見張り（設計-01）: `web/tests/deployProcedure.test.ts` が、`deploy` が組み立てのあと・公開の前に migration を当てること・`observability` が有効なこと・本番に当たった `0001`・`0002` の中身（sha256）・migration の番号が重ならないこと・README の手順を見る
+
+### 公開物（安全-05・安全-25・安全-26・安全-27）
+
+- 履歴は書き換えない（本人選択）。速成版の Worker を止める（「秘密情報と個人データの扱い」の提出の前にやることの1）。監査記録の引用から鍵の値を伏せた
+- AI まわりの守りの中身（ルールの一覧・鍵の名前・予算の額・期限）は公開の文書に書かない。守りがあること・弾かれたら点数順に倒れることは書いてよい。`web/tests/publicDocs.test.ts` が、公開の文書とコードのコメントを見張る
+- 仕様の「元になる文書」は絶対パスをやめてファイル名だけにした（番号つきの `0N_….md` は本人の手元の非公開の資料）

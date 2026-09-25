@@ -16,6 +16,7 @@ phase: tasks
 > 2026-09-21 09:10 に設計者が書いた。入力は承認済みの `intent.md`・`requirements.md`（34要件・368基準）・`design.md`（第7周で承認）と、進行役の実装メモ（`04_v2の注文.md` の21〜26節）。
 > **帰属の印**: 本人の決定を写した所には「本人発案」「本人選択」を付けた。それ以外の分け方・順・受け入れ検査の中身は設計者が置いたもので「AI判断」（後で覆されうる）。
 > **並び**: 提出版（締切 2026-09-22 15:00 JST）の本体（1〜25）→ README（26）→ OrcaRouter の3点セット（27・28・落とせる）→ 【最終日】（29〜34）→ **本人の担当（35〜39・後ろにまとめた）**。本人の担当を後ろに置いたのは、本人が居ない時間に無人で回すと本人の担当で止まるため（進行役の指示）。**本人の担当のタスクは番号の順に縛られず、提出版の本体（25まで）が通った時点で、AI のタスクと並行して進めてよい**（AI判断）。
+> **2026-09-25 の監査の直しのあとの実態**（監査の指摘 設計-06 で書き足した・AI判断）: タスク1・2のほか、**タスク3〜34 も実装済み**（2026-09-21〜22 に並列の作業ツリーで実装して main へ入れ、2026-09-25〜26 の監査の直しで手を入れた）。✓ が1・2にしか付いていないのは、並列の実装に切り替えたあと完了の記録（`record.mjs done`）を付けていないため。**✓ は /dev の道具が付ける完了の記録なので、手では付けていない**（下の注のとおり）。本人の担当のうち、36 の公開そのものは 2026-09-22 に済んだ（そのあと 2026-09-25 から止めてある・README の6節）が、README の確かめを全部歩いたかの記録は無い。38 は行わない（履歴は書き換えない・本人選択）。監査の直しで足した基準（3.16・8.12・8.13・13.12・14.18〜14.22）は、上の各タスクの「要件」に割り当てた。どの基準をなぜ変えたかは `CHANGES-2026-09-25.md`。タスクの行に書いたファイルのうち、あとで分けたもの（`repo/reservations` → `reservations`・`reservationReceive`・`reservationsOfStore`、`repo/adminStores` → `adminStoreActions` を分離、`adapters/orcarouter` → `orcarouterPitch` を分離、客の画面・公開中のカード・CSS の分割・監査の指摘 設計-16）の今の置き場は、設計書の「ファイル構成の計画」
 > **受け入れ検査はこの段で全部書いた**（36ファイル・`tests/acceptance/v2/`）。承認のときに指紋が取られ、以後は変えられない・足せない。各ブロックは `describeTask("<番号>", …)` でそれを実現するタスクの番号を名乗る（設計書「受け入れ検査をタスクごとに走らせる」）。
 
 ## 実装メモ
@@ -27,8 +28,8 @@ phase: tasks
 - **Worker・D1・R2 のバケットの名前**: `ai-hack-v2`・`ai-hack-v2`・`ai-hack-v2-permits`（22節・AI判断の既定を本人が受けた）。D1 の `database_id` は `09a71aee-5f9e-4733-b92e-275afa4cbc57`（07 の控え）。束縛の名前は `DB`・`PERMITS`（AI判断・受け入れ検査 `_fakes.ts` の `openDb` と `structure.test.ts` が見る）。
 - **`web/wrangler.jsonc` の `vars` はこの3つだけ**: `ORCAROUTER_MODEL=orcarouter/ai-sekitori`・`TURNSTILE_SITE_KEY=0x4AAAAAAE98fYv_yiGU_Aa_`・`VAPID_PUBLIC_KEY=BLacCvDVdQI5_Rgb1DqHDa0m_K50tyQVp9ry6YNhaI_9nwnd77KWSmqO1Zmy5wIIecMDpSZid3sEp_AKjIeG7MI`（値は 07 の控え・本人がメモ）。秘密の名前・メールアドレスは `vars` に書かない（34.6 の走査が落とす）。
 - **OrcaRouter（3点セット A-1・タスク27）**: `ORCAROUTER_MODEL` の既定は `orcarouter/auto`（コード側）。要求本文の `models` の受け皿は `anthropic/claude-haiku-4.5`（**ドット**）、候補は `openai/gpt-4o-mini`・`google/gemini-2.5-flash`。Named Router `ai-sekitori`・Guardrails・予算上限つきの鍵は本人が管理画面で作成済み（23節。Guardrails のルールと鍵の設定の中身は公開の文書に書かない・安全-25）。**A〜C は本体の後ろの独立したタスクで、間に合わなければ落とせる**（23節・本人選択）。B の2つの検査（`tools` が無い構造・`guardrail_blocked` を通る振る舞い）は本体のタスク11に入れた。
-- **ゲート**: 型検査 `pnpm exec tsc --noEmit -p tsconfig.json`／lint `pnpm --dir web exec eslint .`／テスト `pnpm exec vitest run`（設計書の配列。進行役が `dev.config.json` へ写す・承認の直後・タスク1の着手前）。
-- **受け入れ検査の走り方**: `tests/acceptance/v2/_tasks.ts` の `describeTask` が、着手の記録 `.dev/runs/v2/task-<番号>.json` の無いタスクのブロックを飛ばす。`_setup.ts` は fetch を「外へ出たら落とす」に差し替え、**着手済みで未完了の AI のタスクに、その番号を名乗るブロックが0件なら例外を投げる**（第7周の本人判断の受け皿・進行役の指示）。`structure.test.ts` の「最上位のブロックが全部 `describeTask`」の見張りはタスク1の番号（第7周の反論役の見落とし）。
+- **ゲート**: 型検査 `pnpm exec tsc --noEmit -p tsconfig.json`／lint `pnpm --dir web exec eslint .`／テスト `pnpm exec vitest run`（設計書の配列。進行役が `dev.config.json` へ写す・承認の直後・タスク1の着手前）。**2026-09-25 の追記（設計-02）**: タスクごとの絞りを使うなら、テストは `env ACCEPTANCE_TASK_GATE=1 pnpm exec vitest run`（設計書の表）。並列数の既定は2（`VITEST_MAX_WORKERS` で広げる）。
+- **受け入れ検査の走り方**: `tests/acceptance/v2/_tasks.ts` の `describeTask` が、着手の記録 `.dev/runs/v2/task-<番号>.json` の無いタスクのブロックを飛ばす。`_setup.ts` は fetch を「外へ出たら落とす」に差し替え、**着手済みで未完了の AI のタスクに、その番号を名乗るブロックが0件なら例外を投げる**（第7周の本人判断の受け皿・進行役の指示）。**2026-09-25 の直し（設計-02）: この絞りと例外は、環境変数 `ACCEPTANCE_TASK_GATE=1` を立てた実行のときだけ効く**（立てなければ全部走る。記録のフォルダがあるだけで絞っていたため、並列の作業ツリーで実装したタスクの検査が手元で黙って飛んでいた）。`structure.test.ts` の「最上位のブロックが全部 `describeTask`」の見張りはタスク1の番号（第7周の反論役の見落とし）。
 
 ### 実行者への契約（受け入れ検査が呼ぶ形。正本は `tests/acceptance/v2/_types.ts` の注記と各検査）
 
@@ -38,7 +39,7 @@ phase: tasks
 - `Deps`（`web/lib/ports.ts`）: `db`・`files`・`ai`・`geocoder`・`push`・`card`・`human`・`logger`・`clock`・`rng`・`hasher`・`config`。各差し替え口の形は `_types.ts`。**`createApp` は deps を呼ばれるたびに読む**（作った時に分解して閉じない）。`web/lib/adapters/webcrypto.ts` は `createRng()`・`createHasher()`、`adapters/logger.ts` は `createLogger()`、`adapters/orcarouter.ts` は `createOrcaRouterSelector({ apiKey, model, fetch? })`、`adapters/env.ts` は `readEnv(env)`（`config.orcarouterModel` の既定 `orcarouter/auto`）を export する。
 - **時刻**: 手続きの「今」は必ず `deps.clock.now()`。**SQL の比較も束縛した「今」で行う**（SQLite の `datetime('now')` を使わない）。打ち切り（AI 6秒・地図 3秒・人かどうかの確かめ 3秒）は `deps.clock.after(ms)` と AbortSignal の両方で書く（偽の時計が `after` を進める）。「何時まで」の解釈は日本時間で固定。
 - **Cookie**: 名前は自由。検査は Set-Cookie の先頭の `name=value` をそのまま返す。客の Cookie は HttpOnly・Secure・SameSite=Lax・Max-Age は7桁以上（400日）。
-- **応答の形**: 入力の断りは 400/409 `{ ok:false, error:{ kind, fields?:[{ name, reason }] } }`（`schemas/error.ts` の `errorSchema`・語は `domain/inputRefusal.ts` の `INPUT_REFUSAL_KINDS`・`FIELD_REASONS`）。受け取りの断りは 409 `{ ok:false, refusal:{ kind, partyMax?, nextStep }, home }`。確保への操作の状態による断りは 409 `{ ok:false, current:{ state } }`。見分けの断りは 401（客・未ログイン）／403（役割違い・Origin）。連打の抑止【最終日】は 429 `rate_limited`。応答の要点は `_types.ts`（`HomeDto`・`ReservationDto`・`ResultItem`・`StoreHomeDto`・`OfferDto`・`ArrivalRow`）。`GET /api/admin/stores` は `?filter=publishing|approved|pending|banned&q=` と `{ items, summary:{ publishing, pending } }`。`GET /api/admin/metrics` は `{ ai:{calls,avgCostUsd,avgDurationMs,succeeded,failed}, fetch:{count,avgDurationMs,aiUsed,fellBack}, reservations:{total,expiredRate}, byModel, fallbackCount }`。
+- **応答の形**: 入力の断りは 400/409 `{ ok:false, error:{ kind, fields?:[{ name, reason }] } }`（`schemas/error.ts` の `errorSchema`・語は `domain/inputRefusal.ts` の `INPUT_REFUSAL_KINDS`・`FIELD_REASONS`）。受け取りの断りは 409 `{ ok:false, refusal:{ kind, partyMax?, nextStep }, home }`。確保への操作の状態による断りは 409 `{ ok:false, current:{ state } }`。見分けの断りは 401（客・未ログイン）／403（役割違い・Origin）。**2026-09-25 の直し（横断-01・設計-15）**: 本文の語は 401 `unauthenticated`・403 `forbidden`・404 `not_found`・500 `internal`（どれも入力の断りと同じ `{ ok:false, error:{ kind } }`。語 → 状態コードの表は `web/lib/http/refusals.ts` の1つ）。連打の抑止【最終日】は 429 `rate_limited`。応答の要点は `_types.ts`（`HomeDto`・`ReservationDto`・`ResultItem`・`StoreHomeDto`・`OfferDto`・`ArrivalRow`）。`GET /api/admin/stores` は `?filter=publishing|approved|pending|banned&q=` と `{ items, summary:{ publishing, pending } }`。`GET /api/admin/metrics` は `{ ai:{calls,avgCostUsd,avgDurationMs,succeeded,failed}, fetch:{count,avgDurationMs,aiUsed,fellBack}, reservations:{total,expiredRate}, byModel, fallbackCount }`。
 - **純粋な関数の名前**（`web/lib/domain/`）: `geo.ts` の `distanceMeters`・`walkMinutes`・`inJapan`／`filter.ts` の `filterCandidates({ origin, party, budgetMax }, stores[{ id, lat, lng, partyMax, budgetMin, budgetMax, receivable, genres }])`／`score.ts` の `scoreStore`・`rankStores(items[{ id, distanceMeters, storeGenres, createdAt }], customerGenres)`／`selection.ts` の `validateSelection(text, allowedIds)`・`fallbackResult(rankedIds)`／`offer.ts` の `isReceivable({ endedAt, untilAt, remaining }, now)`／`remaining.ts` の `remainingOf(capacity, rows[{ status, expiresAt, holdsSlot }], now)`／`until.ts` の `resolveUntil({ input, publishedAt, now }) → { kind: ok|in_past|over_window, at, latest }`／`receiveRefusal.ts` の `nextStep(kind, home)`／`storeHome.ts` の `publishPrefill({ lastOffer, coupons, now })`／`token.ts` の `tokenFromBytes`／`code.ts` の `codeFromBytes`／`password.ts` の `parsePasswordRecord`／`fileType.ts` の `detectFileType`／`genres.ts` の `GENRES`／`texts.ts` の `TEXTS`（`inputRefusal(kind, ctx)`・`fieldReason(reason, ctx)`・`receiveRefusal(kind, ctx)`・`nextStep(step, ctx)`・`push(scene) → { title, body }`・`fallbackReason`）。`schemas/customer.ts` の `customerRegisterSchema`・`schemas/fetch.ts` の `fetchSchema`。`usecases/seedAdmin.ts` の `seedAdmin(deps, { email, password })`（`web/scripts/seed-admin.mjs` もこれを呼ぶ・画面の入口は無い）。
 - **テーブルの列の名前で検査が読むもの**: `customers(id, nickname, phone, genres, budget_max, token_hash)`・`accounts(email, role, store_id, password_hash)`・`stores(id, name, status, address, lat, lng, license_key, license_mime)`・`coupons(id, store_id)`・`offers(id, store_id, capacity, ended_at, end_reason, until_at)`・`reservations(id, offer_id, customer_id, status, party, code, expires_at, holds_slot, coupons_json)`・`fetch_logs(id, customer_id, origin_lat, origin_lng, party, genres, budget_max, candidate_count, returned_count, ai_used, duration_ms, at)`・`fetch_items(fetch_id, store_id, rank, score, reason)`・`selections(fetch_id, store_id)`・`reservation_events(reservation_id, status)`・`ai_calls(id, fetch_id, cost_usd, duration_ms, succeeded, validation_failed, resolved_model, request_id, fallback_level, at)`・`reports(store_id, customer_id, reason, at)`・`push_subscriptions(subscription_json)`・【最終日】`rate_counters`。時刻の列は ISO 8601 の文字列。
 - **AI の出力の本文**: `{"selections":[{"storeId","reason"}]}` の文字列（コードフェンスつきでも受ける）。OrcaRouter の応答は `choices[0].message.content` と `usage.cost_usd`（`sprint/lib/llm.ts` と同じ）。
@@ -53,6 +54,7 @@ phase: tasks
 - **タスク2→3**: 入口は `web/lib/http/endpoints/<領域>.ts` が `RouteDefinition[]` を export し `routes.ts` が並べる形。`app/api/**/route.ts` はまだ0件（タスク25の「揃え」でまとめて作る）。打ち切りの合図は最初の await より前に作り `Promise.race` で競わせる（`defineRoute.ts` の `verifyHuman` が手本）。人かどうかの確かめは断られたらその場で同期に `reset()` を呼び直す（effect 経由だと次の送信に間に合わない）。ジャンルの選択肢は `domain/texts.ts` の `TEXTS.genres` を画面側が読む（`lib/domain` を部品が値として直接読めない）。`getPublicConfig()` はメモ化しない。画面の分岐は `client/api.ts` の `isFailure()`。
 - **タスク3→4**: タスク3は `d02-human-check.test.ts` の横断ブロック（human な入口の一覧）がタスク4の入口が無いと通らず、タスク3・4を同じサイクルで実装・監査した（記録上は task-4 の監査としてまとめて回す）。
 - **タスク4→5以降**: `GET /api/store/home` は今 `{ id, status }` の最小版のみ。**タスク7 が `usecases/storeHome.ts` へ `checklist`・`missingProfile`・`offer`・`publishPrefill`・`coupons`・`arrivals` を足す**。`usecases/credentials.ts` の `hashPassword`／`verifyPassword`／`issueSession`（PBKDF2 10万回）はタスク31（仮パスワード・パスワード変更）が再利用できる。`repo/{accounts,stores,sessions}.ts` は `*Statement` 版もあるので `db.batch([...])` に並べられる。`identifySession` は `mustChangePassword` も返す（タスク31用）。**店・運営の入口は `defineRoute` が残り1時間未満なら勝手に延長の Set-Cookie を足す**——応答の Set-Cookie 先頭を検査するテストを書くときは条件に注意。
+  - **2026-09-25 の追記（安全-08）**: 延長しても、作った時刻（`sessions.created_at`・migration 0008）から14日で必ず切れる（`SESSION_ABSOLUTE_MAX_SECONDS`）。パスワードとメールアドレスを変えると、今のセッションのほかは全部切れる。
   - **セッションの寿命は25時間・残り1時間未満のアクセスで自動延長**（`web/lib/schemas/limits.ts` の `SESSION_MAX_AGE_SECONDS`／`SESSION_RENEW_WITHIN_SECONDS`。本人選択・AI提示 2026-09-21。旧: 14日〔AI判断〕→ 実装時に一度2時間へ短縮したが、r20/r18/r19 の既存受け入れ検査が最大24時間1分の間隔を想定しており通らなかったため25時間へ調整・進行役が確定）。
   - `seed-admin`: `node web/scripts/seed-admin.mjs --email … --password …`（手元D1。先に `pnpm --dir web exec wrangler d1 migrations apply ai-hack-v2 --local`）。`--print` で本番用 `wrangler d1 execute --remote` コマンドを出す（本番を黙って書き換えない）。README（タスク26）に使い方を書くこと。
 
@@ -79,7 +81,7 @@ phase: tasks
 
 - [ ] 4. 店の登録・ログイン・セッション: `POST /api/register/store`・`POST /api/auth/{login,logout}`・`sessions`・`usecases/{registerStore,login,seedAdmin}`・`web/scripts/seed-admin.mjs`・`components/store/RegisterForm`・`components/auth/LoginForm`
   - 登録の応答でセッションの Cookie も配る（AI判断・登録の直後にホームへ入れるため）
-  - _要件: 12.1, 12.2, 12.3, 12.4, 12.5, 14.1, 14.2, 14.3, 14.4, 14.8, 14.9_
+  - _要件: 12.1, 12.2, 12.3, 12.4, 12.5, 14.1, 14.2, 14.3, 14.4, 14.8, 14.9, 14.18, 14.19, 14.21_
   - _受け入れ検査: tests/acceptance/v2/r12-store-register.test.ts_
   - _担当: AI_
 
@@ -96,7 +98,7 @@ phase: tasks
 
 - [ ] 7. 営業許可書とカード・店のホームの帯: `GET/POST /api/store/license`・`POST /api/store/card/{setup,confirm}`・`adapters/{files,stripe}`・`domain/fileType`・`GET /api/store/home`（承認の状況・チェックリスト・`missingProfile`）・`components/store/{StoreHome,StatusBanner,SetupChecklist,DocumentsPanel}`
   - `GET /api/admin/stores/:id/license` の読み口もここ（同じ手続き `readLicense`・運営の見分けはタスク4のセッション）
-  - _要件: 12.6, 12.7, 12.8, 12.9, 12.10, 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.8, 13.9_
+  - _要件: 12.6, 12.7, 12.8, 12.9, 12.10, 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.8, 13.9, 13.12_
   - _受け入れ検査: tests/acceptance/v2/r13-license-card.test.ts_
   - _担当: AI_
 
@@ -125,13 +127,13 @@ phase: tasks
 
 - [ ] 12. 取得の画面: `components/customer/{FetchForm,ResultList}`・`client/geolocation`（現在地・5秒）
   - 受け取りのボタンの動きはタスク14。ここでは押せる形と一覧の表示まで
-  - _要件: 3.1, 3.7, 3.8, 3.9, 3.12, 3.13, 4.4, 4.5, 4.11, 4.14_
+  - _要件: 3.1, 3.7, 3.8, 3.9, 3.12, 3.13, 3.16, 4.4, 4.5, 4.11, 4.14_
   - _受け入れ検査: tests/acceptance/v2/r03-fetch-input.ui.test.tsx_
   - _担当: AI_
 
 - [ ] 13. 受け取りと確保（手続き・判断）: `POST /api/customer/reservations`（受け取り・受け取り直し）・`usecases/receiveOffer`・`repo/reservations`（条件つきの1文の INSERT）・`domain/{code,remaining,reservation,receiveRefusal,customerHome}`・`GET /api/customer/home` の確保の表示の種類・`selections`・`reservation_events`
   - 受け取り直し（`retryOf`）の判定（期限切れから20分・受け取れる状態・何名まで）もここ。期限切れの記録（`INSERT OR IGNORE`・期限の時刻）は客のホーム・店のホームの先頭
-  - _要件: 8.1, 8.2, 8.3, 8.4, 8.6, 8.7, 8.8, 8.9, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.13, 16.6, 18.1, 18.10, 18.12, 18.13, 27.3, 27.4_
+  - _要件: 8.1, 8.2, 8.3, 8.4, 8.6, 8.7, 8.8, 8.9, 8.12, 8.13, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.13, 16.6, 18.1, 18.10, 18.12, 18.13, 27.3, 27.4_
   - _受け入れ検査: tests/acceptance/v2/r08-receive.test.ts_
   - _担当: AI_
 
@@ -228,7 +230,7 @@ phase: tasks
   - _担当: AI_
 
 - [ ] 31. 仮のパスワード・パスワードの変更・運営の連絡先: `POST /api/admin/stores/:id/temp-password`・`POST /api/store/password`・`accounts.must_change_password`・`ADMIN_CONTACT_EMAIL` を `GET /api/config/public` の `contactEmail` で・`components/store/PasswordForm`・`LoginForm` の連絡先・`app/store/password`
-  - _要件: 14.10, 14.11, 14.12, 14.13, 14.14, 14.15, 14.16, 14.17_
+  - _要件: 14.10, 14.11, 14.12, 14.13, 14.14, 14.15, 14.16, 14.17, 14.20, 14.22_
   - _受け入れ検査: tests/acceptance/v2/r14-login-scope.test.ts_
   - _担当: AI_
 
