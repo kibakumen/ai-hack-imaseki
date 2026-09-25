@@ -11,6 +11,7 @@ import { placeLabel } from "../../usecases/placeLabel";
 import { placeSuggest } from "../../usecases/placeSuggest";
 import { registerCustomer } from "../../usecases/registerCustomer";
 import { CUSTOMER_COOKIE_MAX_AGE_SECONDS, CUSTOMER_COOKIE_NAME, serializeCookie } from "../cookies";
+import { identifyCustomer } from "../guards";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { unauthenticated } from "../refusals";
@@ -21,7 +22,11 @@ const registerCustomerRoute = defineRoute({
   auth: "public",
   human: HUMAN_CHECK_ACTIONS.registerCustomer,
   input: customerRegisterSchema,
-  handler: async ({ input, deps }) => {
+  handler: async ({ input, deps, req }) => {
+    // 多重の守り（2026-09-25 監査の指摘 不具合-02）: 有効な客の Cookie を持つ端末には新しい識別子を配らない。
+    // 画面が通信の失敗や 500 を「識別子が無い」と取り違えて登録を送っても、今の Cookie（確保中の客が店で見せる
+    // コードにつながる）を上書きしない。客も増やさず、今の登録のまま通ったと返す。
+    if ((await identifyCustomer(req, deps)) !== null) return respond("POST /api/register/customer", { ok: true }, 200);
     const { token } = await registerCustomer(deps, input);
     // 識別子の値は本文にも Location にも載せない（基準 2.6）。端末へ渡すのは Set-Cookie だけ。
     return respond("POST /api/register/customer", { ok: true }, 201, [serializeCookie(CUSTOMER_COOKIE_NAME, token, CUSTOMER_COOKIE_MAX_AGE_SECONDS)]);

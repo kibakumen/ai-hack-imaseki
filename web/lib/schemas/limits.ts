@@ -12,8 +12,8 @@ export const PHONE_MAX_LENGTH = 11;
  * 自動の登録（`components/customer/GuestEntry`）の仮の値の**写し**（2026-09-25 のレビューで正本を移した）。
  * 正本と「仮かどうか」の見分けは `domain/guest.ts` に在り、店の一覧（`domain/storeHome`）はそちらを読む。
  * 部品は lib/domain のうち texts.ts しか値として読めない（依存の向き）ので、部品が要る2つの定数だけを
- * ここに写す——自動の登録が作る値（`GuestEntry`）と、取得の画面の電話番号の欄（`FetchForm` の
- * `phoneToShow`・`phoneToStore`）が読む。写しと部品の見分けが正本とずれないことは
+ * ここに写す——自動の登録が作る値（`client/guestIdentity`・`GuestEntry` と受け皿の `RegisterForm` が使う）と、
+ * 取得の画面の電話番号の欄（`PhoneField` の `phoneToShow`・`phoneToStore`）が読む。写しと部品の見分けが正本とずれないことは
  * `tests/domain/guest.test.ts` が固定する。ここには判断の関数を置かない（定数だけ・何も import しない）。
  */
 export const GUEST_PHONE_PLACEHOLDER = "0000000000";

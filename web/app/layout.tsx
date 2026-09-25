@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { SiteFooter } from "../components/ui/SiteFooter";
 import "./globals.css";
+import "./site-footer.css";
 
 export const metadata: Metadata = {
   title: "イマセキ",
@@ -21,7 +23,11 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* 外への送信の一覧へ、どの画面からでも辿れるように（2026-09-25 監査の指摘 安全-18） */}
+        <SiteFooter />
+      </body>
     </html>
   );
 }

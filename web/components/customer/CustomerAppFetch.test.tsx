@@ -33,7 +33,7 @@ const installFetch = (respond: (method: string, path: string) => Answer) => {
   };
 };
 
-const ITEM = { offerId: "o1", storeId: "s1", storeName: "店", walkMinutes: 3, budgetMin: 1000, budgetMax: 3000, reason: "近い", partyMax: 4, coupons: [], storeUrl: null };
+const ITEM = { offerId: "o1", storeId: "s1", storeName: "店", walkMinutes: 3, budgetMin: 1000, budgetMax: 3000, reason: "近い", partyMax: 4, coupons: [], storeUrl: null, storeAddress: null };
 const HOME = { kind: "fetch", profile: { nickname: "guest-abc", phone: "0000000000", genres: [], budgetMax: null } };
 
 describe("取得の画面の入れ物", () => {
@@ -70,6 +70,34 @@ describe("取得の画面の入れ物", () => {
   it("人数は最初から 1 が入っている", async () => {
     await renderApp([]);
     expect((screen.getByTestId("field-party") as HTMLInputElement).value).toBe("1");
+  });
+
+  // 客-07: 人数が「入れなくても探せます」の中に既定1で置かれ、増減のボタンも無く、4人連れでも1名のまま確保しやすかった
+  it("人数は「今すぐ探す」の直前（こだわり条件の外）に −/＋ つきで置かれ、ボタンの文言に今の人数が載る", async () => {
+    await renderApp([]);
+    const party = screen.getByTestId("field-party") as HTMLInputElement;
+    const button = screen.getByTestId("btn-fetch");
+    const form = screen.getByTestId("form-fetch");
+    expect(form.querySelector(".fetch-options")!.contains(party)).toBe(false);
+    expect(party.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(button.textContent).toBe("1名で今すぐ探す");
+
+    const minus = screen.getByTestId("btn-party-minus") as HTMLButtonElement;
+    const plus = screen.getByTestId("btn-party-plus") as HTMLButtonElement;
+    expect(minus.disabled).toBe(true);
+    fireEvent.click(plus);
+    fireEvent.click(plus);
+    fireEvent.click(plus);
+    expect(party.value).toBe("4");
+    expect(button.textContent).toBe("4名で今すぐ探す");
+    fireEvent.click(minus);
+    expect(party.value).toBe("3");
+
+    fireEvent.change(party, { target: { value: "10" } });
+    expect(plus.disabled).toBe(true);
+    // 数にならない値のときは人数を載せない（断りは入口が返す）
+    fireEvent.change(party, { target: { value: "" } });
+    expect(button.textContent).toBe("今すぐ探す");
   });
 
   it("0件なら、文は「今すぐ探す」のすぐ下（こだわり条件より上）に断りの体裁で出て、条件は畳まない", async () => {
@@ -120,9 +148,12 @@ describe("取得の画面の入れ物", () => {
     const calls = await renderApp([ITEM], { streamMissing: true });
     fireEvent.change(screen.getByTestId("field-place"), { target: { value: "渋谷" } });
     fireEvent.click(screen.getByTestId("btn-fetch"));
-    await screen.findByTestId("result-o1");
+    const card = await screen.findByTestId("result-o1");
     expect(postsTo(calls, "/api/customer/fetch/stream")).toBe(1);
     expect(postsTo(calls, "/api/customer/fetch")).toBe(1);
+    // 普通の入口には紹介文を後から差し込む道が無いので、待機の見た目で固めない（不具合-21）
+    expect(card.querySelector('[aria-busy="true"]')).toBeNull();
+    expect(card.textContent).not.toContain("書いています");
   });
 
   it("少しずつ届く入口が働くサーバーでは、普通の入口を呼ばない", async () => {
@@ -132,5 +163,43 @@ describe("取得の画面の入れ物", () => {
     await screen.findByTestId("result-o1");
     expect(postsTo(calls, "/api/customer/fetch/stream")).toBe(1);
     expect(postsTo(calls, "/api/customer/fetch")).toBe(0);
+  });
+
+  // 不具合-06: 受け取ったあとも前のストリームが結果を入れ直し、確保を取り消すと古い一覧が出ていた
+  it("受け取りが通ったあとに前の取得の紹介文が届いても、結果の一覧へ戻らない（前の取得を止める）", async () => {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const reservation = { id: "res-1", code: "12345678", storeId: "s1", storeName: "店", storeAddress: "東京都渋谷区1-1", storeUrl: null, party: 1, expiresAt: new Date(Date.now() + 20 * 60_000).toISOString(), status: "active", coupons: [] };
+    const active = { ...HOME, kind: "active", reservation };
+    let received = false;
+    restore = installFetch((method, path) => {
+      if (path === "/api/config/public") return { json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } };
+      if (path === "/api/customer/home") return { json: received ? active : HOME };
+      if (method === "POST" && path === "/api/customer/fetch/stream") return { stream: streamOfResult({ fetchId: "f1", items: [ITEM] }, { holdAfter: 1, release: released }) };
+      if (method === "POST" && path === "/api/customer/reservations") {
+        received = true;
+        return { status: 201, json: { ok: true, reservation, home: active } };
+      }
+      if (method === "POST" && path === "/api/customer/reservations/res-1/cancel") {
+        received = false;
+        return { json: { ok: true, home: HOME } };
+      }
+      return { status: 404, json: { ok: false } };
+    });
+    render(<CustomerApp />);
+    await screen.findByTestId("btn-fetch");
+    fireEvent.change(screen.getByTestId("field-place"), { target: { value: "渋谷" } });
+    fireEvent.click(screen.getByTestId("btn-fetch"));
+    fireEvent.click(await screen.findByTestId("btn-receive"));
+    await screen.findByTestId("view-active");
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // 確保を取り消して取得の画面へ戻っても、前の取得の一覧は出ない
+    fireEvent.click(screen.getByTestId("btn-close-celebration"));
+    fireEvent.click(screen.getByTestId("btn-cancel"));
+    fireEvent.click(await screen.findByTestId("btn-confirm"));
+    await waitFor(() => expect(screen.queryByTestId("view-active")).toBeNull());
+    await screen.findByTestId("btn-fetch");
+    expect(screen.queryByTestId("result-o1")).toBeNull();
   });
 });

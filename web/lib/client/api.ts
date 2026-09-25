@@ -219,11 +219,15 @@ const emitLines = (buffer: string, onLine: (line: StreamLine) => void): string =
  *
  * 断り（`ok:false`）は普通の入口と同じ形で返し、経路が無ければ `STREAM_UNAVAILABLE` を返す
  * （呼ぶ側が普通の入口へ倒せるように——**少しずつ届くのは速さの工夫で、機能の前提ではない**）。
+ *
+ * `signal` が止められたら、それ以降の行は `onLine` へ渡さず読み取りを打ち切る（2026-09-25 監査の指摘 不具合-06。
+ * 探し直した・受け取った・画面を離れたあとに、前の検索の紹介文が一覧を上書きしていた）。合図は fetch にも渡すが、
+ * 合図を聞かない相手（途中の機器・検査の偽物）でも止まるよう、1行ごとに読み取りの側でも確かめる。
  */
-export const apiStream = async (path: string, body: unknown, onLine: (line: StreamLine) => void): Promise<StreamOutcome> => {
+export const apiStream = async (path: string, body: unknown, onLine: (line: StreamLine) => void, signal?: AbortSignal): Promise<StreamOutcome> => {
   let res: Response;
   try {
-    res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
   } catch {
     return networkFailure();
   }
@@ -244,17 +248,25 @@ export const apiStream = async (path: string, body: unknown, onLine: (line: Stre
   if (!reader) return STREAM_UNAVAILABLE;
   const decoder = new TextDecoder();
   let buffer = "";
+  // 止められたあとは1行も渡さない（`emitLines` が1行ごとにここを通す）
+  const deliver = (line: StreamLine) => {
+    if (signal?.aborted !== true) onLine(line);
+  };
   try {
     for (;;) {
+      if (signal?.aborted === true) {
+        await reader.cancel().catch(() => undefined);
+        return networkFailure();
+      }
       const chunk = await reader.read();
       if (chunk.done) break;
-      buffer = emitLines(buffer + decoder.decode(chunk.value, { stream: true }), onLine);
+      buffer = emitLines(buffer + decoder.decode(chunk.value, { stream: true }), deliver);
     }
   } catch {
     // 途中で切れても、そこまでに届いた行は既に渡してある（画面はそのまま使える）
     return networkFailure();
   }
-  emitLines(`${buffer}\n`, onLine);
+  emitLines(`${buffer}\n`, deliver);
   return null;
 };
 

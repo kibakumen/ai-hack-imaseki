@@ -3,9 +3,15 @@
 // 客の登録の入力（要件1の基準 1.1〜1.7・1.10）。打つ欄は4つだけで、自由記述とアレルギーの欄は
 // 持たない（基準 1.5）。送る前に自分では検査せず、入口が返した断りを InputRefusal に描かせる
 // （設計書「入力の誤りの出し方」の規則5）。入力欄の属性は打ち間違いを減らす補助で、正本ではない。
+//
+// 通り道では出ない画面（`GuestEntry` が開いた瞬間に裏で登録を済ませる）。ここが出るのは自動の登録が
+// 通らなかったときと、取り直しで 401 を受けたときの受け皿だけ。**受け皿でも客に何も打たせずに進める**
+// （2026-09-25 監査の指摘 客-02・本人の指摘「そもそも登録いる？」）: 呼び名は自動で作って入れておき、
+// 電話番号は任意（空なら仮の番号を送る＝裏の自動の登録と同じ `lib/client/guestIdentity`）。
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
+import { guestNickname, phoneOrPlaceholder } from "../../lib/client/guestIdentity";
 import { PERSONAL_DATA_TEXTS, TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, HUMAN_CHECK_ACTIONS, NICKNAME_MAX, NICKNAME_MIN, PHONE_MAX_LENGTH } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
@@ -26,7 +32,7 @@ const budgetToSend = (raw: string): number | string | null => {
 };
 
 export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => {
-  const [nickname, setNickname] = useState("");
+  const [nickname, setNickname] = useState(guestNickname);
   const [phone, setPhone] = useState("");
   const [genres, setGenres] = useState<string[]>([]);
   const [budgetMax, setBudgetMax] = useState("");
@@ -58,7 +64,7 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
     const result = await callApi("POST /api/register/customer", {
       body: {
         nickname,
-        phone,
+        phone: phoneOrPlaceholder(phone),
         genres,
         budgetMax: budgetToSend(budgetMax),
         humanToken,
@@ -83,8 +89,8 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
         void submit(event);
       }}
     >
-      <h2>はじめに登録します</h2>
-      <p>一度だけ入れておくと、探すたびに入れ直さずに済みます。</p>
+      <h2>はじめる前の確認</h2>
+      <p>入れなくても、下の「はじめる」だけで探し始められます。</p>
       {/*
         通り道では出ない画面（`GuestEntry` が開いた瞬間に裏で登録を済ませる）。ここが出るのは
         自動の登録が通らなかったときだけなので、何のために聞くのかを1行で添える
@@ -94,7 +100,7 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
       */}
       <p>{PERSONAL_DATA_TEXTS.registerNotice}</p>
 
-      <label htmlFor="register-nickname">呼び名</label>
+      <label htmlFor="register-nickname">呼び名（自動で作りました・変えなくてかまいません）</label>
       <input
         id="register-nickname"
         data-testid="field-nickname"
@@ -105,7 +111,7 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
       />
       <FieldMessage name="nickname" failure={failure} ctx={{ field: "呼び名", min: NICKNAME_MIN, max: NICKNAME_MAX }} />
 
-      <label htmlFor="register-phone">電話番号</label>
+      <label htmlFor="register-phone">電話番号（任意）</label>
       <input
         id="register-phone"
         data-testid="field-phone"
@@ -144,7 +150,7 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.registerCustomer} onToken={handleToken} />}
 
       <button type="submit" data-testid="btn-register">
-        登録する
+        はじめる
       </button>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
     </form>

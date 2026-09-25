@@ -212,7 +212,7 @@ export const PERSONAL_DATA_TEXTS = {
   /** 客の登録の画面（自動の登録が通らなかったときの受け皿・`components/customer/RegisterForm`） */
   registerNotice:
     "呼び名と電話番号は、席を受け取ったお店の画面に表示されます（長くても、完了済みになってから24時間まで）。呼び名は本名でなくてかまいません。電話番号は、お店が当日どうしても連絡を取りたいときに使います。",
-  /** 取得の画面の電話番号（任意）の欄の説明（`components/customer/FetchForm`） */
+  /** 取得の画面の電話番号（任意）の欄の説明（`components/customer/PhoneField`・`FetchForm` のいちばん下） */
   fetchPhoneNote:
     "お店が緊急時に連絡できるようにするためのものです。入れた番号は、このあと席を受け取ったお店の画面に表示されます（長くても、完了済みになってから24時間まで）。入れなくても探せます。",
 } as const;

@@ -1,0 +1,11 @@
+/* どの画面の下にも置く1行（components/ui/SiteFooter・2026-09-25 安全-18）。本文より小さく淡く、邪魔にしない。 */
+.site-footer {
+  font-size: 0.75rem;
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: 0 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+}
+.site-footer a {
+  color: var(--color-text-muted);
+}

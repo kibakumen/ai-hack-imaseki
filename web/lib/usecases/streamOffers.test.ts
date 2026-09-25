@@ -7,7 +7,7 @@ vi.mock("./fetchOffers", () => ({
   fetchOffers: async () => ({
     ok: true,
     fetchId: "fetch-1",
-    items: [{ offerId: "offer-1", storeId: "store-1", storeName: "海鮮どんぶり亭", walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, reason: "近くて好みに合います", partyMax: 4, coupons: [], storeUrl: null }],
+    items: [{ offerId: "offer-1", storeId: "store-1", storeName: "海鮮どんぶり亭", walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, reason: "近くて好みに合います", partyMax: 4, coupons: [], storeUrl: null, storeAddress: null }],
     pitchTargets: [
       {
         storeId: "store-1",

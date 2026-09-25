@@ -37,6 +37,8 @@ export type FetchResultItem = {
   partyMax: number;
   coupons: ResultCoupon[];
   storeUrl: string | null;
+  /** 店の住所（確保する前にどこにある店かを見せる・2026-09-25 監査の指摘 客-12） */
+  storeAddress: string | null;
 };
 
 /**
@@ -144,6 +146,7 @@ const buildItems = (selections: readonly Selection[], ranked: readonly Candidate
         // そのオファーが見せているクーポンだけを、店が作った順のまま（基準 4.7・4.8）
         coupons: coupons.filter((coupon) => coupon.storeId === row.storeId && shown.has(coupon.id)).map((coupon) => ({ name: coupon.name, note: coupon.note })),
         storeUrl: row.storeUrl,
+        storeAddress: row.storeAddress,
       },
     ];
   });

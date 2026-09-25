@@ -6,7 +6,7 @@
 // （domain/genres.test.ts と同じ形。「写しを置くときは、一致を検査で固定する」）。
 import { describe, expect, it } from "vitest";
 import { phoneToShow, phoneToStore } from "../../components/customer/FetchForm";
-import { guestNickname } from "../../components/customer/GuestEntry";
+import { guestNickname } from "../../lib/client/guestIdentity";
 import { GUEST_NICKNAME_PREFIX, GUEST_PHONE_PLACEHOLDER, isGuestNickname, isPlaceholderPhone } from "../../lib/domain/guest";
 import * as limits from "../../lib/schemas/limits";
 

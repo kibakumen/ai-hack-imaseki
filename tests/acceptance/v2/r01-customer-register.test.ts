@@ -94,6 +94,30 @@ describeTask("3", "客の登録（手続き）", () => {
     expect(home.json.profile).toEqual({ nickname: CUSTOMER.nickname, phone: CUSTOMER.phone, genres: CUSTOMER.genres, budgetMax: CUSTOMER.budgetMax });
   });
 
+  // 不具合-02 の多重の守り: 画面の側の取り違え（通信の失敗を「識別子が無い」と読む等）で登録が送られても、
+  // 有効な客の Cookie を持つ端末には新しい識別子を配らない。配ると今の Cookie が上書きされ、確保中の客が
+  // 店で見せるコードへ二度と戻れない。
+  it("有効な客の Cookie が付いた登録の要求には、新しい識別子を配らず、客も増やさない（今の Cookie のまま使える）", async () => {
+    const c = await registerCustomer(ctx);
+    const before = (await rows(ctx.db, "SELECT id FROM customers")).length;
+    const again = await c.api.post("/api/register/customer", { ...CUSTOMER, nickname: "guest-again", humanToken: "tok-ok" });
+    expect([200, 201]).toContain(again.status);
+    expect(again.json.ok).toBe(true);
+    expect(cookieOf(again)).toBeNull();
+    expect((await rows(ctx.db, "SELECT id FROM customers")).length).toBe(before);
+    const home = await c.api.get("/api/customer/home");
+    expect(home.status).toBe(200);
+    expect(home.json.profile.nickname).toBe(CUSTOMER.nickname);
+  });
+
+  it("消された・でたらめな Cookie が付いた登録の要求は、今までどおり新しい識別子を配る", async () => {
+    const c = await registerCustomer(ctx);
+    const name = c.cookie.split("=")[0];
+    const r = await ctx.api(`${name}=${"x".repeat(22)}`).post("/api/register/customer", { ...CUSTOMER, humanToken: "tok-ok" });
+    expect([200, 201]).toContain(r.status);
+    expect(cookieOf(r)).toBeTruthy();
+  });
+
   it("2.7 客の入口のスキーマにパスワード・確認番号・ログインの項目が無い", async () => {
     const schemas = await loadWeb("lib/schemas/customer");
     const text = JSON.stringify(Object.keys(schemas)) + JSON.stringify(Object.values(schemas).map((s: any) => Object.keys(s?.shape ?? {})));

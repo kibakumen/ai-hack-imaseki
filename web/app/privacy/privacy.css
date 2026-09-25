@@ -1,0 +1,33 @@
+/* 送信先と個人情報の扱い（/privacy）の見た目。色は `app/globals.css` の変数だけを使う（要件32の基準 32.3）。 */
+.privacy {
+  display: grid;
+  gap: 1rem;
+}
+.privacy__lead {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+/* 表は横に長いので、枠の中だけ横に流す（画面そのものは横に動かさない） */
+.privacy__scroll {
+  overflow-x: auto;
+}
+.privacy__table {
+  font-size: 0.8125rem;
+  min-width: 36rem;
+}
+.privacy__table th,
+.privacy__table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+.privacy__table th {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+.privacy ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}

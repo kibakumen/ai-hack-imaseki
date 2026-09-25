@@ -11,7 +11,8 @@
 //   3. 確保を持ったまま「ほかの店を探す」を押したか（基準 8.10。サーバーは確保中のままを返す）
 //   4. 取り直しが通信の失敗に終わったか（端末に残した内容へ倒す・基準 9.10・9.11。何も残っていなければ
 //      読めなかったことを出し、登録の入力は出さない——登録の入力は 401 のときだけ）
-//   5. 開いている脇の画面（最近行った店・登録の確認と消去。同時には1つだけ・基準 26.14・28.4）
+//   5. 開いている脇の画面（最近行った店・基準 26.14）と、登録を消したばかりか（基準 28.11 の知らせ）。
+//      「この端末の登録を消す」は画面の下端に常に置く（基準 28.4・2026-09-25 監査の指摘 安全-15 で戻した）
 //   6. 通報が指している店（基準 26.1・26.17。断られても元の表示のままにするため外に置く）
 //
 // 受け取り・受け取り直しの応答は、通っても断られても**新しいホームを連れてくる**ので、それで
@@ -26,6 +27,7 @@ import { usePolling } from "../../lib/client/usePolling";
 import { AdminCancelledView } from "./AdminCancelledView";
 import { recallOrigin } from "../../lib/client/lastOrigin";
 import { ClaimedCelebration } from "./ClaimedCelebration";
+import { EraseRegistration } from "./EraseRegistration";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
 import { FetchForm, type FetchResult } from "./FetchForm";
@@ -52,13 +54,13 @@ const KEEPS_REFUSAL: ReadonlyArray<HomeDto["kind"]> = ["fetch", "expired"];
 /** 通報ボタンを置く表示（基準 26.1）。期限切れと取り消しの表示には置かない。 */
 const REPORT_VIEW_KINDS: ReadonlyArray<HomeDto["kind"]> = ["active", "completed"];
 /**
- * 「最近行った店」と「登録の確認と消去」の入口を置く表示（基準 26.14・28.4）。客が画面を開いた
+ * 「最近行った店」の入口を置く表示（基準 26.14）。客が画面を開いた
  * ときにまず出る3つで、期限切れと取り消しの表示には置かない（店へ向かう途中で出る表示・要件26の補足）。
  */
 const RECENT_ENTRY_KINDS: ReadonlyArray<HomeDto["kind"]> = ["fetch", "active", "completed"];
 
 /** 開いている脇の画面（同時には1つだけ）。 */
-type Panel = "none" | "recent" | "settings";
+type Panel = "none" | "recent";
 
 const CustomerScreens = () => {
   const [home, setHome] = useState<HomeDto | null>(null);
@@ -76,9 +78,18 @@ const CustomerScreens = () => {
    */
   const [conditionsOpen, setConditionsOpen] = useState(false);
   const fetchScreenRef = useRef<HTMLElement | null>(null);
+  /** 今出している結果の取得の番号（`showResults` が、同じ取得の入れ直しか新しい取得かを見分ける）。 */
+  const shownFetchIdRef = useRef<string | null>(null);
+  /**
+   * 客が片づけた取得の番号（2026-09-25 レビューの指摘・不具合-06 の残り）。断りの「探し直す」「◯名で探し直す」は
+   * 一覧を片づけるだけで `FetchForm` を外さないので、その取得のストリームは走り続ける。後から届く紹介文が
+   * 片づけた一覧（前の人数・古い fetchId）を戻し、押すと人数の欄と違う人数で席を押さえていた。
+   * この番号の結果は、次に探し始める（`showResults(null)`）まで受け取らない。
+   */
+  const dismissedFetchIdRef = useRef<string | null>(null);
   const [refused, setRefused] = useState<RefusedReceive | null>(null);
   const [searching, setSearching] = useState(false);
-  // 脇の画面（最近行った店・登録の確認と消去）と、通報が指している店。どちらも表示の種類とは別に持つ
+  // 脇の画面（最近行った店）と、通報が指している店。どちらも表示の種類とは別に持つ
   // ——断られたときに元の表示のまま文を出す必要があるため（基準 26.19・28.5）。
   const [panel, setPanel] = useState<Panel>("none");
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
@@ -94,6 +105,8 @@ const CustomerScreens = () => {
    * 出すと客が入れ直して登録し、新しい識別子の Cookie が今の Cookie（確保を持つかもしれない）を上書きする。
    */
   const [unreachable, setUnreachable] = useState<ApiFailure | null>(null);
+  /** この端末の登録を消したばかりか（登録の入力の上に「消しました」を出す・基準 28.11） */
+  const [erased, setErased] = useState(false);
 
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
@@ -130,6 +143,18 @@ const CustomerScreens = () => {
 
   usePolling(refresh);
 
+  /**
+   * 出している結果を片づけ、その取得から後で届く結果も受け取らない（`dismissedFetchIdRef`）。
+   * 受け取りが通ったときもここを通す——前の取得は `FetchForm` が外れたときに止まるが、止めるのは描き終えた
+   * あとの後始末（effect の片づけ）なので、その間に届いた紹介文が一覧を入れ直しうる（全体の検査を重く回した
+   * ときに、受け取りのあとの一覧が戻る検査が1度だけ落ちた。この隙間が原因というのは推測）。
+   */
+  const dismissResults = () => {
+    dismissedFetchIdRef.current = shownFetchIdRef.current;
+    shownFetchIdRef.current = null;
+    setFetchResult(null);
+  };
+
   /** 受け取り・受け取り直しの応答（通った／断られた）で、表示を作り直す。 */
   const applyReceived = (result: unknown, offerId: string | null) => {
     const failure = isFailure(result) ? result : null;
@@ -146,7 +171,7 @@ const CustomerScreens = () => {
     const keepsNotice = responded !== null && KEEPS_REFUSAL.includes(responded.kind);
     setRefused(body !== undefined && keepsNotice ? { offerId, body } : null);
     // 通ったときは結果の一覧を片づける（確保中の表示へ移る・基準 8.5）
-    if (failure === null) setFetchResult(null);
+    if (failure === null) dismissResults();
     // 通って確保中になったときだけ、受け取りの演出を前面に出す（断りでは出さない）
     if (failure === null && responded !== null && responded.reservation !== undefined && responded.kind === "active") setCelebrating(true);
   };
@@ -199,13 +224,20 @@ const CustomerScreens = () => {
     }
     // 「◯名で探し直す」は、その人数を入れた取得の画面へ（人数を減らせば取れる客を振り出しに戻さない）
     if (step === "search_again_with_party" && refused.body.partyMax !== undefined) setParty(String(refused.body.partyMax));
-    setFetchResult(null);
+    dismissResults();
     setSearching(true);
   };
 
   const showResults = (result: FetchResult | null) => {
+    // 片づけた取得の結果は戻さない。探し始めたら解く（前の取得は `useOfferSearch` が止めてから null を渡す）。
+    if (result !== null && result.fetchId === dismissedFetchIdRef.current) return;
+    if (result === null) dismissedFetchIdRef.current = null;
+    // 断りの知らせを消すのは、探し始めたとき（null）と取得が替わったときだけ（2026-09-25 監査の指摘 不具合-06）。
+    // 紹介文が届くたびに同じ取得の結果が入れ直されるので、そのたびに消すと断りの文とボタンが読めないうちに消える。
+    const nextFetchId = result?.fetchId ?? null;
+    if (result === null || nextFetchId !== shownFetchIdRef.current) setRefused(null);
+    shownFetchIdRef.current = nextFetchId;
     setFetchResult(result);
-    setRefused(null);
     // 探し始め（`FetchForm` は探す前に必ず null を渡す）で閉じ直す。少しずつ届く結果の更新では触らない
     // ——客が紹介文の届く途中で条件を開いていても、勝手に畳まない。
     if (result === null) setConditionsOpen(false);
@@ -218,7 +250,7 @@ const CustomerScreens = () => {
   };
   const searchAgain = () => {
     setRefused(null);
-    setFetchResult(null);
+    dismissResults();
     setSearching(true);
   };
   const togglePanel = (next: Panel) => setPanel((current) => (current === next ? "none" : next));
@@ -238,6 +270,11 @@ const CustomerScreens = () => {
   if (home === null) {
     return (
       <main>
+        {erased ? (
+          <p className="msg" role="status" data-testid="erased-notice">
+            この端末の登録を消しました。
+          </p>
+        ) : null}
         <RegisterForm onRegistered={() => void refresh()} />
       </main>
     );
@@ -369,6 +406,14 @@ const CustomerScreens = () => {
 
       {panel === "recent" ? <RecentStores onReport={setReportTarget} /> : null}
       {reportTarget !== null ? <ReportForm storeId={reportTarget.storeId} storeName={reportTarget.storeName} onClose={() => setReportTarget(null)} /> : null}
+
+      {/* 下端に1つだけ（基準 28.4）。どの表示でも置く——確保中なら入口が断り、先に取り消すよう出す（基準 28.5） */}
+      <EraseRegistration
+        onDeleted={() => {
+          setErased(true);
+          void refresh();
+        }}
+      />
     </main>
   );
 };
