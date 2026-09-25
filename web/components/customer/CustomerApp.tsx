@@ -36,6 +36,7 @@ import { HomeScreenHint } from "./HomeScreenHint";
 import { changedMessage, claimedMessage, resultsMessage } from "./liveMessages";
 import type { HomeDto, ReceiveRefusal, ReservationDto } from "./home";
 import { PreviousCompletedEntry } from "./PreviousCompleted";
+import { History } from "./History";
 import { RecentStores } from "./RecentStores";
 import { RegisterForm } from "./RegisterForm";
 import { ReportForm, type ReportTarget } from "./ReportForm";
@@ -513,7 +514,18 @@ const CustomerScreens = () => {
         </nav>
       ) : null}
 
-      {panel === "recent" ? <RecentStores onReport={setReportTarget} /> : null}
+      {/* 最近行った店（通報の入口）の下に、過去の受け取りの見返し（住所・ホームページ・もう一度探す・客-13 の案A） */}
+      {panel === "recent" ? (
+        <>
+          <RecentStores onReport={setReportTarget} />
+          <History
+            onSearchAgain={() => {
+              setPanel("none");
+              searchAgain();
+            }}
+          />
+        </>
+      ) : null}
       {reportTarget !== null ? <ReportForm storeId={reportTarget.storeId} storeName={reportTarget.storeName} onClose={() => setReportTarget(null)} /> : null}
 
       {/* 下端に1つだけ（基準 28.4）。どの表示でも置く——確保中なら入口が断り、先に取り消すよう出す（基準 28.5） */}

@@ -223,3 +223,32 @@ describe("読み上げと焦点（客-08）", () => {
     expect(liveText()).toMatch(/取り消されました/);
   });
 });
+
+describe("過去の受け取りの見返し（客-13 の案A）", () => {
+  it("「最近行った店」を開くと、過去の受け取り（店名・状態・住所・ホームページ・コード）と「もう一度探す」が出る。押すと取得の画面へ", async () => {
+    api = installFakeApi({
+      "GET /api/config/public": CONFIG,
+      "GET /api/customer/home": () => ({ json: homeFetch({ kind: "active", reservation: reservationDto() }) }),
+      "GET /api/customer/recent": () => ({ json: { items: [] } }),
+      "GET /api/customer/history": () => ({
+        json: {
+          items: [
+            { id: "old-1", code: "87650000", status: "completed", storeId: "s9", storeName: "先月の店", storeAddress: "東京都新宿区西新宿1-1", storeUrl: "https://example.com/old", party: 2, receivedAt: "2026-08-20T10:00:00.000Z" },
+          ],
+        },
+      }),
+    });
+    render(<CustomerApp />);
+    fireEvent.click(await screen.findByTestId("btn-recent"));
+    const row = await screen.findByTestId("history-row-old-1");
+    expect(row.textContent).toContain("先月の店");
+    expect(row.textContent).toContain("東京都新宿区西新宿1-1");
+    expect(row.textContent).toContain("87650000");
+    expect(row.querySelector("a[href='https://example.com/old']")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("btn-history-search"));
+    await screen.findByTestId("btn-fetch");
+    expect(screen.queryByTestId("history-row-old-1")).toBeNull();
+    // 確保を持ったままなので、確保中の表示へ戻る道がある
+    expect(screen.getByTestId("btn-back-to-reservation")).toBeTruthy();
+  });
+});

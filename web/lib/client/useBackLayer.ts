@@ -18,6 +18,12 @@ type Layer = { id: number; close: () => void };
 let layers: Layer[] = [];
 let lastId = 0;
 let listening = false;
+/**
+ * ボタンなどで閉じて、履歴から消すのを待っている重ねの番号。消すのは今の描き直しが終わってから（マイクロタスク）——
+ * 同じ描き直しで別の重ねが開いたら、戻さずにその履歴を開いた重ねに使い回す（戻しが後から届いて、開いたばかりの
+ * 重ねを閉じてしまわないように。例: 脇の画面の「もう一度探す」で、脇の画面を閉じて取得の画面を開く）。
+ */
+let pendingRemoval: number | null = null;
 
 /** 履歴の状態に載せた番号（重ねの履歴でなければ 0） */
 const layerIdOf = (state: unknown): number => {
@@ -40,6 +46,23 @@ const listen = () => {
   listening = true;
 };
 
+/** 待っていた「履歴から消す」を行う（その履歴がまだいちばん上に在るときだけ） */
+const flushRemoval = () => {
+  const id = pendingRemoval;
+  pendingRemoval = null;
+  if (id !== null && layerIdOf(window.history.state) === id) window.history.back();
+};
+
+/** 重ねの履歴を積む。消すのを待っている履歴がいちばん上に在れば、それを使い回す */
+const pushLayerEntry = (id: number) => {
+  if (pendingRemoval !== null && layerIdOf(window.history.state) === pendingRemoval) {
+    pendingRemoval = null;
+    window.history.replaceState({ imasekiLayer: id }, "");
+    return;
+  }
+  window.history.pushState({ imasekiLayer: id }, "");
+};
+
 /**
  * `open` が true の間、端末の「戻る」で `close` が呼ばれる。`close` は毎回いちばん新しいものを使う。
  * 同時に開く重ねが複数あれば、後から開いたものから順に閉じる。
@@ -56,13 +79,15 @@ export const useBackLayer = (open: boolean, close: () => void): void => {
     lastId += 1;
     const layer: Layer = { id: lastId, close: () => latestClose.current() };
     layers = [...layers, layer];
-    window.history.pushState({ imasekiLayer: layer.id }, "");
+    pushLayerEntry(layer.id);
     return () => {
       // 戻る操作で閉じた重ねは、もう外れていて履歴も戻っている
       if (!layers.some((item) => item.id === layer.id)) return;
       layers = layers.filter((item) => item.id !== layer.id);
-      // 積んだ履歴がいちばん上に在るときだけ戻して消す（ほかの重ねの履歴を消さない）
-      if (layerIdOf(window.history.state) === layer.id) window.history.back();
+      // 積んだ履歴がいちばん上に在るときだけ消す（ほかの重ねの履歴を消さない）
+      if (layerIdOf(window.history.state) !== layer.id) return;
+      pendingRemoval = layer.id;
+      queueMicrotask(flushRemoval);
     };
   }, [open]);
 };

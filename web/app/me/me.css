@@ -1411,3 +1411,31 @@
 .claimed-title:focus {
   outline: none;
 }
+
+/* 過去の受け取りの見返し（客-13 の案A）。「最近行った店」の脇の画面の中、通報の一覧の下 */
+.history {
+  display: grid;
+  gap: 0.5rem;
+}
+.history__list {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.history__row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.625rem 0.875rem;
+}
+.history__store {
+  font-weight: 800;
+}
+.history__meta,
+.history__address {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
