@@ -10,6 +10,7 @@ import { placeLabel } from "../../usecases/placeLabel";
 import { placeSuggest } from "../../usecases/placeSuggest";
 import { registerCustomer } from "../../usecases/registerCustomer";
 import { CUSTOMER_COOKIE_MAX_AGE_SECONDS, CUSTOMER_COOKIE_NAME, serializeCookie } from "../cookies";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { unauthenticated } from "../refusals";
 
@@ -22,11 +23,7 @@ const registerCustomerRoute = defineRoute({
   handler: async ({ input, deps }) => {
     const { token } = await registerCustomer(deps, input);
     // 識別子の値は本文にも Location にも載せない（基準 2.6）。端末へ渡すのは Set-Cookie だけ。
-    return {
-      status: 201,
-      body: { ok: true },
-      cookies: [serializeCookie(CUSTOMER_COOKIE_NAME, token, CUSTOMER_COOKIE_MAX_AGE_SECONDS)],
-    };
+    return respond("POST /api/register/customer", { ok: true }, 201, [serializeCookie(CUSTOMER_COOKIE_NAME, token, CUSTOMER_COOKIE_MAX_AGE_SECONDS)]);
   },
 });
 
@@ -38,7 +35,7 @@ const customerHomeRoute = defineRoute({
     const home = await customerHome(deps, ctx.customerId);
     // 見分けの直後に登録が消えた場合だけ null になる。客のデータは返さない（基準 2.5）。
     if (!home) return unauthenticated();
-    return { status: 200, body: home };
+    return respond("GET /api/customer/home", home);
   },
 });
 
@@ -53,7 +50,7 @@ const customerPlaceRoute = defineRoute({
   path: "/api/customer/place",
   auth: "customer",
   input: placeQuerySchema,
-  handler: async ({ input, deps }) => ({ status: 200, body: await placeLabel(deps, input) }),
+  handler: async ({ input, deps }) => respond("GET /api/customer/place", await placeLabel(deps, input)),
 });
 
 /**
@@ -66,7 +63,7 @@ const customerPlaceSuggestRoute = defineRoute({
   path: "/api/customer/place-suggest",
   auth: "customer",
   input: placeSuggestQuerySchema,
-  handler: async ({ input, deps }) => ({ status: 200, body: await placeSuggest(deps, input) }),
+  handler: async ({ input, deps }) => respond("GET /api/customer/place-suggest", await placeSuggest(deps, input)),
 });
 
 export const customerRoutes: RouteDefinition[] = [registerCustomerRoute, customerHomeRoute, customerPlaceRoute, customerPlaceSuggestRoute];

@@ -7,6 +7,7 @@
 
 import { readStoreProfile, saveStoreProfile } from "../../usecases/saveStoreProfile";
 import { storeProfileSchema } from "../../schemas/store";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { refusal, unauthenticated } from "../refusals";
 
@@ -18,7 +19,7 @@ const getStoreProfileRoute = defineRoute({
     const profile = await readStoreProfile(deps, ctx.storeId);
     // 見分けの直後に店が消えた場合だけ null。店のデータは返さない。
     if (!profile) return unauthenticated();
-    return { status: 200, body: { ok: true, profile } };
+    return respond("GET /api/store/profile", { ok: true, profile });
   },
 });
 
@@ -31,7 +32,7 @@ const putStoreProfileRoute = defineRoute({
     const result = await saveStoreProfile(deps, ctx.storeId, input);
     // 住所が位置に直せなかったのは形の誤りではないので 409（設計書「入力の断りの応答の形」・対応は http/refusals の表）。
     if (!result.ok) return refusal(result.kind, { fields: result.fields });
-    return { status: 200, body: { ok: true, profile: result.profile } };
+    return respond("PUT /api/store/profile", { ok: true, profile: result.profile });
   },
 });
 

@@ -35,7 +35,7 @@
 //    断りの文は**その操作の `<form>` の中**に出る（検査が `within(form)` で引く）。
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure, type OfferViewDto } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, type RefusalContext } from "../ui/InputRefusal";
 import { OfferTrend, type TrendPoint } from "./OfferTrend";
@@ -44,16 +44,8 @@ import { Wheel } from "./WheelPicker";
 
 export type OfferPanelCoupon = { id: string; name: string; note: string };
 
-export type OfferPanelOffer = {
-  id: string;
-  capacity: number;
-  remaining: number;
-  partyMax: number;
-  untilAt: string;
-  publishedAt: string;
-  coupons: OfferPanelCoupon[];
-  latestUntil: string;
-};
+/** 公開中のオファーのカード（受け入れ検査の契約 `OfferDto`）。型は schemas/responses の表から（設計-07）。 */
+export type OfferPanelOffer = OfferViewDto;
 
 type Props = {
   offer: OfferPanelOffer;
@@ -106,7 +98,7 @@ const useOfferChange = (action: OfferAction) => {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   const send = async (body: Record<string, unknown>): Promise<Outcome> => {
-    const result = await apiCall("POST", `/api/store/offers/current/${action}`, body);
+    const result = await callApi(`POST /api/store/offers/current/${action}` as const, { body });
     if (!isFailure(result)) {
       setFailure(null);
       return "ok";
@@ -126,7 +118,7 @@ const useRepublish = () => {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   const send = async (body: Record<string, unknown>): Promise<boolean> => {
-    const result = await apiCall("POST", "/api/store/offers", body);
+    const result = await callApi("POST /api/store/offers", { body });
     setFailure(isFailure(result) ? result : null);
     return !isFailure(result);
   };

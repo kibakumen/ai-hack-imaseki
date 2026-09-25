@@ -14,7 +14,7 @@
 //   - クーポンは**チェックの付いたカードを横に並べる**
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 import { WheelPicker } from "./WheelPicker";
@@ -148,11 +148,13 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall("POST", "/api/store/offers", {
-      couponIds,
-      capacity: toNumberOrNull(capacity),
-      partyMax: toNumberOrNull(partyMax),
-      until,
+    const result = await callApi("POST /api/store/offers", {
+      body: {
+        couponIds,
+        capacity: toNumberOrNull(capacity),
+        partyMax: toNumberOrNull(partyMax),
+        until,
+      },
     });
     if (isFailure(result)) {
       // 画面は移らず、入れた内容もそのまま（設計書「入力の誤りの出し方」の規則3）。

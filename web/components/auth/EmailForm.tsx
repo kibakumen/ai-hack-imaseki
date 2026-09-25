@@ -7,7 +7,7 @@
 // その欄の直下。文の正本は domain/texts で、この部品は語を読まない。
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { EMAIL_MAX, PASSWORD_MAX } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
@@ -15,7 +15,7 @@ const FIELD_NAMES = ["email", "currentPassword"];
 
 type Props = {
   /** 叩く入口。店は `/api/store/email`、運営は `/api/admin/email`。 */
-  endpoint: string;
+  endpoint: "/api/store/email" | "/api/admin/email";
   /** 変えたあと呼ぶ側が表示を取り直すため。 */
   onChanged?: () => void;
 };
@@ -28,7 +28,7 @@ export const EmailForm = ({ endpoint, onChanged }: Props) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall("POST", endpoint, { email, currentPassword });
+    const result = await callApi(`POST ${endpoint}` as const, { body: { email, currentPassword } });
     if (isFailure(result)) {
       setFailure(result);
       setChangedTo(null);

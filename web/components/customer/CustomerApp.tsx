@@ -19,7 +19,7 @@
 // 断りの文とボタンの文は `RefusalNotice` が `domain/texts` から引く。
 
 import { useRef, useState } from "react";
-import { apiCall, isFailure, isTransientFailure } from "../../lib/client/api";
+import { callApi, isFailure, isTransientFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
 import { usePolling } from "../../lib/client/usePolling";
 import { AdminCancelledView } from "./AdminCancelledView";
@@ -94,7 +94,7 @@ export const CustomerApp = () => {
 
   /** ホームを取り直して表示を決める（開いた時と10秒ごと・基準 9.8・9.9）。 */
   const refresh = async (): Promise<void> => {
-    const result = await apiCall<HomeDto>("GET", "/api/customer/home");
+    const result = await callApi("GET /api/customer/home");
     setLoaded(true);
     if (!isFailure(result)) {
       setHome(result);
@@ -159,7 +159,7 @@ export const CustomerApp = () => {
   /** 結果から1件を受け取る（基準 8.1・8.5・8.6）。人数とどの取得から選んだかを一緒に送る。 */
   const receive = async (item: ResultItem): Promise<void> => {
     if (fetchResult === null) return;
-    const result = await apiCall("POST", "/api/customer/reservations", { offerId: item.offerId, party: fetchResult.party, fetchId: fetchResult.fetchId });
+    const result = await callApi("POST /api/customer/reservations", { body: { offerId: item.offerId, party: fetchResult.party, fetchId: fetchResult.fetchId } });
     applyReceived(result, item.offerId);
   };
 
@@ -167,7 +167,7 @@ export const CustomerApp = () => {
   const retry = async (): Promise<void> => {
     const id = home?.reservation?.id;
     if (id === undefined) return;
-    const result = await apiCall("POST", "/api/customer/reservations", { retryOf: id });
+    const result = await callApi("POST /api/customer/reservations", { body: { retryOf: id } });
     applyReceived(result, null);
   };
 

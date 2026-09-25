@@ -6,7 +6,7 @@
 // 登録とログインの3つだけ（設計書「入口の一覧」）で、ここは識別子を持つ客しか通れない。
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, NICKNAME_MAX, NICKNAME_MIN, PHONE_MAX_LENGTH } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
@@ -14,7 +14,8 @@ import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 const FIELD_NAMES = ["nickname", "phone", "genres", "budgetMax"];
 const PHONE_HINT = "数字10桁か11桁";
 
-export type CustomerProfileValues = { nickname: string; phone: string; genres: string[]; budgetMax: number | null };
+/** 客の登録の4項目（型は schemas/responses の表から・設計-07）。 */
+export type CustomerProfileValues = ResponseOf<"PATCH /api/customer/profile">["profile"];
 
 /** 空欄は未指定（null）。数にならない文字はそのまま送り、判定は入口の検査に任せる。 */
 const budgetToSend = (raw: string): number | string | null => {
@@ -44,11 +45,13 @@ export const ProfileSettings = ({ profile, onSaved }: ProfileSettingsProps) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall<{ profile: CustomerProfileValues }>("PATCH", "/api/customer/profile", {
-      nickname,
-      phone,
-      genres,
-      budgetMax: budgetToSend(budgetMax),
+    const result = await callApi("PATCH /api/customer/profile", {
+      body: {
+        nickname,
+        phone,
+        genres,
+        budgetMax: budgetToSend(budgetMax),
+      },
     });
     if (isFailure(result)) {
       setFailure(result);

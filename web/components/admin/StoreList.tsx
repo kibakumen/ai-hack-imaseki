@@ -18,29 +18,16 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type AdminStoreRowDto, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { ADMIN_SEARCH_MAX } from "../../lib/schemas/limits";
 import { FormMessage } from "../ui/InputRefusal";
 import styles from "./admin.module.css";
 
-type StoreStatus = "pending" | "approved" | "banned";
-
-type StoreRow = {
-  id: string;
-  name: string;
-  address: string | null;
-  email: string | null;
-  status: StoreStatus;
-  publishing?: boolean;
-  /** 受け取り実績＝完了済みの確保の数（並び替え「受け取り実績が多い順」）。応答に無ければ0扱い。 */
-  claims?: number;
-  /** 予算の下限。未設定の店は null（並び替え「予算が安い順」）。 */
-  budgetMin?: number | null;
-  /** 公開中のオファーの残り枠。無ければ null（並び替え「残り枠が多い順」）。 */
-  offerRemaining?: number | null;
-};
-
-type StoreListResponse = { items: StoreRow[]; summary: { publishing: number; pending: number } };
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+// 受け取り実績（claims）・予算の下限（budgetMin）・残り枠（offerRemaining）は応答に無いことがある（無ければ0／末尾）。
+type StoreRow = AdminStoreRowDto;
+type StoreStatus = StoreRow["status"];
+type StoreListResponse = ResponseOf<"GET /api/admin/stores">;
 
 /** 絞り込みの4つと「すべて」（基準 24.3）。値は入口の語、表示は運営が読む言葉。既定は「すべて」。 */
 const FILTERS = [
@@ -104,11 +91,8 @@ export const StoreList = () => {
   const listRef = useRef<HTMLUListElement>(null);
 
   const load = useCallback(async (): Promise<{ data: StoreListResponse | null; failure: ApiFailure | null }> => {
-    const params = new URLSearchParams();
-    if (filter) params.set("filter", filter);
-    if (query) params.set("q", query);
-    const suffix = params.toString();
-    const result = await apiCall<StoreListResponse>("GET", `/api/admin/stores${suffix ? `?${suffix}` : ""}`);
+    // 空の値は送らない（callApi が落とす）——「指定なし」と「空の指定」を入口で分けないため。
+    const result = await callApi("GET /api/admin/stores", { query: { filter, q: query } });
     return isFailure(result) ? { data: null, failure: result } : { data: result, failure: null };
   }, [filter, query]);
 

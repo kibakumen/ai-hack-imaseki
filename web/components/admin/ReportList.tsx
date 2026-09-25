@@ -10,17 +10,17 @@
 //    当番が気づくのはこの画面を開いたとき（承知のうえの穴）。
 
 import Link from "next/link";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { LoadView } from "../ui/LoadState";
 import { dateTimeInJst } from "../ui/jstTime";
 
-/** 入口の応答（`GET /api/admin/reports`）。形は検査していないので、在ることに頼らずに読む。 */
-type ReportRow = { id: string; storeId: string; storeName: string; reason: string; at: string };
+/** 入口の応答（`GET /api/admin/reports`）の1行。形は client/api が表（schemas/responses）で確かめてある。 */
+type ReportRow = ResponseOf<"GET /api/admin/reports">["items"][number];
 
 const loadReports = async (): Promise<ReportRow[] | ApiFailure> => {
-  const result = await apiCall<{ items: ReportRow[] }>("GET", "/api/admin/reports");
-  return isFailure(result) ? result : (result.items ?? []);
+  const result = await callApi("GET /api/admin/reports");
+  return isFailure(result) ? result : result.items;
 };
 
 const isNoReport = (items: ReportRow[]): boolean => items.length === 0;

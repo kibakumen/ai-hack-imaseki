@@ -5,6 +5,7 @@
 
 import { storeImageQuerySchema } from "../../schemas/storeImage";
 import { storeImage } from "../../usecases/storeImage";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 
 const customerStoreImageRoute = defineRoute({
@@ -12,7 +13,7 @@ const customerStoreImageRoute = defineRoute({
   path: "/api/customer/store-image",
   auth: "customer",
   input: storeImageQuerySchema,
-  handler: async ({ input, deps }) => ({ status: 200, body: await storeImage(deps, input) }),
+  handler: async ({ input, deps }) => respond("GET /api/customer/store-image", await storeImage(deps, input)),
 });
 
 export const storeImageRoutes: RouteDefinition[] = [customerStoreImageRoute];

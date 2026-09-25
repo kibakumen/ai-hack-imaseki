@@ -98,7 +98,11 @@ describe("確保中の表示の2つの操作", () => {
   });
 
   it("10.4 通ると文が消え、応答のホームがそのまま親へ渡る", async () => {
-    const home = { kind: "active", reservation: { party: 3 } };
+    // 入口が返すホームの形のまま（形の表 schemas/responses が確かめる・2026-09-25 設計-07）
+    const home = {
+      kind: "active",
+      reservation: { id: "res-1", code: "12345678", storeId: "s1", storeName: "店", storeAddress: "住所", storeUrl: null, party: 3, expiresAt: "2026-09-22T06:20:00.000Z", status: "active", coupons: [] },
+    };
     let response: FakeResponse = invalidParty;
     const onChanged = renderActions(() => response);
     const form = screen.getByTestId("form-party");

@@ -7,6 +7,7 @@
 
 import { customerRegisterSchema } from "../../schemas/customer";
 import { updateCustomerProfile } from "../../usecases/updateCustomerProfile";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { unauthenticated } from "../refusals";
 
@@ -19,7 +20,7 @@ const updateCustomerProfileRoute = defineRoute({
     const profile = await updateCustomerProfile(deps, ctx.customerId, input);
     // 見分けの直後に登録が消えた場合だけ null。客のデータは返さない（基準 2.5）。
     if (!profile) return unauthenticated();
-    return { status: 200, body: { ok: true, profile } };
+    return respond("PATCH /api/customer/profile", { ok: true, profile });
   },
 });
 

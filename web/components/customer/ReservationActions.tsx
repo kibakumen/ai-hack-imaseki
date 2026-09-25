@@ -19,7 +19,7 @@
 //    今の状態と衝突して断られたときは `home` を渡さずに呼ぶ＝親がホームを取り直す（基準 9.8・10.3）。
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { PARTY_MAX, PARTY_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, type RefusalContext } from "../ui/InputRefusal";
 
@@ -40,7 +40,7 @@ const useReservationOperation = (reservationId: string, action: "cancel" | "part
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   const submit = async (body: Record<string, unknown>): Promise<void> => {
-    const result = await apiCall<{ ok: true; home: unknown }>("POST", `/api/customer/reservations/${encodeURIComponent(reservationId)}/${action}`, body);
+    const result = await callApi(`POST /api/customer/reservations/:id/${action}` as const, { params: { id: reservationId }, body });
     if (!isFailure(result)) {
       setFailure(null);
       onChanged(result.home);

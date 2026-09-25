@@ -10,34 +10,27 @@
 // 画面のあいだの行き来はタブに変えた（StoreNav）。新しい客が増えた時は音で知らせる。
 
 import { useCallback, useRef, useState } from "react";
-import { apiCall, type ApiFailure } from "../../lib/client/api";
+import { callApi, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
 import { LoadView } from "../ui/LoadState";
-import { ArrivalsList, type ArrivalsListRow } from "./ArrivalsList";
+import { ArrivalsList } from "./ArrivalsList";
 import { playNotifyBeep } from "./beep";
-import { PublishForm, type PublishFormCoupon, type PublishFormPrefill } from "./PublishForm";
-import { OfferPanel, type OfferPanelOffer } from "./OfferPanel";
+import { PublishForm } from "./PublishForm";
+import { OfferPanel } from "./OfferPanel";
 import { appendTrend, type TrendPoint } from "./OfferTrend";
 import { SetupChecklist } from "./SetupChecklist";
-import { StatusBanner, type StoreStatusValue } from "./StatusBanner";
+import { StatusBanner } from "./StatusBanner";
 import { StoreNav } from "./StoreNav";
 
-/** 入口 `GET /api/store/home` の応答のうち、この画面が読む分（受け入れ検査の契約 `StoreHomeDto`）。 */
-export type StoreHomeView = {
-  id: string;
-  status: StoreStatusValue;
-  checklist: { license: boolean; card: boolean };
-  missingProfile: string[];
-  offer: OfferPanelOffer | null;
-  publishPrefill: PublishFormPrefill;
-  coupons: PublishFormCoupon[];
-  arrivals: ArrivalsListRow[];
-  /** 仮のパスワードで入っている（基準 14.14）。立っていれば新しいパスワードを決める画面へ案内する。 */
-  mustChangePassword?: boolean;
-};
+/**
+ * 入口 `GET /api/store/home` の応答（受け入れ検査の契約 `StoreHomeDto`）。サーバーと同じ定義
+ * （schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+ * `mustChangePassword` は仮のパスワードで入っている印（基準 14.14）で、立っていれば新しいパスワードを決める画面へ案内する。
+ */
+export type StoreHomeView = StoreHomeDto;
 
-const loadHome = (): Promise<StoreHomeView | ApiFailure> => apiCall<StoreHomeView>("GET", "/api/store/home");
+const loadHome = (): Promise<StoreHomeView | ApiFailure> => callApi("GET /api/store/home");
 
 type HomeBodyProps = { home: StoreHomeView; trend: TrendPoint[]; onChanged: () => void };
 

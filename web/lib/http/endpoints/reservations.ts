@@ -17,6 +17,7 @@ import { partyChangeSchema, receiveSchema } from "../../schemas/reservation";
 import { cancelByCustomer, type CancelByCustomerResult } from "../../usecases/cancelByCustomer";
 import { changeParty, type ChangePartyResult } from "../../usecases/changeParty";
 import { receiveOffer } from "../../usecases/receiveOffer";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
 import { notFound, receiveRefused, refusal, stateConflict, unauthenticated } from "../refusals";
 
@@ -34,7 +35,7 @@ const receiveRoute = defineRoute({
       if ("refusal" in result) return receiveRefused(result.refusal, result.home);
       return refusal(result.kind, { fields: result.fields });
     }
-    return { status: 200, body: { ok: true, reservation: result.reservation, home: result.home } };
+    return respond("POST /api/customer/reservations", { ok: true, reservation: result.reservation, home: result.home });
   },
 });
 
@@ -43,9 +44,12 @@ const receiveRoute = defineRoute({
  * ——今の状態との衝突は `current`、入力の断りは `error`（設計書「入口の一覧」の注）。
  * 手続きが `null` を返すのは、見分けの直後に登録が消えた場合だけ（客のデータは返さない・基準 2.5）。
  */
-const reservationOperationResponse = (result: CancelByCustomerResult | ChangePartyResult | null): RouteHandlerResult => {
+const reservationOperationResponse = (
+  route: "POST /api/customer/reservations/:id/cancel" | "POST /api/customer/reservations/:id/party",
+  result: CancelByCustomerResult | ChangePartyResult | null,
+): RouteHandlerResult => {
   if (!result) return unauthenticated();
-  if (result.ok) return { status: 200, body: { ok: true, home: result.home } };
+  if (result.ok) return respond(route, { ok: true, home: result.home });
   if (result.kind === "not_found") return notFound();
   if (result.kind === "state") return stateConflict(result.state);
   return refusal(result.kind, { partyMax: result.partyMax });
@@ -55,7 +59,7 @@ const cancelReservationRoute = defineRoute({
   method: "POST",
   path: "/api/customer/reservations/:id/cancel",
   auth: "customer",
-  handler: async ({ params, deps, ctx }) => reservationOperationResponse(await cancelByCustomer(deps, ctx.customerId, params.id ?? "")),
+  handler: async ({ params, deps, ctx }) => reservationOperationResponse("POST /api/customer/reservations/:id/cancel", await cancelByCustomer(deps, ctx.customerId, params.id ?? "")),
 });
 
 const changePartyRoute = defineRoute({
@@ -63,7 +67,7 @@ const changePartyRoute = defineRoute({
   path: "/api/customer/reservations/:id/party",
   auth: "customer",
   input: partyChangeSchema,
-  handler: async ({ input, params, deps, ctx }) => reservationOperationResponse(await changeParty(deps, ctx.customerId, params.id ?? "", input)),
+  handler: async ({ input, params, deps, ctx }) => reservationOperationResponse("POST /api/customer/reservations/:id/party", await changeParty(deps, ctx.customerId, params.id ?? "", input)),
 });
 
 export const reservationRoutes: RouteDefinition[] = [receiveRoute, cancelReservationRoute, changePartyRoute];

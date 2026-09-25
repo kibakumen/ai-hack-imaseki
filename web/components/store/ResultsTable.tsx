@@ -8,24 +8,15 @@
 // ⚠️ 客のデータ（呼び名・電話番号）は入口が返さないので、この画面にも出ない（基準 27.6・28.2）。
 
 import { useEffect, useState } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { FormMessage } from "../ui/InputRefusal";
 import { StoreNav } from "./StoreNav";
 import { dateTimeInJst } from "../ui/jstTime";
 
 /** 取り消された数の内訳（基準 23.6）。 */
-type CancelledBreakdown = { total: number; customer: number; expired: number; store: number; admin: number };
-
-type ResultRow = {
-  offerId: string;
-  publishedAt: string;
-  shown: number;
-  received: number;
-  completed: number;
-  cancelled: CancelledBreakdown;
-};
-
-type ResultsResponse = { items: ResultRow[] };
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type ResultRow = ResponseOf<"GET /api/store/results">["items"][number];
+type CancelledBreakdown = ResultRow["cancelled"];
 
 /** 表の見出し（基準 23.1 の4つ ＋ 並びの元になる公開の時刻）。 */
 const HEADINGS = ["公開", "出た回数", "受け取られた数", "完了済み", "取り消し（内訳）"] as const;
@@ -43,7 +34,7 @@ export const ResultsTable = () => {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const result = await apiCall<ResultsResponse>("GET", "/api/store/results");
+      const result = await callApi("GET /api/store/results");
       if (!alive) return;
       if (isFailure(result)) {
         setFailure(result);

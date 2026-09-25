@@ -10,7 +10,7 @@
 // 既定（引数なし）は店の場面のままで、受け入れ検査 r14 が描く形は変えていない。
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { PASSWORD_MAX, PASSWORD_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
@@ -18,7 +18,7 @@ type Props = {
   /** 決め直したあと呼ぶ側（店のホーム）が表示を取り直すため。 */
   onChanged?: () => void;
   /** 叩く入口。既定は店の入口。運営の画面は `/api/admin/password` を渡す。 */
-  endpoint?: string;
+  endpoint?: "/api/store/password" | "/api/admin/password";
   /** 今のパスワードの再入力を求めるか。仮のパスワードで入った店には求めない（既定 false）。 */
   requireCurrent?: boolean;
 };
@@ -33,7 +33,7 @@ export const PasswordForm = ({ onChanged, endpoint = "/api/store/password", requ
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall("POST", endpoint, requireCurrent ? { currentPassword, password } : { password });
+    const result = await callApi(`POST ${endpoint}` as const, { body: requireCurrent ? { currentPassword, password } : { password } });
     if (isFailure(result)) {
       setFailure(result);
       setChanged(false);

@@ -10,17 +10,17 @@
 //    同時に出ると、どちらの操作の話なのかが読めなくなる。
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { COUPON_TEXTS } from "../../lib/domain/texts";
 import { COUPON_MAX, COUPON_NAME_MAX, COUPON_NAME_MIN, COUPON_NOTE_MAX } from "../../lib/schemas/limits";
 import { FieldMessage } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
 
-type Coupon = { id: string; name: string; note: string };
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type Coupon = ResponseOf<"GET /api/store/coupons">["items"][number];
 type Draft = { name: string; note: string };
 
-const COUPONS_PATH = "/api/store/coupons";
 /** 作る側の断りの置き場を表す印（行の断りは、その行の番号を使う） */
 const CREATE_SCOPE = "create";
 const NAME_CTX = { field: "名前", min: COUPON_NAME_MIN, max: COUPON_NAME_MAX };
@@ -28,8 +28,6 @@ const NOTE_CTX = { field: "特記事項", min: 0, max: COUPON_NOTE_MAX };
 
 /** 断りと、それがどの操作のものか。 */
 type ScopedFailure = { scope: string; failure: ApiFailure };
-
-const couponPath = (id: string) => `${COUPONS_PATH}/${encodeURIComponent(id)}`;
 
 const draftsOf = (list: Coupon[]): Record<string, Draft> => Object.fromEntries(list.map((coupon) => [coupon.id, { name: coupon.name, note: coupon.note ?? "" }]));
 
@@ -39,8 +37,8 @@ const draftsOf = (list: Coupon[]): Record<string, Draft> => Object.fromEntries(l
  * 0件の「まだありません」と区別もつかない・2026-09-25 監査の指摘 横断-01）。
  */
 const fetchCoupons = async (): Promise<Coupon[] | ApiFailure> => {
-  const result = await apiCall<{ items?: Coupon[] }>("GET", COUPONS_PATH);
-  return isFailure(result) ? result : (result.items ?? []);
+  const result = await callApi("GET /api/store/coupons");
+  return isFailure(result) ? result : result.items;
 };
 
 
@@ -197,7 +195,7 @@ export const CouponEditor = () => {
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await apply(CREATE_SCOPE, () => apiCall("POST", COUPONS_PATH, { name, note }), () => {
+    await apply(CREATE_SCOPE, () => callApi("POST /api/store/coupons", { body: { name, note } }), () => {
       setName("");
       setNote("");
     });
@@ -220,10 +218,10 @@ export const CouponEditor = () => {
             onChange={(values) => setDrafts((prev) => ({ ...prev, [coupon.id]: values }))}
             onSave={() => {
               const draft = drafts[coupon.id] ?? { name: coupon.name, note: coupon.note ?? "" };
-              void apply(coupon.id, () => apiCall("PUT", couponPath(coupon.id), draft), () => undefined);
+              void apply(coupon.id, () => callApi("PUT /api/store/coupons/:id", { params: { id: coupon.id }, body: draft }), () => undefined);
             }}
             onDelete={() => {
-              void apply(coupon.id, () => apiCall("DELETE", couponPath(coupon.id)), () => undefined);
+              void apply(coupon.id, () => callApi("DELETE /api/store/coupons/:id", { params: { id: coupon.id } }), () => undefined);
             }}
           />
         ))}

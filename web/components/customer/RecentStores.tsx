@@ -7,12 +7,13 @@
 // ホームページの URL は出さない。それらを見返すのは過去の受け取りの見返し（要件8の基準 8.11・タスク30）。
 
 import { useEffect, useState } from "react";
-import { apiCall, isFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ResponseOf } from "../../lib/client/api";
 import { dateTimeInJst } from "../ui/jstTime";
 import type { ReportTarget } from "./ReportForm";
 
 /** 入口の応答（`GET /api/customer/recent`）。形は検査していないので、在ることに頼らずに読む。 */
-type RecentItem = { reservationId: string; storeId: string; storeName: string; completedAt: string };
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type RecentItem = ResponseOf<"GET /api/customer/recent">["items"][number];
 
 type Props = { onReport: (target: ReportTarget) => void };
 
@@ -22,9 +23,9 @@ export const RecentStores = ({ onReport }: Props) => {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const result = await apiCall<{ items: RecentItem[] }>("GET", "/api/customer/recent");
+      const result = await callApi("GET /api/customer/recent");
       // 取れなかったときは「1件も無い」として描く（この一覧は通報への入口で、止める理由が無い）。
-      if (alive) setItems(isFailure(result) ? [] : (result.items ?? []));
+      if (alive) setItems(isFailure(result) ? [] : result.items);
     })();
     return () => {
       alive = false;

@@ -22,7 +22,7 @@
 // どちらも「客が入れなくても探し始められる」ことを優先した結果で、要件の項目自体は減らしていない。
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiCall, getPublicConfig, isFailure } from "../../lib/client/api";
+import { callApi, getPublicConfig, isFailure } from "../../lib/client/api";
 import { GUEST_PHONE_PLACEHOLDER } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { CustomerApp } from "./CustomerApp";
@@ -83,7 +83,7 @@ export const GuestEntry = () => {
 
     void (async () => {
       // 1. 識別子を持っているか（持っていれば何もしない）。
-      const home = await apiCall("GET", "/api/customer/home");
+      const home = await callApi("GET /api/customer/home");
       if (!alive) return;
       if (!isFailure(home)) {
         setPhase("ready");
@@ -107,12 +107,14 @@ export const GuestEntry = () => {
       const register = async (): Promise<boolean> => {
         const humanToken = tokenRef.current;
         tokenRef.current = null;
-        const answer = await apiCall("POST", "/api/register/customer", {
-          nickname: guestNickname(),
-          phone: PLACEHOLDER_PHONE,
-          genres: [],
-          budgetMax: null,
-          humanToken,
+        const answer = await callApi("POST /api/register/customer", {
+          body: {
+            nickname: guestNickname(),
+            phone: PLACEHOLDER_PHONE,
+            genres: [],
+            budgetMax: null,
+            humanToken,
+          },
         });
         return !isFailure(answer);
       };

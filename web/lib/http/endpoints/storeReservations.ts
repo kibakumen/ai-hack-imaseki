@@ -1,4 +1,5 @@
 import { completeReservation } from "../../usecases/completeReservation";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { notFound, stateConflict } from "../refusals";
 import { cancelByStore } from "../../usecases/cancelByStore";
@@ -19,7 +20,7 @@ const completeReservationRoute = defineRoute({
   auth: "store",
   handler: async ({ params, deps, ctx }) => {
     const result = await completeReservation(deps, ctx.storeId, params.id);
-    if (result.ok) return { status: 200, body: { ok: true } };
+    if (result.ok) return respond("POST /api/store/reservations/:id/complete", { ok: true });
     // 404 は「その店の確保ではない」。409 は状態による断り（今の状態を返す・基準 20.20）
     if (result.kind === "not_found") return notFound();
     return stateConflict(result.state);
@@ -53,7 +54,7 @@ const storeCancelReservationRoute = defineRoute({
   auth: "store",
   handler: async ({ params, deps, ctx }) => {
     const result = await cancelByStore(deps, ctx.storeId, params.id);
-    if (result.ok) return { status: 200, body: { ok: true } };
+    if (result.ok) return respond("POST /api/store/reservations/:id/cancel", { ok: true });
     if (result.kind === "not_found") return notFound();
     // 確保への操作の断りは「今の状態を返す」形（設計書「入力の断りの応答の形」の境界の②）。
     return stateConflict(result.state);

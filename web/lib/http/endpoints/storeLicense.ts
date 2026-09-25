@@ -5,6 +5,7 @@
 import { confirmCardSetup, startCardSetup } from "../../usecases/card";
 import { readLicense, uploadLicense, type LicenseContent } from "../../usecases/license";
 import { cardConfirmSchema, licenseUploadSchema } from "../../schemas/documents";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
 import { notFound, refusal } from "../refusals";
 
@@ -40,7 +41,7 @@ const uploadLicenseRoute = defineRoute({
       const reason = result.kind === "file_too_large" ? "too_long" : "not_allowed";
       return refusal(result.kind, { fields: [{ name: "file", reason }] });
     }
-    return { status: 200, body: { ok: true } };
+    return respond("POST /api/store/license", { ok: true });
   },
 });
 
@@ -72,7 +73,7 @@ const cardSetupRoute = defineRoute({
     const returnUrl = new URL(DOCUMENTS_PATH, req.url).toString();
     const result = await startCardSetup(deps, ctx.storeId, returnUrl);
     if (!result.ok) return refusal("card_setup_failed");
-    return { status: 200, body: { ok: true, url: result.url } };
+    return respond("POST /api/store/card/setup", { ok: true, url: result.url });
   },
 });
 
@@ -85,7 +86,7 @@ const cardConfirmRoute = defineRoute({
     const result = await confirmCardSetup(deps, ctx.storeId, input.sessionId);
     if (!result.ok) return refusal("card_setup_failed");
     // 応答に在るのは登録済みかどうかだけ（基準 13.8。受け皿の番号も外の識別子も返さない）。
-    return { status: 200, body: { ok: true, cardRegistered: true } };
+    return respond("POST /api/store/card/confirm", { ok: true, cardRegistered: true });
   },
 });
 

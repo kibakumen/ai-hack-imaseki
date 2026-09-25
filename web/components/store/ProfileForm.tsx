@@ -9,7 +9,7 @@
 // 全部打ち直させないため（基準 15.10 の「入れ直すかやり直す」）。
 
 import { useEffect, useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { TEXTS } from "../../lib/domain/texts";
 import {
   BUDGET_MAX_MAX,
@@ -27,24 +27,12 @@ import {
 } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
-const PROFILE_PATH = "/api/store/profile";
 const FIELD_NAMES = ["name", "address", "url", "genres", "menus", "budgetMin", "budgetMax"];
 /** 住所の欄は、形の誤りだけでなく「位置に直せなかった」も直下に出す（基準 15.10）。 */
 const ADDRESS_KINDS = ["address_unresolved"];
 const URL_HINT = "http:// か https:// で始まる形";
 /** 予算の2つの欄は同じ呼び名にする（「〜の最低は最高以下に」の文がそのまま読めるように） */
 const BUDGET_LABEL = "1人あたりの予算";
-
-/** GET /api/store/profile が返す中身。まだ入れていない項目は空か null。 */
-type LoadedProfile = {
-  name?: string | null;
-  address?: string | null;
-  url?: string | null;
-  genres?: string[] | null;
-  menus?: string[] | null;
-  budgetMin?: number | null;
-  budgetMax?: number | null;
-};
 
 const asText = (value: string | null | undefined): string => value ?? "";
 const asList = (value: string[] | null | undefined): string[] => value ?? [];
@@ -68,7 +56,7 @@ export const ProfileForm = () => {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const result = await apiCall<{ profile?: LoadedProfile }>("GET", PROFILE_PATH);
+      const result = await callApi("GET /api/store/profile");
       if (!alive) return;
       const profile = isFailure(result) ? null : result.profile;
       if (profile) {
@@ -111,14 +99,16 @@ export const ProfileForm = () => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall("PUT", PROFILE_PATH, {
-      name,
-      address,
-      url,
-      genres,
-      menus,
-      budgetMin: asNumber(budgetMin),
-      budgetMax: asNumber(budgetMax),
+    const result = await callApi("PUT /api/store/profile", {
+      body: {
+        name,
+        address,
+        url,
+        genres,
+        menus,
+        budgetMin: asNumber(budgetMin),
+        budgetMax: asNumber(budgetMax),
+      },
     });
     if (isFailure(result)) {
       setFailure(result);

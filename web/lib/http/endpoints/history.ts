@@ -5,13 +5,14 @@
 //    （`ctx.customerId`）ので、別の客の番号を送っても他人の受け取りは読めない（基準 2.5・14.7）。
 
 import { customerHistory } from "../../usecases/customerHistory";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 
 const customerHistoryRoute = defineRoute({
   method: "GET",
   path: "/api/customer/history",
   auth: "customer",
-  handler: async ({ deps, ctx }) => ({ status: 200, body: { items: await customerHistory(deps, ctx.customerId) } }),
+  handler: async ({ deps, ctx }) => respond("GET /api/customer/history", { items: await customerHistory(deps, ctx.customerId) }),
 });
 
 export const historyRoutes: RouteDefinition[] = [customerHistoryRoute];

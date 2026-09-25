@@ -18,24 +18,14 @@
 //   - 完了にできた時は音を鳴らす。新しく来た客のカードは出るときに少し跳ねる（CSS の動き）
 
 import { useState } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure, type ArrivalDto } from "../../lib/client/api";
 import { ARRIVALS_TEXTS } from "../../lib/domain/texts";
 import { FormMessage } from "../ui/InputRefusal";
 import { playNotifyBeep } from "./beep";
 import { timeInJst } from "../ui/jstTime";
 
-/** 入口 `GET /api/store/home` の `arrivals` の1行（受け入れ検査の契約 `ArrivalRow`）。 */
-export type ArrivalsListRow = {
-  reservationId: string;
-  kind: "active" | "expired" | "completed" | "store_cancelled";
-  nickname: string;
-  phone: string;
-  party: number;
-  code: string;
-  expiresAt: string;
-  canComplete: boolean;
-  canCancel: boolean;
-};
+/** 入口 `GET /api/store/home` の `arrivals` の1行（受け入れ検査の契約 `ArrivalRow`）。型は schemas/responses の表から（設計-07）。 */
+export type ArrivalsListRow = ArrivalDto;
 
 type ArrivalAction = "complete" | "store-cancel";
 
@@ -45,8 +35,10 @@ type Props = {
   onChanged: () => void;
 };
 
-const pathOf = (action: ArrivalAction, reservationId: string): string =>
-  `/api/store/reservations/${encodeURIComponent(reservationId)}/${action === "complete" ? "complete" : "cancel"}`;
+const ROUTE_OF = {
+  complete: "POST /api/store/reservations/:id/complete",
+  "store-cancel": "POST /api/store/reservations/:id/cancel",
+} as const satisfies Record<ArrivalAction, string>;
 
 type CardProps = {
   row: ArrivalsListRow;
@@ -134,7 +126,7 @@ export const ArrivalsList = ({ rows, onChanged }: Props) => {
   const send = async (action: ArrivalAction, row: ArrivalsListRow) => {
     setPending(null);
     // コードも理由も送らない（基準 20.11・要件21の基準 21.3）
-    const result = await apiCall("POST", pathOf(action, row.reservationId), {});
+    const result = await callApi(ROUTE_OF[action], { params: { id: row.reservationId }, body: {} });
     const refused = isFailure(result);
     setFailure(refused ? result : null);
     // 手が離せない店でも気づけるように、通った時だけ音を鳴らす（鳴らせない環境では何も起きない）

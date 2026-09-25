@@ -1,14 +1,32 @@
-// 画面が fetch を呼ぶただ1つの場所（設計書「ファイル構成の計画」）。応答は zod で形を確かめてから
-// 返す（基準 29.4）。断りは例外にせず、型のついた値として呼び出し元へ返す。例外にするのは通信の失敗と
-// 応答の形の崩れだけで、どちらも kind: "network" の同じ形へ包む（フォームの側の分岐を1つにするため）。
+// 画面が fetch を呼ぶただ1つの場所（設計書「ファイル構成の計画」）。応答は形を確かめてから返す（基準 29.4）。
+// 断りは例外にせず、型のついた値として呼び出し元へ返す。例外にするのは通信の失敗と応答の形の崩れだけで、
+// どちらも kind: "network" の同じ形へ包む（フォームの側の分岐を1つにするため）。
 //
-// スキーマをこのファイルの中に書く理由: lib/client が lib/schemas から値として読めるのは
-// schemas/limits だけ（設計書「依存の向き」・eslint と構造の検査が見張る）。そこで schemas/error.ts と
-// 同じ形を zod だけで最小限に写す。語の一覧（domain/inputRefusal）には踏み込まない——画面は語で
-// 分岐せず domain/texts に文を引くだけなので、ここで確かめるのは形だけでよい。
-import { z, type ZodType } from "zod";
+// **成功した応答も必ず形を確かめる**（2026-09-25 監査の指摘 設計-07）。形は schemas/responses の表
+// `RESPONSES`（入口の鍵 → 本文の形）が持ち、サーバーの入口（http/respond）も同じ表で本文を組む。
+// 画面は `callApi(入口の鍵, …)` で呼び、返る型もその表から決まる——部品ごとに応答の型を手で写さない。
+//
+// ⚠️ zod は**小さい版（zod/mini）から名前を指定して**読む（設計-09）。`import { z } from "zod"` は
+// 約40言語の文言を名前空間ごと抱えていて組み立てで削れず、客の画面の JS の約4割を占めていた。
+import { array, literal, object, optional, string, type ZodMiniType } from "zod/mini";
 import type { AppConfig } from "../ports";
+import { RESPONSES, STREAM_LINE, type ParamNames, type PathOf, type ResponseOf, type RouteKey, type StreamLineDto } from "../schemas/responses";
 import { notifySessionExpired } from "./session";
+
+// 画面の部品は lib/schemas を読めない（依存の向き）ので、応答の型はここから名乗る。
+export type {
+  AdminMetricsDto,
+  AdminStoreDetailDto,
+  AdminStoreRowDto,
+  ArrivalDto,
+  CustomerHomeDto,
+  FetchResultItemDto,
+  OfferViewDto,
+  ReservationViewDto,
+  ResponseOf,
+  RouteKey,
+  StoreHomeDto,
+} from "../schemas/responses";
 
 export type FieldRefusal = { name: string; reason: string };
 
@@ -25,29 +43,20 @@ export type ApiFailure = {
   home?: unknown;
 };
 
-const fieldRefusalSchema = z.object({ name: z.string(), reason: z.string() });
-
-/** 断りの応答の形。在る項目だけを見る（余分な項目は落とさず、そのまま呼び出し元へ渡す）。 */
-const failureSchema = z.object({
-  ok: z.literal(false),
-  error: z.object({ kind: z.string(), fields: z.array(fieldRefusalSchema).optional() }).optional(),
-  refusal: z.object({ kind: z.string(), nextStep: z.string() }).optional(),
-  current: z.object({ state: z.string() }).optional(),
+/**
+ * 断りの応答の形。在る項目だけを見る（検査した値ではなく元の値を返すので、余分な項目は落ちない）。
+ * 語の一覧（domain/inputRefusal）には踏み込まない——画面は語で分岐せず domain/texts に文を引くだけ。
+ */
+const failureSchema = object({
+  ok: literal(false),
+  error: optional(object({ kind: string(), fields: optional(array(object({ name: string(), reason: string() }))) })),
+  refusal: optional(object({ kind: string(), nextStep: string() })),
+  current: optional(object({ state: string() })),
 });
 
 const networkFailure = (): ApiFailure => ({ ok: false, error: { kind: "network" } });
 
-/** 断り（`ok:false`）かどうか。画面はこれで分けるので、状態コードを持ち歩かない。 */
 export const isFailure = (value: unknown): value is ApiFailure => typeof value === "object" && value !== null && (value as { ok?: unknown }).ok === false;
-
-/**
- * 通信そのものが失敗した断り（応答が返らなかった・JSON として読めなかった・形が崩れていた）かどうか。
- * 2026-09-21 タスク14 が足した——確保中の表示は、**通信の失敗のときだけ**端末に残した内容へ倒し、
- * 見分けの断り（401）では登録の入力へ倒す（要件9の基準 9.10・9.11。401 では出さない）。
- * 語で分ける判断を画面に置かないため（断りの語を読むのは `components/ui/InputRefusal` だけ）、
- * 語を知っているこのファイルに判定を置く。
- */
-export const isNetworkFailure = (value: unknown): value is ApiFailure => isFailure(value) && value.error?.kind === "network";
 
 /**
  * ログインが切れた・していない断り（401・unauthenticated）かどうか（2026-09-25 監査の指摘 横断-01）。
@@ -72,10 +81,10 @@ const passFailure = (failure: ApiFailure): ApiFailure => {
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 /**
- * 応答を JSON として受け取り、形を確かめてから返す。断り（`ok:false`）は例外にせず値として返す。
- * `schema` を渡すと成功の応答もその形で検査する（基準 29.4 の成功の側）。渡さなければ形は見ない。
+ * 要求を1つ送り、応答を JSON として受け取り、形を確かめてから返す。断り（`ok:false`）は例外にせず値として返す。
+ * 成功の応答は `schema`（応答の形の表の1つ）で必ず確かめる。合わなければ kind: "network"。
  */
-export const apiCall = async <T = Record<string, unknown>>(method: HttpMethod, path: string, body?: unknown, schema?: ZodType<T>): Promise<T | ApiFailure> => {
+const request = async <T>(method: HttpMethod, path: string, body: unknown, schema: ZodMiniType<T>): Promise<T | ApiFailure> => {
   let res: Response;
   try {
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
@@ -104,15 +113,73 @@ export const apiCall = async <T = Record<string, unknown>>(method: HttpMethod, p
   // 状態コードが 2xx でなければ**アプリの外**が返した既定の応答（プラットフォームの 502・
   // 間に挟まった機器の 503 など）で、成功として読ませてはいけない（2026-09-22 タスク25 が足した）。
   if (!res.ok) return networkFailure();
-  if (!schema) return json as T;
-  const parsed = schema.safeParse(json);
-  return parsed.success ? parsed.data : networkFailure();
+  // 成功の形を確かめる。検査した値ではなく元の値を返す（形の表に書いていない項目も落とさない）。
+  return schema.safeParse(json).success ? (json as T) : networkFailure();
+};
+
+/** 入口の鍵（`"GET /api/store/home"`）を method と path の形へ分ける。 */
+const splitRoute = (route: RouteKey): { method: HttpMethod; pattern: string } => {
+  const space = route.indexOf(" ");
+  return { method: route.slice(0, space) as HttpMethod, pattern: route.slice(space + 1) };
+};
+
+/** 形の表の鍵の中から、method と path（問い合わせ文字列を除く）が当たるものを探す。無ければ null。 */
+const findRoute = (method: HttpMethod, path: string): RouteKey | null => {
+  const actual = path.split("?", 1)[0].split("/").filter(Boolean);
+  const matches = (pattern: string): boolean => {
+    const parts = pattern.split("/").filter(Boolean);
+    return parts.length === actual.length && parts.every((part, i) => part.startsWith(":") || part === actual[i]);
+  };
+  const keys = Object.keys(RESPONSES) as RouteKey[];
+  return keys.find((key) => splitRoute(key).method === method && matches(splitRoute(key).pattern)) ?? null;
+};
+
+/**
+ * method と path で呼ぶ（低い層の道・画面の部品は `callApi` を使う）。path に当たる入口の形で、成功の応答を
+ * 必ず確かめる。形の表に載っていない入口は、確かめられないので kind: "network" に倒す（黙って通さない）。
+ */
+export const apiCall = async (method: HttpMethod, path: string, body?: unknown): Promise<unknown> => {
+  const route = findRoute(method, path);
+  if (route === null) return networkFailure();
+  return request(method, path, body, RESPONSES[route] as ZodMiniType<unknown>);
+};
+
+type QueryValue = string | number | null | undefined;
+
+/** `callApi` に渡すもの。動的な区間を持つ入口は `params` が要る（型が求める）。 */
+export type CallOptions<K extends RouteKey> = { body?: unknown; query?: Record<string, QueryValue> } & ([ParamNames<PathOf<K>>] extends [never]
+  ? { params?: undefined }
+  : { params: Record<ParamNames<PathOf<K>>, string> });
+
+type CallArgs<K extends RouteKey> = [ParamNames<PathOf<K>>] extends [never] ? [options?: CallOptions<K>] : [options: CallOptions<K>];
+
+/** 鍵の `:名前` を値で埋め（区間ごとに percent 符号にする）、問い合わせ文字列を足す（空の値は送らない）。 */
+const buildPath = (pattern: string, params: Record<string, string> = {}, query: Record<string, QueryValue> = {}): string => {
+  const path = pattern.replace(/:(\w+)/g, (_, name: string) => encodeURIComponent(params[name] ?? ""));
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+  const text = search.toString();
+  return text ? `${path}?${text}` : path;
+};
+
+/**
+ * 画面が入口を呼ぶ道（2026-09-25 監査の指摘 設計-07）。`route` は入口の鍵（`"POST /api/store/coupons"`）で、
+ * 成功の応答は必ずその入口の形（schemas/responses）で確かめてから返す。返る型も同じ表から決まるので、
+ * サーバーの本文の項目を変えると、画面の側も型検査で落ちる。
+ */
+export const callApi = async <K extends RouteKey>(route: K, ...[options]: CallArgs<K>): Promise<ResponseOf<K> | ApiFailure> => {
+  const { method, pattern } = splitRoute(route);
+  const opts = (options ?? {}) as { body?: unknown; query?: Record<string, QueryValue>; params?: Record<string, string> };
+  return request(method, buildPath(pattern, opts.params, opts.query), opts.body, RESPONSES[route] as unknown as ZodMiniType<ResponseOf<K>>);
 };
 
 // ---------- 少しずつ届く応答（NDJSON） ----------
 
-/** 1行1つの JSON。種類（`type`）で分けるのは呼ぶ側（部品）の仕事。 */
-export type StreamLine = Record<string, unknown>;
+/**
+ * 1行1つの JSON。形は schemas/responses の STREAM_LINE（サーバーの usecases/streamOffers と同じ定義）で、
+ * 形に合わない行は捨てる（設計-07）。種類（`type`）で分けるのは呼ぶ側（部品）の仕事。
+ */
+export type StreamLine = StreamLineDto;
 
 /** 経路そのものが無かった（古い版のサーバー）。呼ぶ側は普通の入口へ倒す。 */
 export const STREAM_UNAVAILABLE = "unavailable";
@@ -120,17 +187,25 @@ export const STREAM_UNAVAILABLE = "unavailable";
 /** 行が読めたか（`null`）・経路が無いか・断られたか。成功の中身は `onLine` で先に渡してある。 */
 export type StreamOutcome = null | typeof STREAM_UNAVAILABLE | ApiFailure;
 
+/** 1行を読む。JSON でない・形に合わない行は null（捨てる）。 */
+const parseLine = (part: string): StreamLine | null => {
+  try {
+    const value: unknown = JSON.parse(part);
+    return STREAM_LINE.safeParse(value).success ? (value as StreamLine) : null;
+  } catch {
+    return null;
+  }
+};
+
 /** 読めない行は捨てる（1行が壊れても、後ろの行は届く）。 */
 const emitLines = (buffer: string, onLine: (line: StreamLine) => void): string => {
   const parts = buffer.split("\n");
   const rest = parts.pop() ?? "";
   for (const part of parts) {
     if (part.trim() === "") continue;
-    try {
-      onLine(JSON.parse(part) as StreamLine);
-    } catch {
-      // 途中で切れた行・JSON でない行は捨てる
-    }
+    // 途中で切れた行・JSON でない行・形に合わない行は捨てる
+    const line = parseLine(part);
+    if (line !== null) onLine(line);
   }
   return rest;
 };
@@ -186,12 +261,12 @@ export const apiStream = async (path: string, body: unknown, onLine: (line: Stre
  * 公開してよい設定の値（GET /api/config/public）を取る。取れなければ null を返し、
  * 呼ぶ側（フォームの人かどうかの確かめ・プッシュの購読）が「部品を出さない」へ倒す。
  *
- * 形は渡さない——画面が使う3つ（サイトキー・プッシュの公開鍵・連絡先）だけを読み、
- * 欠けていれば読む側が既定へ倒すので、ここで全部を必須にすると却って画面が止まる。
+ * 形の表（schemas/responses）でも3つとも任意にしてある——画面が使う3つ（サイトキー・プッシュの公開鍵・
+ * 連絡先）は、欠けていれば読む側が既定へ倒すので、全部を必須にすると却って画面が止まる。
  * **値をメモリに溜めない**: 画面が作り直されるたびに取り直す。公開の直後や設定の入れ替えで
  * 古いサイトキーを掴んだまま断られ続けるのを避ける（この入口は軽く、フォームを開いた時にしか呼ばない）。
  */
-export const getPublicConfig = async (): Promise<AppConfig | null> => {
-  const result = await apiCall<AppConfig>("GET", "/api/config/public");
-  return isFailure(result) ? null : (result as AppConfig);
+export const getPublicConfig = async (): Promise<Partial<AppConfig> | null> => {
+  const result = await callApi("GET /api/config/public");
+  return isFailure(result) ? null : { turnstileSiteKey: result.turnstileSiteKey, vapidPublicKey: result.vapidPublicKey, contactEmail: result.contactEmail ?? null };
 };

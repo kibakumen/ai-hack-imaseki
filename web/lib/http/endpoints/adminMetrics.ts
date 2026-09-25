@@ -5,13 +5,14 @@
 //    この応答に `byModel` と `fallbackCount` を足す形にしてある（設計書「OrcaRouter の使い方」の④）。
 
 import { adminMetrics } from "../../usecases/adminMetrics";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 
 const adminMetricsRoute = defineRoute({
   method: "GET",
   path: "/api/admin/metrics",
   auth: "admin",
-  handler: async ({ deps }) => ({ status: 200, body: await adminMetrics(deps) }),
+  handler: async ({ deps }) => respond("GET /api/admin/metrics", await adminMetrics(deps)),
 });
 
 export const adminMetricsRoutes: RouteDefinition[] = [adminMetricsRoute];

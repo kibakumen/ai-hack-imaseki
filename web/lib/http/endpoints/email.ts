@@ -5,6 +5,7 @@
 
 import { changeEmailSchema } from "../../schemas/account";
 import { changeEmail, type ChangeEmailResult } from "../../usecases/changeEmail";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { refusal } from "../refusals";
 
@@ -20,7 +21,7 @@ const changeStoreEmailRoute = defineRoute({
   handler: async ({ input, deps, ctx }) => {
     const result = await changeEmail(deps, ctx.accountId, input);
     if (!result.ok) return refuse(result);
-    return { status: 200, body: { ok: true } };
+    return respond("POST /api/store/email", { ok: true });
   },
 });
 
@@ -32,7 +33,7 @@ const changeAdminEmailRoute = defineRoute({
   handler: async ({ input, deps, ctx }) => {
     const result = await changeEmail(deps, ctx.accountId, input);
     if (!result.ok) return refuse(result);
-    return { status: 200, body: { ok: true } };
+    return respond("POST /api/admin/email", { ok: true });
   },
 });
 

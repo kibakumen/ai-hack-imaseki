@@ -5,7 +5,7 @@
 // 断られたら、店名とメールアドレスは残し、パスワードだけ消す（打ち直しを求めるのはそこだけ）。
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { apiCall, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
 import { EMAIL_MAX, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
@@ -48,7 +48,7 @@ export const RegisterForm = () => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall("POST", "/api/register/store", { name, email, password, humanToken });
+    const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken } });
     if (isFailure(result)) {
       setFailure(result);
       setPassword("");

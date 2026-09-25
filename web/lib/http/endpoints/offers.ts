@@ -7,6 +7,7 @@ import { offerCountSchema, offerPartyMaxSchema, offerPublishSchema, offerUntilSc
 import { addOfferCount, changeOfferPartyMax, changeOfferUntil, reduceOfferCount, type ChangeOfferResult } from "../../usecases/changeOffer";
 import { publishOffer } from "../../usecases/publishOffer";
 import { stopOffer } from "../../usecases/stopOffer";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
 import { refusal } from "../refusals";
 
@@ -19,7 +20,7 @@ const publishOfferRoute = defineRoute({
     const result = await publishOffer(deps, ctx.storeId, input);
     // 形・範囲の誤りは 400、今の状態との衝突は 409（設計書「入力の断りの応答の形」・対応は http/refusals の表）。
     if (!result.ok) return refusal(result.kind, result.fields ? { fields: result.fields } : {});
-    return { status: 201, body: { ok: true, offer: result.offer } };
+    return respond("POST /api/store/offers", { ok: true, offer: result.offer }, 201);
   },
 });
 
@@ -30,7 +31,7 @@ const stopOfferRoute = defineRoute({
   handler: async ({ deps, ctx }) => {
     const result = await stopOffer(deps, ctx.storeId);
     if (!result.ok) return refusal(result.kind);
-    return { status: 200, body: { ok: true } };
+    return respond("POST /api/store/offers/current/stop", { ok: true });
   },
 });
 
@@ -38,15 +39,17 @@ const stopOfferRoute = defineRoute({
  * 公開中の変更の結果を応答へ。手続きが決めた形をそのまま載せる（入口で組み直さない）。
  * 形・範囲の誤りは 400、今の状態との衝突は 409（設計書「入力の断りの応答の形」・対応は http/refusals の表）。
  */
-const changeOfferResponse = (result: ChangeOfferResult): RouteHandlerResult =>
-  result.ok ? { status: 200, body: { ok: true, offer: result.offer } } : refusal(result.kind, result.fields ? { fields: result.fields } : {});
+type ChangeOfferRoute = "POST /api/store/offers/current/add" | "POST /api/store/offers/current/reduce" | "POST /api/store/offers/current/party-max" | "POST /api/store/offers/current/until";
+
+const changeOfferResponse = (route: ChangeOfferRoute, result: ChangeOfferResult): RouteHandlerResult =>
+  result.ok ? respond(route, { ok: true, offer: result.offer }) : refusal(result.kind, result.fields ? { fields: result.fields } : {});
 
 const addOfferRoute = defineRoute({
   method: "POST",
   path: "/api/store/offers/current/add",
   auth: "store",
   input: offerCountSchema,
-  handler: async ({ input, deps, ctx }) => changeOfferResponse(await addOfferCount(deps, ctx.storeId, input)),
+  handler: async ({ input, deps, ctx }) => changeOfferResponse("POST /api/store/offers/current/add", await addOfferCount(deps, ctx.storeId, input)),
 });
 
 const reduceOfferRoute = defineRoute({
@@ -54,7 +57,7 @@ const reduceOfferRoute = defineRoute({
   path: "/api/store/offers/current/reduce",
   auth: "store",
   input: offerCountSchema,
-  handler: async ({ input, deps, ctx }) => changeOfferResponse(await reduceOfferCount(deps, ctx.storeId, input)),
+  handler: async ({ input, deps, ctx }) => changeOfferResponse("POST /api/store/offers/current/reduce", await reduceOfferCount(deps, ctx.storeId, input)),
 });
 
 const offerPartyMaxRoute = defineRoute({
@@ -62,7 +65,7 @@ const offerPartyMaxRoute = defineRoute({
   path: "/api/store/offers/current/party-max",
   auth: "store",
   input: offerPartyMaxSchema,
-  handler: async ({ input, deps, ctx }) => changeOfferResponse(await changeOfferPartyMax(deps, ctx.storeId, input)),
+  handler: async ({ input, deps, ctx }) => changeOfferResponse("POST /api/store/offers/current/party-max", await changeOfferPartyMax(deps, ctx.storeId, input)),
 });
 
 const offerUntilRoute = defineRoute({
@@ -70,7 +73,7 @@ const offerUntilRoute = defineRoute({
   path: "/api/store/offers/current/until",
   auth: "store",
   input: offerUntilSchema,
-  handler: async ({ input, deps, ctx }) => changeOfferResponse(await changeOfferUntil(deps, ctx.storeId, input)),
+  handler: async ({ input, deps, ctx }) => changeOfferResponse("POST /api/store/offers/current/until", await changeOfferUntil(deps, ctx.storeId, input)),
 });
 
 export const offerRoutes: RouteDefinition[] = [publishOfferRoute, stopOfferRoute, addOfferRoute, reduceOfferRoute, offerPartyMaxRoute, offerUntilRoute];

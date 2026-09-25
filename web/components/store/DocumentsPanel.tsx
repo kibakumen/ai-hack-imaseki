@@ -8,19 +8,20 @@
 // 画面はそのまま、前に登録したものの表示も変わらない（設計書「入力の誤りの出し方」の 13.3 の行）。
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { LICENSE_MAX_MEGABYTES } from "../../lib/schemas/limits";
 import { FieldKindMessage, FormMessage } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
 
-type DocumentsView = { checklist: { license: boolean; card: boolean } };
+/** 店のホームの応答のうち、この画面が読む分（型は schemas/responses の表から・設計-07）。 */
+type DocumentsView = Pick<StoreHomeDto, "checklist">;
 
 const REGISTERED = "登録済み";
 const NOT_REGISTERED = "まだ登録されていません";
 const ACCEPTED_TYPES = "application/pdf,image/jpeg,image/png";
 
-const loadView = (): Promise<DocumentsView | ApiFailure> => apiCall<DocumentsView>("GET", "/api/store/home");
+const loadView = (): Promise<DocumentsView | ApiFailure> => callApi("GET /api/store/home");
 
 export const DocumentsPanel = () => {
   // 読めなかったときは空の section で止めず、断りの文と読み直す道を出す（2026-09-25 監査の指摘 横断-01）。
@@ -38,7 +39,7 @@ export const DocumentsPanel = () => {
     if (!file) return;
     const form = new FormData();
     form.append("file", file);
-    const result = await apiCall("POST", "/api/store/license", form);
+    const result = await callApi("POST /api/store/license", { body: form });
     if (isFailure(result)) {
       // 選んだファイルは残す（同じものを選び直させない）。前に登録した表示も触らない。
       setLicenseFailure(result);
@@ -50,7 +51,7 @@ export const DocumentsPanel = () => {
 
   const startCardSetup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall<{ url: string }>("POST", "/api/store/card/setup", {});
+    const result = await callApi("POST /api/store/card/setup", { body: {} });
     if (isFailure(result)) {
       setCardFailure(result);
       return;

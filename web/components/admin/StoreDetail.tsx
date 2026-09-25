@@ -20,28 +20,15 @@
 
 import Link from "next/link";
 import { useCallback, useState, type ReactNode } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type AdminStoreDetailDto, type ApiFailure } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { FormMessage } from "../ui/InputRefusal";
 import { LoadView, RefreshFailedBand } from "../ui/LoadState";
 import styles from "./admin.module.css";
 
-type StoreStatus = "pending" | "approved" | "banned";
-
-type StoreDetailDto = {
-  id: string;
-  name: string;
-  address: string | null;
-  email: string | null;
-  status: StoreStatus;
-  url: string | null;
-  genres: string[];
-  menus: string[];
-  budgetMin: number | null;
-  budgetMax: number | null;
-  license: boolean;
-  cardRegistered: boolean;
-};
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type StoreDetailDto = AdminStoreDetailDto;
+type StoreStatus = StoreDetailDto["status"];
 
 type Props = { storeId: string };
 
@@ -182,7 +169,7 @@ export const StoreDetail = ({ storeId }: Props) => {
 
   /** 【最終日】仮のパスワードの発行（基準 14.10〜14.13）。2026-09-22 に足した——入口は在ったが画面から呼ぶ道が無かった。 */
   const issueTemp = async () => {
-    const result = await apiCall<{ tempPassword: string }>("POST", `/api/admin/stores/${storeId}/temp-password`, {});
+    const result = await callApi("POST /api/admin/stores/:id/temp-password", { params: { id: storeId }, body: {} });
     if (isFailure(result)) {
       setFailure(result);
       return;
@@ -193,7 +180,7 @@ export const StoreDetail = ({ storeId }: Props) => {
   };
 
   const load = useCallback(async (): Promise<StoreDetailDto | ApiFailure> => {
-    const result = await apiCall<{ store: StoreDetailDto }>("GET", `/api/admin/stores/${storeId}`);
+    const result = await callApi("GET /api/admin/stores/:id", { params: { id: storeId } });
     return isFailure(result) ? result : result.store;
   }, [storeId]);
   // 読めなかった（ログインが切れた・見つからない・通信に失敗した）ときは、その語の文と読み直す道を出す
@@ -201,8 +188,8 @@ export const StoreDetail = ({ storeId }: Props) => {
   const { state, reload } = useLoad(load);
 
   /** 承認・停止・復帰のあとは、詳細を取り直して今の状況を映す（断られたときはその場に留まる）。 */
-  const act = async (path: string) => {
-    const result = await apiCall("POST", `/api/admin/stores/${storeId}/${path}`, {});
+  const act = async (path: "approve" | "ban" | "restore") => {
+    const result = await callApi(`POST /api/admin/stores/:id/${path}` as const, { params: { id: storeId }, body: {} });
     if (isFailure(result)) {
       setFailure(result);
       return;

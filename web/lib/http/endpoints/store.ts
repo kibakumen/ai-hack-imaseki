@@ -6,6 +6,7 @@ import { registerStore } from "../../usecases/registerStore";
 import { storeHome } from "../../usecases/storeHome";
 import { storeRegisterSchema } from "../../schemas/account";
 import { SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, serializeCookie } from "../cookies";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { refusal, unauthenticated } from "../refusals";
 
@@ -20,11 +21,7 @@ const registerStoreRoute = defineRoute({
     // 重複は 409（設計書「入力の断りの応答の形」。どの項目かも返す）。
     if (!result.ok) return refusal(result.kind, { fields: [{ name: "email", reason: "not_allowed" }] });
     // 登録の直後にもう一度ログインさせないため、ここでセッションの Cookie も配る（AI判断・タスク表）。
-    return {
-      status: 201,
-      body: { ok: true, role: "store" },
-      cookies: [serializeCookie(SESSION_COOKIE_NAME, result.session.token, SESSION_COOKIE_MAX_AGE_SECONDS)],
-    };
+    return respond("POST /api/register/store", { ok: true, role: "store" }, 201, [serializeCookie(SESSION_COOKIE_NAME, result.session.token, SESSION_COOKIE_MAX_AGE_SECONDS)]);
   },
 });
 
@@ -37,7 +34,7 @@ const storeHomeRoute = defineRoute({
     // 見分けの直後に店が消えた場合だけ null。店のデータは返さない。
     if (!home) return unauthenticated();
     // 【最終日】仮のパスワードで入った店には、新しいパスワードを決めるよう画面が求める（基準 14.14）。
-    return { status: 200, body: { ...home, mustChangePassword: ctx.mustChangePassword } };
+    return respond("GET /api/store/home", { ...home, mustChangePassword: ctx.mustChangePassword });
   },
 });
 

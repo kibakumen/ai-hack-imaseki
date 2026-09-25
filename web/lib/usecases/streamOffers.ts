@@ -15,7 +15,8 @@
 import type { Deps } from "../ports";
 import { fallbackPitch } from "../domain/pitch";
 import type { FetchInput } from "../schemas/fetch";
-import { fetchOffers, type FetchOffersResult, type FetchResultItem } from "./fetchOffers";
+import type { StreamLineDto } from "../schemas/responses";
+import { fetchOffers, type FetchOffersResult } from "./fetchOffers";
 import { writePitch, type PitchSource, type PitchTarget } from "./writePitch";
 
 /** ストリーム全体の上限（値は AI判断・速成版と同じ25秒） */
@@ -23,10 +24,11 @@ const STREAM_BUDGET_MS = 25000;
 /** 着手を少しずつずらす幅（近い店から先に着手する。全部並行に進めてよい） */
 const PITCH_STAGGER_MS = 150;
 
-export type StreamLine =
-  | { type: "init"; fetchId: string; items: FetchResultItem[] }
-  | { type: "pitch"; storeId: string; reason: string; source: PitchSource }
-  | { type: "done" };
+/**
+ * 1行の形。**画面と同じ定義**（schemas/responses の STREAM_LINE）から作る——画面はこの形に合わない行を捨てるので、
+ * ここで項目を変えたら画面の側も型検査で落ちる（2026-09-25 監査の指摘 設計-07）。
+ */
+export type StreamLine = StreamLineDto;
 
 export type StreamOffersResult = { ok: true; stream: ReadableStream<Uint8Array> } | Extract<FetchOffersResult, { ok: false }>;
 
