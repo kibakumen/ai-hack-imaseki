@@ -34,8 +34,9 @@ const customerFetchStreamRoute = defineRoute({
   path: "/api/customer/fetch/stream",
   auth: "customer",
   input: fetchSchema,
-  handler: async ({ input, deps, ctx }) => {
-    const result = await buildOffersStream(deps, ctx.customerId, input);
+  handler: async ({ input, deps, ctx, req }) => {
+    // 要求の打ち切りの合図（客の切断）を渡す——鳴ったら書きかけの紹介文の AI を止める（設計-18）
+    const result = await buildOffersStream(deps, ctx.customerId, input, { signal: req.signal });
     if (!result.ok) return refusal(result.kind, { fields: result.fields });
     return { status: 200, body: null, raw: { body: result.stream, headers: { "content-type": NDJSON_CONTENT_TYPE, "cache-control": "no-store" } } };
   },

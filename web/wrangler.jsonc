@@ -3,7 +3,10 @@
   "name": "ai-hack-v2",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-09-21",
-  "compatibility_flags": ["nodejs_compat"],
+  // enable_request_signal: 客が接続を切ったときに request.signal を鳴らす（2026-09-25 監査の指摘 設計-18）。
+  // 取得のストリームは、切断（とストリームの cancel）で書きかけの紹介文の AI を止める（lib/usecases/streamOffers）。
+  // ⚠️ OpenNext を通した Next の req.signal へこの合図が届くかは未実測。届かなくても、ストリームの cancel の側で止まる。
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal"],
   // 1回の取得が D1 へ何度も往復する（店の一覧 → オファー → クーポン → 記録の書き込み）ので、
   // 客に一番近い端で動かすより、D1 の近くで動かした方が往復の分だけ縮む見込みで頼む。
   // ⚠️ 効果は未実測（2026-09-22）。Cloudflare 側が「近づけても縮まない」と判断した要求は

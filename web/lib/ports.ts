@@ -143,4 +143,11 @@ export type Deps = {
   rng: Rng;
   hasher: Hasher;
   config: AppConfig;
+  /**
+   * 応答を返したあとも走らせたい仕事を預ける口（任意・2026-09-25 監査の指摘 設計-17）。本物は Worker の
+   * `ctx.waitUntil`（adapters/env が渡す）。預けないと、応答を閉じた時点で Worker が残りの仕事を切る——
+   * 紹介文の AI の呼び出しとその記録（ai_calls）が、本番だけ跡を残さずに欠ける（手元の workerd で実測）。
+   * 無い場面（受け入れ検査・単体の検査）では預けずにそのまま走らせる（Node は応答のあとも仕事を切らない）。
+   */
+  defer?: (task: Promise<unknown>) => void;
 };

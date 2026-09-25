@@ -41,6 +41,12 @@ export type WritePitchInput = {
   genres: string[];
   budgetMax: number | null;
   target: PitchTarget;
+  /**
+   * 客が画面を閉じた合図（任意・usecases/streamOffers が渡す・設計-18）。鳴ったら書きかけの書き手と検査官を止め、
+   * 書き直しも検査も新たに頼まずに決まった文へ倒す——誰も読まない文に AI のクレジットを使わない。
+   * 止めた呼び出しも「失敗」として記録に残る（ai_calls の数と実費は正しいまま）。
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -69,9 +75,9 @@ const record = async (deps: Deps, input: { fetchId: string; purpose: AiCallPurpo
 };
 
 /** 外の呼び出しを、実時計と差し替えられる時計の両方で打ち切る（fetchOffers と同じ形）。 */
-const callWithDeadline = async (deps: Deps, timeoutMs: number, run: (signal: AbortSignal) => Promise<PitchResult>): Promise<{ result: PitchResult; durationMs: number }> => {
+const callWithDeadline = async (deps: Deps, timeoutMs: number, run: (signal: AbortSignal) => Promise<PitchResult>, cancel?: AbortSignal): Promise<{ result: PitchResult; durationMs: number }> => {
   const startedAt = deps.clock.now().getTime();
-  const answer = await raceDeadline(timeoutMs, deps.clock.after(timeoutMs), run);
+  const answer = await raceDeadline(timeoutMs, deps.clock.after(timeoutMs), run, cancel);
   return {
     result: answer.ok ? answer.value : { ok: false, error: "timeout", costUsd: null },
     durationMs: deps.clock.now().getTime() - startedAt,
@@ -84,6 +90,7 @@ type Attempt = { text: string } | { critique: string };
 const writeOnce = async (deps: Deps, writer: NonNullable<Deps["pitch"]>, input: WritePitchInput, critique: string | null, timeoutMs: number): Promise<Attempt> => {
   const { result, durationMs } = await callWithDeadline(deps, timeoutMs, (signal) =>
     writer.write({ party: input.party, genres: input.genres, budgetMax: input.budgetMax, store: input.target.store, charLimit: PITCH_CHAR_LIMIT, critique }, { signal }),
+    input.signal,
   );
   if (!result.ok) {
     await record(deps, { fetchId: input.fetchId, purpose: "pitch", result, durationMs, validationFailed: false });
@@ -100,6 +107,7 @@ const judgeOnce = async (deps: Deps, writer: NonNullable<Deps["pitch"]>, input: 
   const { store } = input.target;
   const { result, durationMs } = await callWithDeadline(deps, timeoutMs, (signal) =>
     writer.judge({ text, store: { name: store.name, genres: store.genres, menus: store.menus, couponName: store.couponName } }, { signal }),
+    input.signal,
   );
   if (!result.ok) {
     await record(deps, { fetchId: input.fetchId, purpose: "pitch_eval", result, durationMs, validationFailed: false });
@@ -123,16 +131,18 @@ export const writePitch = async (deps: Deps, input: WritePitchInput): Promise<Wr
 
   const deadline = deps.clock.now().getTime() + PITCH_BUDGET_MS;
   const left = (): number => deadline - deps.clock.now().getTime();
+  /** もう頼まない（1店の割り振りを使い切った・客が閉じた） */
+  const stopped = (): boolean => left() <= 0 || input.signal?.aborted === true;
   let critique: string | null = null;
   try {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      if (left() <= 0) break;
+      if (stopped()) break;
       const written = await writeOnce(deps, writer, input, critique, Math.min(WRITE_TIMEOUT_MS, left()));
       if ("critique" in written) {
         critique = written.critique;
         continue;
       }
-      if (left() <= 0) break;
+      if (stopped()) break;
       const judged = await judgeOnce(deps, writer, input, written.text, Math.min(JUDGE_TIMEOUT_MS, left()));
       if (judged.ok) return { storeId: target.storeId, reason: written.text, source: "persona" };
       critique = judged.critique;

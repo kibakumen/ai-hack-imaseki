@@ -21,8 +21,10 @@ import { createPushSender } from "./webpush";
  *
  * ⚠️ 束縛が無いときは黙って倒さずに投げる（fail-loud）——D1 が無いまま走らせると、
  * 全部の入口が「中で落ちた」だけの応答になり、原因が公開先の設定だと分からなくなる。
+ *
+ * @param defer 応答のあとも仕事を生かしておく口（Worker の ctx.waitUntil・adapters/env の loadWorkerContext・設計-17）
  */
-export const createDeps = (env: RawEnv): Deps => {
+export const createDeps = (env: RawEnv, defer: ((task: Promise<unknown>) => void) | null = null): Deps => {
   const { config, secrets } = readEnv(env);
   const { db, permits } = readBindings(env);
   if (!db) throw new Error("D1 の束縛 DB が見つかりません（web/wrangler.jsonc の d1_databases）");
@@ -45,5 +47,6 @@ export const createDeps = (env: RawEnv): Deps => {
     rng: createRng(),
     hasher: createHasher(),
     config,
+    ...(defer ? { defer } : {}),
   };
 };
