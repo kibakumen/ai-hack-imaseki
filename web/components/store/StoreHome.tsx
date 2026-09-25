@@ -36,18 +36,22 @@ type HomeBodyProps = { home: StoreHomeView; trend: TrendPoint[]; onChanged: () =
 
 /** 取れたホームの中身（案内・状況の帯・向かっている客・公開の設定）。 */
 const HomeBody = ({ home, trend, onChanged }: HomeBodyProps) => {
+  // 仮のパスワードで入った店への案内（基準 14.14）。`app/store/password` の注が「店のホームが
+  // ここへ案内する」と言いながら、この道が無かった（2026-09-22 に足した）。
+  // 決めるまでは、ホームとパスワードの変更のほかの入口が 403 で断る（2026-09-25 監査の指摘 安全-21）ので、
+  // 押しても断られるだけの操作（公開・確保の完了など）は出さず、案内だけを出す。
+  if (home.mustChangePassword) {
+    return (
+      <p className="msg" role="alert" data-testid="must-change-password">
+        運営から受け取った仮のパスワードで入っています。<a href="/store/password">新しいパスワードを決めてください。</a>
+        決めるまで、ほかの操作はできません。
+      </p>
+    );
+  }
   // 公開の操作を出すのは承認済みのときだけ（未承認・止められている間は入口も断る・基準 17.10）。
   const canPublish = home.status === "approved" && home.offer === null;
   return (
     <>
-      {/* 仮のパスワードで入った店への案内（基準 14.14）。`app/store/password` の注が「店のホームが
-          ここへ案内する」と言いながら、この道が無かった（2026-09-22 に足した）。 */}
-      {home.mustChangePassword && (
-        <p className="msg" role="alert" data-testid="must-change-password">
-          運営から受け取った仮のパスワードで入っています。<a href="/store/password">新しいパスワードを決めてください。</a>
-        </p>
-      )}
-
       <StatusBanner status={home.status} />
 
       {home.status === "pending" && <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />}
