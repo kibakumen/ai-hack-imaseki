@@ -16,7 +16,9 @@ describeTask("4", "店の登録のフォーム（断りの表示）", () => {
     api?.restore();
   });
 
-  it("email_taken／invalid_input（password・email・name を1つずつと同時）で、その欄の直下にだけ文が出て、店名とメールアドレスが残り、パスワードは残さず、フォームのまま、送るボタンは押せる", async () => {
+  // 2026-09-25（監査の指摘 店-20）: パスワードを消すのは、パスワードの欄の断りと人の確かめの断りのときだけに変えた
+  // （別の欄の断りでも消していたので、打ち直しを求められ、打ち間違いに気づかないまま登録が進んでいた）。
+  it("email_taken／invalid_input（password・email・name を1つずつと同時）で、その欄の直下にだけ文が出て、店名とメールアドレスが残り、パスワードは別の欄の断りなら残し、フォームのまま、送るボタンは押せる", async () => {
     let response: any = refusal("email_taken", { fields: [{ name: "email", reason: "not_allowed" }] });
     api = installFakeApi({ "GET /api/config/public": publicConfig, "POST /api/register/store": () => response });
     const RegisterForm = await componentOf("components/store/RegisterForm", "RegisterForm");
@@ -32,7 +34,7 @@ describeTask("4", "店の登録のフォーム（断りの表示）", () => {
     expect(screen.queryByTestId(TID.msg("password"))).toBeNull();
     expect((screen.getByTestId(TID.field("name")) as HTMLInputElement).value).toBe("検査の店");
     expect((screen.getByTestId(TID.field("email")) as HTMLInputElement).value).toBe("dup@example.com");
-    expect((screen.getByTestId(TID.field("password")) as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId(TID.field("password")) as HTMLInputElement).value).toBe("store-pass-1234");
     expect(submit.disabled).toBe(false);
 
     for (const field of ["password", "email", "name"]) {

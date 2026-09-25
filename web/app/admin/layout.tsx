@@ -5,6 +5,7 @@
 // 導線だけを置く殻で、中身は各画面の部品が持つ。運営の画面は PC 向けなので常に3つとも出す。
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { LogoutButton } from "../../components/auth/LogoutButton";
 import { SessionExpiredNotice } from "../../components/ui/SessionExpired";
 import { ThemeToggle } from "../../components/ui/ThemeToggle";
 
@@ -29,6 +30,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             {page.label}
           </Link>
         ))}
+        {/* 会場の共用 PC に運営の権限を残さない（2026-09-25 監査の指摘 安全-09） */}
+        <LogoutButton />
       </nav>
       {children}
       {/* `position: fixed` で描く（`app/globals.css` の `.theme-toggle` が admin-nav の

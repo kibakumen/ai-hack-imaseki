@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { callApi, getPublicConfig, isFailure, isUnauthenticated } from "../../lib/client/api";
-import { GUEST_PHONE_PLACEHOLDER } from "../../lib/schemas/limits";
+import { GUEST_PHONE_PLACEHOLDER, HUMAN_CHECK_ACTIONS } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { CustomerApp } from "./CustomerApp";
 
@@ -184,7 +184,7 @@ export const GuestEntry = () => {
       {/* 確かめの部品は描かれていないと値を作れない。客の目に触れない置き方は CSS 側の仕事。 */}
       {siteKey !== null ? (
         <div className="human-check-quiet">
-          <HumanCheck ref={humanRef} siteKey={siteKey} onToken={handleToken} />
+          <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.registerCustomer} onToken={handleToken} />
         </div>
       ) : null}
     </main>

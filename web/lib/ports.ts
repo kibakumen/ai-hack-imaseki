@@ -104,7 +104,12 @@ export type CardRegistrar = {
   createSetupSession(input: { storeId: string; returnUrl: string }): Promise<{ ok: true; url: string; sessionId: string } | { ok: false }>;
   confirmSetup(sessionId: string): Promise<{ ok: true; clientReference: string } | { ok: false }>;
 };
-export type HumanCheck = { verify(token: string | null, opts: { signal?: AbortSignal }): Promise<{ ok: true; human: boolean } | { ok: false }> };
+/**
+ * 人かどうかの確かめ（Turnstile）。`expectedHostname` と `expectedAction` を渡すと、答えの解かれた場所と
+ * 用途がそれに合わない値を人と認めない（2026-09-25 監査の指摘 安全-23）。`remoteIp` は利用者の接続元。
+ */
+export type HumanCheckOptions = { signal?: AbortSignal; expectedHostname?: string; expectedAction?: string; remoteIp?: string | null };
+export type HumanCheck = { verify(token: string | null, opts: HumanCheckOptions): Promise<{ ok: true; human: boolean } | { ok: false }> };
 export type FileStore = {
   put(key: string, body: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<{ body: Uint8Array; contentType: string } | null>;

@@ -7,7 +7,10 @@
 //
 // 2026-09-22 追加: 運営が自分のパスワードを決め直す場面でも同じ部品を使う（`endpoint` と
 // `requireCurrent`）。運営には仮のパスワードの場面が無いので、今のパスワードの再入力を求める。
-// 既定（引数なし）は店の場面のままで、受け入れ検査 r14 が描く形は変えていない。
+// 既定（引数なし）は仮のパスワードの店の場面のままで、受け入れ検査 r14 が描く形は変えていない。
+//
+// 2026-09-25（監査の指摘 安全-07）: 店の入口も、仮のパスワードの直後でなければ今のパスワードを求める。
+// 店の画面（StorePasswordPanel）がホームの印を見て `requireCurrent` を渡す。
 
 import { useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";

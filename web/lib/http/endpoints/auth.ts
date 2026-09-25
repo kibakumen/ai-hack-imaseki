@@ -4,6 +4,7 @@
 
 import { login, logout } from "../../usecases/login";
 import { loginSchema } from "../../schemas/account";
+import { HUMAN_CHECK_ACTIONS } from "../../schemas/limits";
 import {
   LOGIN_DEVICE_COOKIE_MAX_AGE_SECONDS,
   LOGIN_DEVICE_COOKIE_NAME,
@@ -21,7 +22,7 @@ const loginRoute = defineRoute({
   method: "POST",
   path: "/api/auth/login",
   auth: "public",
-  human: true,
+  human: HUMAN_CHECK_ACTIONS.login,
   input: loginSchema,
   handler: async ({ input, deps, req }) => {
     const result = await login(deps, input, parseCookies(req.headers.get("cookie"))[LOGIN_DEVICE_COOKIE_NAME] ?? null);

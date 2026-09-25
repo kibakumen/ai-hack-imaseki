@@ -62,6 +62,14 @@ export const isEmailTakenError = (error: unknown): boolean => {
   return /UNIQUE constraint failed:\s*accounts\.email/i.test(message);
 };
 
+/** 運営の一覧（番号とメールアドレスだけ）。運営の投入（seedAdmin）が、書く前に今いる運営を見せるために使う（安全-01）。 */
+export type AdminSummary = { id: string; email: string };
+
+export const listAdminAccounts = async (db: Db): Promise<AdminSummary[]> => {
+  const result = await db.prepare(`SELECT id, email FROM accounts WHERE role = 'admin' ORDER BY email`).bind().all();
+  return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({ id: row.id as string, email: row.email as string }));
+};
+
 /** メールアドレスだけを置き換える（2026-09-22 追加）。重複は表の UNIQUE が例外で教える（呼ぶ側が受ける）。 */
 export const updateAccountEmail = async (db: Db, accountId: string, email: string): Promise<void> => {
   await db.prepare(`UPDATE accounts SET email = ?2 WHERE id = ?1`).bind(accountId, email).run();

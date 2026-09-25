@@ -72,3 +72,50 @@ describe("店の登録の断りの文", () => {
     await waitFor(() => expect(message.textContent).toBe(TEXTS.fieldReason("bad_format", { field: "メールアドレス", hint: "メールアドレスの形" })));
   });
 });
+
+// 2026-09-25 監査の指摘 店-20: 登録のときにパスワードを確かめる手段が無く、別の欄の断りでも消えていた。
+// 登録の直後はログインした状態になるので打ち間違いに気づけず、翌日入れなくなって運営に頼むしかなかった。
+describe("店の登録のパスワードの欄（店-20）", () => {
+  const configOk = { json: { turnstileSiteKey: "site-key-test", vapidPublicKey: "vapid", contactEmail: null } };
+  const passwordField = () => screen.getByTestId("field-password") as HTMLInputElement;
+
+  it("字数の案内（8〜128字）が欄に結びついて出ていて、「パスワードを表示」で伏せ字と平文を切り替えられる", async () => {
+    restore = installFetch(() => configOk);
+    render(<RegisterForm />);
+    await screen.findByTestId("field-name");
+    const hint = screen.getByTestId("hint-password");
+    expect(hint.textContent).toContain("8");
+    expect(hint.textContent).toContain("128");
+    expect(passwordField().getAttribute("aria-describedby")).toContain(hint.id);
+    expect(passwordField().type).toBe("password");
+    fireEvent.click(screen.getByTestId("toggle-show-password"));
+    expect(passwordField().type).toBe("text");
+    fireEvent.click(screen.getByTestId("toggle-show-password"));
+    expect(passwordField().type).toBe("password");
+  });
+
+  const submitWith = async (refusal: FakeResponse) => {
+    restore = installFetch((path) => (path === "/api/config/public" ? configOk : refusal));
+    render(<RegisterForm />);
+    await screen.findByTestId("field-name");
+    fillAndSubmit();
+  };
+
+  it("店名・メールアドレスの断りでは、パスワードを消さない", async () => {
+    await submitWith({ status: 400, json: { ok: false, error: { kind: "invalid_input", fields: [{ name: "name", reason: "too_long" }] } } });
+    await screen.findByTestId("msg-name");
+    expect(passwordField().value).toBe("store-pass-1234");
+  });
+
+  it("パスワードの欄の断りでは消す", async () => {
+    await submitWith({ status: 400, json: { ok: false, error: { kind: "invalid_input", fields: [{ name: "password", reason: "too_short" }] } } });
+    await screen.findByTestId("msg-password");
+    expect(passwordField().value).toBe("");
+  });
+
+  it("人の確かめの断りでも消す", async () => {
+    await submitWith({ status: 400, json: { ok: false, error: { kind: "human_check_failed" } } });
+    await screen.findByTestId("msg-form");
+    await waitFor(() => expect(passwordField().value).toBe(""));
+  });
+});

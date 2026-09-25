@@ -28,17 +28,21 @@ export const loginSchema = z.object({
 });
 
 /**
- * 【最終日】店が決め直す新しいパスワード（要件14の基準 14.15）。範囲は登録と同じ（基準 12.3）。
- * 今のパスワードは求めない——ここへ来られるのはセッションを持っている店だけで、
- * 仮のパスワードで入った店は「今のパスワード」を覚えていない（基準 14.14 の場面）。
- */
-export const changePasswordSchema = z.object({ password: passwordSchema });
-
-/**
  * 確かめのために入れさせる「今のパスワード」。ログインと同じく形と範囲の規則は当てない
  * （前の規則で決めた値でも確かめられるように）。空と極端な長さだけを断る。
  */
 const currentPasswordSchema = z.string().min(1).max(PASSWORD_MAX);
+
+/**
+ * 【最終日】店が決め直す新しいパスワード（要件14の基準 14.15）。範囲は登録と同じ（基準 12.3）。
+ *
+ * 今のパスワード（currentPassword）は、形の上では省ける。省けるのは仮のパスワードで入った直後
+ * （mustChangePassword）の店だけで、それ以外の店が省いたら入口が「欄が要る」で断る
+ * （2026-09-25 監査の指摘 安全-07）。それまでは誰にも求めず、ログインの残った端末に触れた人が、
+ * 今の値を知らないまま新しいパスワードを決められた。仮のパスワードで入った店は「今のパスワード」を
+ * 覚えていない（基準 14.14 の場面）ので、そこだけは求めない。
+ */
+export const changePasswordSchema = z.object({ password: passwordSchema, currentPassword: currentPasswordSchema.optional() });
 
 /**
  * メールアドレスの変更（2026-09-22 追加・店と運営の両方）。確認メールを送らない設計

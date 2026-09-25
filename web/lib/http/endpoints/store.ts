@@ -5,6 +5,7 @@
 import { registerStore } from "../../usecases/registerStore";
 import { storeHome } from "../../usecases/storeHome";
 import { storeRegisterSchema } from "../../schemas/account";
+import { HUMAN_CHECK_ACTIONS } from "../../schemas/limits";
 import { SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, serializeCookie } from "../cookies";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
@@ -14,7 +15,7 @@ const registerStoreRoute = defineRoute({
   method: "POST",
   path: "/api/register/store",
   auth: "public",
-  human: true,
+  human: HUMAN_CHECK_ACTIONS.registerStore,
   input: storeRegisterSchema,
   handler: async ({ input, deps }) => {
     const result = await registerStore(deps, input);

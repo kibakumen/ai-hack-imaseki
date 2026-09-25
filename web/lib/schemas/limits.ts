@@ -63,6 +63,13 @@ export const SESSION_TOKEN_BYTES = 16;
  */
 export const SESSION_MAX_AGE_SECONDS = 25 * 60 * 60;
 export const SESSION_RENEW_WITHIN_SECONDS = 60 * 60;
+/**
+ * セッションの絶対の寿命（2026-09-25 監査の指摘 安全-08・AI判断・値は本人の確認待ち）。上の延長を何度重ねても、
+ * 作った時刻（sessions.created_at・migration 0008）からこの長さで必ず切る。それまでは使い続ける限り切れず、
+ * 盗まれたり置き忘れたりしたセッションを持ち主が止める手段が無かった。14日は監査の例の値で、
+ * 店が2週に1度は入り直す程度の手間に収まる長さとして選んだ。
+ */
+export const SESSION_ABSOLUTE_MAX_SECONDS = 14 * 24 * 60 * 60;
 
 // 要件16（クーポン）の基準 16.2・16.3
 /** 1つの店が持てるクーポンの数（基準 16.2） */
@@ -310,3 +317,16 @@ export const PUSH_KEY_MAX = 255;
  * 上限そのものなので、**これより長くしない**（値は基準のまま・AI判断ではない）。
  */
 export const ARRIVALS_REFRESH_MS = 30_000;
+
+// 人かどうかの確かめ（Turnstile）の用途（2026-09-25 監査の指摘 安全-23）
+/**
+ * 部品（components/ui/HumanCheck）が Turnstile に名乗る用途と、入口（http/defineRoute）が答えに求める用途。
+ * 画面とサーバーが同じ値を使うので、両方が読めるここに置く。Turnstile の決まりで英数字・_・- の32字以内。
+ * 登録の部品で解いた値をログインに流す、のような使い回しを入口が断れるようにする。
+ */
+export const HUMAN_CHECK_ACTIONS = {
+  login: "login",
+  registerStore: "register-store",
+  registerCustomer: "register-customer",
+} as const;
+export type HumanCheckAction = (typeof HUMAN_CHECK_ACTIONS)[keyof typeof HUMAN_CHECK_ACTIONS];

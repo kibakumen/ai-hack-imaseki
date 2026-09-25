@@ -4,9 +4,12 @@
 //
 // 2026-09-22 追加: 運営が自分のパスワードを決め直す入口（POST /api/admin/password）。運営には仮の
 // パスワードの場面が無いので、今のパスワードの再入力を求める（合わなければ 403・password_mismatch）。
+//
+// 2026-09-25（監査の指摘 安全-07）: 店の入口も、仮のパスワードで入った直後でなければ今のパスワードを求める。
+// どちらの入口も、通ったら今の1本以外のセッションを切る（安全-08・手続きの側）。
 
 import { changeOwnPasswordSchema, changePasswordSchema } from "../../schemas/account";
-import { changeOwnPassword, changePassword } from "../../usecases/changePassword";
+import { changeOwnPassword, changeStorePassword } from "../../usecases/changePassword";
 import { issueTempPassword } from "../../usecases/issueTempPassword";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
@@ -31,7 +34,10 @@ const changeStorePasswordRoute = defineRoute({
   auth: "store",
   input: changePasswordSchema,
   handler: async ({ input, deps, ctx }) => {
-    await changePassword(deps, ctx.accountId, input.password);
+    const result = await changeStorePassword(deps, ctx, input);
+    // 仮のパスワードの直後でない店が、今のパスワードを送らなかった。形の断り（欄が要る）として返す。
+    if (!result.ok && result.kind === "current_password_required") return refusal("invalid_input", { fields: [{ name: "currentPassword", reason: "required" }] });
+    if (!result.ok) return refusal(result.kind, { fields: [{ name: "currentPassword", reason: "not_allowed" }] });
     return respond("POST /api/store/password", { ok: true });
   },
 });
@@ -42,7 +48,7 @@ const changeAdminPasswordRoute = defineRoute({
   auth: "admin",
   input: changeOwnPasswordSchema,
   handler: async ({ input, deps, ctx }) => {
-    const result = await changeOwnPassword(deps, ctx.accountId, input);
+    const result = await changeOwnPassword(deps, ctx, input);
     // 今のパスワードが合わない。見分け（401）とは別の断りなので 403 にし、どの欄かも返す。
     if (!result.ok) return refusal(result.kind, { fields: [{ name: "currentPassword", reason: "not_allowed" }] });
     return respond("POST /api/admin/password", { ok: true });

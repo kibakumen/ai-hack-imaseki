@@ -322,7 +322,7 @@ describe("30.1・30.5 同じ客の取得は1分に5回まで", () => {
 
 describe("30.2 同じ接続元の登録（客と店は別に数える・不具合-04）", () => {
   const registerRoute = (path: string) =>
-    defineRoute({ method: "POST", path, auth: "public", human: true, handler: async () => ({ status: 201, body: { ok: true } }) });
+    defineRoute({ method: "POST", path, auth: "public", human: path.endsWith("/store") ? "register-store" : "register-customer", handler: async () => ({ status: 201, body: { ok: true } }) });
   const body = { humanToken: "tok-ok" };
 
   it("店の登録は11回目を断る。客の登録はその接続元でも通る。別の接続元は数えない。1時間たつと通る", async () => {
@@ -391,7 +391,7 @@ describe("30.4 同じアカウントへの、同じ接続元からのログイ�
       method: "POST",
       path: "/api/auth/login",
       auth: "public",
-      human: true,
+      human: "login",
       handler: async ({ input }) => {
         onHandled();
         const { password } = input as { password: string };

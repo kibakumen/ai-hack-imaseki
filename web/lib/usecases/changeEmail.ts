@@ -7,16 +7,21 @@
 //
 // 重複の見方は店の登録（registerStore）と同じ2段: 先回りの引き当てで断りの語を返し、
 // 滑り込みは表の UNIQUE（COLLATE NOCASE）を最後の砦にして同じ断りへ倒す。
+//
+// 変えたら、今の1本以外のセッションを全部切る（2026-09-25 監査の指摘 安全-08）——ログインの ID を
+// 変えた本人の画面は残し、ほかの端末（乗っ取った側・置き忘れた端末）のセッションは止める。
 
 import type { Deps } from "../ports";
 import { findAccountByEmail, findAccountById, isEmailTakenError, updateAccountEmail } from "../repo/accounts";
+import { deleteOtherSessionsOfAccount } from "../repo/sessions";
 import type { ChangeEmailInput } from "../schemas/account";
+import type { SessionOwner } from "./changePassword";
 import { verifyPassword } from "./credentials";
 
 export type ChangeEmailResult = { ok: true } | { ok: false; kind: "password_mismatch" | "email_taken" };
 
-export const changeEmail = async (deps: Deps, accountId: string, input: ChangeEmailInput): Promise<ChangeEmailResult> => {
-  const account = await findAccountById(deps.db, accountId);
+export const changeEmail = async (deps: Deps, owner: SessionOwner, input: ChangeEmailInput): Promise<ChangeEmailResult> => {
+  const account = await findAccountById(deps.db, owner.accountId);
   // セッションが指す本人が表に無い（消された直後など）。見分けの外の話なので、合わない側へ倒す。
   if (!account) return { ok: false, kind: "password_mismatch" };
   if (!(await verifyPassword(deps, account.passwordHash, input.currentPassword))) return { ok: false, kind: "password_mismatch" };
@@ -31,5 +36,6 @@ export const changeEmail = async (deps: Deps, accountId: string, input: ChangeEm
     if (!isEmailTakenError(error)) throw error;
     return { ok: false, kind: "email_taken" };
   }
+  await deleteOtherSessionsOfAccount(deps.db, account.id, owner.tokenHash);
   return { ok: true };
 };

@@ -41,7 +41,7 @@ export const login = async (deps: Deps, input: LoginInput, presentedDevice: stri
   if (!(await verifyPassword(deps, account.passwordHash, input.password))) return { ok: false, kind: "login_failed" };
 
   const session = await issueSession(deps);
-  await insertSession(deps.db, { tokenHash: session.tokenHash, accountId: account.id, expiresAtIso: session.expiresAtIso });
+  await insertSession(deps.db, { tokenHash: session.tokenHash, accountId: account.id, expiresAtIso: session.expiresAtIso, createdAtIso: session.createdAtIso });
   return {
     ok: true,
     accountId: account.id,

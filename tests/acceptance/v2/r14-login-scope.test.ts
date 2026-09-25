@@ -177,8 +177,9 @@ describeTask("31", "【最終日】仮のパスワードとパスワードの変
   });
 });
 
-// 設計-04: 重い指摘ほど確かめる検査が無かった。直す前に、直ったときの振る舞いを先に書いておく（it.fails）。
-describeTask("31", "【最終日】パスワードの変更とセッション・仮のパスワードの守り（既知の不具合）", () => {
+// 設計-04: 重い指摘ほど確かめる検査が無かった。直す前に、直ったときの振る舞いを先に書いておいた（it.fails）。
+// 2026-09-25 に安全-07・安全-08・安全-21 を直したので、普通の it に戻した。
+describeTask("31", "【最終日】パスワードの変更とセッション・仮のパスワードの守り", () => {
   let ctx: Ctx;
   beforeAll(async () => {
     ctx = await makeCtx();
@@ -189,7 +190,7 @@ describeTask("31", "【最終日】パスワードの変更とセッション・
 
   const login = (email: string, password: string) => ctx.api().post("/api/auth/login", { email, password, humanToken: "tok-ok" });
 
-  it.fails("既知の不具合（安全-08）: パスワードを変えると、ほかの端末のセッションは効かなくなる（変えた端末は続けて使える）", async () => {
+  it("安全-08 パスワードを変えると、ほかの端末のセッションは効かなくなる（変えた端末は続けて使える）", async () => {
     const admin = await seedAdmin(ctx, { email: "sessions@example.com", password: "admin-pass-1234" });
     const second = await login("sessions@example.com", "admin-pass-1234");
     expect(second.status).toBe(200);
@@ -201,7 +202,7 @@ describeTask("31", "【最終日】パスワードの変更とセッション・
     expect((await otherDevice.get("/api/admin/stores")).status).toBe(401);
   });
 
-  it.fails("既知の不具合（安全-07）: 仮のパスワードで入った直後でない店は、今のパスワードなしではパスワードを変えられない", async () => {
+  it("安全-07 仮のパスワードで入った直後でない店は、今のパスワードなしではパスワードを変えられない", async () => {
     const s = await registerStore(ctx, { email: "no-current@example.com", password: "store-pass-1234" });
     const r = await s.api.post("/api/store/password", { password: "taken-over-password-1" });
     expect(r.status).not.toBe(200);
@@ -210,7 +211,7 @@ describeTask("31", "【最終日】パスワードの変更とセッション・
   });
 
   // 案1（勧める案が無いので最初の案）: 印が立っている店の要求は、ホーム・パスワードの変更・ログアウト以外を 403 で断る。
-  it.fails("既知の不具合（安全-21）: 仮のパスワードのまま入った店は、パスワードを変えるまでホーム・パスワードの変更・ログアウト以外を使えない", async () => {
+  it("安全-21 仮のパスワードのまま入った店は、パスワードを変えるまでホーム・パスワードの変更・ログアウト以外を使えない", async () => {
     if (!ctx.admin) await seedAdmin(ctx);
     const s = await registerStore(ctx, { email: "temp-guard@example.com", password: "old-password-1" });
     const issued = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, {});

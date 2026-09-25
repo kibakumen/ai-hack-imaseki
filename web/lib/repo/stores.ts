@@ -16,17 +16,24 @@ export type NewStore = { id: string; name: string; createdAtIso: string };
 
 export type StoreSummary = { id: string; name: string; status: StoreStatus };
 
+const insertStoreStatement = (db: Db, store: NewStore) =>
+  db.prepare(`INSERT INTO stores (id, name, created_at, status) VALUES (?1, ?2, ?3, 'pending')`).bind(store.id, store.name, store.createdAtIso);
+
 /**
  * 店の登録（基準 12.1）。店・アカウント・セッションを1つのまとまり（`db.batch`）で書く——途中で落ちて、
  * 店だけが残る形を作らない。メールアドレスの重複は表の UNIQUE が例外で教える（呼ぶ側が
  * `isEmailTakenError` で受ける）。2026-09-25 監査の指摘 設計-13 で手続きの中から移した。
  */
 export const insertStoreWithAccountAndSession = async (db: Db, input: { store: NewStore; account: NewAccount; session: NewSession }): Promise<void> => {
-  await db.batch([
-    db.prepare(`INSERT INTO stores (id, name, created_at, status) VALUES (?1, ?2, ?3, 'pending')`).bind(input.store.id, input.store.name, input.store.createdAtIso),
-    insertAccountStatement(db, input.account),
-    insertSessionStatement(db, input.session),
-  ]);
+  await db.batch([insertStoreStatement(db, input.store), insertAccountStatement(db, input.account), insertSessionStatement(db, input.session)]);
+};
+
+/**
+ * 店とアカウントだけを1つのまとまりで書く（セッションは作らない）。デモの種データの投入（usecases/seedDemo）が使う
+ * ——登録の画面を通らずに店を作るので、入ったままの画面を残さない。店だけが残る形を作らないのは上と同じ。
+ */
+export const insertStoreWithAccount = async (db: Db, input: { store: NewStore; account: NewAccount }): Promise<void> => {
+  await db.batch([insertStoreStatement(db, input.store), insertAccountStatement(db, input.account)]);
 };
 
 /** 店の番号で1件。無ければ null（アカウントは在るのに店が消えている、は起きない想定）。 */

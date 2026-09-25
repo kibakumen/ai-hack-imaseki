@@ -6,12 +6,23 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
-import { EMAIL_MAX, PASSWORD_MAX } from "../../lib/schemas/limits";
+import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
 const FIELD_NAMES = ["email", "password"];
 const HOME_BY_ROLE: Record<string, string> = { store: "/store", admin: "/admin" };
+/**
+ * 仮のパスワードで入った店の行き先（2026-09-25 監査の指摘 安全-21）。決めるまでホームとパスワードの変更しか
+ * 使えない（入口が 403 で断る）ので、ホームを経ずに決める画面へ直行させる。
+ */
+const MUST_CHANGE_PASSWORD_PATH = "/store/password";
+
+/** 通ったあとの行き先。役割で分け、仮のパスワードの店だけは決める画面へ。 */
+const destinationAfterLogin = (role: string | undefined, mustChangePassword: boolean | undefined): string => {
+  if (role === "store" && mustChangePassword) return MUST_CHANGE_PASSWORD_PATH;
+  return HOME_BY_ROLE[role ?? "store"] ?? HOME_BY_ROLE.store;
+};
 
 export const LoginForm = () => {
   const [email, setEmail] = useState("");
@@ -51,7 +62,7 @@ export const LoginForm = () => {
       return;
     }
     setFailure(null);
-    window.location.assign(HOME_BY_ROLE[result.role ?? "store"] ?? HOME_BY_ROLE.store);
+    window.location.assign(destinationAfterLogin(result.role, result.mustChangePassword));
   };
 
   return (
@@ -88,7 +99,7 @@ export const LoginForm = () => {
       />
       <FieldMessage name="password" failure={failure} ctx={{ field: "パスワード", max: PASSWORD_MAX }} />
 
-      {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} onToken={handleToken} />}
+      {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.login} onToken={handleToken} />}
 
       <button type="submit" data-testid="btn-login">
         ログイン
