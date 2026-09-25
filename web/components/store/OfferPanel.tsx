@@ -19,8 +19,9 @@
 //   - 店-03 「公開を止める」は確かめを1段挟み、向かっている組数がそのまま来ることを伝える
 //   - 店-06 スマホの幅でも縦に短く——ダイヤルは2列に並べ、何時までは「終了タイマー」の裏に畳み、クーポンは
 //     折り返しの横並びにし、「更新する」は変えたところがある間だけ画面の下に貼り付ける（本人の第2回の指摘）
-//   - 店-09 配信数のダイヤルは入口の範囲に合わせる——下は受け取り済みの数（最小1）、上は残りが20になるまで。
-//     「受付を締める」で残りを0にできる
+//   - 店-09 配信数のダイヤルは入口の範囲に合わせる——下は受け取り済みの数（最小1。ただし今の配信数が0なら0）、
+//     上は残りが20になるまで。「受付を締める」で残りを0にできる
+//   - 不具合-03 のレビュー 選んだクーポンは、札に触っていない間は取り直しのたびにサーバーの値へ合わせる
 //   - 店-16 残りが0なら「満席（いまは客に出ていません）」と出し、配信数を足せばまた出ることを添える
 //
 // ⚠️ **受け入れ検査が掴む4つの `<form>`（`form-add` `form-reduce` `form-party-max` `form-until`）と、
@@ -86,15 +87,25 @@ const couponsToShow = (registered: OfferPanelCoupon[], shown: OfferPanelCoupon[]
  * 配信数のダイヤルの範囲（2026-09-25 監査の指摘 店-09）。入口の規則に合わせる——減らせるのは残りまで（基準 19.5）
  * なので下は**受け取り済みの数**（配信数 − 残り・最小1）、足したあとの残りは20まで（基準 19.2）なので上は
  * **配信数 ＋（20 − 残り）**。それまでは 1〜20 で回せて、配信数10・残り2 の店では選べる 1〜7 がどれも断られた。
+ *
+ * ⚠️ **範囲には今の配信数を必ず含める**（2026-09-25 のレビュー）。誰も受け取っていないオファーで「受付を締める」を
+ *    押すと配信数は0になる。下限を1のままにすると、ダイヤルは範囲の外の「0」ではなく「1」に印を付けて描き
+ *    （実際と違う値を指して見える・店-04 と同じ種類の症状）、▲も押せなかった。
  */
 const capacityRange = (offer: { capacity: number; remaining: number }) => {
   const sold = Math.max(0, offer.capacity - offer.remaining);
   return {
     sold,
-    min: Math.max(OFFER_CAPACITY_MIN, sold),
+    min: Math.min(offer.capacity, Math.max(OFFER_CAPACITY_MIN, sold)),
     max: Math.max(offer.capacity, offer.capacity + (OFFER_CAPACITY_MAX - offer.remaining)),
   };
 };
+
+/**
+ * 見せるクーポンの選択。`touched` は札に触って、まだ送っていない間だけ true。`seenKey` は最後に合わせた
+ * サーバーの値（番号を「,」でつないだもの）。
+ */
+type CouponPick = { ids: string[]; touched: boolean; seenKey: string };
 
 export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props) => {
   const stop = useOfferChange("stop");
@@ -109,8 +120,18 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
   const [reduceCount, setReduceCount] = useState("");
   const [partyMax, setPartyMax] = useState("");
   const [until, setUntil] = useState("");
-  /** 選んだクーポン。初めは今見せているもの */
-  const [couponIds, setCouponIds] = useState<string[]>(() => offer.coupons.map((coupon) => coupon.id));
+  // 選んだクーポン。初めは今見せているもの。**札に触っていない間は、取り直しのたびにサーバーの今の値へ合わせる**
+  // （2026-09-25 のレビュー）。選び直しが同じオファーのままになった（不具合-03）ので、取り直しでカードは作り直されない。
+  // 描き始めの1回だけで作っていたときは、別の端末で選び直されても古い選択が残り、触っていないのに「1 項目を変えます」が
+  // 出て、そのまま「更新する」を押すと別の端末の選び直しを黙って戻していた。
+  const serverCouponIds = offer.coupons.map((coupon) => coupon.id);
+  const serverCouponKey = serverCouponIds.join(",");
+  const [couponPick, setCouponPick] = useState<CouponPick>(() => ({ ids: serverCouponIds, touched: false, seenKey: serverCouponKey }));
+  if (couponPick.seenKey !== serverCouponKey) {
+    // 描く途中で合わせる（props が変わったときに state を合わせる React の形。effect で後から直すと、古い選択で1回描く）
+    setCouponPick((current) => ({ ids: current.touched ? current.ids : serverCouponIds, touched: current.touched, seenKey: serverCouponKey }));
+  }
+  const couponIds = couponPick.ids;
   /** 「更新する」を押したが、変えたところが無かった */
   const [nothingToSend, setNothingToSend] = useState(false);
   const [sending, setSending] = useState(false);
@@ -128,10 +149,7 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
   const capacityChanged = addCount !== "" || reduceCount !== "";
   const partyChanged = partyMax !== "" && partyMax !== String(offer.partyMax);
   const untilChanged = until !== "" && until !== timeInJst(offer.untilAt);
-  const couponsChanged = !sameIds(
-    couponIds,
-    offer.coupons.map((coupon) => coupon.id),
-  );
+  const couponsChanged = !sameIds(couponIds, serverCouponIds);
   const pendingCount = [capacityChanged, partyChanged, untilChanged, couponsChanged].filter(Boolean).length;
 
   const dialCapacity = (next: string) => {
@@ -145,7 +163,11 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
     setNothingToSend(false);
   };
   const toggleCoupon = (id: string) => {
-    setCouponIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+    setCouponPick((current) => {
+      const ids = current.ids.includes(id) ? current.ids.filter((value) => value !== id) : [...current.ids, id];
+      // 触ってサーバーの値と同じに戻したら、また取り直しに合わせる側へ戻す
+      return { ...current, ids, touched: !sameIds(ids, serverCouponIds) };
+    });
     setNothingToSend(false);
   };
 
@@ -200,7 +222,8 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
     if (reduceCount !== "") steps.push(() => sendOne(reduce, { count: numberToSend(reduceCount) }, () => setReduceCount("")));
     if (partyChanged) steps.push(() => sendOne(partyMaxChange, { partyMax: numberToSend(partyMax) }, () => setPartyMax("")));
     if (untilChanged) steps.push(() => sendOne(untilChange, { until }, () => setUntil("")));
-    if (couponsChanged) steps.push(() => sendOne(couponsChange, { couponIds }, () => undefined));
+    // 通ったら「送っていない選択」ではなくなる——次の取り直しからサーバーの値に合わせる（選択は送った値のまま待つ）
+    if (couponsChanged) steps.push(() => sendOne(couponsChange, { couponIds }, () => setCouponPick((current) => ({ ...current, touched: false }))));
     if (steps.length === 0) {
       setNothingToSend(true);
       return;

@@ -92,6 +92,75 @@ describe("配信数のダイヤルの範囲と「受付を締める」（店-09�
     const full = await renderCard({ offer: offerDto({ capacity: 5, remaining: 0 }) });
     expect((within(full).getByTestId("btn-close-intake") as HTMLButtonElement).disabled).toBe(true);
   });
+
+  // レビューの指摘（2026-09-25）: 誰も受け取っていないオファーで「受付を締める」を押すと配信数が0になる。
+  // それまでは範囲の下限が1のままで、ダイヤルは「0」ではなく「1」に印を付けて描き、▲は押せなかった（店-04 と同じ種類の症状）。
+  it("配信数0・残り0（誰も受け取らずに受付を締めた）なら、印の付いた目盛りは「0」で、▼で1にすると追加で1組を送る", async () => {
+    const card = await renderCard(
+      { offer: offerDto({ capacity: 0, remaining: 0 }) },
+      { "POST /api/store/offers/current/add": () => ({ json: { ok: true, offer: offerDto({ capacity: 1, remaining: 1 }) } }) },
+    );
+    const dial = within(card).getByTestId("dial-capacity");
+    expect(dial.querySelector(".store-dial__item--on")?.textContent).toBe("0");
+    expect([...dial.querySelectorAll(".store-dial__item")].map((e) => e.textContent)[0]).toBe("0");
+
+    fireEvent.click(dial.querySelector(".store-dial__step--down")!);
+    expect(dial.querySelector(".store-dial__item--on")?.textContent).toBe("1");
+    fireEvent.click(within(card).getByTestId("btn-update"));
+    await waitFor(() => expect(posts()).toEqual(["/api/store/offers/current/add"]));
+    expect(api!.calls.find((c) => c.path === "/api/store/offers/current/add")!.body).toEqual({ count: 1 });
+  });
+});
+
+// レビューの指摘（2026-09-25）: クーポンの選び直しが同じオファーのままになった（不具合-03）ので、取り直しでカードが
+// 作り直されなくなった。選んだクーポンを描き始めに1回だけ作っていたため、別の端末で選び直されても画面は古いまま残り、
+// 触っていないのに「1 項目を変えます」が出て、そのまま「更新する」を押すと別の端末の選び直しを黙って戻していた。
+describe("見せるクーポンの選択は、札に触っていない間はサーバーの今の値に合わせる", () => {
+  const c1 = { id: "c1", name: "生ビール", note: "", createdAt: "2026-09-01T00:00:00Z" };
+  const c2 = { id: "c2", name: "デザート", note: "", createdAt: "2026-09-01T00:01:00Z" };
+  const shownOf = (ids: string[]) => [c1, c2].filter((c) => ids.includes(c.id)).map(({ id, name, note }) => ({ id, name, note }));
+
+  /** 取り直しのたびに `server.ids` を見せる店のホーム。何名までの変更（通る）で取り直しを起こす */
+  const renderWithServer = async (server: { ids: string[] }) => {
+    api = installFakeApi({
+      "GET /api/store/home": () => ({ json: storeHomeDto({ offer: offerDto({ partyMax: 4, coupons: shownOf(server.ids) }), coupons: [c1, c2] }) }),
+      "GET /api/config/public": () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } }),
+      "POST /api/store/offers/current/party-max": () => ({ json: { ok: true, offer: offerDto({ partyMax: 5, coupons: shownOf(server.ids) }) } }),
+    });
+    render(<StoreHome />);
+    return screen.findByTestId("offer-card");
+  };
+  const homeLoads = () => api!.calls.filter((c) => c.method === "GET" && c.path === "/api/store/home").length;
+  /** 何名までを1つ変えて送る（通る）→ カードがホームを取り直す */
+  const reloadHome = async (card: HTMLElement) => {
+    const before = homeLoads();
+    fireEvent.change(within(card).getByTestId("field-partyMax"), { target: { value: "5" } });
+    fireEvent.submit(within(card).getByTestId("form-party-max"));
+    await waitFor(() => expect(homeLoads()).toBeGreaterThan(before));
+  };
+  const checked = (id: string) => within(screen.getByTestId("offer-card")).getByTestId(`offer-coupon-${id}`).getAttribute("aria-checked");
+  const sticky = () => within(screen.getByTestId("offer-card")).getByTestId("offer-update-bar").getAttribute("data-sticky");
+
+  it("別の端末で選び直されたら、取り直しで選択がサーバーの値に変わり、「更新する」は貼り付かない", async () => {
+    const server = { ids: ["c1"] };
+    const card = await renderWithServer(server);
+    expect(checked("c1")).toBe("true");
+    server.ids = ["c2"];
+    await reloadHome(card);
+    await waitFor(() => expect(checked("c2")).toBe("true"));
+    expect(checked("c1")).toBe("false");
+    expect(sticky()).toBe("false");
+  });
+
+  it("札に触って送っていない選択は、取り直しでも消さない（「1 項目を変えます」のまま）", async () => {
+    const server = { ids: ["c1"] };
+    const card = await renderWithServer(server);
+    fireEvent.click(within(card).getByTestId("offer-coupon-c2"));
+    await reloadHome(card);
+    expect(checked("c1")).toBe("true");
+    expect(checked("c2")).toBe("true");
+    expect(sticky()).toBe("true");
+  });
 });
 
 describe("残りが0のときのバッジ（店-16）", () => {
