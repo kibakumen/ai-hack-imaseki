@@ -188,11 +188,15 @@ export type RateAdmission = { refused: true } | { refused: false; charges: RateC
  * そのとき先に数えたほかの規則の分は返す（手続きが動いていない要求で、ほかの数えを減らさないため）。
  */
 export const admitRequest = async (deps: Deps, rules: readonly RateRule[], source: RateKeySource): Promise<RateAdmission> => {
+  const keyed = rules.flatMap((rule) => {
+    const key = rateKeyFor(rule, source);
+    return key ? [{ rule, key }] : [];
+  });
+  // 数える材料が1つも無い要求（見出しの無い接続元など）では、時計も表も触らない
+  if (keyed.length === 0) return { refused: false, charges: [] };
   const nowIso = deps.clock.now().toISOString();
   const charges: RateCharge[] = [];
-  for (const rule of rules) {
-    const key = rateKeyFor(rule, source);
-    if (!key) continue;
+  for (const { rule, key } of keyed) {
     const counted = await hitRateCounter(deps.db, key, { nowIso, windowMs: rule.windowMs, limit: rule.limit });
     if (counted.count > rule.limit) {
       await Promise.all(charges.map((charge) => refundRateCounter(deps.db, charge.key, charge.windowStartIso)));
