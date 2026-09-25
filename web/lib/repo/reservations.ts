@@ -210,15 +210,10 @@ export const findOfferSnapshot = async (db: Db, offerId: string): Promise<{ stor
  * （取り消しの表示は、そのあと取得を押していないときだけ出す・設計書「客の画面」）。
  */
 /**
- * その取得の記録が在って、その客のものか（受け取りの `fetchId` の確かめ）。
+ * その客の取得の記録の時刻。在らない・別の客のものなら null（受け取りの `fetchId` の確かめ）。
  *
  * `reservations.fetch_id` は取得の記録を指す（外部の鍵）ので、在らない番号で受け取ろうとすると
  * INSERT が落ちる。落ちる前に入力の断りへ倒すために見る（要件29——どんな入力でも落ちない）。
- */
-export const fetchLogBelongsTo = async (db: Db, fetchId: string, customerId: string): Promise<boolean> => (await findFetchLogAt(db, fetchId, customerId)) !== null;
-
-/**
- * その客の取得の記録の時刻。在らない・別の客のものなら null（受け取りの `fetchId` の確かめ）。
  * 取得から一定時間を過ぎた結果からは新しく受け取らせない（安全-06）ので、時刻まで返す。
  */
 export const findFetchLogAt = async (db: Db, fetchId: string, customerId: string): Promise<Date | null> => {

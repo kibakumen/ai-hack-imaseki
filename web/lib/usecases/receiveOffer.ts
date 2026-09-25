@@ -123,9 +123,9 @@ const refusedWith = async (deps: Deps, customerId: string, refusal: ReturnType<t
 };
 
 /** 断った理由を読み直して決め、次の一手と新しいホームを載せる（設計書「受け取りが断られたとき」）。 */
-const refuse = async (deps: Deps, customerId: string, plan: { offerId: string; party: number; fetchId: string | null }, nowIso: string, now: Date): Promise<ReceiveOfferResult | ReceiveOfferMissing> => {
+const refuse = async (deps: Deps, customerId: string, plan: ReceivePlan, nowIso: string, now: Date): Promise<ReceiveOfferResult | ReceiveOfferMissing> => {
   const found = await findOfferForReceive(deps.db, plan.offerId, nowIso);
-  const used = plan.fetchId === null ? 0 : await countReceivesFromFetch(deps.db, { customerId, offerId: plan.offerId, fetchId: plan.fetchId });
+  const used = await countReceivesFromFetch(deps.db, { customerId, offerId: plan.offerId, fetchId: plan.fetchId });
   const refusal = classify(
     {
       storeBanned: found?.storeBanned ?? false,
