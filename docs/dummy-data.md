@@ -35,7 +35,7 @@ node web/scripts/seed-demo.mjs --admin-email … --admin-password … --store-pa
 止められた店は承認済みへ戻します（乗っ取られて締め出されたデモ店を、作り直しで取り返せるように）。
 
 ⚠️ `--print` は本番の D1 を読めないので、店は「まだ無い」前提の文になります。**デモ店が既に在る本番には流さないでください**
-（店だけが二重にできます）。本番のデモ店のパスワードの入れ替えは、運営の画面で仮のパスワードを発行して行います（README 5.3）。
+（店だけが二重にできます）。本番のデモ店のパスワードの入れ替えは、`--print` の出力から `password_hash` の値だけを写して UPDATE する形で行います（README 5.3 の「本番のデモ店のパスワードを入れ替えるとき」。運営の画面の仮のパスワードは、ログインの直後に決め直しを強いるので、共用のデモ店には向きません）。
 
 **パスワードのハッシュを自分で作らないでください。** スクリプトは `lib/usecases/seedDemo.ts`（運営は `seedAdmin.ts`）と
 `lib/adapters/webcrypto.ts` を通します（PBKDF2-SHA256 を10万回・塩と回数を一緒に保存）。
@@ -93,9 +93,10 @@ SQL の `WHERE` の中で原子的に確かめます**。承認より先に呼�
 | `menus` | TEXT | **JSON の配列の文字列**。1件1〜40字・最大5件 |
 | `budget_min` / `budget_max` | INTEGER | 1人あたりの円。0〜100,000 |
 | `license_key` / `license_mime` | TEXT | 営業許可書（R2 の鍵）。ダミーは NULL でよい |
-| `card_registered_at` ほか | TEXT | カード登録。ダミーは NULL でよい |
+| `card_registered_at` ほか | TEXT | カード登録。ダミーは NULL でよい。`stripe_customer_id` は**使っていない**（予約・未使用） |
+| `geocoded_at` | TEXT | 住所を Google で位置に直した時刻（migration 0009）。**座標を手で置くダミーは NULL にする**（NULL の座標は取り直しの対象から外れる。入れると25日で住所から取り直され、直せなければ座標が消える） |
 
-⚠️ **`url` にダミーを入れるときの注意**: 客のカードは、この URL の `og:image` を読んで店の写真を出します。
+⚠️ **`url` にダミーを入れるときの注意**: 客のカードは、この URL の `og:image` から取った画像を出します（店の情報を保存したときに1回取って置き場に置く。置いていない承認済みの店は、客が開いたときに1日1回まで取りに行く）。
 **架空の店に実在する飲食店のサイトを結びつけないでください**——その店の写真を偽の掲載に使うことになります。
 今のデモは全店 NULL にしてあります。
 
@@ -116,21 +117,22 @@ SQL の `WHERE` の中で原子的に確かめます**。承認より先に呼�
 | `role` | TEXT | `store` か `admin` のどちらか |
 | `store_id` | TEXT | 店のときだけ。運営は NULL |
 | `must_change_password` | INTEGER | 仮パスワードで入った印。ダミーは 0 |
-| `failed_count` / `locked_until` | | ログイン失敗の数え。ダミーは 0 / NULL |
+| `failed_count` / `locked_until` | | **使っていない**（予約・未使用。ログインの失敗の数えは `rate_counters` が持つ）。ダミーは 0 / NULL のまま |
 
 ### offers — 公開中のオファー（店ごとに1つまで）
 
 | 列 | 型 | 備考 |
 | --- | --- | --- |
 | `store_id` | TEXT | |
-| `capacity` | INTEGER | **残りの組数**。1〜20 |
+| `capacity` | INTEGER | **募集する組数**（公開したときの組数に「追加で出す」「残りの募集を減らす」を足し引きした値）。**残りではない**——残りは列に持たず、下の注の式で出す。1〜20 |
 | `initial_capacity` | INTEGER | 公開したときの組数（実績の計算に使う） |
 | `party_max` | INTEGER | 1組の上限人数。1〜10 |
 | `published_at` / `until_at` | TEXT | ISO8601。**`until_at` が過ぎると検索に出ません** |
+| `until_set` | INTEGER | 店が「何時まで」を入れたら 1、入れずに公開して公開から12時間の自動の終わりなら 0（migration 0007）。ダミーは 1 |
 | `coupon_ids` | TEXT | **JSON の配列の文字列**。最大3件 |
 | `ended_at` / `end_reason` | TEXT | 公開中は NULL |
 
-⚠️ **残り枠は列に持っていません。** `capacity` から使用中の確保を引いた**式**で毎回出します。
+⚠️ **残り枠は列に持っていません。** `capacity` から枠を押さえている確保（確保中で期限前・`holds_slot=1` の完了済み・店が取り消したもの）を引いた**式**で毎回出します。
 ダミーで「残り2組」にしたいなら、`capacity` と確保の行の辻褄を合わせてください。
 
 ### coupons — クーポン（1店3枚まで）
@@ -179,7 +181,8 @@ pnpm --dir web exec wrangler d1 execute ai-hack-v2 --local \
   --command "SELECT (SELECT COUNT(*) FROM stores WHERE status='approved') AS 承認済み, (SELECT COUNT(*) FROM offers WHERE ended_at IS NULL) AS 公開中"
 
 # 起点から実際に出るか（客の Cookie を用意してから）
-curl -b "aihack_customer=<生の値>" -H 'content-type: application/json' \
+# 書き込み（POST）は Origin が公開先と同じでないと 403 で断られる（Cookie で見分ける入口を他のサイトから叩かせないため）
+curl -b "aihack_customer=<生の値>" -H 'content-type: application/json' -H 'origin: https://<公開先>' \
   -X POST -d '{"lat":35.6984924,"lng":139.7668622,"party":2,"genres":[],"budgetMax":null}' \
   https://<公開先>/api/customer/fetch
 ```
