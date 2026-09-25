@@ -3,7 +3,9 @@
 //
 // 入力の形は登録と同じ4項目なので `customerRegisterSchema` をそのまま使う（同じ範囲を2か所に
 // 書かないため）。4項目を**まとめて**受け取って入れ替える——送られなかった項目だけを残す形には
-// しない。画面（ProfileSettings）は今の値を初期値にして4項目とも送る。
+// しない。呼ぶ画面は取得の画面の電話番号の欄（`components/customer/PhoneField`）だけで、入れた電話番号に
+// 呼び名・ジャンル・予算の**登録の値**をそのまま添えて4項目とも送る。登録の4項目を変える画面は持たない
+// （2026-09-25 監査の指摘 客-13 で、どこからも読み込まれていなかった `ProfileSettings` を消した・要件1の基準 1.9）。
 
 import { customerRegisterSchema } from "../../schemas/customer";
 import { updateCustomerProfile } from "../../usecases/updateCustomerProfile";
