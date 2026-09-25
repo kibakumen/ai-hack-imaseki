@@ -1341,3 +1341,37 @@
   font-size: 0.75rem;
   padding: 0.25rem 0.75rem;
 }
+
+/* 残り時間と、期限を過ぎたときの扱い（客-06・横断-07 の案A）。半券の期限の時刻のすぐ下 */
+.claim-ticket__remaining {
+  margin-top: 0.25rem;
+  text-align: center;
+}
+.remaining {
+  font-size: 0.9375rem;
+  font-weight: 800;
+}
+/* 5分を切ったら目立たせる（色だけに頼らず、文にも「まもなく期限です」を足している） */
+.remaining--soon {
+  color: var(--color-danger);
+}
+.claim-ticket__rule {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.375rem;
+  text-align: center;
+}
+
+/* 期限切れの表示の住所と、「何名まで」が下がっていたことの知らせ（客-06） */
+.expired-address {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+.expired-party-max {
+  background: var(--color-highlight);
+  border: 1px solid var(--color-highlight-edge);
+  border-radius: var(--radius-sm);
+  color: var(--color-highlight-text);
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+}

@@ -270,6 +270,9 @@ const CustomerScreens = () => {
   const searchAgain = () => {
     setRefused(null);
     dismissResults();
+    // 期限切れで「何名まで」が下がっていたら、その人数で探す（同じ人数ではその店に入れない・客-06）
+    const partyMax = home?.kind === "expired" ? home.expired?.partyMax : undefined;
+    if (partyMax !== undefined) setParty(String(partyMax));
     setSearching(true);
   };
   const togglePanel = (next: Panel) => setPanel((current) => (current === next ? "none" : next));
@@ -360,6 +363,7 @@ const CustomerScreens = () => {
           onRetry={() => void retry()}
           onNextStep={takeNextStep}
           onSearchAgain={searchAgain}
+          from={routeFrom}
         />
       );
     }

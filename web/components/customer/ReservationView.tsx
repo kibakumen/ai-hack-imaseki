@@ -16,16 +16,21 @@
 // 「Googleマップで経路を開く」を**半券のすぐ下**に置く（2026-09-22 の本人の指摘「確保の画面に戻ったら
 // Googleマップを探すボタンに辿り着けなくなるので、この画面にもおくようにしてほしい」）。向かうのが主で、
 // 人数の変更・取り消しは従——だから操作の囲いより上。リンクの中身は確定の演出（`ClaimedCelebration`）と
-// 同じ `routeHref`。出発地は入れ物が渡す（確保の応答の起点 → 探した結果 → タブの覚え。無ければ付けない）。
-// ⚠️ `<a href="https://…">` ではなく **`<button>` で開く**——受け入れ検査 r09 の 9.1 が「店の URL が無ければ
-//    `view-active` の中に http のリンクが1つも無い」を固定しており、その検査は変えられない。
+// 同じ `routeHref`（ボタンは `RouteButton`・期限切れの表示と共用）。出発地は入れ物が渡す（確保の応答の起点 →
+// 探した結果 → タブの覚え。無ければ付けない）。
+//
+// 期限の時刻の下に「あと◯分」と、期限を過ぎたときの扱いの1文を置く（2026-09-25 監査の指摘 客-06・横断-07 の案A
+// ——以前は期限の時刻だけで、過ぎたら自動で取り消されることも、20分以内ならお店の判断で入れることも、
+// 期限が切れてから初めて知らされた）。
 
 import type { ReactNode } from "react";
 import type { ApiFailure } from "../../lib/client/api";
-import { routeHref, type SearchOrigin } from "../../lib/client/lastOrigin";
+import type { SearchOrigin } from "../../lib/client/lastOrigin";
 import { CouponPickNote } from "./CouponPickNote";
 import { PushPrompt } from "./PushPrompt";
+import { RemainingTime } from "./RemainingTime";
 import { ReservationActions } from "./ReservationActions";
+import { RouteButton } from "./RouteButton";
 import { timeInJst } from "../ui/jstTime";
 import { FormMessage } from "../ui/InputRefusal";
 import type { ReservationDto } from "./home";
@@ -52,13 +57,10 @@ type ReservationViewProps = {
   from?: SearchOrigin | null;
 };
 
-/** 新しいタブで開く（リンクと同じ振る舞い。`noopener` で開いた側からこの画面を触れなくする）。 */
-const openRoute = (href: string) => {
-  window.open(href, "_blank", "noopener,noreferrer");
-};
+/** 期限を過ぎたときの扱い（横断-07 の案A）。20分は `domain/reservation` の EXPIRED_GRACE_MS（店が完了済みにできる幅） */
+export const EXPIRY_RULE_TEXT = "期限を過ぎると、確保は自動で取り消されます。過ぎてから20分以内なら、この画面をお店に見せれば、お店の判断で入れることがあります。";
 
 export const ReservationView = ({ reservation, onSearchMore, onChanged, failure = null, pushPromptDue = false, children = null, from = null }: ReservationViewProps) => {
-  const route = routeHref(reservation, from);
   return (
     <section className="claim-view" data-testid="view-active">
       {/* 店頭で見せる面。番号をいちばん大きく、そのまわりに店名と期限を置く（基準 9.1・9.2） */}
@@ -80,14 +82,16 @@ export const ReservationView = ({ reservation, onSearchMore, onChanged, failure 
           <span aria-hidden>・</span>
           <span data-testid="reservation-expires">期限 {timeInJst(reservation.expiresAt)} まで</span>
         </p>
+        <p className="claim-ticket__remaining">
+          <RemainingTime expiresAt={reservation.expiresAt} />
+        </p>
+        <p className="claim-ticket__rule" data-testid="reservation-expiry-rule">
+          {EXPIRY_RULE_TEXT}
+        </p>
       </div>
 
-      {/* 店へ向かう導線。半券の直下・操作の囲いより上（向かうのが主）。`data-href` は検査が開く先を読むため */}
-      {route === null ? null : (
-        <button type="button" className="claimed-route claim-route" data-testid="btn-route" data-href={route} onClick={() => openRoute(route)}>
-          Googleマップで経路を開く
-        </button>
-      )}
+      {/* 店へ向かう導線。半券の直下・操作の囲いより上（向かうのが主） */}
+      <RouteButton destination={reservation} from={from} />
 
       <div className="claim-coupons">
         <p className="claim-coupons__label">クーポン</p>
