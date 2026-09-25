@@ -210,6 +210,13 @@
   animation: none;
 }
 
+/* 残りが0——点滅を止め、いまは客に出ていないことを言う（店-16） */
+.store-badge--full {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-accent-strong);
+  color: var(--color-accent-strong);
+}
+
 .store-empty {
   background: var(--color-surface);
   border: 1px dashed var(--color-border);
@@ -390,6 +397,12 @@
     background: color-mix(in srgb, var(--color-danger) 20%, var(--color-background));
     filter: none;
   }
+}
+
+/* 行の中に置く小さなボタン（受付を締める・終了タイマー） */
+.store-btn--small {
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
 }
 
 /* `<a>` をボタンの形で出す */
@@ -949,38 +962,6 @@
   padding: 0.75rem;
 }
 
-/* 「今日の動き」の凡例の2枠（受け取られた・配信数） */
-.store-fact {
-  background: var(--color-background);
-  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
-  border-radius: 0.875rem;
-  display: grid;
-  gap: 0.125rem;
-  padding: 0.625rem 0.75rem;
-  position: relative;
-}
-
-.store-fact__label {
-  color: var(--color-text-muted);
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.store-fact__value {
-  align-items: baseline;
-  color: var(--color-accent-strong);
-  display: flex;
-  flex-wrap: wrap;
-  font-family: ui-monospace, "SFMono-Regular", monospace;
-  font-size: 2rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 900;
-  gap: 0.25rem;
-  line-height: 1.1;
-  margin: 0;
-}
-
 /* ---------- 数を変える札（回して決めて、更新する1つで一括） ---------- */
 
 .store-tune {
@@ -988,13 +969,13 @@
   border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
   border-radius: 1rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.75rem;
   min-width: 0;
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
-/* 見出しの行——左に見出しと注、右に「残り」の札（操作できない値はこれ1つだけ） */
-.store-tune__head {
+/* いちばん上の行——左に「残り」の札（操作できない値はこれ1つだけ）、右に「受付を締める」（店-09） */
+.store-remaining-row {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -1002,14 +983,9 @@
   justify-content: space-between;
 }
 
-.store-tune__title {
-  display: grid;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.store-tune__title > h3 {
-  margin: 0;
+.store-offer__full {
+  color: var(--color-accent-strong);
+  font-weight: 700;
 }
 
 /* 「残り」——橙の地に白抜き。店がいちばん見る数なので、いちばん濃く・大きく */
@@ -1049,11 +1025,13 @@
   opacity: 0.85;
 }
 
+/* 配信数と何名までの2本は**いつも横並び**（本人の第2回の指摘・店-06）。スマホの幅（約290px）でも2列に収まる
+   よう、狭い画面ではダイヤルの幅を縮める。それまでは auto-fit の 9.5rem で、390px の幅では縦に積まれていた */
 .store-tune__dials {
   align-items: start;
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 /* ダイヤル1本ぶんの縦の並び。変えた本は地が橙の薄い色に、縁が点線に */
@@ -1062,10 +1040,21 @@
   border: 1.5px solid transparent;
   border-radius: 1rem;
   display: grid;
-  gap: 0.5rem;
+  gap: 0.375rem;
   justify-items: center;
-  padding: 0.75rem 0.5rem;
+  min-width: 0;
+  padding: 0.5rem 0.25rem;
   transition: background 140ms ease, border-color 140ms ease;
+}
+
+@media (max-width: 30rem) {
+  .store-tune__dial .store-dial__window--lg {
+    --store-dial-width: 5rem;
+  }
+
+  .store-tune__dial .store-dial__window--lg .store-dial__item--on {
+    font-size: 1.625rem;
+  }
 }
 
 .store-tune__dial--changed {
@@ -1088,18 +1077,25 @@
   width: 100%;
 }
 
-/* 「何時まで」は欄のまま。ダイヤルの列に並べる */
-.store-tune__until {
-  align-content: start;
+/* 終了タイマー——1行（今の終わりの時刻と、変える先）だけを出し、欄は「終了タイマーを変える」の裏に畳む（店-05・店-06） */
+.store-timer {
   border: 1.5px solid transparent;
   border-radius: 1rem;
   gap: 0.5rem;
-  justify-items: center;
-  padding: 0.75rem 0.5rem;
+  padding: 0.375rem 0.5rem;
 }
 
-.store-tune__until.store-tune__dial--changed {
+.store-timer.store-tune__dial--changed {
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-background));
+}
+
+.store-timer__now {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  gap: 0.375rem;
+  margin: 0;
 }
 
 .store-tune__time {
@@ -1141,9 +1137,23 @@
   border: 1.5px solid transparent;
   border-radius: 1rem;
   display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem 0.5rem;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
   transition: background 140ms ease, border-color 140ms ease;
+}
+
+/* 公開中のカードの札は**横いっぱいにしない**——名前を隠さない幅で折り返して並べる（本人の第2回の指摘・店-06） */
+.store-coupons--wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.store-coupons--wrap .store-coupon--toggle {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 0.375rem 0.625rem;
+  width: auto;
 }
 
 .store-tune__coupons-head {
@@ -1169,7 +1179,20 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   justify-content: space-between;
-  padding-top: 0.875rem;
+  padding-top: 0.75rem;
+}
+
+/* 変えたところがある間だけ、画面の下に貼り付く——スマホで下までスクロールしなくても押せる（本人の第2回の指摘
+   「開いたら更新ボタンが押せるほどコンパクトに」・店-06）。カードの外へは出ない（sticky は親の中で止まる） */
+.store-tune__foot--sticky {
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  border-radius: 1rem;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-text) 18%, transparent);
+  padding: 0.625rem 0.75rem;
+  position: sticky;
+  z-index: 5;
 }
 
 .store-tune__pending {
@@ -1180,10 +1203,10 @@
 }
 
 .store-tune__apply {
-  flex: 1 1 12rem;
+  flex: 1 1 10rem;
   font-size: 1.0625rem;
   max-width: 20rem;
-  padding: 0.875rem 1.25rem;
+  padding: 0.75rem 1.25rem;
 }
 
 /* ---------- 折れ線グラフ ---------- */
@@ -1194,10 +1217,43 @@
 }
 
 .store-chart__legend {
-  display: grid;
-  gap: 0.375rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
   margin: 0;
+}
+
+/* 凡例1つ——線の色の四角・名前・合計 */
+.store-chart__key {
+  align-items: baseline;
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.375rem;
+}
+
+.store-chart__key::before {
+  border-radius: 2px;
+  content: "";
+  display: inline-block;
+  height: 0.5rem;
+  width: 0.75rem;
+}
+
+.store-chart__key--shown::before {
+  background: var(--color-text-muted);
+}
+
+.store-chart__key--received::before {
+  background: var(--color-accent);
+}
+
+.store-chart__key dt {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.store-chart__key dd {
+  font-weight: 800;
 }
 
 .store-chart__svg {
@@ -1216,13 +1272,16 @@
   stroke: var(--color-accent);
 }
 
-.store-chart__line--capacity {
+.store-chart__line--shown {
   stroke: var(--color-text-muted);
-  stroke-dasharray: 4 4;
 }
 
 .store-chart__dot {
   fill: var(--color-accent);
+}
+
+.store-chart__dot--shown {
+  fill: var(--color-text-muted);
 }
 
 .store-chart__legend dd {
@@ -1239,8 +1298,13 @@
 .store-progress {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   font-size: 0.75rem;
   gap: 0.5rem;
+}
+
+.store-progress__label {
+  font-weight: 700;
 }
 
 .store-progress__track {

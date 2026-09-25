@@ -710,6 +710,7 @@ export const storeHomeDto = (over: Partial<import("./_types").StoreHomeDto> = {}
   coupons: [],
   arrivals: [],
   mustChangePassword: false,
+  trend: [],
   ...over,
 });
 export const offerDto = (over: Partial<import("./_types").OfferDto> = {}): import("./_types").OfferDto => ({

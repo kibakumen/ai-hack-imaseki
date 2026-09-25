@@ -135,6 +135,8 @@ const storeHome = object({
   arrivals: array(arrival),
   /** 仮のパスワードで入っている（基準 14.14）。入口がセッションの印から必ず載せる */
   mustChangePassword: boolean(),
+  /** 公開中のオファーの「今日の動き」——15分ごとの結果に出た回数と受け取り（公開中が無ければ空・2026-09-25 店-15） */
+  trend: array(object({ at: string(), shown: number(), received: number() })),
 });
 
 const storeProfile = object({

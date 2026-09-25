@@ -65,62 +65,93 @@ type CouponRowProps = {
 };
 
 /**
+ * 削除の確かめ（2026-09-25 監査の指摘 店-03）。消したクーポンは戻せないので、同じ画面の完了・取り消しと同じ形で
+ * 1段挟む（それまでは押した瞬間に消えた）。
+ */
+const DeleteConfirm = ({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) => (
+  <div className="store-confirm" role="dialog" aria-label="クーポンを削除する確かめ" data-testid="confirm-delete-coupon">
+    <p>「{name}」を削除します。元に戻せません。</p>
+    <div className="store-confirm__buttons">
+      <button type="button" className="store-btn store-btn--danger" data-testid="btn-confirm-delete-coupon" onClick={onConfirm}>
+        削除する
+      </button>
+      <button type="button" className="store-btn store-btn--quiet" onClick={onCancel}>
+        やめる
+      </button>
+    </div>
+  </div>
+);
+
+/**
  * 1つのクーポン。今の中身を見せたまま、その場で直せる（基準 16.4）。
  * 見た目は**1枚ずつの札**（2026-09-22 の本人の指摘「1枚ずつのカードにして、ボタンの余白を空ける」）:
  * 上段が券面（客に見える名前と特記事項・客の画面の `.offer-coupon` と同じ点線の縁の語彙）、
- * 下段が直す欄と、離して置いた2つのボタン。
+ * 下段が直す欄と、離して置いた2つのボタン。「削除」は確かめを1段挟む（店-03）。
  */
-const CouponRow = ({ coupon, draft, failure, onChange, onSave, onDelete }: CouponRowProps) => (
-  <li className="store-coupon-card" data-testid={`row-${coupon.id}`}>
-    <div className="store-coupon-card__face">
-      <span className="store-coupon-card__mark" aria-hidden="true">
-        ✓
-      </span>
-      <div className="store-coupon-card__text">
-        <h3>{coupon.name}</h3>
-        {coupon.note !== "" && <p className="store-coupon-card__note">{coupon.note}</p>}
+const CouponRow = ({ coupon, draft, failure, onChange, onSave, onDelete }: CouponRowProps) => {
+  const [askingDelete, setAskingDelete] = useState(false);
+  return (
+    <li className="store-coupon-card" data-testid={`row-${coupon.id}`}>
+      <div className="store-coupon-card__face">
+        <span className="store-coupon-card__mark" aria-hidden="true">
+          ✓
+        </span>
+        <div className="store-coupon-card__text">
+          <h3>{coupon.name}</h3>
+          {coupon.note !== "" && <p className="store-coupon-card__note">{coupon.note}</p>}
+        </div>
       </div>
-    </div>
 
-    <div className="store-coupon-card__fields">
-      <div className="store-field">
-        <label htmlFor={`coupon-name-${coupon.id}`}>名前</label>
-        <input
-          id={`coupon-name-${coupon.id}`}
-          data-testid={`field-name-${coupon.id}`}
-          type="text"
-          value={draft.name}
-          maxLength={COUPON_NAME_MAX}
-          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+      <div className="store-coupon-card__fields">
+        <div className="store-field">
+          <label htmlFor={`coupon-name-${coupon.id}`}>名前</label>
+          <input
+            id={`coupon-name-${coupon.id}`}
+            data-testid={`field-name-${coupon.id}`}
+            type="text"
+            value={draft.name}
+            maxLength={COUPON_NAME_MAX}
+            onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          />
+          <FieldMessage name="name" failure={failure} ctx={NAME_CTX} />
+        </div>
+
+        <div className="store-field">
+          <label htmlFor={`coupon-note-${coupon.id}`}>特記事項</label>
+          <input
+            id={`coupon-note-${coupon.id}`}
+            data-testid={`field-note-${coupon.id}`}
+            type="text"
+            value={draft.note}
+            maxLength={COUPON_NOTE_MAX}
+            onChange={(event) => onChange({ ...draft, note: event.target.value })}
+          />
+          <FieldMessage name="note" failure={failure} ctx={NOTE_CTX} />
+        </div>
+      </div>
+
+      <div className="store-actions">
+        <button type="button" className="store-btn store-btn--primary" data-testid="btn-save-coupon" onClick={onSave}>
+          保存する
+        </button>
+        <button type="button" className="store-btn store-btn--danger" data-testid="btn-delete-coupon" aria-expanded={askingDelete} onClick={() => setAskingDelete(true)}>
+          削除
+        </button>
+      </div>
+      {askingDelete ? (
+        <DeleteConfirm
+          name={coupon.name}
+          onConfirm={() => {
+            setAskingDelete(false);
+            onDelete();
+          }}
+          onCancel={() => setAskingDelete(false)}
         />
-        <FieldMessage name="name" failure={failure} ctx={NAME_CTX} />
-      </div>
-
-      <div className="store-field">
-        <label htmlFor={`coupon-note-${coupon.id}`}>特記事項</label>
-        <input
-          id={`coupon-note-${coupon.id}`}
-          data-testid={`field-note-${coupon.id}`}
-          type="text"
-          value={draft.note}
-          maxLength={COUPON_NOTE_MAX}
-          onChange={(event) => onChange({ ...draft, note: event.target.value })}
-        />
-        <FieldMessage name="note" failure={failure} ctx={NOTE_CTX} />
-      </div>
-    </div>
-
-    <div className="store-actions">
-      <button type="button" className="store-btn store-btn--primary" data-testid="btn-save-coupon" onClick={onSave}>
-        保存する
-      </button>
-      <button type="button" className="store-btn store-btn--danger" data-testid="btn-delete-coupon" onClick={onDelete}>
-        削除
-      </button>
-    </div>
-    <CouponFormMessage failure={failure} />
-  </li>
-);
+      ) : null}
+      <CouponFormMessage failure={failure} />
+    </li>
+  );
+};
 
 type CreateFormProps = {
   name: string;

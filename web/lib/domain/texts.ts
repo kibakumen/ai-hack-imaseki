@@ -78,7 +78,9 @@ const FIELD_REASON_TEXTS: Record<string, (ctx: Ctx) => string> = {
   too_many: (ctx) => `${str(ctx.field, "この項目")}は${str(ctx.max, "")}件までです。`,
   min_over_max: (ctx) => `${str(ctx.field, "この項目")}の最低は最高以下にしてください。`,
   over_capacity: (ctx) => `足したあとの残りは${str(ctx.max, "")}までです（今の残り${str(ctx.remaining ?? ctx.min, "")}）。`,
-  over_remaining: (ctx) => `減らせるのは残りの${str(ctx.remaining ?? ctx.max, "")}までです。`,
+  // 店-09（2026-09-25）: ダイヤルは配信数で、断りは残りで話していて違う数を指していたので、受け取り済みの数も添える
+  over_remaining: (ctx) =>
+    `減らせるのは残りの${str(ctx.remaining ?? ctx.max, "")}までです。` + (ctx.sold === undefined ? "" : `配信数は受け取り済みの${str(ctx.sold)}組より下げられません。`),
   in_past: () => "今より後の時刻にしてください。",
   // ⚠️ 設計書 447行の文案は「今から12時間以内の時刻にしてください」だったが、受け入れ検査
   // r17-publish.ui.test.tsx が「公開を止め」か「新しく公開」を含むことを見るので、次の手を足した

@@ -12,7 +12,7 @@ import { listStoresForAdmin } from "../lib/repo/adminStores";
 import { findFetchCandidates } from "../lib/repo/fetchCandidates";
 import { insertExpiredEvents } from "../lib/repo/logs";
 import { findLastFetchAt, listStoreArrivals } from "../lib/repo/reservations";
-import { listOfferShownCounts, listReservationStatesOfStore } from "../lib/repo/storeResults";
+import { listOfferShownCounts, listOfferTrendCounts, listReservationStatesOfStore } from "../lib/repo/storeResults";
 import { interleaved } from "./_interleavedDb";
 
 type Recorded = { sql: string; params: unknown[] };
@@ -88,6 +88,11 @@ describe("読み取りの幅と索引（設計-08）", () => {
   it("店の実績は、その店の確保と、その店が出た取得の記録だけを索引で引く", async () => {
     expect(await wideScansOf((db) => listReservationStatesOfStore(db, "store-x"))).toEqual([]);
     expect(await wideScansOf((db) => listOfferShownCounts(db, "store-x"))).toEqual([]);
+  });
+
+  it("店のホームの「今日の動き」（30秒ごと・店-15）は、その店が出た取得とそのオファーの確保だけを索引で引く", async () => {
+    const input = { storeId: "store-x", offerId: "offer-x", publishedAtIso: SINCE, nowIso: NOW, originIso: SINCE, bucketMs: 15 * 60 * 1000 };
+    expect(await wideScansOf((db) => listOfferTrendCounts(db, input))).toEqual([]);
   });
 
   it("運営の一覧の受け取り実績と公開中の残りは、店ごとに索引で引く（店の数 × 全部の確保を読まない）", async () => {

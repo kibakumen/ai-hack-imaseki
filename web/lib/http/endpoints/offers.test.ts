@@ -295,8 +295,68 @@ describe("GET /api/store/home（公開のフォームの初めの値）", () => 
     // 15:30 の時点では、16:00 はまだ今より後で枠の内＝そのまま入る（基準 17.18）。
     clock.set(jst("15:30"));
     expect((await home(store)).publishPrefill.until).toBe("16:00");
-    // 16:30 まで進むと、16:00 は翌日と読まれて枠（翌 04:30 まで）の外＝空欄（基準 17.19）。
+    // 16:30 まで進むと、前回の 16:00 はもう過ぎている＝空欄（基準 17.19。日付ごと比べる・不具合-09）。
     clock.set(jst("16:30"));
     expect((await home(store)).publishPrefill.until).toBeNull();
+    // 翌日の 15:30 に開いても、前回（昨日）の 16:00 を今日の 16:00 と読まない（不具合-09。セッションが切れない翌日で見る）
+    clock.set(jst("15:30", 1));
+    expect((await home(store)).publishPrefill.until).toBeNull();
+    clock.set(jst("15:00"));
+  });
+});
+
+// 2026-09-25 監査の指摘 店-15: 「今日の動き」の線は画面が溜めた「配信数−残り」だけで、結果に出た回数を描かず、
+// 開き直すと消えていた。店のホームの応答が、15分ごとの結果に出た回数と受け取りを返す。
+describe("GET /api/store/home（今日の動き・店-15）", () => {
+  let fetchSeq = 0;
+  const seedCustomer = async (): Promise<string> => {
+    const id = `customer-trend-${++fetchSeq}`;
+    await db.prepare(`INSERT INTO customers (id, nickname, phone) VALUES (?1, 'とれんど', '')`).bind(id).run();
+    return id;
+  };
+  /** その店が結果に出た取得を1回置く（時刻 at） */
+  const seedShown = async (storeId: string, at: string): Promise<string> => {
+    const customerId = await seedCustomer();
+    const fetchId = `fetch-trend-${fetchSeq}`;
+    await db
+      .prepare(
+        `INSERT INTO fetch_logs (id, customer_id, origin_lat, origin_lng, party, genres, budget_max, candidate_count, returned_count, ai_used, duration_ms, at)
+         VALUES (?1, ?2, 35.66, 139.7, 2, '[]', NULL, 1, 1, 0, 10, ?3)`,
+      )
+      .bind(fetchId, customerId, at)
+      .run();
+    await db.prepare(`INSERT INTO fetch_items (id, fetch_id, store_id, rank, score, reason) VALUES (?1, ?2, ?3, 1, 1, '')`).bind(`item-${fetchId}`, fetchId, storeId).run();
+    return fetchId;
+  };
+  const seedReceived = async (storeId: string, offerId: string, at: string): Promise<void> => {
+    const fetchId = await seedShown(storeId, at);
+    await db
+      .prepare(
+        `INSERT INTO reservations (id, offer_id, store_id, customer_id, fetch_id, party, code, created_at, expires_at, status, status_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 2, ?6, ?7, ?7, 'active', ?7)`,
+      )
+      .bind(`res-${fetchId}`, offerId, storeId, `customer-trend-${fetchSeq}`, fetchId, `8${String(fetchSeq).padStart(7, "0")}`, at)
+      .run();
+  };
+
+  it("公開中のオファーについて、公開の15分の頭から今まで、15分ごとの結果に出た回数と受け取りを返す。公開中が無ければ空", async () => {
+    clock.set(jst("15:05"));
+    const store = await seedStore();
+    const other = await seedStore();
+    const offerId = (await publish(store)).json.offer.id;
+    await seedShown(store.id, jst("15:04")); // 公開より前は数えない
+    await seedShown(store.id, jst("15:06"));
+    await seedShown(store.id, jst("15:14"));
+    await seedReceived(store.id, offerId, jst("15:20")); // 結果に出て、受け取った
+    await seedShown(other.id, jst("15:21")); // よその店は数えない
+    clock.set(jst("15:40"));
+    expect((await home(store)).trend).toEqual([
+      { at: jst("15:00"), shown: 2, received: 0 },
+      { at: jst("15:15"), shown: 1, received: 1 },
+      { at: jst("15:30"), shown: 0, received: 0 },
+    ]);
+    await stop(store);
+    expect((await home(store)).trend).toEqual([]);
+    clock.set(jst("15:00"));
   });
 });
