@@ -9,6 +9,9 @@
   // ⚠️ 効果は未実測（2026-09-22）。Cloudflare 側が「近づけても縮まない」と判断した要求は
   //    そのまま端で処理されるので、外れても遅くはならない。実測できたら数字をここに書く。
   "placement": { "mode": "smart" },
+  // 記録（Workers Logs）を有効にする（2026-09-25 監査の指摘 安全-03・設計-01）。本番の500や連打・AI の1日の上限に
+  // 届いたこと（ai_daily_budget_reached）を、後からダッシュボードで追えるようにする。記録に個人データは載せない（要件27）。
+  "observability": { "enabled": true },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
