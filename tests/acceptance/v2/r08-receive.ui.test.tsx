@@ -94,7 +94,7 @@ describeTask("14", "受け取りの画面と断りの表示", () => {
   });
 
   // 紹介文の行が届くたびに断りの知らせを消さない（消すのは探し始めたときと、取得が変わったときだけ）。
-  it.fails("既知の不具合（不具合-06）: 紹介文が後から届いても、押したカードの断りの知らせは消えない", async () => {
+  it("不具合-06 紹介文が後から届いても、押したカードの断りの知らせは消えない", async () => {
     const { TEXTS } = await loadWeb("lib/domain/texts");
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));

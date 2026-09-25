@@ -79,7 +79,7 @@ describeTask("12", "結果の一覧", () => {
   });
 
   // ストリームが途中で切れたら、まだ届いていない紹介文は「決まった文」として確定させる（待機の見た目で固めない）。
-  it.fails("既知の不具合（不具合-21）: 取得の途中で通信が切れても、紹介文の欄が「書いています…」のまま止まらない", async () => {
+  it("不具合-21 取得の途中で通信が切れても、紹介文の欄が「書いています…」のまま止まらない", async () => {
     const first = item();
     await search([first], { "POST /api/customer/fetch/stream": () => ({ stream: { lines: [{ type: "init", fetchId: "f1", items: [first] }], end: "cut" } }) });
     const card = await screen.findByTestId(TID.card("o1"));
@@ -90,7 +90,7 @@ describeTask("12", "結果の一覧", () => {
   });
 
   // 探し直したら、前の検索のストリームは止めるか、その行を捨てる。
-  it.fails("既知の不具合（不具合-06）: 探し直したあとに前の検索の紹介文が届いても、一覧は新しい検索の結果のまま", async () => {
+  it("不具合-06 探し直したあとに前の検索の紹介文が届いても、一覧は新しい検索の結果のまま", async () => {
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));
     const older = item({ offerId: "o-old", storeId: "s-old", storeName: "前の店" });

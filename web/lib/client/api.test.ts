@@ -204,4 +204,47 @@ describe("少しずつ届く応答（NDJSON）を1行ずつ読む", () => {
     }) as typeof fetch;
     expect(await apiStream("/api/customer/fetch/stream", {}, () => {})).toEqual({ ok: false, error: { kind: "network" } });
   });
+
+  // 不具合-06: 探し直した・画面を離れたあとに前の検索の行を画面へ渡さない。合図を fetch にも渡し、
+  // 合図を聞かない相手（途中の機器・検査の偽物）でも、読み取りの側で打ち切る。
+  it("止めの合図（AbortSignal）を受けたら、それ以降の行を渡さず、fetch にも同じ合図を渡す", async () => {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let seenSignal: AbortSignal | null | undefined;
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seenSignal = init?.signal;
+      const encoder = new TextEncoder();
+      let step = 0;
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull: async (controller) => {
+            step += 1;
+            if (step === 1) controller.enqueue(encoder.encode('{"type":"init","fetchId":"f1","items":[]}\n'));
+            else if (step === 2) {
+              await released;
+              controller.enqueue(encoder.encode('{"type":"pitch","storeId":"s1","reason":"遅れた文","source":"persona"}\n'));
+            } else controller.close();
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      return new Response(body, { status: 200, headers: { "content-type": "application/x-ndjson" } });
+    }) as typeof fetch;
+    const controller = new AbortController();
+    const lines: Array<Record<string, unknown>> = [];
+    await apiStream(
+      "/api/customer/fetch/stream",
+      {},
+      (line) => {
+        lines.push(line);
+        if (line.type === "init") {
+          controller.abort();
+          release();
+        }
+      },
+      controller.signal,
+    );
+    expect(seenSignal).toBe(controller.signal);
+    expect(lines.map((l) => l.type)).toEqual(["init"]);
+  });
 });

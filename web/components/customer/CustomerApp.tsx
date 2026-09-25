@@ -76,6 +76,8 @@ const CustomerScreens = () => {
    */
   const [conditionsOpen, setConditionsOpen] = useState(false);
   const fetchScreenRef = useRef<HTMLElement | null>(null);
+  /** 今出している結果の取得の番号（`showResults` が、同じ取得の入れ直しか新しい取得かを見分ける）。 */
+  const shownFetchIdRef = useRef<string | null>(null);
   const [refused, setRefused] = useState<RefusedReceive | null>(null);
   const [searching, setSearching] = useState(false);
   // 脇の画面（最近行った店・登録の確認と消去）と、通報が指している店。どちらも表示の種類とは別に持つ
@@ -204,8 +206,12 @@ const CustomerScreens = () => {
   };
 
   const showResults = (result: FetchResult | null) => {
+    // 断りの知らせを消すのは、探し始めたとき（null）と取得が替わったときだけ（2026-09-25 監査の指摘 不具合-06）。
+    // 紹介文が届くたびに同じ取得の結果が入れ直されるので、そのたびに消すと断りの文とボタンが読めないうちに消える。
+    const nextFetchId = result?.fetchId ?? null;
+    if (result === null || nextFetchId !== shownFetchIdRef.current) setRefused(null);
+    shownFetchIdRef.current = nextFetchId;
     setFetchResult(result);
-    setRefused(null);
     // 探し始め（`FetchForm` は探す前に必ず null を渡す）で閉じ直す。少しずつ届く結果の更新では触らない
     // ——客が紹介文の届く途中で条件を開いていても、勝手に畳まない。
     if (result === null) setConditionsOpen(false);
