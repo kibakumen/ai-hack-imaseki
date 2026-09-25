@@ -551,6 +551,25 @@ export const fetchOffersStream = async (ctx: Pick<Ctx, "clock">, api: Api, over:
   return { status: res.status, json: null, lines };
 };
 
+/**
+ * 約束が実時間 `ms` のうちに決まればその値、決まらなければ null（待ち続けない）。
+ * 「偽の時計を進めたら応答が返る」を確かめる検査が、返らなかったときに検査の打ち切り（30秒）まで止まらないよう使う。
+ */
+export const settledWithin = async <T>(pending: Promise<T>, ms: number): Promise<T | null> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+  try {
+    return await Promise.race([pending, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** 客の端末の Web プッシュの購読（偽物。配信先は偽の口が受けるので外へは出ない） */
+export const PUSH_SUBSCRIPTION = { endpoint: "https://push.example.test/sub/1", keys: { p256dh: "BPUB", auth: "AUTH" } };
+
 // ---------- 画面の検査（jsdom）用の偽の fetch ----------
 /**
  * 少しずつ届く応答（NDJSON）。`lines` を1行ずつ送る。`holdAfter` 行を送ったら `release` を待ってから残りを送る

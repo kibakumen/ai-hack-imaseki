@@ -1,7 +1,7 @@
 // 検査の道具（tests/acceptance/v2/_fakes.ts）そのものの検査（2026-09-25 設計-19・設計-03）。
 // 道具が約束どおりに効かないと、それを使う検査は「実時間の打ち切りで緑」「近道で緑」になり、何も示さなくなる。
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { fakeCard, fakeClock, fakeGeocoder, isFake, makeCtx, splitSql, type FakeAi, type FakeGeocoder } from "../../tests/acceptance/v2/_fakes";
+import { fakeCard, fakeClock, fakeGeocoder, fakePush, isFake, makeCtx, settledWithin, splitSql, type FakeAi, type FakeGeocoder } from "../../tests/acceptance/v2/_fakes";
 
 describe("偽の時計", () => {
   it("armed は、これから作られる合図を待ってから解ける（要求を送った直後に進めても合図を取りこぼさない）", async () => {
@@ -89,5 +89,17 @@ describe("場面の偽物の道具（ctx.<名前>）", () => {
     const g = fakeGeocoder();
     expect(isFake(g)).toBe(true);
     expect(isFake({ ...g })).toBe(false);
+  });
+});
+
+describe("偽の Web プッシュの口", () => {
+  it("\"hang\" は打ち切りの合図まで返らず、合図が来たら「届かなかった」を返す", async () => {
+    const push = fakePush();
+    push.result = "hang";
+    const controller = new AbortController();
+    const pending = push.send({ endpoint: "https://push.example.test/sub/1" }, { ttlSeconds: 60, signal: controller.signal });
+    expect(await settledWithin(pending, 20)).toBeNull();
+    controller.abort();
+    expect(await settledWithin(pending, 1_000)).toEqual({ ok: false, gone: false });
   });
 });

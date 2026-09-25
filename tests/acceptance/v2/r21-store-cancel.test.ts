@@ -1,7 +1,7 @@
 // 要件21 店による確保の取り消し（手続き）。画面は r20-arrivals.ui.test.tsx のタスク18のブロック。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { fetchOffers, makeCtx, MIN, one, receive, receivedScene, registerCustomer, snapshot, type Ctx } from "./_fakes";
+import { fetchOffers, makeCtx, MIN, one, PUSH_SUBSCRIPTION, receive, receivedScene, registerCustomer, settledWithin, snapshot, type Ctx } from "./_fakes";
 
 describeTask("18", "店の取り消し", () => {
   let ctx: Ctx;
@@ -49,6 +49,28 @@ describeTask("18", "店の取り消し", () => {
       expect(ctx.push.calls.length, state).toBe(pushBefore);
     }
     ctx.clock.set("2026-09-22T06:00:00.000Z");
+  });
+
+  // 通知の送信は外のサービス。ほかの外向きの呼び出しと同じく打ち切りがないと、応答しない配信先を登録した客が1人いるだけで
+  // 店の「取り消す」が戻らず、押し直すと「もう取り消されています」と断られる。打ち切りは偽の時計（deps.clock）で進める
+  // ——実時計の打ち切りだけだと、この検査は実時間の数秒で緑になり、打ち切りが手続きに効いているかを示さない（設計-19）。
+  it.fails("既知の不具合（不具合-08）: 通知の送信が返らなくても、店の取り消しは偽の時計の数秒で応答する", async () => {
+    const s = await receivedScene(ctx);
+    expect((await s.customer.api.post("/api/customer/push-subscription", { subscription: PUSH_SUBSCRIPTION })).status).toBe(200);
+    ctx.push.result = "hang";
+    try {
+      const armed = ctx.clock.armed();
+      const pending = s.store.api.post(`/api/store/reservations/${s.reservation.id}/cancel`, {});
+      await armed;
+      const startedAt = performance.now();
+      await ctx.clock.advance(5_100);
+      const r = await settledWithin(pending, 1_000);
+      expect(r?.status).toBe(200);
+      expect(performance.now() - startedAt).toBeLessThan(1_000);
+      expect((await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", s.reservation.id)).status).toBe("store_cancelled");
+    } finally {
+      ctx.push.result = { ok: true };
+    }
   });
 
   it("別の店のセッションからは取り消せない", async () => {

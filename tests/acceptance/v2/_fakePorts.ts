@@ -267,7 +267,11 @@ export const fakeStoreImage = (): FakeStoreImage => {
   return markFake(s);
 };
 
-export type FakePush = PushSender & { calls: Array<{ subscription: unknown; ttlSeconds: number }>; result: { ok: true } | { ok: false; gone: boolean } | "throw" };
+/**
+ * 偽の Web プッシュの口。`result` で返し方を替える: 既定は届いた／`{ ok: false, gone }`／"throw"（例外）／
+ * "hang"（**打ち切りの合図まで返らない**＝応答しない配信先。合図が無ければ永遠に返らない・通知の送信の打ち切りの件（不具合-08））。
+ */
+export type FakePush = PushSender & { calls: Array<{ subscription: unknown; ttlSeconds: number }>; result: { ok: true } | { ok: false; gone: boolean } | "throw" | "hang" };
 export const fakePush = (): FakePush => {
   const p: FakePush = {
     calls: [],
@@ -275,6 +279,7 @@ export const fakePush = (): FakePush => {
     send: async (subscription, opts) => {
       p.calls.push({ subscription, ttlSeconds: opts.ttlSeconds });
       if (p.result === "throw") throw new Error("push failure");
+      if (p.result === "hang") return hangUntilAbort(opts.signal, { ok: false, gone: false } as const);
       return p.result;
     },
   };

@@ -63,7 +63,11 @@ export type PitchWriter = {
 };
 /** 店のホームページから画像の URL を取る口（任意の口。本番は持つ） */
 export type StoreImageFetcher = { fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; imageUrl: string } | { ok: false }> };
-export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
+/**
+ * Web プッシュの送信。`signal` は打ち切りの合図（任意）——応答しない配信先で呼ぶ側の応答が止まらないよう、
+ * 手続きは送信を打ち切れる（通知の送信の打ち切りの件（不具合-08）。ほかの外向きの口と同じ形）。
+ */
+export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number; signal?: AbortSignal }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
 export type CardRegistrar = {
   createSetupSession(input: { storeId: string; returnUrl: string }): Promise<{ ok: true; url: string; sessionId: string } | { ok: false }>;
   confirmSetup(sessionId: string): Promise<{ ok: true; clientReference: string } | { ok: false }>;
