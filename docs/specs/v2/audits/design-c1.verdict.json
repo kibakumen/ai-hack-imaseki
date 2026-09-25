@@ -33,14 +33,14 @@
           "quote": ".env.*"
         },
         {
-          "path": "~/.claude/skills/dev/scripts/lib/config.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の config.mjs",
           "line": 27,
-          "quote": "\".gitignore\","
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "~/vault/knowledge/models/development/sdd/02_dev最小版_構造.md",
+          "path": "（非公開）02_dev最小版_構造.md",
           "line": 59,
-          "quote": "役割を問わず `.git/**`・`.gitignore`・`.gitattributes`・`.claude/**`・`dev.config.json`・`.dev/**` を**書けない場所**に追加。さらに**着手時にこれらの指紋を控え、ゲートで突き合わせる**"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ]
     },

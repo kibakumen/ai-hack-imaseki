@@ -10,14 +10,14 @@
       "claim": "intent.md の設計への申し送りが、正本として直接引用している01_要件.mdと矛盾する事実（OrcaRouter無料プランでのGuardrails/Firewallの可否）を「確認済み」と書いている。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 129,
           "quote": "OrcaRouter の Guardrails を AI の入出力の検査に使うか（負債「Guardrails・Firewall を使っていない」・S6。無料プランでも使えることは v1 の申し送りで調査役が確認済み・進行役は未再確認）"
         },
         {
-          "path": "vault/knowledge/projects/ai-hack-2026/01_要件.md",
+          "path": "（非公開）01_要件.md",
           "line": 56,
-          "quote": "❓ **無料プラン（Hacker）で Firewall・Guardrails・承認待ちが使えるかは未確認**。ハッカソン用のクレジットの有無も未確認"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ],
       "confidence": "確実",
@@ -30,17 +30,17 @@
       "claim": "基準5（取得）で、1店が複数の受付可能なオファーを同時に持つ場合、取得の結果の1件（店単位）にそのうち何個・どのオファーを乗せるかが決まっておらず、後続の絞り込み・点数・AI選定（基準21〜23）が店単位かオファー単位かも読み取れない。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 71,
           "quote": "**取得**: 客が取得を押すと、今受け取れるオファーを持つ店のうち条件と嗜好の合う店が最大5件、それぞれに AI の書いた理由1文と受け取れるオファーを添えて返ること（取得のボタンは v2 メモ・本人発案。選び方は本人選択。1件を店の単位にするのはチーム案の画面から・AI判断）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 58,
           "quote": "**オファー**: 店が置く「サービス内容・受け入れの単位・受付時間」のひとまとまり。1店につき3つまで"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 97,
           "quote": "**点数と上位10件**: 絞り込んだ候補に決定論で点数を付け、上位10件を AI へ渡すこと（本人選択）。点数の中身は要件の段で決める（チーム案は距離・ジャンルの一致・時間帯の相性・AI判断）"
         }

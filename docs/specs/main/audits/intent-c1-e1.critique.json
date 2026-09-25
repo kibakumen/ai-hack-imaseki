@@ -22,9 +22,9 @@
           "quote": "進行役がこう読んだ。**解釈は推測**。DB そのものを持たない意味かどうかは本人に確かめる）"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-doc.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-doc.mjs",
           "line": 94,
-          "quote": "const aiJudgments = (body.match(/AI判断/g) ?? []).length;"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/main/intent.md",
@@ -39,9 +39,9 @@
       "verdict": "AGREE",
       "evidence": [
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/01_要件.md",
+          "path": "（非公開）01_要件.md",
           "line": 92,
-          "quote": "- 自律度の見せ方（承認つき実行か、例外だけ人へ回すか）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/main/intent.md",
@@ -78,9 +78,9 @@
       "verdict": "AGREE",
       "evidence": [
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/01_要件.md",
+          "path": "（非公開）01_要件.md",
           "line": 40,
-          "quote": "- スポンサーの **OrcaRouter を使用する**こと"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/main/intent.md",
@@ -111,9 +111,9 @@
           "quote": "- **ネイティブアプリ**（Flutter／React Native とプッシュ通知基盤 FCM/APNs）。ウェブアプリで作る（本人発案の構成から。AI判断）"
         },
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/02_題材と注文.md",
+          "path": "（非公開）02_題材と注文.md",
           "line": 92,
-          "quote": "お客さん側は**実機のみ**で見せる（実際の端末に通知を届ける）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ]
     },
@@ -141,9 +141,9 @@
       "claim": "元の文書は「データモデルに関する実装も今回の要件外」の読み方を「聞き取りの段で確かめる」としていたのに、聞き取りの段の成果物である意図の文書はまだ「本人に確かめる」と先送りしている。監査の本人への質問にも入っていない。仮に「DB を持たない」という意味だった場合、届ける相手の決定の基準（基準2）の「あらかじめ登録された客」と、店側の確認の基準（基準5）の配信数は、何らかの保存先が無いと成り立たない。未解決の矛盾の芽になっている。",
       "evidence": [
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/02_題材と注文.md",
+          "path": "（非公開）02_題材と注文.md",
           "line": 86,
-          "quote": "と進行役は読んだ（**解釈は推測**。聞き取りの段で確かめる）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/main/intent.md",
@@ -161,9 +161,9 @@
       "claim": "01_要件の未決事項のうち「効果を示す数字」も、自律度の見せ方（F2）と同様に意図の文書のどこにも扱いが無い。基準にも、やらないことにも、後の段で決めるという注記にも出てこない。他の未決事項（公開リポジトリに含めないもの・チームD の役割分担）には対応が付いているので、対応付けが一部だけ抜けている。",
       "evidence": [
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/01_要件.md",
+          "path": "（非公開）01_要件.md",
           "line": 93,
-          "quote": "- 効果を示す数字（処理時間・人が手を入れた割合・正解率・1件あたりのコスト）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/main/intent.md",
@@ -181,14 +181,14 @@
           "quote": "店主がスマホのブラウザから、席の空き状況（空席数）を入力して、周囲の客への集客オファーを出せること（本人発案・基本機能）"
         },
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/02_題材と注文.md",
+          "path": "（非公開）02_題材と注文.md",
           "line": 65,
-          "quote": "- スマホのブラウザで完結（店主はPCの前にいません）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/02_題材と注文.md",
+          "path": "（非公開）02_題材と注文.md",
           "line": 82,
-          "quote": "技術案に関して、これはAIに出力させたとりあえずのたたき台ですので、遵守しなくていいです。"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ]
     },
@@ -196,9 +196,9 @@
       "claim": "ゲートが数えた「AI判断14件」には、前文で印を定義している行（12行）自体が含まれている。本文の実際の印は13件。監査が「崩せなかった点」に挙げた「14件で一致」は形式上は正しいが、承認のときに本人へ見せる件数は1件多い。これは意図の文書ではなくゲートの数え方の欠陥。",
       "evidence": [
         {
-          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-doc.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-doc.mjs",
           "line": 94,
-          "quote": "const aiJudgments = (body.match(/AI判断/g) ?? []).length;"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/main/intent.md",
@@ -206,9 +206,9 @@
           "quote": "「（AI判断）」は元の文書に無く、設計者が推測で埋めたもの（後で覆されうる）。"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/SKILL.md",
+          "path": "（非公開）開発ハーネス（skill dev）の SKILL.md",
           "line": 148,
-          "quote": "6. 「AI判断」の印の件数（ゲートの結果にある）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ]
     }

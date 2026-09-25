@@ -129,7 +129,7 @@
     }
   ],
   "unbroken": [
-    "dev.config.json の gate コマンドが空のままであること（`typecheck`・`lint`・`test` すべて `[]`）は、当初「ゲートのコマンドの欠落」型の候補として疑ったが、`.claude/skills/dev/SKILL.md`（2d-2節）の正規の手順どおり——設計の承認後に進行役が本人へ確認して初めて書き写す——という段階にまだ達していないだけで、design.md 自体は3つのコマンドを明記済み（85〜91行目）であり、設計書側の欠陥ではない",
+    "dev.config.json の gate コマンドが空のままであること（`typecheck`・`lint`・`test` すべて `[]`）は、当初「ゲートのコマンドの欠落」型の候補として疑ったが、`開発ハーネス（skill dev）の SKILL.md`（2d-2節）の正規の手順どおり——設計の承認後に進行役が本人へ確認して初めて書き写す——という段階にまだ達していないだけで、design.md 自体は3つのコマンドを明記済み（85〜91行目）であり、設計書側の欠陥ではない",
     "外部サービス（OrcaRouter・Geocoding・Stripe・Web Push・R2・Turnstile）はすべて `lib/adapters/` の1ファイルずつに閉じ、`lib/ports.ts` の型を介してのみ他層から参照される構成が一貫しており、段1〜2で検査を置けない外部APIへの直結は見当たらなかった。D1・R2ともに `getPlatformProxy` で本物のSQL/バインディングを使う検査が組まれ、実機やCheckout画面遷移などunit化しにくい項目は段3・段4・段5へ明示的に切り出されている",
     "秘密鍵（ORCAROUTER_API_KEY・GOOGLE_MAPS_API_KEY・STRIPE_SECRET_KEY・VAPID_PRIVATE_KEY・TURNSTILE_SECRET_KEY・ADMIN_CONTACT_EMAIL）はすべて Worker の secret として扱われ、`web/wrangler.jsonc`（gitで追跡される）の `vars` には一切置かれない設計になっており、ブラウザに渡る値は公開してよいもの（VAPID公開鍵・Turnstileサイトキー・運営連絡先メール）に限定されている。基準34.6の走査もフォルダ除外なしで全木を対象にしており、ログの出口も `adapters/logger.ts` の1か所に絞られ個人データを渡さない型で守られている",
     "requirements.md の34要件368基準は、design.md「要件ごとの検査の割り当て」表に番号単位ですべて出現し、検査方法・検証の段・実現する場所が空欄の行は無い（1件ずつ突き合わせ済み）",

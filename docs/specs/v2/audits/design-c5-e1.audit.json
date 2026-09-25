@@ -36,9 +36,9 @@
           "quote": "\"test\": []"
         },
         {
-          "path": ".claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 84,
-          "quote": "const notes = Object.values(config.gate).some((c) => (Array.isArray(c) ? c.length : c))\n    ? []\n    : [\"dev.config.json の gate にコマンドが1つもありません（型・lint・テストは検査していない）\"];"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ],
       "confidence": "確実",
@@ -80,17 +80,17 @@
       "claim": "確保中の表示・取得の結果に、店へ向かうための地図（道順）を開く手段が無く、住所の文字とホームページの URL だけしか出ない。ペルソナ田中さんは駅前の人混みを片手のスマホで歩きながら店を探す設定なのに、実際に店へ向かう段でこの助けが無い。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 139,
           "quote": "- **どこで**: 駅前の人混みの中。片手でスマホを持っている"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 161,
           "quote": "8. 店に着き、確保中の表示（コード・店名・人数・期限・クーポン）を店員に見せる。"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/design.md",
+          "path": "docs/specs/v2/design.md",
           "line": 391,
           "quote": "確保中の表示 | **コード（大きく）**・店名・住所・人数・期限の時刻・クーポン・ホームページ・「人数を変える」・通報ボタン・「ほかの店を探す」・いちばん下に「確保を取り消す」"
         }

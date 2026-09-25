@@ -28,19 +28,19 @@
           "quote": "検査のファイルは `tests/acceptance/v2/`（タスク分割の段で設計者が書く）。"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 25,
-          "quote": "const result = spawnSync(cmd, args, { cwd: repo, shell, encoding: \"utf8\" });"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 47,
-          "quote": "...Object.keys(current).filter((rel) => !(rel in approved)).map((rel) => `タスク表の承認後に受け入れ検査が足されています（改ざん）: ${rel}`),"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/SKILL.md",
+          "path": "（非公開）開発ハーネス（skill dev）の SKILL.md",
           "line": 26,
-          "quote": "**周回の上限を守る。** ゲートの差し戻しは1段あたり3回"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/v2/design.md",

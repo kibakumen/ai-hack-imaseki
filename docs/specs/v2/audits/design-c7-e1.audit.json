@@ -16,9 +16,9 @@
           "quote": "飛ばしたブロックは Vitest の出力に skipped として数が出るので、飛ばしたことは隠れない。"
         },
         {
-          "path": ".claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 33,
-          "quote": ".map(({ name, shown, result }) => {\n      if (result.status === 0) return { shown, error: null };"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ],
       "confidence": "高確率",
@@ -33,12 +33,12 @@
       "claim": "要件の用語「登録の入口」は requirements.md の用語節で『客の登録と店の登録だけが入る』と閉じて定義されているが、design.md の「入口（API）の一覧」はこの同じラベルを、ログイン・ログアウト・公開設定値取得（GET /api/config/public）まで含む5つの入口の分類名として無印（AI判断の印なし）で再利用している。振る舞い自体（これらを無記名で通す）は妥当だが、要件書が明示的に閉じた用語を、設計書の随所にある帰属の印の慣行（AI判断・本人選択などを必ず添える）を欠いたまま黙って広げており、後から要件書の用語定義と照らし合わせる読み手を混乱させる。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 65,
           "quote": "- **登録の入口**: まだ要求の主を持たない人が最初に使う要求のまとまり（語は AI判断）。客の登録（要件1の基準 1.1）と、店の登録（要件12の基準 12.1。重複メールの確認を含む）だけが入る。ここに来る要求は、客の識別子もログインも持たない無記名の要求として受け付ける"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/design.md",
+          "path": "docs/specs/v2/design.md",
           "line": 331,
           "quote": "| 登録の入口 | `POST /api/register/customer`・`POST /api/register/store`・`POST /api/auth/login`・`POST /api/auth/logout`・**`GET /api/config/public`**（公開してよい設定の値を返すだけ...）"
         }
@@ -142,7 +142,7 @@
   ],
   "unbroken": [
     "dev.config.json の gate が空（型検査/lint/テストのコマンド未設定）は欠陥ではない——design.md 93行目と skills/dev/SKILL.md 156行目が『設計承認後に進行役が確認して書き写す』と明記し、実際その運びで一致している",
-    "着手の記録 .dev/runs/v2/task-<番号>.json がどの/dev役割からも書けないという design.md の主張（113・123行目）は、.claude/skills/dev/scripts/lib/config.mjs の INFRA_DENY と gate-code.mjs 65行目の実装を確認し、事実と一致した",
+    "着手の記録 .dev/runs/v2/task-<番号>.json がどの/dev役割からも書けないという design.md の主張（113・123行目）は、開発ハーネス（skill dev）の config.mjs の INFRA_DENY と gate-code.mjs 65行目の実装を確認し、事実と一致した",
     "lib/adapters 以外で crypto を呼べないという境界は、web/scripts/ を明示的な例外として文書化しており、隠れた例外ではない（305行目）",
     "web/wrangler.jsonc の vars に置ける名前の許可リスト（3つ）と、秘密の名前パターンの走査は一貫しており、ADMIN_CONTACT_EMAIL 等の秘密情報がそこに紛れ込む経路は見当たらなかった",
     "AiSelector・Geocoder・PushSender・CardRegistrar・FileStore・HumanCheck・Logger・Clock・Rng・Hasher の10個の差し替え口で外部サービス（OrcaRouter・Google Maps・Web Push・Stripe・R2・Turnstile・console・crypto）が全部覆われており、段1で検査を置けない外部直結は見つからなかった",
