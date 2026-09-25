@@ -42,6 +42,10 @@ const onPopState = (event: PopStateEvent) => {
 
 const listen = () => {
   if (listening) return;
+  // 再読み込みの前に積んだ重ねの履歴が残っていれば、その番号より大きい番号から積む（客-03 のレビュー）。
+  // モジュールの番号は再読み込みで0に戻るが、履歴には前の番号が残る。同じ番号で積み直すと、最初の戻る操作が
+  // 前の番号の履歴に着地して「着地した番号より後の重ね」が無く、何も閉じない（戻るを1回余計に押すことになる）。
+  lastId = Math.max(lastId, layerIdOf(window.history.state));
   window.addEventListener("popstate", onPopState);
   listening = true;
 };
