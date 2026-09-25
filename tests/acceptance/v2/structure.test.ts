@@ -395,9 +395,10 @@ describeTask("34", "明暗の両対応: 色は変数でだけ指す", () => {
   });
 });
 
-describeTask("25", "応答の見出し（既知の不具合）", () => {
-  // セキュリティ用の応答の見出しが1つも無い。next.config.ts の headers() で全部の経路に付ける（設計-04 が挙げた、確かめる検査の無い約束）。
-  it.fails("既知の不具合（安全-24）: 全部の経路の応答に CSP・X-Frame-Options・Referrer-Policy・Permissions-Policy・X-Content-Type-Options が付き、X-Powered-By を出さない", async () => {
+describeTask("25", "応答の見出し", () => {
+  // セキュリティ用の応答の見出しが1つも無かった。next.config.ts の headers() で全部の経路に付ける（設計-04 が挙げた、確かめる検査の無い約束）。
+  // 2026-09-25 に安全-24 を直したので、普通の it に戻した。CSP が画面の読むものを壊さないことは web/tests/securityHeaders.test.ts が見る。
+  it("安全-24 全部の経路の応答に CSP・X-Frame-Options・Referrer-Policy・Permissions-Policy・X-Content-Type-Options が付き、X-Powered-By を出さない", async () => {
     const { pathToFileURL } = await import("node:url");
     const config = (await import(/* @vite-ignore */ pathToFileURL(path.join(WEB, "next.config.ts")).href)).default as {
       poweredByHeader?: boolean;
