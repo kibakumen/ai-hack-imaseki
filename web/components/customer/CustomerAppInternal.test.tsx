@@ -20,6 +20,35 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+// 端末に何も残っていない（プライベートモード・保存を止めた端末）ときも、登録の入力は出さない
+// （2026-09-25 レビューの指摘）。登録の入力へ倒すのは 401 のときだけ（設計書「客の画面」の優先の順の1）で、
+// 出すと客が入れ直して登録し、新しい識別子の Cookie が今の Cookie を上書きしてしまう。
+it.each([
+  ["500・internal", () => ({ status: 500, json: { ok: false, error: { kind: "internal" } } })],
+  [
+    "通信の失敗",
+    () => {
+      throw new TypeError("Failed to fetch");
+    },
+  ],
+])("初めの取得が %s で端末にも何も無いときは、登録の入力を出さず、読めなかったことと読み直す道を出す。直れば取得の画面へ", async (_label, failing) => {
+  let down = true;
+  api = installFakeApi({
+    "GET /api/config/public": () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } }),
+    "GET /api/customer/home": () => (down ? failing() : { json: homeFetch() }),
+  });
+  render(<CustomerApp />);
+  await screen.findByTestId("load-failed");
+  expect(screen.queryByTestId("form-register")).toBeNull();
+  expect(screen.queryByTestId("field-nickname")).toBeNull();
+  down = false;
+  await act(async () => {
+    screen.getByTestId("btn-retry").click();
+  });
+  await screen.findByTestId("btn-fetch");
+  expect(screen.queryByTestId("load-failed")).toBeNull();
+});
+
 it("取り直しが 500・internal を返しても、確保中の表示と「確かめられていません」を出し、登録の入力へ倒さない", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   let broken = false;

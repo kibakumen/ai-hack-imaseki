@@ -9,7 +9,8 @@
 //   1. 取得の結果と人数（取得の画面の続き。人数は結果の側から入れ替わるので外に置く）
 //   2. 受け取り・受け取り直しが断られた1件（どのカードの中に出すか・基準 8.6）
 //   3. 確保を持ったまま「ほかの店を探す」を押したか（基準 8.10。サーバーは確保中のままを返す）
-//   4. 取り直しが通信の失敗に終わったか（端末に残した内容へ倒す・基準 9.10・9.11）
+//   4. 取り直しが通信の失敗に終わったか（端末に残した内容へ倒す・基準 9.10・9.11。何も残っていなければ
+//      読めなかったことを出し、登録の入力は出さない——登録の入力は 401 のときだけ）
 //   5. 開いている脇の画面（最近行った店・登録の確認と消去。同時には1つだけ・基準 26.14・28.4）
 //   6. 通報が指している店（基準 26.1・26.17。断られても元の表示のままにするため外に置く）
 //
@@ -19,7 +20,7 @@
 // 断りの文とボタンの文は `RefusalNotice` が `domain/texts` から引く。
 
 import { useRef, useState } from "react";
-import { callApi, isFailure, isTransientFailure } from "../../lib/client/api";
+import { callApi, isFailure, isTransientFailure, type ApiFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
 import { usePolling } from "../../lib/client/usePolling";
 import { AdminCancelledView } from "./AdminCancelledView";
@@ -36,6 +37,7 @@ import { ReservationView } from "./ReservationView";
 import { ResultList, type ResultItem } from "./ResultList";
 import { StoreCancelledView } from "./StoreCancelledView";
 import { CustomerRefusals } from "../ui/InputRefusal";
+import { LoadView } from "../ui/LoadState";
 
 /** 断られた1件。`offerId` は結果のカードに出すため（受け取り直しは押した場所が1つなので null）。 */
 type RefusedReceive = { offerId: string | null; body: ReceiveRefusal };
@@ -86,6 +88,12 @@ const CustomerScreens = () => {
    * `ClaimedCelebration` を重ねる。閉じれば下の確保中の表示がそのまま在る。
    */
   const [celebrating, setCelebrating] = useState(false);
+  /**
+   * 1度も取れず端末にも残っていないまま、取り直しが通信の失敗・サーバーの不具合に終わった（2026-09-25 レビューの指摘）。
+   * このときは登録の入力を出さない——登録の入力へ倒すのは 401 のときだけ（設計書「客の画面」の優先の順の1）で、
+   * 出すと客が入れ直して登録し、新しい識別子の Cookie が今の Cookie（確保を持つかもしれない）を上書きする。
+   */
+  const [unreachable, setUnreachable] = useState<ApiFailure | null>(null);
 
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
@@ -100,20 +108,24 @@ const CustomerScreens = () => {
     if (!isFailure(result)) {
       setHome(result);
       setStale(false);
+      setUnreachable(null);
       keep(result);
       return;
     }
     // 通信の失敗とサーバーの不具合（500・internal）は、端末に残した内容へ倒す（基準 9.10・9.11）。
     // サーバーの不具合を見分けの断りと取り違えて登録の入力へ倒さない（2026-09-25 監査の指摘 設計-15）。
+    // 端末にも何も残っていなければ、読めなかったことと読み直す道を出す（登録の入力は出さない・レビューの指摘）。
     if (isTransientFailure(result)) {
       const kept = home ?? loadCachedHome<HomeDto>();
       setHome(kept);
       setStale(kept !== null);
+      setUnreachable(kept === null ? result : null);
       return;
     }
     // 見分けの断り（401）は登録の入力へ（基準 1.10・1.11）
     setHome(null);
     setStale(false);
+    setUnreachable(null);
   };
 
   usePolling(refresh);
@@ -212,6 +224,16 @@ const CustomerScreens = () => {
   const togglePanel = (next: Panel) => setPanel((current) => (current === next ? "none" : next));
 
   if (!loaded) return <main aria-busy="true" />;
+
+  if (home === null && unreachable !== null) {
+    return (
+      <main>
+        <LoadView state={{ status: "failed", failure: unreachable }} onRetry={() => void refresh()}>
+          {() => null}
+        </LoadView>
+      </main>
+    );
+  }
 
   if (home === null) {
     return (
