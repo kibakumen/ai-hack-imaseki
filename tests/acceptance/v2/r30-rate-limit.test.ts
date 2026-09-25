@@ -50,9 +50,14 @@ describeTask("33", "連打の抑止", () => {
   it("30.3 同じ客の通報は1時間に5回まで。6回目は断る", async () => {
     at(ctx, 100);
     const s = await receivedScene(ctx);
+    // 通報を受け付けるのは、確保中か7日以内に完了済みになった店だけ（要件26の基準 26.18）。
+    // 1時間後も通報できる客にするため、来店して完了済みにしておく（確保中のまま1時間たつと期限切れになり、
+    // 26.18 で断られる——それを連打の抑止と取り違えないように・設計-02）
+    expect((await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {})).status).toBe(200);
     for (let i = 0; i < 5; i++) expect((await s.customer.api.post("/api/customer/reports", { storeId: s.store.id, reason: `理由${i}` })).status, String(i)).toBeLessThan(300);
     const sixth = await s.customer.api.post("/api/customer/reports", { storeId: s.store.id, reason: "6回目" });
     expect(sixth.status).toBe(429);
+    expect(sixth.json.error.kind).toBe("rate_limited");
     at(ctx, 161);
     expect((await s.customer.api.post("/api/customer/reports", { storeId: s.store.id, reason: "1時間後" })).status).toBeLessThan(300);
   });

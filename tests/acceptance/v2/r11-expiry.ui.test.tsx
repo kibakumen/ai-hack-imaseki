@@ -4,7 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { componentOf, homeFetch, installFakeApi, loadWeb, reservationDto, type FakeApi } from "./_fakes";
+import { componentOf, homeFetch, installFakeApi, loadWeb, reservationDto, type FakeApi, type FakeRoute } from "./_fakes";
 import { TID, type HomeDto } from "./_types";
 
 const expiredHome = (over: Partial<HomeDto> = {}, expired: HomeDto["expired"] = { showCode: true, canRetry: true }): HomeDto => ({ ...homeFetch(), kind: "expired", reservation: reservationDto({ status: "expired", party: 2 }), expired, ...over });
@@ -16,7 +16,7 @@ describeTask("16", "期限切れの表示", () => {
     api?.restore();
   });
 
-  const renderHome = async (home: () => HomeDto, routes: Record<string, any> = {}) => {
+  const renderHome = async (home: () => HomeDto, routes: Record<string, FakeRoute> = {}) => {
     api = installFakeApi({ "GET /api/config/public": () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } }), "GET /api/customer/home": () => ({ json: home() }), ...routes });
     const CustomerApp = await componentOf("components/customer/CustomerApp", "CustomerApp");
     render(<CustomerApp />);
