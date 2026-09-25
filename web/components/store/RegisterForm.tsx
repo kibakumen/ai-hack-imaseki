@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
 import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN, STORE_TERMS_VERSION } from "../../lib/schemas/limits";
-import { STORE_TERMS_TEXTS } from "../../lib/domain/texts";
+import { STORE_TERMS_TEXTS, TERMS } from "../../lib/domain/texts";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { SubmitButton } from "../ui/Submit";
@@ -141,7 +141,8 @@ export const RegisterForm = () => {
       <FieldMessage inputId="store-register-password" name="password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
 
       {/* 店向けの利用規約（2026-09-25 監査の指摘 店-21 の案1）。カードを預かる目的と「今は請求しない」こと・
-          止める条件・客のデータの扱い・退会・問い合わせ先を先に示し、同意してから登録する。 */}
+          登録を取り消す条件・客のデータの扱い・退会・問い合わせ先を先に示し、同意してから登録する。
+          呼び方は TERMS の「登録を取り消す」にそろえる（横断-11 のレビュー）。 */}
       <label className="store-agree">
         <input
           type="checkbox"
@@ -156,7 +157,7 @@ export const RegisterForm = () => {
           <a href="/store/terms" target="_blank" rel="noopener" data-testid="link-store-terms">
             店向けの利用規約
           </a>
-          （カードの扱い・止める条件・お客さまの情報の扱い）を読み、同意します
+          （カードの扱い・{TERMS.storeBan}条件・お客さまの情報の扱い）を読み、同意します
         </span>
       </label>
       {askAgree ? (
