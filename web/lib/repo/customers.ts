@@ -57,8 +57,9 @@ export const updateCustomerProfile = async (db: Db, customerId: string, profile:
  * 無いこと（基準 28.5）。判断の正本は `domain/customer.canDeleteRegistration` で、この条件はその SQL 版——
  * **どちらかを直したら両方直す**。手続きが読んで確かめたあとに受け取りが入っても、確保を残したまま消さない。
  *
- * 同じまとまりで、通知の宛先（`push_subscriptions`）も消す（消せたときだけ当たる条件つき）。
- * もう誰も見分けられない客へ知らせを送らない（不具合-15 の直し方の注）。
+ * 同じまとまりで、その客のものを2つ片づける（どちらも、消せたときだけ当たる条件つき）:
+ *   - 確保の行に写した電話番号（`reservations.customer_phone`・安全-17）を空にする。店の一覧にもう出さない
+ *   - 通知の宛先（`push_subscriptions`）を消す。もう誰も見分けられない客へ知らせを送らない（不具合-15 の直し方の注）
  *
  * 既に消えている客には当たらない（何も起きない）＝2度押しても記録は動かない。
  */
@@ -73,6 +74,7 @@ export const eraseCustomer = async (db: Db, customerId: string, input: { nowIso:
           ` AND ((${activeReservationCondition("res", "?2")}) OR (${expiredWithinGraceCondition("res", "?2", "?3")})))`,
       )
       .bind(customerId, input.nowIso, input.expiredGraceFromIso),
+    db.prepare(`UPDATE reservations SET customer_phone = NULL WHERE customer_id = ?1 AND ${erasedNow}`).bind(customerId, input.nowIso),
     db.prepare(`DELETE FROM push_subscriptions WHERE customer_id = ?1 AND ${erasedNow}`).bind(customerId, input.nowIso),
   ]);
   return changedRows(erased) > 0;

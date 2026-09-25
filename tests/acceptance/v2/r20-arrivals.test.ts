@@ -18,9 +18,10 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
   const arrivals = async (api: any) => (await api.get("/api/store/home")).json.arrivals as any[];
   const anotherCustomer = async (over: Record<string, unknown> = {}) => registerCustomer(ctx, { nickname: `客${++seq}`, phone: `0803000${String(seq).padStart(4, "0")}`, ...over });
 
-  // 電話番号を入れていない客（本番の入口が裏で登録する客）は、形を満たすだけの仮の番号で登録される。
-  // 店の一覧にその仮の番号を電話番号として渡さない（案A: 店へ渡す手前で仮の番号を外す）。
-  it.fails("既知の不具合（横断-02）: 電話番号を入れていない客の行に、仮の番号を電話番号として渡さない", async () => {
+  // 電話番号を入れていない客（本番の入口が裏で登録する客）は、形を満たすだけの仮の番号と `guest-…` の呼び名で
+  // 登録される。店の一覧にその仮の番号を電話番号として、仮の呼び名を客の名前として渡さない（横断-02 の案A:
+  // 店へ渡す手前で外す。見分けはコードに任せる）。
+  it("横断-02 電話番号を入れていない客の行に、仮の番号も仮の呼び名も渡さない（どちらも null）", async () => {
     at(ctx, 0);
     const { GUEST_PHONE_PLACEHOLDER } = await loadWeb("lib/schemas/limits");
     const s = await receivedScene(ctx);
@@ -28,9 +29,36 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
     const f = await fetchOffers(guest.api, { party: 2, ...s.at });
     const received = await receive(guest.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId });
     expect(received.status).toBe(200);
-    const row = (await arrivals(s.store.api)).find((r) => r.code === received.json.reservation.code);
-    expect(row).toBeTruthy();
-    expect(row!.phone).not.toBe(GUEST_PHONE_PLACEHOLDER);
+    const home = await s.store.api.get("/api/store/home");
+    expect(home.text).not.toContain(GUEST_PHONE_PLACEHOLDER);
+    expect(home.text).not.toContain("guest-abc123");
+    const row = (home.json.arrivals as any[]).find((r) => r.code === received.json.reservation.code);
+    expect(row).toMatchObject({ nickname: null, phone: null, party: 2 });
+    // 自分で入れた客の行は、これまでどおり呼び名と番号が出る
+    expect((home.json.arrivals as any[]).find((r) => r.code === s.reservation.code)).toMatchObject({ nickname: "たなか", phone: "09012345678" });
+  });
+
+  // 店の一覧の電話番号は、受け取った時点の番号の写し（安全-17 の案1）。あとから入れた番号は、前に受け取った店へ渡らない。
+  it("安全-17 番号なしで受け取って完了したあとに番号を入れても、その店の「済んだぶん」に番号は出ない。次に受け取った店には出る", async () => {
+    at(ctx, 0);
+    const { GUEST_PHONE_PLACEHOLDER } = await loadWeb("lib/schemas/limits");
+    const first = await receivedScene(ctx);
+    const guest = await registerCustomer(ctx, { nickname: "あとから番号", phone: GUEST_PHONE_PLACEHOLDER });
+    const f = await fetchOffers(guest.api, { party: 2, ...first.at });
+    const received = await receive(guest.api, { offerId: first.offer.id, party: 2, fetchId: f.json.fetchId });
+    expect(received.status).toBe(200);
+    expect((await first.store.api.post(`/api/store/reservations/${received.json.reservation.id}/complete`, {})).status).toBe(200);
+    at(ctx, 30);
+    const profile = (await guest.api.get("/api/customer/home")).json.profile;
+    expect((await guest.api.patch("/api/customer/profile", { ...profile, phone: "08077770001" })).status).toBe(200);
+    const done = (await arrivals(first.store.api)).find((r) => r.code === received.json.reservation.code);
+    expect(done).toMatchObject({ kind: "completed", phone: null });
+    const second = await receivedScene(ctx);
+    const f2 = await fetchOffers(guest.api, { party: 2, ...second.at });
+    const again = await receive(guest.api, { offerId: second.offer.id, party: 2, fetchId: f2.json.fetchId });
+    expect(again.status).toBe(200);
+    expect((await arrivals(second.store.api)).find((r) => r.code === again.json.reservation.code)).toMatchObject({ phone: "08077770001" });
+    at(ctx, 0);
   });
 
   it("20.1・20.2・20.3・20.18 確保中の行に呼び名・電話番号・人数・コード・期限が出て、期限の近い順。人数の変更が映る。0件なら空", async () => {

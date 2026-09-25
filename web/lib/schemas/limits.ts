@@ -15,6 +15,19 @@ export const PHONE_MAX_LENGTH = 11;
  * 「仮かどうか」の見分けを2つの部品が同じ値で行うため。
  */
 export const GUEST_PHONE_PLACEHOLDER = "0000000000";
+/**
+ * 自動の登録が作る呼び名の頭（`guest-` ＋ 6字）。客は自分のこの呼び名を知らないので、店の一覧は
+ * 客の名前として出さない（2026-09-25 監査の指摘 横断-02）。
+ */
+export const GUEST_NICKNAME_PREFIX = "guest-";
+/**
+ * 電話番号が「無い」か（空・自動の登録の仮の番号）。**仮かどうかの見分けはこの1か所**——店の一覧
+ * （`domain/storeHome`）と客の画面（取得の画面の電話番号の欄）が同じここを読む（横断-02）。
+ * 部品が値として読める `lib/domain` は texts だけなので、定数の隣のここに置く（何も import しない性質は保つ）。
+ */
+export const isPlaceholderPhone = (phone: string | null | undefined): boolean => !phone || phone === GUEST_PHONE_PLACEHOLDER;
+/** 呼び名が「客が決めたものでない」か（空・自動の登録の `guest-…`）。店の一覧は「お客さま」と出す（横断-02）。 */
+export const isGuestNickname = (nickname: string | null | undefined): boolean => !nickname || nickname.startsWith(GUEST_NICKNAME_PREFIX);
 export const CUSTOMER_GENRES_MAX = 12;
 export const BUDGET_MAX_MIN = 0;
 export const BUDGET_MAX_MAX = 100_000;

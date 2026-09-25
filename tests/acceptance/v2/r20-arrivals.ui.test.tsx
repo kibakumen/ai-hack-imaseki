@@ -53,6 +53,19 @@ describeTask("17", "向かっている客の一覧（画面）", () => {
     await waitFor(() => expect(api.calls.filter((c) => c.path.endsWith("/complete"))).toHaveLength(1));
   });
 
+  it("横断-02 呼び名と電話番号の無い行は「お客さま」と出し、発信のリンクを付けず、番号の登録が無いことを出す", async () => {
+    await renderHome(() => storeHomeDto({ offer: offerDto(), arrivals: [row({ nickname: null, phone: null }), row({ reservationId: "r2" })] }));
+    const guest = screen.getByTestId(TID.row("r1"));
+    expect(guest.textContent).toContain("お客さま");
+    expect(guest.textContent).toMatch(/電話番号の登録なし/);
+    expect(guest.querySelector('a[href^="tel:"]')).toBeNull();
+    expect(guest.textContent).not.toMatch(/null/);
+    // 番号のある行は、これまでどおり発信のリンクが付く
+    expect(screen.getByTestId(TID.row("r2")).querySelector('a[href="tel:09012345678"]')).not.toBeNull();
+    fireEvent.click(within(guest).getByTestId(TID.btn("complete")));
+    expect((await screen.findByTestId("confirm-complete")).textContent).toContain("お客さま");
+  });
+
   it("20.20・20.21 断られたら今の状態が行に出て、一覧を取り直す", async () => {
     let arrivals = [row()];
     await renderHome(() => storeHomeDto({ offer: offerDto(), arrivals }), { "POST /api/store/reservations/:id/complete": () => ({ status: 409, json: { ok: false, current: { state: "customer_cancelled" } } }) });

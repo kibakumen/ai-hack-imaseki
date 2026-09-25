@@ -295,14 +295,18 @@ export type NewReservation = {
  * 店の状況も見る（止められている店から受け取らせない）。運営が店を止めるとオファーも終わるので、
  * これは受け取れる状態の判断を二重に持つものではない（設計書「オファーの状態」）。
  *
+ * 客の電話番号は**受け取った時点の値を確保の行に写す**（`customer_phone`・安全-17 の案1）。店の一覧はこの写しを
+ * 読むので、あとから客が番号を入れ直しても、前に受け取った店へは渡らない。仮の番号かどうかは写したあとで
+ * `domain/storeHome` が見る（判断を SQL に置かない）。
+ *
  * 選択の記録（基準 27.3）と状態の変化の記録（基準 27.4）は**同じ `db.batch` の並び**で書く（不具合-16）——
  * どちらの文も確保の行が在るときだけ足すので、確保を作らなかったまとまりでは何も残らない。
  */
 export const receiveReservation = async (db: Db, input: NewReservation): Promise<boolean> => {
   const insert = db
     .prepare(
-      `INSERT INTO reservations (id, offer_id, store_id, customer_id, fetch_id, party, code, created_at, expires_at, status, status_at, holds_slot, completed_after_expiry, coupons_json)` +
-        ` SELECT ?1, o.id, o.store_id, ?2, ?3, ?4, ?5, ?6, ?7, 'active', ?6, 1, 0, ?8` +
+      `INSERT INTO reservations (id, offer_id, store_id, customer_id, fetch_id, party, code, created_at, expires_at, status, status_at, holds_slot, completed_after_expiry, coupons_json, customer_phone)` +
+        ` SELECT ?1, o.id, o.store_id, ?2, ?3, ?4, ?5, ?6, ?7, 'active', ?6, 1, 0, ?8, c.phone` +
         ` FROM offers o JOIN stores s ON s.id = o.store_id JOIN customers c ON c.id = ?2` +
         ` WHERE o.id = ?9` +
         ` AND s.status = 'approved'` +
@@ -346,6 +350,7 @@ export type ArrivalReservationRow = {
   expiresAt: Date;
   statusAt: Date;
   nickname: string;
+  /** 受け取った時点の電話番号の写し（安全-17）。写しが無い（写す前の行・消去した客）なら空 */
   phone: string;
   party: number;
   code: string;
@@ -368,11 +373,14 @@ const HAS_NEWER_RESERVATION = (alias: string): string =>
  * 取り消した・運営に取り消された・基準 20.15）③読む幅を `sinceIso` で切る（残り方の
  * いちばん長い24時間ぶん。これが無いと店の一覧が日ごとに重くなる）。①と③は索引
  * `idx_reservations_store_status_at`（migrations/0004）で引く（設計-08）。
+ *
+ * 電話番号は**確保の行の写し**（`res.customer_phone`・受け取った時点の値）を読み、客の今の番号は読まない
+ * （安全-17 の案1: あとから入れた番号が、前に受け取った店の「済んだぶん」に出ていた）。呼び名は客の今の値。
  */
 export const listStoreArrivals = async (db: Db, storeId: string, sinceIso: string): Promise<ArrivalReservationRow[]> => {
   const result = await db
     .prepare(
-      `SELECT ${RESERVATION_COLUMNS}, c.nickname AS customer_nickname, c.phone AS customer_phone,` +
+      `SELECT ${RESERVATION_COLUMNS}, c.nickname AS customer_nickname, res.customer_phone AS customer_phone,` +
         ` ${HAS_NEWER_RESERVATION("res")} AS has_newer` +
         ` FROM reservations res` +
         ` JOIN customers c ON c.id = res.customer_id` +

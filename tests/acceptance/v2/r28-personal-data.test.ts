@@ -1,7 +1,7 @@
 // 要件28 客の個人データと登録の消去。28.3 はタスク11、28.1・28.2 はタスク25、28.4〜28.11 は【最終日】タスク32。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { approvedStore, fetchOffers, makeCtx, MIN, one, publishOffer, receivedScene, registerCustomer, rows, snapshot, type Ctx } from "./_fakes";
+import { approvedStore, dbContains, fetchOffers, makeCtx, MIN, one, publishOffer, receivedScene, registerCustomer, rows, snapshot, type Ctx } from "./_fakes";
 
 describeTask("11", "AI に渡す内容（28.3）", () => {
   let ctx: Ctx;
@@ -110,5 +110,21 @@ describeTask("32", "【最終日】登録の消去（28.4〜28.11）", () => {
     expect((await fetchOffers(s.customer.api, { party: 2 })).status).toBe(401);
     expect(await rows(ctx.db, "SELECT * FROM fetch_logs ORDER BY rowid")).toEqual(logsBefore);
     expect(logsBefore.some((l: any) => l.customer_id === customerId)).toBe(true);
+  });
+
+  // 2026-09-25 監査の指摘 安全-17・不具合-15: 店の一覧の電話番号は確保の行に写した値なので、消去はその写しも空にする。
+  // もう誰も見分けられない客へ知らせを送らないよう、通知の宛先も消す。
+  it("28.6・28.8 消すと、確保の行に写した電話番号と通知の宛先も消える", async () => {
+    ctx.clock.set("2026-09-22T06:00:00.000Z");
+    const s = await receivedScene(ctx, { capacity: 3 });
+    const sub = { endpoint: "https://push.example.test/sub/erase", keys: { p256dh: "BPUB", auth: "AUTH" } };
+    expect((await s.customer.api.post("/api/customer/push-subscription", { subscription: sub })).status).toBe(200);
+    expect((await s.customer.api.post(`/api/customer/reservations/${s.reservation.id}/cancel`, {})).status).toBe(200);
+    const customerId = (await one(ctx.db, "SELECT customer_id FROM reservations WHERE id = ?", s.reservation.id)).customer_id;
+    expect((await one(ctx.db, "SELECT customer_phone FROM reservations WHERE id = ?", s.reservation.id)).customer_phone).toBe("09012345678");
+    expect((await s.customer.api.del("/api/customer")).status).toBe(200);
+    expect((await one(ctx.db, "SELECT customer_phone FROM reservations WHERE id = ?", s.reservation.id)).customer_phone).toBeNull();
+    expect(await rows(ctx.db, "SELECT customer_id FROM push_subscriptions WHERE customer_id = ?", customerId)).toEqual([]);
+    expect(await dbContains(ctx.db, "push.example.test/sub/erase")).toBe(false);
   });
 });

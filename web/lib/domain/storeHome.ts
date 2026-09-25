@@ -1,3 +1,4 @@
+import { isGuestNickname, isPlaceholderPhone } from "../schemas/limits";
 import { canCancelByStore, canComplete, effectiveState, isWithinExpiredGrace } from "./reservation";
 import { formatTimeOfDay, resolveUntil } from "./until";
 // 店のホームに何を出すかの判断（設計書「どの判断をどこに置くか」）。副作用なし・時計も引数で受け取る。
@@ -26,8 +27,16 @@ export type OfferView = {
 export type ArrivalView = {
   reservationId: string;
   kind: "active" | "expired" | "completed" | "store_cancelled";
-  nickname: string;
-  phone: string;
+  /**
+   * 客の呼び名。客が自分で決めていない（自動の登録の `guest-…`・消した客の空）なら null——店の画面は
+   * 「お客さま」と出し、見分けはコードに任せる（横断-02 の案A。客は自分の仮の呼び名を知らない）。
+   */
+  nickname: string | null;
+  /**
+   * 受け取った時点の電話番号。登録が無い（自動の登録の仮の番号・空）なら null——店の画面は発信の
+   * リンクを付けず「電話番号の登録なし（コードで照合）」と出す（横断-02 の案A。仮の番号へ発信させない）。
+   */
+  phone: string | null;
   party: number;
   code: string;
   expiresAt: string;
@@ -189,8 +198,9 @@ export const arrivalRows = (rows: readonly ArrivalRowInput[], now: Date, options
     .map(({ row, kind }) => ({
       reservationId: row.reservationId,
       kind,
-      nickname: row.nickname,
-      phone: row.phone,
+      // 自動の登録の仮の値は、店へ渡す手前で外す（横断-02 の案A。見分けは `schemas/limits` の1か所）
+      nickname: isGuestNickname(row.nickname) ? null : row.nickname,
+      phone: isPlaceholderPhone(row.phone) ? null : row.phone,
       party: row.party,
       code: row.code,
       expiresAt: row.expiresAt.toISOString(),
