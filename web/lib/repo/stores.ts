@@ -3,7 +3,7 @@
 
 import type { Deps } from "../ports";
 import { insertAccountStatement, type NewAccount } from "./accounts";
-import { parseStringList } from "./d1";
+import { changedRows, parseStringList } from "./d1";
 import { insertSessionStatement, type NewSession } from "./sessions";
 import type { StoreProfile } from "../schemas/store";
 
@@ -191,6 +191,47 @@ export const updateStoreLicense = async (db: Db, storeId: string, licenseKey: st
     .prepare(`UPDATE stores SET license_key = ?2, license_mime = ?3, license_uploaded_at = ?4 WHERE id = ?1`)
     .bind(storeId, licenseKey, licenseMime, uploadedAtIso)
     .run();
+};
+
+// ---------- 営業許可書を消す（2026-09-25 監査の指摘 安全-20 の案1） ----------
+
+/** 営業許可書のファイルの鍵（今の分と承認の写し）と店の状況。消す手続きが読む。 */
+export type StoreLicenseKeys = { status: StoreStatus; licenseKey: string | null; approvedLicenseKey: string | null };
+
+export const findStoreLicenseKeys = async (db: Db, storeId: string): Promise<StoreLicenseKeys | null> => {
+  const row = await db.prepare(`SELECT status, license_key, approved_license_key FROM stores WHERE id = ?1`).bind(storeId).first();
+  if (!row) return null;
+  return {
+    status: row.status as StoreStatus,
+    licenseKey: (row.license_key as string | null) ?? null,
+    approvedLicenseKey: (row.approved_license_key as string | null) ?? null,
+  };
+};
+
+/**
+ * 止められた店の許可書の鍵を表から外す（今の分と承認の写しの両方）。**止められている間だけ**当たる
+ * （読んでから書くまでに戻されたら外さない）。当たれば true。ファイルそのものは呼ぶ側が置き場から消す。
+ */
+export const clearBannedStoreLicense = async (db: Db, storeId: string): Promise<boolean> => {
+  const result = await db
+    .prepare(
+      `UPDATE stores SET license_key = NULL, license_mime = NULL, license_uploaded_at = NULL, approved_license_key = NULL, approved_license_mime = NULL WHERE id = ?1 AND status = 'banned'`,
+    )
+    .bind(storeId)
+    .run();
+  return changedRows(result) > 0;
+};
+
+/**
+ * 承認の前の店が自分の許可書を取り下げる。**未承認のままで、読んだ鍵のままのときだけ**当たる——読んでから書くまでに
+ * 承認されたら（承認の写しがその鍵を指す）外さない。当たれば true。
+ */
+export const clearPendingStoreLicense = async (db: Db, storeId: string, licenseKey: string): Promise<boolean> => {
+  const result = await db
+    .prepare(`UPDATE stores SET license_key = NULL, license_mime = NULL, license_uploaded_at = NULL WHERE id = ?1 AND status <> 'approved' AND license_key = ?2`)
+    .bind(storeId, licenseKey)
+    .run();
+  return changedRows(result) > 0;
 };
 
 /** カードの登録の口を開いた印。戻ってきた要求を突き合わせるために持つ（カードの値そのものは持たない）。 */

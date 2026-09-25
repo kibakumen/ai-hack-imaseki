@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // 要件13（画面）: 13.3・13.9 の断りの表示、13.8 登録済みかどうかだけ。
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
 import { componentOf, installFakeApi, refusal, storeHomeDto, type FakeApi } from "./_fakes";
@@ -84,6 +84,32 @@ describeTask("7", "書類の画面", () => {
     await setup(storeHomeDto({ status: "pending", checklist: { license: true, card: false }, cardSetupPending: false }), {});
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(api.calls.filter((c) => c.path === "/api/store/card/confirm")).toHaveLength(0);
+  });
+
+  // 2026-09-25 営業許可書が消える道が無い件（安全-20）: 書類の画面に、保管の目的・消す時・連絡先を書き、
+  // 承認の前の店には「営業許可書を消す」を置く（確かめてから消す）。カードは今は請求しないことも書く（店-21）。
+  it("安全-20 書類の画面に許可書の使い道と消す時が書かれ、承認の前の店は確かめてから許可書を消せる。承認済みの店には消す操作が無い", async () => {
+    let license = true;
+    await setup(storeHomeDto({ status: "pending", checklist: { license: true, card: false } }), {
+      "GET /api/store/home": () => ({ json: storeHomeDto({ status: "pending", checklist: { license, card: false } }) }),
+      "DELETE /api/store/license": () => {
+        license = false;
+        return { json: { ok: true } };
+      },
+    });
+    const form = screen.getByTestId(TID.form("license"));
+    expect(form.textContent).toMatch(/承認の確かめ/);
+    expect(form.textContent).toMatch(/消します/);
+    expect(screen.getByTestId(TID.form("card")).textContent).toMatch(/請求しません/);
+    fireEvent.click(screen.getByTestId(TID.btn("delete-license")));
+    expect(api.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+    fireEvent.click(within(await screen.findByTestId("confirm-delete-license")).getByTestId(TID.btn("confirm-delete-license")));
+    await waitFor(() => expect(screen.getByTestId("license-status").textContent).not.toMatch(/登録済み/));
+    expect(api.calls.filter((c) => c.method === "DELETE" && c.path === "/api/store/license")).toHaveLength(1);
+    cleanup();
+    api.restore();
+    await setup(storeHomeDto({ status: "approved", checklist: { license: true, card: true } }), {});
+    expect(screen.queryByTestId(TID.btn("delete-license"))).toBeNull();
   });
 
   it("13.9 card_setup_failed は「カードを登録する」の直下に出て、登録済みにならない", async () => {

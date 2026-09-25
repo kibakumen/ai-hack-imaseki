@@ -6,7 +6,7 @@ import { detectFileType } from "../domain/fileType";
 import type { Deps } from "../ports";
 import { insertAdminAction } from "../repo/adminActions";
 import { findApprovedLicense } from "../repo/adminStores";
-import { findStoreDocuments, updateStoreLicense } from "../repo/stores";
+import { clearBannedStoreLicense, clearPendingStoreLicense, findStoreDocuments, findStoreLicenseKeys, updateStoreLicense, type StoreStatus } from "../repo/stores";
 import { ID_BYTES, LICENSE_MAX_BYTES } from "../schemas/limits";
 import { tokenFromBytes } from "../domain/token";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
@@ -94,4 +94,55 @@ export const readLicenseAsAdmin = async (deps: Deps, storeId: string, actor: Adm
   if (!file) return null;
   await insertAdminAction(deps.db, newAdminAction(deps, actor, "view_license", storeId, { detail: { approved: version === "approved" } }));
   return file;
+};
+
+// ---------- 許可書を消す（2026-09-25 監査の指摘 安全-20 の案1・AI判断） ----------
+// 許可書には個人経営の店主の氏名と住所が載りうる。それまでファイルを消すのは上げ直したときだけで、止めた店・
+// 取り下げたい店のものは期限なく残り、運営の画面からいつでも開けた。使う必要が無くなった時に消す:
+//   - 運営が店を止めたとき … 今の分と承認の写しの両方（`discardLicenseOfBannedStore`・止める手続きの最後）
+//   - 承認の前に店が取り下げたとき … 今の分（`withdrawLicense`・入口 DELETE /api/store/license）
+// 承認のときには消さない——承認の写しは、承認のあとの上げ直しと見比べるために運営が使う（運営-02）。
+// 表から先に外し、そのあとでファイルを消す（逆だと、途中で落ちたとき表が無いファイルを指す）。消せなかったファイルは
+// 記録に残す（鍵は `licenses/<店の番号>/` で始まるので、置き場を見れば辿れる）。
+
+/** 置き場からファイルを消す。消せなくても手続きは続ける（表からはもう外してある）。 */
+const deleteLicenseFiles = async (deps: Deps, storeId: string, keys: ReadonlyArray<string | null>) => {
+  for (const key of new Set(keys.filter((k): k is string => k !== null))) {
+    try {
+      await deps.files.delete(key);
+    } catch {
+      deps.logger.log({ event: "license_discard_failed", id: storeId });
+    }
+  }
+};
+
+/** 運営が止めた店の許可書（今の分と承認の写し）を消す。止められていなければ何もしない。 */
+export const discardLicenseOfBannedStore = async (deps: Deps, storeId: string): Promise<void> => {
+  const keys = await findStoreLicenseKeys(deps.db, storeId);
+  if (!keys || keys.status !== "banned") return;
+  if (!(await clearBannedStoreLicense(deps.db, storeId))) return;
+  await deleteLicenseFiles(deps, storeId, [keys.licenseKey, keys.approvedLicenseKey]);
+};
+
+export type WithdrawLicenseResult =
+  | { ok: true }
+  /** 消す許可書が無い（入口は 404） */
+  | { ok: false; kind: "not_found" }
+  /** 承認済み（承認の根拠なので店からは消せない。退会は運営への連絡で受ける・入口は 409 で今の状況を返す） */
+  | { ok: false; kind: "state"; state: StoreStatus };
+
+/** 承認の前の店が、自分の許可書を取り下げる（消す）。 */
+export const withdrawLicense = async (deps: Deps, storeId: string): Promise<WithdrawLicenseResult> => {
+  const keys = await findStoreLicenseKeys(deps.db, storeId);
+  if (!keys?.licenseKey) return { ok: false, kind: "not_found" };
+  if (keys.status === "approved") return { ok: false, kind: "state", state: keys.status };
+  if (!(await clearPendingStoreLicense(deps.db, storeId, keys.licenseKey))) {
+    // 読んでから書くまでに承認された・上げ直された。今の状況を読み直して断る
+    const latest = await findStoreLicenseKeys(deps.db, storeId);
+    return latest?.status === "approved" ? { ok: false, kind: "state", state: latest.status } : { ok: false, kind: "not_found" };
+  }
+  // 承認の写し（止められた店を戻した後など）が同じ鍵を指していれば、ファイルは残す
+  await deleteLicenseFiles(deps, storeId, [keys.licenseKey === keys.approvedLicenseKey ? null : keys.licenseKey]);
+  deps.logger.log({ event: "license_withdrawn", id: storeId });
+  return { ok: true };
 };

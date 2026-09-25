@@ -307,6 +307,8 @@ export const RESPONSES = {
   "POST /api/store/reservations/:id/cancel": done,
   "GET /api/store/results": object({ items: array(storeResult), summary: object({ today: resultTotals, week: resultTotals }) }),
   "POST /api/store/license": done,
+  // 承認の前の店が許可書を消す（2026-09-25 安全-20）
+  "DELETE /api/store/license": done,
   "POST /api/store/card/setup": object({ ok, url: string() }),
   "POST /api/store/card/confirm": object({ ok, cardRegistered: literal(true) }),
   "POST /api/store/email": done,

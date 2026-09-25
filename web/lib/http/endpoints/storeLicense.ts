@@ -3,13 +3,13 @@
 // URL を知っているだけでは読めない——見分けは defineRoute が済ませ、店の入口は自分の店しか指せない。
 
 import { confirmCardSetup, startCardSetup } from "../../usecases/card";
-import { readLicense, readLicenseAsAdmin, uploadLicense, type LicenseContent } from "../../usecases/license";
+import { readLicense, readLicenseAsAdmin, uploadLicense, withdrawLicense, type LicenseContent } from "../../usecases/license";
 import { adminLicenseQuerySchema } from "../../schemas/admin";
 import { cardConfirmSchema, licenseUploadSchema } from "../../schemas/documents";
 import { LICENSE_UPLOAD_MAX_BODY_BYTES } from "../../schemas/limits";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
-import { notFound, refusal } from "../refusals";
+import { notFound, refusal, stateConflict } from "../refusals";
 
 /**
  * 店が戻ってくる先（外のカードの画面から）。要求そのものの URL を起点にする（環境ごとに書き分けない）。
@@ -64,6 +64,22 @@ const readOwnLicenseRoute = defineRoute({
 });
 
 /**
+ * 承認の前の店が、自分の許可書を消す（2026-09-25 監査の指摘 安全-20）。承認済みの店は 409 で今の状況を返して断る
+ * （承認の根拠なので店からは消せない。退会は運営への連絡で受け、運営が止めると消える）。
+ */
+const withdrawLicenseRoute = defineRoute({
+  method: "DELETE",
+  path: "/api/store/license",
+  auth: "store",
+  handler: async ({ deps, ctx }) => {
+    const result = await withdrawLicense(deps, ctx.storeId);
+    if (result.ok) return respond("DELETE /api/store/license", { ok: true });
+    if (result.kind === "not_found") return notFound();
+    return stateConflict(result.state);
+  },
+});
+
+/**
  * 運営が許可書を開く。`?version=approved` なら承認した時点の写し（2026-09-25 監査の指摘 運営-02）。
  * 開いたことは「誰が・いつ」つきで記録に残す（個人が特定できる書類なので・運営-01）。
  */
@@ -103,4 +119,4 @@ const cardConfirmRoute = defineRoute({
   },
 });
 
-export const storeLicenseRoutes: RouteDefinition[] = [uploadLicenseRoute, readOwnLicenseRoute, readLicenseAsAdminRoute, cardSetupRoute, cardConfirmRoute];
+export const storeLicenseRoutes: RouteDefinition[] = [uploadLicenseRoute, readOwnLicenseRoute, withdrawLicenseRoute, readLicenseAsAdminRoute, cardSetupRoute, cardConfirmRoute];

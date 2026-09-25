@@ -1,4 +1,4 @@
-// 入口 GET・POST /api/store/license（設計書「入口（API）の一覧」）。
+// 入口 GET・POST・DELETE /api/store/license（設計書「入口（API）の一覧」。DELETE は 2026-09-25 安全-20）。
 // 中身は書かない——同じ定義を実物の Deps で呼ぶだけ（構造の検査 29.1）。定義の正本は lib/http/endpoints。
 import { app } from "../../../../lib/entry";
 
@@ -7,3 +7,4 @@ export const dynamic = "force-dynamic";
 
 export const GET = app;
 export const POST = app;
+export const DELETE = app;
