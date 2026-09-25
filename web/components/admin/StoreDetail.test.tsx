@@ -82,7 +82,7 @@ describe("取り消し・戻すの理由と、止めたときの影響（運営-
   });
 
   it("戻すにも理由を求める", async () => {
-    api = installFakeApi({ "GET /api/admin/stores/:id": () => detail({ status: "banned" }), "POST /api/admin/stores/:id/restore": () => ({ json: { ok: true } }) });
+    api = installFakeApi({ "GET /api/admin/stores/:id": () => detail({ status: "banned" }), "POST /api/admin/stores/:id/restore": () => ({ json: { ok: true, status: "approved" } }) });
     render(<StoreDetail storeId="store-1" />);
     fireEvent.click(await screen.findByTestId("btn-restore"));
     const confirm = await screen.findByTestId("confirm-restore");
@@ -90,6 +90,31 @@ describe("取り消し・戻すの理由と、止めたときの影響（運営-
     fireEvent.click(within(confirm).getByTestId("btn-confirm"));
     await waitFor(() => expect(postsTo("/restore")).toHaveLength(1));
     expect(postsTo("/restore")[0].body).toEqual({ reason: "店と電話で確かめた" });
+    expect((await screen.findByTestId("action-result")).textContent).toMatch(/承認済みに戻しました/);
+  });
+
+  // 2026-09-25 安全-20 のレビュー: 止めると営業許可書と承認の写しが消え、戻すと承認待ちになる。押す前にそれを言う
+  it("止める確かめは営業許可書が消えることを言い、許可書を消した店（承認の写しが無い）を戻すときは承認待ちに戻ることを言う", async () => {
+    api = installFakeApi({ "GET /api/admin/stores/:id": () => detail() });
+    render(<StoreDetail storeId="store-1" />);
+    fireEvent.click(await screen.findByTestId("btn-ban"));
+    expect((await screen.findByTestId("confirm-ban")).textContent).toMatch(/営業許可書.*消え.*承認待ち/);
+    cleanup();
+    api.restore();
+
+    api = installFakeApi({
+      "GET /api/admin/stores/:id": () => detail({ status: "banned", license: false, approval: null }),
+      "POST /api/admin/stores/:id/restore": () => ({ json: { ok: true, status: "pending" } }),
+    });
+    render(<StoreDetail storeId="store-1" />);
+    const form = await screen.findByTestId("form-restore");
+    expect(form.textContent).toMatch(/承認待ち/);
+    fireEvent.click(within(form).getByTestId("btn-restore"));
+    const confirm = await screen.findByTestId("confirm-restore");
+    expect(confirm.textContent).toMatch(/承認待ちに戻り/);
+    fireEvent.change(within(confirm).getByTestId("field-reason"), { target: { value: "誤って止めた" } });
+    fireEvent.click(within(confirm).getByTestId("btn-confirm"));
+    expect((await screen.findByTestId("action-result")).textContent).toMatch(/承認待ちに戻しました/);
   });
 
   it("仮のパスワードの発行は、運営自身の今のパスワードを入れてから送る。違えばその欄の直下に断りが出る", async () => {
@@ -196,7 +221,7 @@ describe("状況が先に変わっていたとき（運営-04）と、断りの�
     await waitFor(() => expect(go.disabled).toBe(true));
     fireEvent.click(go);
     expect(postsTo("/restore")).toHaveLength(1);
-    release({ json: { ok: true } });
+    release({ json: { ok: true, status: "approved" } });
   });
 
   it("承認の断りは承認の欄の1か所にだけ出る（仮のパスワードの欄には出ない）", async () => {

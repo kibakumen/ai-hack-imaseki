@@ -78,8 +78,9 @@ const banStoreRoute = defineRoute({
 });
 
 /**
- * 承認済みへ戻す（基準 25.9）。止められている店だけが戻り、終わったオファーと取り消された確保は
- * 戻らない（基準 25.10）。断りの形は停止・承認と同じ（`{ ok:false, current:{ state } }` の409）。
+ * 止められている店を戻す（基準 25.9）。止められている店だけが戻り、終わったオファーと取り消された確保は
+ * 戻らない（基準 25.10）。戻した先（承認済み／止めたときに許可書を消した店は承認待ち・安全-20 のレビュー）を
+ * `status` で返す。断りの形は停止・承認と同じ（`{ ok:false, current:{ state } }` の409）。
  */
 const restoreStoreRoute = defineRoute({
   method: "POST",
@@ -88,7 +89,7 @@ const restoreStoreRoute = defineRoute({
   input: adminActionReasonSchema,
   handler: async ({ params, input, deps, ctx }) => {
     const result = await restoreStore(deps, params.id, { accountId: ctx.accountId }, input.reason);
-    if (result.ok) return respond("POST /api/admin/stores/:id/restore", { ok: true });
+    if (result.ok) return respond("POST /api/admin/stores/:id/restore", { ok: true, status: result.status });
     return storeRefusal(result);
   },
 });

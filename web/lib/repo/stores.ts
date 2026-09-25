@@ -217,15 +217,22 @@ export const findStoreLicenseKeys = async (db: Db, storeId: string): Promise<Sto
 };
 
 /**
- * 止められた店の許可書の鍵を表から外す（今の分と承認の写しの両方）。**止められている間だけ**当たる
- * （読んでから書くまでに戻されたら外さない）。当たれば true。ファイルそのものは呼ぶ側が置き場から消す。
+ * 止められた店の許可書の鍵を表から外す（今の分と承認の写しの両方）。同じ文で**承認の写し全体**（承認の時刻・店名・住所）も
+ * 外す——承認の根拠の書類が無くなったので、戻すときは審査をやり直す印にする（`restoreBannedStore` がこれを見て承認待ちへ
+ * 戻す・安全-20 のレビュー）。
+ *
+ * **止められている間で、鍵が読んだときのままのときだけ**当たる（読んでから書くまでに戻された・上げ直された鍵を、
+ * ファイルを消さないまま外さない・安全-20 のレビュー）。`IS` は NULL どうしも同じと見る。当たれば true。
+ * ファイルそのものは呼ぶ側が置き場から消す。
  */
-export const clearBannedStoreLicense = async (db: Db, storeId: string): Promise<boolean> => {
+export const clearBannedStoreLicense = async (db: Db, storeId: string, read: Pick<StoreLicenseKeys, "licenseKey" | "approvedLicenseKey">): Promise<boolean> => {
   const result = await db
     .prepare(
-      `UPDATE stores SET license_key = NULL, license_mime = NULL, license_uploaded_at = NULL, approved_license_key = NULL, approved_license_mime = NULL WHERE id = ?1 AND status = 'banned'`,
+      `UPDATE stores SET license_key = NULL, license_mime = NULL, license_uploaded_at = NULL, approved_license_key = NULL, approved_license_mime = NULL,
+              approved_at = NULL, approved_name = NULL, approved_address = NULL
+        WHERE id = ?1 AND status = 'banned' AND license_key IS ?2 AND approved_license_key IS ?3`,
     )
-    .bind(storeId)
+    .bind(storeId, read.licenseKey, read.approvedLicenseKey)
     .run();
   return changedRows(result) > 0;
 };

@@ -336,17 +336,32 @@ export const approvePendingStore = async (db: Db, storeId: string, read: StoreRe
   return changedRows(approved) > 0;
 };
 
+/** 止めた店を戻した先。承認の写しが残っていれば承認済み、止めたときに外していれば承認待ち（安全-20 のレビュー）。 */
+export type RestoredStatus = "approved" | "pending";
+
 /**
- * 承認済みへ戻す（基準 25.9）。止められている店だけが承認済みになる。当たれば true。
+ * 止められている店を戻す（基準 25.9）。止められている店だけが当たり、戻した先の状況を返す。当たらなければ null。
+ *
+ *   - 承認の写しが残っている店（許可書を消す手続きより前に止めた店・消すのに失敗した店）… 承認済みへ。許可書も残っている
+ *   - 止めたときに許可書と承認の写しを外した店 … **承認待ちへ**。店が許可書を上げ直し、運営が確かめてから承認する
+ *     （2026-09-25 安全-20 のレビュー。それまでは承認済みへ戻し、許可書の無い承認済みの店がそのまま公開できた）
+ *
  * 終わったオファーと取り消された確保は戻さない（基準 25.10）——この文は `stores` だけを触る。
- * 承認した時点の写しも取り直さない（戻すのは審査のやり直しではない）。
+ * 承認した時点の写しも取り直さない（戻すのは審査のやり直しではない。やり直すのは承認待ちへ戻った店の承認）。
  */
-export const restoreBannedStore = async (db: Db, storeId: string, action: NewAdminAction): Promise<boolean> => {
+export const restoreBannedStore = async (db: Db, storeId: string, action: NewAdminAction): Promise<RestoredStatus | null> => {
   const [restored] = await db.batch([
-    db.prepare(`UPDATE stores SET status = 'approved' WHERE id = ?1 AND status = 'banned'`).bind(storeId),
+    db
+      .prepare(
+        `UPDATE stores SET status = CASE WHEN approved_name IS NULL THEN 'pending' ELSE 'approved' END
+          WHERE id = ?1 AND status = 'banned' RETURNING status`,
+      )
+      .bind(storeId),
     insertAdminActionIfChangedStatement(db, action),
   ]);
-  return changedRows(restored) > 0;
+  // 当たった行だけが `RETURNING` で返る（返らなければ、止められていなかった・同時に来た操作に負けた）
+  const status = ((restored?.results ?? [])[0] as { status?: unknown } | undefined)?.status;
+  return status === "approved" || status === "pending" ? status : null;
 };
 
 /**

@@ -100,17 +100,25 @@ describeTask("21", "緊急の停止と復帰", () => {
     expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", pending.id)).status).toBe("pending");
   });
 
-  it("25.9・25.10 止められている店を承認済みに戻せる。戻しても終わったオファーと取り消された確保は戻らない", async () => {
+  // 2026-09-25 安全-20 のレビュー（AI判断・基準 25.9 を変えた）: 止めると営業許可書と承認の写しを消すので、戻した店は
+  // 承認待ちへ戻り、許可書を上げ直して運営が承認すると承認済みになる（許可書の無い承認済みの店を作らない）。
+  it("25.9・25.10 止められている店を戻せる（許可書を消した店は承認待ちへ）。上げ直して承認すると承認済み。戻しても終わったオファーと取り消された確保は戻らない", async () => {
     const scene = await receivedScene(ctx);
     await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/ban`, { reason: "検査の停止" });
     const before = await snapshot(ctx.db);
     const restore = await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/restore`, { reason: "検査の戻し" });
     expect(restore.status).toBe(200);
-    expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).status).toBe("approved");
+    expect(restore.json).toEqual({ ok: true, status: "pending" });
+    expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).status).toBe("pending");
     expect((await one(ctx.db, "SELECT ended_at FROM offers WHERE id = ?", scene.offer.id)).ended_at).toBeTruthy();
     expect((await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", scene.reservation.id)).status).toBe("admin_cancelled");
-    expect((await scene.store.api.get("/api/store/home")).json.status).toBe("approved");
+    const home = (await scene.store.api.get("/api/store/home")).json;
+    expect(home).toMatchObject({ status: "pending", checklist: { license: false, card: true } });
     expect(before).not.toBe(await snapshot(ctx.db));
+    // 許可書を上げ直して運営が承認すると、承認済みに戻る（戻したあとの承認は、普通の承認と同じ道）
+    await uploadLicense(scene.store.api, PDF_BYTES);
+    expect((await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/approve`, {})).status).toBe(200);
+    expect((await scene.store.api.get("/api/store/home")).json.status).toBe("approved");
     const s2 = await approvedStore(ctx);
     expect((await ctx.admin!.api.post(`/api/admin/stores/${s2.id}/restore`, { reason: "検査の戻し" })).status).toBe(409);
   });

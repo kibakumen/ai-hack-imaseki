@@ -84,12 +84,12 @@ describe("banStore", () => {
 });
 
 describe("restoreStore", () => {
-  it("25.9・25.10 止められている店は戻せる。終わったオファーと取り消された確保は戻らない", async () => {
+  it("25.9・25.10 止められている店は戻せる（止めたときに許可書を消したので承認待ちへ・安全-20 のレビュー）。終わったオファーと取り消された確保は戻らない", async () => {
     const scene = await receivedScene(ctx);
     await banStore(ctx.deps, scene.store.id, ACTOR, REASON);
-    expect(await restoreStore(ctx.deps, scene.store.id, ACTOR, REASON)).toEqual({ ok: true });
+    expect(await restoreStore(ctx.deps, scene.store.id, ACTOR, REASON)).toEqual({ ok: true, status: "pending" });
 
-    expect(await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).toMatchObject({ status: "approved" });
+    expect(await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).toMatchObject({ status: "pending" });
     expect((await one(ctx.db, "SELECT ended_at FROM offers WHERE id = ?", scene.offer.id))?.ended_at).toBeTruthy();
     expect(await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", scene.reservation.id)).toMatchObject({ status: "admin_cancelled" });
   });

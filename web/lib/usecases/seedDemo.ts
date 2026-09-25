@@ -91,8 +91,11 @@ const SEED_REASON = "デモの種データ";
  */
 const approveDemoStore = async (deps: Deps, storeId: string, spec: DemoStoreSpec, actor: AdminActor): Promise<void> => {
   const read = (await findStoreReview(deps.db, storeId)) ?? { name: spec.name, address: spec.address, licenseKey: null };
-  if (await approvePendingStore(deps.db, storeId, read, newAdminAction(deps, actor, "approve", storeId, { reason: SEED_REASON }))) return;
-  await restoreBannedStore(deps.db, storeId, newAdminAction(deps, actor, "restore", storeId, { reason: SEED_REASON }));
+  const approve = () => approvePendingStore(deps.db, storeId, read, newAdminAction(deps, actor, "approve", storeId, { reason: SEED_REASON }));
+  if (await approve()) return;
+  // 運営の画面で止めた店は、承認の写しが消えていて承認待ちへ戻る（2026-09-25 安全-20 のレビュー）。デモの店は
+  // 承認済みへ戻すのが種の役目なので、そのまま承認し直す。
+  if ((await restoreBannedStore(deps.db, storeId, newAdminAction(deps, actor, "restore", storeId, { reason: SEED_REASON }))) === "pending") await approve();
 };
 
 /**

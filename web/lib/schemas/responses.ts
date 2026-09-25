@@ -323,7 +323,8 @@ export const RESPONSES = {
   }),
   "POST /api/admin/stores/:id/approve": done,
   "POST /api/admin/stores/:id/ban": object({ ok, cancelled: number(), notified: number() }),
-  "POST /api/admin/stores/:id/restore": done,
+  // 戻した先（止めたときに許可書を消した店は承認待ち・2026-09-25 安全-20 のレビュー）
+  "POST /api/admin/stores/:id/restore": object({ ok, status: oneOf(["approved", "pending"]) }),
   "POST /api/admin/stores/:id/note": done,
   "POST /api/admin/stores/:id/acknowledge": done,
   "POST /api/admin/stores/:id/temp-password": object({ ok, tempPassword: string() }),

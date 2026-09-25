@@ -99,7 +99,8 @@ export const readLicenseAsAdmin = async (deps: Deps, storeId: string, actor: Adm
 // ---------- 許可書を消す（2026-09-25 監査の指摘 安全-20 の案1・AI判断） ----------
 // 許可書には個人経営の店主の氏名と住所が載りうる。それまでファイルを消すのは上げ直したときだけで、止めた店・
 // 取り下げたい店のものは期限なく残り、運営の画面からいつでも開けた。使う必要が無くなった時に消す:
-//   - 運営が店を止めたとき … 今の分と承認の写しの両方（`discardLicenseOfBannedStore`・止める手続きの最後）
+//   - 運営が店を止めたとき … 今の分と承認の写しの両方（`discardLicenseOfBannedStore`・止める手続きの最後）。
+//     承認の写しも外すので、戻すときは承認待ちへ戻り、店の上げ直しと運営の承認をやり直す（安全-20 のレビュー・基準 25.9）
 //   - 承認の前に店が取り下げたとき … 今の分（`withdrawLicense`・入口 DELETE /api/store/license）
 // 承認のときには消さない——承認の写しは、承認のあとの上げ直しと見比べるために運営が使う（運営-02）。
 // 表から先に外し、そのあとでファイルを消す（逆だと、途中で落ちたとき表が無いファイルを指す）。消せなかったファイルは
@@ -116,12 +117,29 @@ const deleteLicenseFiles = async (deps: Deps, storeId: string, keys: ReadonlyArr
   }
 };
 
-/** 運営が止めた店の許可書（今の分と承認の写し）を消す。止められていなければ何もしない。 */
-export const discardLicenseOfBannedStore = async (deps: Deps, storeId: string): Promise<void> => {
+/** 読んでから外すまでの間に鍵が変わったとき、読み直して試す回数（最初の1回を含む・安全-20 のレビュー） */
+const DISCARD_ATTEMPTS = 2;
+
+/**
+ * 運営が止めた店の許可書（今の分と承認の写し）を消す。止められていなければ何もしない。
+ *
+ * 表から外すのは**読んだ鍵のままのときだけ**で、外した鍵のファイルを消す。止められた店は許可書を上げ直せるので、
+ * 読んでから外すまでの間に新しい鍵が入ったら、読み直してもう一度だけ試す（安全-20 のレビュー: それまでは条件なしで
+ * 外し、新しいファイルがどこからも指されないまま置き場に残った）。2回とも当たらなければ記録に残してやめる
+ * （表は今のファイルを指したままなので、指されないファイルは生まれない）。
+ */
+export const discardLicenseOfBannedStore = async (deps: Deps, storeId: string, attemptsLeft = DISCARD_ATTEMPTS): Promise<void> => {
   const keys = await findStoreLicenseKeys(deps.db, storeId);
   if (!keys || keys.status !== "banned") return;
-  if (!(await clearBannedStoreLicense(deps.db, storeId))) return;
-  await deleteLicenseFiles(deps, storeId, [keys.licenseKey, keys.approvedLicenseKey]);
+  if (await clearBannedStoreLicense(deps.db, storeId, keys)) {
+    await deleteLicenseFiles(deps, storeId, [keys.licenseKey, keys.approvedLicenseKey]);
+    return;
+  }
+  if (attemptsLeft > 1) {
+    await discardLicenseOfBannedStore(deps, storeId, attemptsLeft - 1);
+    return;
+  }
+  deps.logger.log({ event: "license_discard_raced", id: storeId });
 };
 
 export type WithdrawLicenseResult =
