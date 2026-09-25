@@ -8,7 +8,7 @@
 // （2026-09-25 監査の指摘 横断-03）。同じ瞬間の2度押しは ref で止める。
 
 import { useRef, useState } from "react";
-import { callApi, isFailure } from "../../lib/client/api";
+import { callApi, isFailure, receiveRefusalOf, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import type { FetchResult } from "./FetchForm";
 import type { HomeDto, ReceiveRefusal } from "./home";
 import type { RefusedReceive } from "./useFetchResults";
@@ -39,13 +39,17 @@ export const useReceiveFlow = ({ home, fetchResult, adoptResponded, setRefused, 
   const [receiving, setReceiving] = useState<string | null>(null);
   const receivingRef = useRef(false);
 
-  /** 受け取り・受け取り直しの応答（通った／断られた）で、表示を作り直す。 */
-  const applyReceived = (result: unknown, offerId: string | null) => {
+  /**
+   * 受け取り・受け取り直しの応答（通った／断られた）で、表示を作り直す。
+   * 断りは形を確かめてから使う（2026-09-26 のレビュー・設計-07 の残り）。形の崩れた断りと、ほかの失敗（入力の断り・
+   * 混み合い・通信の失敗）では、ホームを取り込まず今の表示のままにする——崩れた `home` を描くと画面が undefined を描く。
+   */
+  const applyReceived = (result: ResponseOf<"POST /api/customer/reservations"> | ApiFailure, offerId: string | null) => {
     onResponse();
     const failure = isFailure(result) ? result : null;
-    const body = failure === null ? undefined : (failure.refusal as ReceiveRefusal | undefined);
-    // 応答に `home` が無い形でも表示を消さない（今の表示のまま、断りだけを出す）
-    const responded = (failure === null ? (result as { home?: HomeDto }).home : (failure.home as HomeDto | undefined)) ?? home;
+    const refused = failure === null ? null : receiveRefusalOf(failure);
+    const body: ReceiveRefusal | undefined = refused?.refusal;
+    const responded: HomeDto | null = (failure === null ? (result as ResponseOf<"POST /api/customer/reservations">).home : refused?.home) ?? home;
     if (responded !== null) adoptResponded(responded);
     const keepsNotice = responded !== null && KEEPS_REFUSAL.includes(responded.kind);
     setRefused(body !== undefined && keepsNotice ? { offerId, body } : null);

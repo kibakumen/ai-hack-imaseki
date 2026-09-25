@@ -161,6 +161,22 @@ describeTask("14", "受け取りの画面と断りの表示", () => {
     expect(receives()[1].body).toMatchObject({ party: 2, fetchId: "f2" });
   });
 
+  // 2026-09-26 のレビュー（設計-07 の残り）: 受け取りの断り（409）の home を形を見ずに取り込んでいたので、項目名がずれると
+  // 画面が undefined を描いた（確保中の表示へ切り替わるのに、確保の中身が番号しか無い）。形の崩れた断りは取り込まない。
+  it("設計-07 形の崩れた断り（home の確保の中身が足りない）は取り込まず、結果の一覧をそのまま残す", async () => {
+    const { profile } = homeFetch() as HomeDto & { profile: unknown };
+    await renderAndSearch(homeFetch, [item(), item({ offerId: "o2", storeId: "s2", storeName: "店B" })], () => ({
+      status: 409,
+      json: { ok: false, refusal: { kind: "has_active_reservation", nextStep: "back_to_reservation" }, home: { kind: "active", profile, reservation: { id: "r1" } } },
+    }));
+    fireEvent.click(within(screen.getByTestId(TID.card("o1"))).getByTestId(TID.btn("receive")));
+    await waitFor(() => expect(api.calls.filter((c) => c.path === "/api/customer/reservations")).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByTestId(TID.view("active"))).toBeNull();
+    expect(screen.getByTestId(TID.card("o1"))).toBeTruthy();
+    expect(screen.getByTestId(TID.card("o2"))).toBeTruthy();
+  });
+
   it("RefusalNotice は nextStep を自分で決めない（同じ kind でも渡した nextStep が違えば違うボタンが出る）", async () => {
     const { TEXTS } = await loadWeb("lib/domain/texts");
     const RefusalNotice = await componentOf("components/customer/RefusalNotice", "RefusalNotice");

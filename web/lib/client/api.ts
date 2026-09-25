@@ -10,7 +10,7 @@
 // 約40言語の文言を名前空間ごと抱えていて組み立てで削れず、客の画面の JS の約4割を占めていた。
 import { array, literal, object, optional, string, type ZodMiniType } from "zod/mini";
 import type { AppConfig } from "../ports";
-import { RESPONSES, STREAM_LINE, type ParamNames, type PathOf, type ResponseOf, type RouteKey, type StreamLineDto } from "../schemas/responses";
+import { RECEIVE_REFUSAL, RESPONSES, STREAM_LINE, type ParamNames, type PathOf, type ReceiveRefusalDto, type ResponseOf, type RouteKey, type StreamLineDto } from "../schemas/responses";
 import { notifySessionExpired } from "./session";
 
 // 画面の部品は lib/schemas を読めない（依存の向き）ので、応答の型はここから名乗る。
@@ -61,6 +61,13 @@ const failureSchema = object({
 });
 
 const networkFailure = (): ApiFailure => ({ ok: false, error: { kind: "network" } });
+
+/**
+ * 受け取りの断り（409）なら、形（schemas/responses の RECEIVE_REFUSAL）を確かめた本文を返す。ほかの失敗と、形の崩れた
+ * 断りは null（2026-09-26 のレビュー・設計-07 の残り）。受け取りの断りは客の画面をまるごと作り直す応答なので、画面は
+ * これを通してから `home` を取り込む——崩れた `home` を取り込むと、画面が undefined を描く。
+ */
+export const receiveRefusalOf = (value: unknown): ReceiveRefusalDto | null => (RECEIVE_REFUSAL.safeParse(value).success ? (value as ReceiveRefusalDto) : null);
 
 export const isFailure = (value: unknown): value is ApiFailure => typeof value === "object" && value !== null && (value as { ok?: unknown }).ok === false;
 

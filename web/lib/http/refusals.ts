@@ -10,7 +10,9 @@
 //   受け取りの断り       … 409 `{ ok:false, refusal, home }`（endpoints/reservations が組む）
 
 import type { FieldReason, ServerRefusalKind } from "../domain/inputRefusal";
+import { RECEIVE_REFUSAL, type ReceiveRefusalDto } from "../schemas/responses";
 import type { RouteHandlerResult } from "./defineRoute";
+import { ResponseShapeError } from "./respond";
 
 const STATUS_BY_KIND: Record<ServerRefusalKind, number> = {
   // 形・範囲の誤り（入れ直せば通る）
@@ -79,5 +81,13 @@ export const forbidden = (): RouteHandlerResult => refusal("forbidden");
  */
 export const stateConflict = (state: string, extra: Record<string, boolean> = {}): RouteHandlerResult => ({ status: 409, body: { ok: false, current: { state, ...extra } } });
 
-/** 受け取りの断り（409）。理由・次の一手・新しいホームを1つの応答で返す（描くのは RefusalNotice）。 */
-export const receiveRefused = (refusalBody: unknown, home: unknown): RouteHandlerResult => ({ status: 409, body: { ok: false, refusal: refusalBody, home } });
+/**
+ * 受け取りの断り（409）。理由・次の一手・新しいホームを1つの応答で返す（描くのは RefusalNotice）。
+ * 返す前に形（schemas/responses の RECEIVE_REFUSAL）を確かめ、崩れていれば投げる（defineRoute が 500・internal と
+ * `response_shape_error` の記録にする）——成功の応答の respond と同じ道（2026-09-26 のレビュー・設計-07 の残り）。
+ */
+export const receiveRefused = (refusalBody: ReceiveRefusalDto["refusal"], home: ReceiveRefusalDto["home"]): RouteHandlerResult => {
+  const body: ReceiveRefusalDto = { ok: false, refusal: refusalBody, home };
+  if (!RECEIVE_REFUSAL.safeParse(body).success) throw new ResponseShapeError("POST /api/customer/reservations");
+  return { status: 409, body };
+};

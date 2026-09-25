@@ -204,3 +204,28 @@ describe("画面の束に zod の大きい版を入れない（設計-09）", ()
     expect(offenders).toEqual([]);
   });
 });
+
+// 2026-09-26 のレビュー（設計-07 の残り）: 形の確かめは成功の応答だけが対象で、受け取りの断り（409）は型が unknown のまま
+// 入口の確かめも通らず、画面は `failure.home as HomeDto` でそのまま描いていた。受け取りの断りは客の画面をまるごと
+// 作り直す応答なので、項目名がずれると画面が undefined を描く。成功と同じく1つの定義（RECEIVE_REFUSAL）で両側が確かめる。
+describe("受け取りの断り（409）の形", () => {
+  const HOME = { kind: "fetch", profile: { nickname: "たなか", phone: "09012345678", genres: [], budgetMax: null } };
+  const VALID = { ok: false, refusal: { kind: "sold_out", nextStep: "search_again" }, home: HOME } as const;
+
+  it("サーバーは返す前に形を確かめ、崩れていれば投げる（defineRoute が 500・internal にする）", async () => {
+    const { receiveRefused } = await import("../lib/http/refusals");
+    const { ResponseShapeError } = await import("../lib/http/respond");
+    expect(receiveRefused(VALID.refusal, VALID.home as never)).toEqual({ status: 409, body: VALID });
+    expect(receiveRefused({ kind: "party_over_max", partyMax: 2, nextStep: "search_again_with_party" }, VALID.home as never).status).toBe(409);
+    expect(() => receiveRefused({ kind: "sold_out", nextStep: "search_again" }, { kind: "fetch" } as never)).toThrow(ResponseShapeError);
+    expect(() => receiveRefused({ kind: "unknown_kind", nextStep: "search_again" } as never, VALID.home as never)).toThrow(ResponseShapeError);
+  });
+
+  it("画面は断りの形を確かめてから使う。崩れた断りの home は取り込まない（null）", async () => {
+    const { receiveRefusalOf } = await import("../lib/client/api");
+    expect(receiveRefusalOf(VALID)).toEqual(VALID);
+    expect(receiveRefusalOf({ ...VALID, home: { kind: "active" } })).toBeNull();
+    expect(receiveRefusalOf({ ...VALID, refusal: { kind: "sold_out" } })).toBeNull();
+    expect(receiveRefusalOf({ ok: false, error: { kind: "rate_limited" } })).toBeNull();
+  });
+});

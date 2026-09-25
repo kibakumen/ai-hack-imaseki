@@ -18,6 +18,7 @@
 // 手続き側の正本の型（usecases・domain）とずれたら、サーバーの `respond` の型検査が落ちる。
 
 import { array, boolean, enum as oneOf, literal, nullable, number, object, optional, record, string, union, type output, type ZodMiniType } from "zod/mini";
+import type { NextStep, ReceiveRefusalKind } from "../domain/receiveRefusal";
 
 // ---------- 共通の部品 ----------
 
@@ -339,6 +340,34 @@ export type RouteKey = keyof typeof RESPONSES;
 
 /** その入口の成功の本文の型。サーバーの `respond` と画面の `callApi` が同じ型を使う。 */
 export type ResponseOf<K extends RouteKey> = output<(typeof RESPONSES)[K]>;
+
+// ---------- 受け取りの断り（409） ----------
+
+/**
+ * 閉じた語の並びが、手続きの側の型とちょうど同じかを型検査で確かめる（足りなくても余っても型の誤り）。
+ * 語の正本（domain/receiveRefusal）は値として読めない（読んでよいのは usecases/receiveOffer だけ・構造の検査）ので、
+ * ここに並びを写し、型で正本につなぐ。
+ */
+const exactlyTheKinds =
+  <T extends string>() =>
+  <const L extends readonly T[]>(list: L & ([T] extends [L[number]] ? unknown : never)): L =>
+    list;
+
+const RECEIVE_REFUSAL_KIND_NAMES = exactlyTheKinds<ReceiveRefusalKind>()(["sold_out", "offer_ended", "party_over_max", "has_active_reservation", "store_banned", "results_stale", "receives_used_up"]);
+const NEXT_STEP_NAMES = exactlyTheKinds<NextStep>()(["search_again", "search_again_with_party", "back_to_reservation", "retry_same_party"]);
+
+/**
+ * 受け取りの断りの本文（409・http/refusals の receiveRefused）。理由・次の一手・新しいホームを1つの応答で返す
+ * （2026-09-26 のレビュー・設計-07 の残り）。成功の表と同じく、サーバーは返す前に、画面（client/api の
+ * receiveRefusalOf）は使う前にこの形で確かめる。それまで型が unknown で、画面は `home` を形を見ずに描いていた。
+ */
+export const RECEIVE_REFUSAL = object({
+  ok: literal(false),
+  refusal: object({ kind: oneOf(RECEIVE_REFUSAL_KIND_NAMES), nextStep: oneOf(NEXT_STEP_NAMES), partyMax: optional(number()) }),
+  home: customerHome,
+});
+
+export type ReceiveRefusalDto = output<typeof RECEIVE_REFUSAL>;
 
 /**
  * JSON でない本文（ファイル・少しずつ届く本文）を返す入口。表に載らないことを検査が確かめる
