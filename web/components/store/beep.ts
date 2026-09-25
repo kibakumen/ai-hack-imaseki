@@ -11,6 +11,10 @@
 //   - **最初に画面に触れたとき**（pointerdown・keydown・touchend）に resume() し、無音を1回鳴らして鳴らせる状態にする
 //   - 鳴らせなかったときは false を返す（呼ぶ側が振動と画面の印で補う。黙って成功したことにしない）
 //   - 鳴らせる状態かどうかは `soundStatus()` と `onSoundStatusChange()` で画面へ出せる（「音を鳴らす」のボタン）
+//   - **動いたあとで止まったとき**（iOS で画面をロックした・裏に回った・電話が来た＝suspended／interrupted）も、
+//     音の口の statechange で知らせを出し、画面に触れるのを待つ仕掛けを付け直す（店-07 のレビュー。それまでは
+//     最初に動いた時点で仕掛けを外し、止まったことを誰にも知らせなかった。iOS Safari には振動の口も無いので、
+//     2回目からは鳴らないことが画面に出ないまま黙っていた）
 // 客の確定の演出（components/customer/ClaimedCelebration）も同じ口を使うので、客が「この店に行く」を押した
 // 操作で音の口が動き出す。
 
@@ -57,6 +61,7 @@ const context = (): AudioContext | null => {
     unsupported = true;
     return null;
   }
+  shared.addEventListener("statechange", onStateChange);
   return shared;
 };
 
@@ -109,20 +114,33 @@ export const unlockSound = async (): Promise<boolean> => {
   return ctx.state === "running";
 };
 
-function removeUnlockListeners() {
-  for (const type of UNLOCK_EVENTS) window.removeEventListener(type, onFirstGesture, true);
+/** 画面に触れるのを待つ仕掛けを付ける。同じ関数を同じ段で付け直しても1つのまま（ブラウザが重ねない）。 */
+function addUnlockListeners() {
+  for (const type of UNLOCK_EVENTS) window.addEventListener(type, onGesture, { capture: true, passive: true });
 }
 
-function onFirstGesture() {
+function removeUnlockListeners() {
+  for (const type of UNLOCK_EVENTS) window.removeEventListener(type, onGesture, true);
+}
+
+function onGesture() {
   void unlockSound().then((running) => {
     if (running) removeUnlockListeners();
   });
 }
 
-// 最初に画面に触れたときに音の口を動かす（読み込んだ時点で1回だけ仕掛ける）。音の口の無い端末では仕掛けない。
-if (audioCtor() !== null) {
-  for (const type of UNLOCK_EVENTS) window.addEventListener(type, onFirstGesture, { capture: true, passive: true });
+/**
+ * 音の口の状態が変わった（2026-09-25 店-07 のレビュー）。画面へ知らせ、動いていなければ次に触れたときに
+ * また動かす仕掛けを付け直す。動いていれば外す（毎回の操作で resume() を呼ばない）。
+ */
+function onStateChange() {
+  notify();
+  if (shared?.state === "running") removeUnlockListeners();
+  else addUnlockListeners();
 }
+
+// 最初に画面に触れたときに音の口を動かす（読み込んだ時点で仕掛ける）。音の口の無い端末では仕掛けない。
+if (audioCtor() !== null) addUnlockListeners();
 
 const scheduleNotes = (ctx: AudioContext) => {
   NOTES_HZ.forEach((freq, index) => {
