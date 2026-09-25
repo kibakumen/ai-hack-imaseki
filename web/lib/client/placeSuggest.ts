@@ -11,11 +11,11 @@
 //      効果の中で同期的に状態を捨てないので lint `react-hooks/set-state-in-effect` に掛からない）
 //   4. 候補は補助——入口が無い・断られた・通信が失敗した、のどれも「候補なし」に倒す
 //
-// 画面が fetch を直接呼ばない（基準 29.4）ため、呼び出しは `client/api` の `apiCall` を経由する。
+// 画面が fetch を直接呼ばない（基準 29.4）ため、呼び出しは `client/api` の `callApi` を経由する。
 
 import { useEffect, useState } from "react";
 import { PLACE_SUGGEST_DEBOUNCE_MS, PLACE_SUGGEST_MAX, PLACE_SUGGEST_MIN_CHARS } from "../schemas/limits";
-import { apiCall, isFailure } from "./api";
+import { callApi, isFailure } from "./api";
 
 /** 応答の `suggestions` を文字の配列として読む（形は検査していないので在ることに頼らない） */
 const readSuggestions = (answer: unknown): string[] => {
@@ -38,7 +38,7 @@ export const usePlaceSuggestions = (text: string, enabled = true): string[] => {
     let alive = true;
     const timer = setTimeout(() => {
       void (async () => {
-        const answer = await apiCall("GET", `/api/customer/place-suggest?q=${encodeURIComponent(query)}`);
+        const answer = await callApi("GET /api/customer/place-suggest", { query: { q: query } });
         if (!alive) return;
         setAnswered({ query, suggestions: readSuggestions(answer) });
       })();

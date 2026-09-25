@@ -41,16 +41,6 @@ export type AdminStoreDetail = AdminStoreListItem & {
   cardRegistered: boolean;
 };
 
-/** D1 に文字列で入っている配列（ジャンル・おすすめメニュー）を読む。壊れていれば空（画面を止めない）。 */
-const parseStringArray = (json: string): string[] => {
-  try {
-    const parsed: unknown = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
 /** 一覧と、いちばん上の集計（基準 24.1〜24.6・24.8・24.9）。集計は絞り込みと検索に左右されない。 */
 export const adminStoreList = async (deps: Deps, input: { filter?: AdminStoreFilter; q?: string } = {}): Promise<AdminStoreListResult> => {
   const nowIso = deps.clock.now().toISOString();
@@ -63,8 +53,6 @@ export const adminStoreList = async (deps: Deps, input: { filter?: AdminStoreFil
 
 /** 店の詳細（基準 24.10・24.11）。無ければ null（入口が 404 に倒す）。 */
 export const adminStoreDetail = async (deps: Deps, storeId: string): Promise<AdminStoreDetail | null> => {
-  const row = await findStoreForAdmin(deps.db, storeId, deps.clock.now().toISOString());
-  if (!row) return null;
-  const { genresJson, menusJson, ...rest } = row;
-  return { ...rest, genres: parseStringArray(genresJson), menus: parseStringArray(menusJson) };
+  // ジャンルとおすすめメニューの JSON の並びは repo が読んで返す（repo/d1 の parseStringList）。
+  return findStoreForAdmin(deps.db, storeId, deps.clock.now().toISOString());
 };

@@ -22,6 +22,7 @@
 // 色の値はここに持たない（要件32の基準 32.3）——形と動きだけを class 名で指し、色は
 // `app/globals.css` の変数と `app/me/me.css` が持つ。
 
+import type { FetchResultItemDto } from "../../lib/client/api";
 import type { ReceiveRefusal } from "./home";
 import { OfferReveal } from "./OfferReveal";
 import { RefusalNotice } from "./RefusalNotice";
@@ -36,22 +37,12 @@ import { StoreImage } from "./StoreImage";
  */
 export type PitchSource = "persona" | "fallback";
 
-/** 結果の1件（応答 `POST /api/customer/fetch` の `items[]`）。手続き側の正本は `usecases/fetchOffers` の
- * `FetchResultItem` で、部品は `lib/usecases` を読めない（依存の向き）ので、画面が要る形をここに置く。 */
-export type ResultItem = {
-  offerId: string;
-  storeId: string;
-  storeName: string;
-  walkMinutes: number;
-  budgetMin: number;
-  budgetMax: number;
-  reason: string;
-  partyMax: number;
-  coupons: Array<{ name: string; note: string }>;
-  storeUrl: string | null;
-  /** 紹介文が届いたか（`FetchForm` が少しずつ届く入口から入れる。無ければ「書いている最中」） */
-  pitchSource?: PitchSource;
-};
+/**
+ * 結果の1件（応答 `POST /api/customer/fetch` の `items[]`）。型はサーバーと同じ定義（schemas/responses の表）から
+ * 作る——手で写さない（2026-09-25 監査の指摘 設計-07）。`pitchSource` は画面の側だけが足す印で、紹介文が届いたか
+ * （`FetchForm` が少しずつ届く入口から入れる。無ければ「書いている最中」）。
+ */
+export type ResultItem = FetchResultItemDto & { pitchSource?: PitchSource };
 
 type ResultListProps = {
   items: ResultItem[];

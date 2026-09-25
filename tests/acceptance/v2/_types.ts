@@ -142,8 +142,11 @@ export type StoreHomeDto = {
   missingProfile: string[];
   offer: null | OfferDto;
   publishPrefill: { couponIds: string[]; capacity: number | null; partyMax: number | null; until: string | null };
-  coupons: Array<{ id: string; name: string; note: string }>;
+  /** 店が持つクーポン（入口は作った時刻も必ず載せる・web/lib/schemas/responses の storeCoupon） */
+  coupons: Array<{ id: string; name: string; note: string; createdAt: string }>;
   arrivals: ArrivalRow[];
+  /** 仮のパスワードで入っている（基準 14.14）。入口が必ず載せる */
+  mustChangePassword: boolean;
 };
 export type OfferDto = {
   id: string;

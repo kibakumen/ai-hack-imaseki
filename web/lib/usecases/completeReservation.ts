@@ -20,9 +20,9 @@ import { ID_BYTES } from "../schemas/limits";
 export type CompleteReservationResult =
   | { ok: true }
   /** 状態による断り（設計書「入口の一覧」の3つ目の形）。画面はこの状態を行の下に出す（基準 20.20） */
-  | { ok: false; status: 409; current: { state: EffectiveState } }
+  | { ok: false; kind: "state"; state: EffectiveState }
   /** その店の確保ではない・もう無い。在ることも知らせない（基準 14.9 と同じ倒し方） */
-  | { ok: false; status: 404 };
+  | { ok: false; kind: "not_found" };
 
 export const completeReservation = async (deps: Deps, storeId: string, reservationId: string): Promise<CompleteReservationResult> => {
   const now = deps.clock.now();
@@ -45,6 +45,6 @@ export const completeReservation = async (deps: Deps, storeId: string, reservati
 
   // 断りの理由は読み直して決める（1文の UPDATE が通らなかった理由は、その時点の状態が答え）。
   const row = await findStoreReservation(deps.db, reservationId, storeId);
-  if (!row) return { ok: false, status: 404 };
-  return { ok: false, status: 409, current: { state: effectiveState(row, now) } };
+  if (!row) return { ok: false, kind: "not_found" };
+  return { ok: false, kind: "state", state: effectiveState(row, now) };
 };

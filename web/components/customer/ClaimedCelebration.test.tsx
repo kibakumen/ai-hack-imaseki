@@ -20,6 +20,9 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+/** 客の登録の4項目。入口は必ず4つとも返す（形の表 schemas/responses が確かめる・2026-09-25 設計-07）。 */
+const PROFILE = { nickname: "けんさ", phone: "09012345678", genres: [], budgetMax: null };
 import { CustomerApp } from "./CustomerApp";
 import { replyToResponse, streamOfResult, type FakeReply } from "../../../tests/acceptance/v2/_fakes";
 
@@ -108,7 +111,7 @@ describe("受け取ったあとの演出", () => {
     fake = installFetch((method, path) => {
       if (path === "/api/config/public") return { json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } };
       if (path === "/api/customer/home") {
-        return { json: held ? { kind: "active", profile: {}, reservation } : { kind: "fetch", profile: {} } };
+        return { json: held ? { kind: "active", profile: PROFILE, reservation } : { kind: "fetch", profile: PROFILE } };
       }
       if (path === "/api/customer/place") return { json: { label: null } };
       // 取得は本番と同じく少しずつ届く入口（NDJSON）で返す（2026-09-25 設計-03。以前はわざと 404 にして普通の入口へ倒していた）
@@ -116,7 +119,7 @@ describe("受け取ったあとの演出", () => {
       if (method === "POST" && path === "/api/customer/fetch") return { json: { ok: true, fetchId: "f1", items: [ITEM] } };
       if (method === "POST" && path === "/api/customer/reservations") {
         held = true;
-        return { json: { ok: true, reservation, home: { kind: "active", profile: {}, reservation } } };
+        return { json: { ok: true, reservation, home: { kind: "active", profile: PROFILE, reservation } } };
       }
       return { status: 404, json: { ok: false } };
     });

@@ -1,5 +1,7 @@
 import { completeReservation } from "../../usecases/completeReservation";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { notFound, stateConflict } from "../refusals";
 import { cancelByStore } from "../../usecases/cancelByStore";
 // 店から確保を操作する入口（設計書「入口（API）の一覧」の店の入口）。
 // 見分け（役割が店・自分の店の確保だけ）は defineRoute と手続きが済ませるので、ここは
@@ -18,10 +20,10 @@ const completeReservationRoute = defineRoute({
   auth: "store",
   handler: async ({ params, deps, ctx }) => {
     const result = await completeReservation(deps, ctx.storeId, params.id);
-    if (result.ok) return { status: 200, body: { ok: true } };
+    if (result.ok) return respond("POST /api/store/reservations/:id/complete", { ok: true });
     // 404 は「その店の確保ではない」。409 は状態による断り（今の状態を返す・基準 20.20）
-    if (result.status === 404) return { status: 404, body: { ok: false, error: { kind: "invalid_input" } } };
-    return { status: 409, body: { ok: false, current: result.current } };
+    if (result.kind === "not_found") return notFound();
+    return stateConflict(result.state);
   },
 });
 
@@ -37,11 +39,8 @@ const completeReservationRoute = defineRoute({
 // ⚠️ 確保の期限を延ばす入口・完了済みを戻す入口は置かない（基準 11.4・20.10・構造の検査が見張る）。
 
 
-/**
- * 在らない番号・別の店の確保（404）。どちらなのかは返さない——別の店の確保の有無を教えないため
- * （受け入れ検査は 403 でも 404 でも通すが、存在を分けて見せない側に寄せた）。
- */
-const notFound = { status: 404, body: { ok: false, error: { kind: "invalid_input" } } };
+// 在らない番号・別の店の確保は 404・not_found（http/refusals の notFound）。どちらなのかは返さない
+// ——別の店の確保の有無を教えないため（受け入れ検査は 403 でも 404 でも通すが、存在を分けて見せない側に寄せた）。
 
 /**
  * 店による確保の取り消し（要件21）。
@@ -55,10 +54,10 @@ const storeCancelReservationRoute = defineRoute({
   auth: "store",
   handler: async ({ params, deps, ctx }) => {
     const result = await cancelByStore(deps, ctx.storeId, params.id);
-    if (result.ok) return { status: 200, body: { ok: true } };
-    if (result.kind === "not_found") return notFound;
+    if (result.ok) return respond("POST /api/store/reservations/:id/cancel", { ok: true });
+    if (result.kind === "not_found") return notFound();
     // 確保への操作の断りは「今の状態を返す」形（設計書「入力の断りの応答の形」の境界の②）。
-    return { status: 409, body: { ok: false, current: { state: result.state } } };
+    return stateConflict(result.state);
   },
 });
 

@@ -20,7 +20,7 @@ describeTask("6", "クーポンの入力の画面", () => {
   });
 
   const setup = async (routes: Record<string, any>) => {
-    api = installFakeApi({ "GET /api/store/coupons": () => ({ json: { items: COUPONS } }), ...routes });
+    api = installFakeApi({ "GET /api/store/coupons": () => ({ json: { ok: true, items: COUPONS } }), ...routes });
     const CouponEditor = await componentOf("components/store/CouponEditor", "CouponEditor");
     const r = render(<CouponEditor />);
     await screen.findByText("生ビール1杯");

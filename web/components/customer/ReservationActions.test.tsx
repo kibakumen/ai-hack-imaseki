@@ -27,6 +27,9 @@ const installFetch = (respond: (path: string) => FakeResponse) => {
   return { calls, restore: () => { globalThis.fetch = previous; } };
 };
 
+/** 入口が返すホームに必ず載る登録の値（形の表 schemas/responses が必須にしている）。 */
+const PROFILE = { nickname: "guest-abc123", phone: "0000000000", genres: [], budgetMax: null };
+
 const invalidParty = { status: 400, json: { ok: false, error: { kind: "invalid_input", fields: [{ name: "party", reason: "out_of_range" }] } } };
 const partyOverMax = { status: 409, json: { ok: false, error: { kind: "party_over_max", partyMax: 4 } } };
 
@@ -47,7 +50,7 @@ describe("確保中の表示の2つの操作", () => {
   };
 
   it("10.1 取り消しは確かめのあとに1回だけ要求が出て、応答のホームがそのまま親へ渡る", async () => {
-    const home = { kind: "fetch" };
+    const home = { kind: "fetch", profile: PROFILE };
     const onChanged = renderActions(() => ({ json: { ok: true, home } }));
 
     fireEvent.click(screen.getByTestId("btn-cancel"));
@@ -98,7 +101,12 @@ describe("確保中の表示の2つの操作", () => {
   });
 
   it("10.4 通ると文が消え、応答のホームがそのまま親へ渡る", async () => {
-    const home = { kind: "active", reservation: { party: 3 } };
+    // 入口が返すホームの形のまま（形の表 schemas/responses が確かめる・2026-09-25 設計-07）
+    const home = {
+      kind: "active",
+      profile: PROFILE,
+      reservation: { id: "res-1", code: "12345678", storeId: "s1", storeName: "店", storeAddress: "住所", storeUrl: null, party: 3, expiresAt: "2026-09-22T06:20:00.000Z", status: "active", coupons: [] },
+    };
     let response: FakeResponse = invalidParty;
     const onChanged = renderActions(() => response);
     const form = screen.getByTestId("form-party");

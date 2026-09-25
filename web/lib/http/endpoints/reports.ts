@@ -10,7 +10,9 @@ import { adminReports } from "../../usecases/adminReports";
 import { recentStores } from "../../usecases/recentStores";
 import { reportStore } from "../../usecases/reportStore";
 import { reportSchema } from "../../schemas/report";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { refusal } from "../refusals";
 
 const createReportRoute = defineRoute({
   method: "POST",
@@ -19,8 +21,8 @@ const createReportRoute = defineRoute({
   input: reportSchema,
   handler: async ({ input, deps, ctx }) => {
     const result = await reportStore(deps, ctx.customerId, input);
-    if (!result.ok) return { status: result.status, body: { ok: false, error: result.error } };
-    return { status: 201, body: { ok: true } };
+    if (!result.ok) return refusal(result.kind, "fields" in result ? { fields: result.fields } : {});
+    return respond("POST /api/customer/reports", { ok: true }, 201);
   },
 });
 
@@ -28,14 +30,14 @@ const recentStoresRoute = defineRoute({
   method: "GET",
   path: "/api/customer/recent",
   auth: "customer",
-  handler: async ({ deps, ctx }) => ({ status: 200, body: await recentStores(deps, ctx.customerId) }),
+  handler: async ({ deps, ctx }) => respond("GET /api/customer/recent", await recentStores(deps, ctx.customerId)),
 });
 
 const adminReportsRoute = defineRoute({
   method: "GET",
   path: "/api/admin/reports",
   auth: "admin",
-  handler: async ({ deps }) => ({ status: 200, body: await adminReports(deps) }),
+  handler: async ({ deps }) => respond("GET /api/admin/reports", await adminReports(deps)),
 });
 
 export const reportRoutes: RouteDefinition[] = [createReportRoute, recentStoresRoute, adminReportsRoute];

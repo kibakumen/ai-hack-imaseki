@@ -5,7 +5,7 @@
 // `getPublicConfig()`）から受け取る（設計書「公開してよい2つの値の置き場所と、画面までの経路」）。
 // 取れなかったときは購読を作らず、断りの文も出さない（通知は無くても、画面を開けば取り消しは分かる）。
 
-import { apiCall, getPublicConfig, isFailure } from "./api";
+import { callApi, getPublicConfig, isFailure } from "./api";
 
 /** 許可か拒否を答えたことを端末に覚えておく鍵（基準 22.11。答えは端末ごとで、サーバーには置かない） */
 const ANSWERED_KEY = "ai-hack:push-answered";
@@ -63,7 +63,7 @@ export const subscribeToPush = async (): Promise<boolean> => {
     const existing = await registration.pushManager.getSubscription();
     // 同じ端末で2度目に押されたときに、購読を作り直さない（配信元の URL が変わってしまう）。
     const subscription = existing ?? (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: applicationServerKey(key) }));
-    const result = await apiCall("POST", "/api/customer/push-subscription", { subscription: subscription.toJSON() });
+    const result = await callApi("POST /api/customer/push-subscription", { body: { subscription: subscription.toJSON() } });
     return !isFailure(result);
   } catch {
     // 端末が購読を断った・Service Worker を登録できない。通知なしで先へ進める。

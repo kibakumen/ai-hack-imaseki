@@ -5,12 +5,12 @@
 // 取れれば画像を、取れなければ何も出さない（呼び出し側の `OfferArt` が飾りの地をそのまま見せる——
 // **画像は飾りなので、落ちても本文は出る**）。
 //
-// 店ごとに問い合わせが要るので、この部品だけが `apiCall` を直接呼ぶ（`FetchForm` の地名の問い合わせ
+// 店ごとに問い合わせが要るので、この部品だけが `callApi` を直接呼ぶ（`FetchForm` の地名の問い合わせ
 // `/api/customer/place` と同じ置き方——画面が fetch を直接呼ばないのは client/api.ts の役目で、
-// `apiCall` を経由する呼び方は許される・基準 29.4）。
+// `callApi` を経由する呼び方は許される・基準 29.4）。
 
 import { useEffect, useState } from "react";
-import { apiCall, isFailure } from "../../lib/client/api";
+import { callApi, isFailure } from "../../lib/client/api";
 
 export type StoreImageProps = {
   /** 店のホームページの URL。無ければ問い合わせない。 */
@@ -29,7 +29,7 @@ export const StoreImage = ({ url, alt = "" }: StoreImageProps) => {
     let alive = true;
     if (!url) return;
     void (async () => {
-      const answer = await apiCall<{ imageUrl?: unknown }>("GET", `/api/customer/store-image?url=${encodeURIComponent(url)}`);
+      const answer = await callApi("GET /api/customer/store-image", { query: { url } });
       if (!alive) return;
       setAnswered({ url, src: !isFailure(answer) && typeof answer.imageUrl === "string" ? answer.imageUrl : null });
     })();

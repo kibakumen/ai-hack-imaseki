@@ -9,16 +9,18 @@
 // ⚠️ 断りは一度に1か所にだけ出す（作る側か、どれか1つの行か）。同じ `msg-name` が2か所に
 //    同時に出ると、どちらの操作の話なのかが読めなくなる。
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { useState, type FormEvent } from "react";
+import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
+import { useLoad } from "../../lib/client/useLoad";
 import { COUPON_TEXTS } from "../../lib/domain/texts";
 import { COUPON_MAX, COUPON_NAME_MAX, COUPON_NAME_MIN, COUPON_NOTE_MAX } from "../../lib/schemas/limits";
 import { FieldMessage } from "../ui/InputRefusal";
+import { LoadView } from "../ui/LoadState";
 
-type Coupon = { id: string; name: string; note: string };
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type Coupon = ResponseOf<"GET /api/store/coupons">["items"][number];
 type Draft = { name: string; note: string };
 
-const COUPONS_PATH = "/api/store/coupons";
 /** 作る側の断りの置き場を表す印（行の断りは、その行の番号を使う） */
 const CREATE_SCOPE = "create";
 const NAME_CTX = { field: "名前", min: COUPON_NAME_MIN, max: COUPON_NAME_MAX };
@@ -27,15 +29,18 @@ const NOTE_CTX = { field: "特記事項", min: 0, max: COUPON_NOTE_MAX };
 /** 断りと、それがどの操作のものか。 */
 type ScopedFailure = { scope: string; failure: ApiFailure };
 
-const couponPath = (id: string) => `${COUPONS_PATH}/${encodeURIComponent(id)}`;
-
 const draftsOf = (list: Coupon[]): Record<string, Draft> => Object.fromEntries(list.map((coupon) => [coupon.id, { name: coupon.name, note: coupon.note ?? "" }]));
 
-/** 一覧を取り直す。取れなかったときは null——呼ぶ側は前の一覧を出したままにする（空にすると消えたように見える）。 */
-const fetchCoupons = async (): Promise<Coupon[] | null> => {
-  const result = await apiCall<{ items?: Coupon[] }>("GET", COUPONS_PATH);
-  return isFailure(result) ? null : (result.items ?? []);
+/**
+ * 一覧を取る。取れなかったときは断りをそのまま返す——読み込みの部品（useLoad）が、1度も取れていなければ
+ * 「読めなかった」を、取れたあとなら前の一覧を残して「更新できていない」を出す（空にすると消えたように見え、
+ * 0件の「まだありません」と区別もつかない・2026-09-25 監査の指摘 横断-01）。
+ */
+const fetchCoupons = async (): Promise<Coupon[] | ApiFailure> => {
+  const result = await callApi("GET /api/store/coupons");
+  return isFailure(result) ? result : result.items;
 };
+
 
 type FormMessageProps = { failure: ApiFailure | null };
 
@@ -117,33 +122,64 @@ const CouponRow = ({ coupon, draft, failure, onChange, onSave, onDelete }: Coupo
   </li>
 );
 
+type CreateFormProps = {
+  name: string;
+  note: string;
+  failure: ApiFailure | null;
+  onName: (value: string) => void;
+  onNote: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+};
+
+/** 新しいクーポンを作る欄（名前と特記事項の2つだけ・基準 16.7）。 */
+const CouponCreateForm = ({ name, note, failure, onName, onNote, onSubmit }: CreateFormProps) => (
+  <form className="store-coupon-new" data-testid="form-coupon" noValidate onSubmit={onSubmit}>
+    <h3>クーポンを作る</h3>
+    <p className="store-note">名前は客の画面の札に大きく、特記事項はその下に小さく出ます。</p>
+
+    <div className="store-field">
+      <label htmlFor="coupon-new-name">名前</label>
+      <input
+        id="coupon-new-name"
+        data-testid="field-name"
+        type="text"
+        placeholder="例: 生ビール1杯"
+        value={name}
+        maxLength={COUPON_NAME_MAX}
+        onChange={(event) => onName(event.target.value)}
+      />
+      <FieldMessage name="name" failure={failure} ctx={NAME_CTX} />
+    </div>
+
+    <div className="store-field">
+      <label htmlFor="coupon-new-note">特記事項（任意）</label>
+      <input
+        id="coupon-new-note"
+        data-testid="field-note"
+        type="text"
+        placeholder="例: 1組1回まで"
+        value={note}
+        maxLength={COUPON_NOTE_MAX}
+        onChange={(event) => onNote(event.target.value)}
+      />
+      <FieldMessage name="note" failure={failure} ctx={NOTE_CTX} />
+    </div>
+
+    <button type="submit" data-testid="btn-create-coupon">
+      作る
+    </button>
+    <CouponFormMessage failure={failure} />
+  </form>
+);
+
 export const CouponEditor = () => {
-  const [items, setItems] = useState<Coupon[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [refused, setRefused] = useState<ScopedFailure | null>(null);
 
-  // 画面を開いた時に一度だけ取る。離れたあとに返ってきた答えは捨てる。
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const list = await fetchCoupons();
-      if (!alive || !list) return;
-      setItems(list);
-      setDrafts(draftsOf(list));
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const reload = useCallback(async () => {
-    const list = await fetchCoupons();
-    if (!list) return;
-    setItems(list);
-    setDrafts(draftsOf(list));
-  }, []);
+  // 画面を開いた時に一度だけ取る（離れたあとに返ってきた答えは useLoad が捨てる）。取れたたびに下書きを作り直す。
+  const { state, reload } = useLoad(fetchCoupons, { onLoaded: (list) => setDrafts(draftsOf(list)) });
 
   /** 断られたらその場に文を出して終わる。通ったら一覧を取り直す（一覧の正本は入口の側）。 */
   const apply = async (scope: string, call: () => Promise<unknown>, onDone: () => void) => {
@@ -159,7 +195,7 @@ export const CouponEditor = () => {
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await apply(CREATE_SCOPE, () => apiCall("POST", COUPONS_PATH, { name, note }), () => {
+    await apply(CREATE_SCOPE, () => callApi("POST /api/store/coupons", { body: { name, note } }), () => {
       setName("");
       setNote("");
     });
@@ -167,19 +203,9 @@ export const CouponEditor = () => {
 
   const failureOf = (scope: string): ApiFailure | null => (refused?.scope === scope ? refused.failure : null);
 
-  return (
-    <section className="store-stack" data-testid="coupon-list">
-      <div className="store-head">
-        <div>
-          <p className="store-eyebrow">店の画面</p>
-          <h1>クーポン</h1>
-        </div>
-        <span className="store-count">
-          {items.length}/{COUPON_MAX}
-        </span>
-      </div>
-      <p className="store-lead">お客さまに見せる特典を{COUPON_MAX}つまで用意できます。公開するオファーにどれを付けるかは、オファーの画面で選びます。</p>
-
+  const renderList = (items: Coupon[]) => (
+    <>
+      {/* 「まだありません」は**取れて0件のときだけ**（読めなかったときは読み込みの部品が断りの文を出す・横断-01）。 */}
       {items.length === 0 ? <p className="store-empty">クーポンはまだありません。下の欄から作れます。</p> : null}
 
       <ul className="store-coupon-cards">
@@ -192,59 +218,46 @@ export const CouponEditor = () => {
             onChange={(values) => setDrafts((prev) => ({ ...prev, [coupon.id]: values }))}
             onSave={() => {
               const draft = drafts[coupon.id] ?? { name: coupon.name, note: coupon.note ?? "" };
-              void apply(coupon.id, () => apiCall("PUT", couponPath(coupon.id), draft), () => undefined);
+              void apply(coupon.id, () => callApi("PUT /api/store/coupons/:id", { params: { id: coupon.id }, body: draft }), () => undefined);
             }}
             onDelete={() => {
-              void apply(coupon.id, () => apiCall("DELETE", couponPath(coupon.id)), () => undefined);
+              void apply(coupon.id, () => callApi("DELETE /api/store/coupons/:id", { params: { id: coupon.id } }), () => undefined);
             }}
           />
         ))}
       </ul>
 
-      <form
-        className="store-coupon-new"
-        data-testid="form-coupon"
-        noValidate
+      <CouponCreateForm
+        name={name}
+        note={note}
+        failure={failureOf(CREATE_SCOPE)}
+        onName={setName}
+        onNote={setNote}
         onSubmit={(event) => {
           void create(event);
         }}
-      >
-        <h3>クーポンを作る</h3>
-        <p className="store-note">名前は客の画面の札に大きく、特記事項はその下に小さく出ます。</p>
+      />
+    </>
+  );
 
-        <div className="store-field">
-          <label htmlFor="coupon-new-name">名前</label>
-          <input
-            id="coupon-new-name"
-            data-testid="field-name"
-            type="text"
-            placeholder="例: 生ビール1杯"
-            value={name}
-            maxLength={COUPON_NAME_MAX}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <FieldMessage name="name" failure={failureOf(CREATE_SCOPE)} ctx={NAME_CTX} />
+  return (
+    <section className="store-stack" data-testid="coupon-list">
+      <div className="store-head">
+        <div>
+          <p className="store-eyebrow">店の画面</p>
+          <h1>クーポン</h1>
         </div>
+        {state.status === "ready" ? (
+          <span className="store-count">
+            {state.data.length}/{COUPON_MAX}
+          </span>
+        ) : null}
+      </div>
+      <p className="store-lead">お客さまに見せる特典を{COUPON_MAX}つまで用意できます。公開するオファーにどれを付けるかは、オファーの画面で選びます。</p>
 
-        <div className="store-field">
-          <label htmlFor="coupon-new-note">特記事項（任意）</label>
-          <input
-            id="coupon-new-note"
-            data-testid="field-note"
-            type="text"
-            placeholder="例: 1組1回まで"
-            value={note}
-            maxLength={COUPON_NOTE_MAX}
-            onChange={(event) => setNote(event.target.value)}
-          />
-          <FieldMessage name="note" failure={failureOf(CREATE_SCOPE)} ctx={NOTE_CTX} />
-        </div>
-
-        <button type="submit" data-testid="btn-create-coupon">
-          作る
-        </button>
-        <CouponFormMessage failure={failureOf(CREATE_SCOPE)} />
-      </form>
+      <LoadView state={state} onRetry={() => void reload()}>
+        {renderList}
+      </LoadView>
     </section>
   );
 };

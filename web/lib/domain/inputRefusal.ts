@@ -37,11 +37,27 @@ export const INPUT_REFUSAL_KINDS = [
   "store_banned",
   "human_check_failed",
   "rate_limited",
+  // 見分けと「見つからない」の断り（2026-09-25 監査の指摘 横断-01 で足した）。それまでは3つとも
+  // invalid_input で返り、画面は「入れた内容を確かめてください」か空の一覧しか出せなかった。
+  //   unauthenticated … 401 ログインしていない・切れた（店と運営の画面はログインへ案内する）
+  //   forbidden       … 403 役割が違う・書き込みの Origin が合わない
+  //   not_found       … 404 経路も番号も「見つからない」（在る無しは区別して見せない）
+  "unauthenticated",
+  "forbidden",
+  "not_found",
+  // 想定外の例外を入口が受け止めたときの 500（2026-09-25 監査の指摘 設計-15）。画面は network と分けて出す。
+  "internal",
   // 画面の側だけで作る2つ（client/geolocation・client/api が返す）
   "location_required",
   "network",
 ] as const;
 export type InputRefusalKind = (typeof INPUT_REFUSAL_KINDS)[number];
+
+/** 画面の側だけで作る語。サーバーはこの語を返さない（入口の状態コードの表 http/refusals に載らない）。 */
+export type ClientOnlyRefusalKind = "location_required" | "network";
+
+/** サーバーが返す語（入口の状態コードの表 http/refusals の鍵）。 */
+export type ServerRefusalKind = Exclude<InputRefusalKind, ClientOnlyRefusalKind>;
 
 /** 応答の `error.fields[].reason`。zod の落ちを直すのは http/defineRoute.ts、規則の断りは各 usecases が直接返す。 */
 export const FIELD_REASONS = [

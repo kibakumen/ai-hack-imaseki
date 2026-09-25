@@ -26,7 +26,7 @@
 // の規則5）。入力欄の属性（maxLength・min・max）は打ち間違いを減らす補助で、正本ではない。
 
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { apiCall, apiStream, isFailure, STREAM_UNAVAILABLE, type ApiFailure, type StreamLine, type StreamOutcome } from "../../lib/client/api";
+import { apiStream, callApi, isFailure, STREAM_UNAVAILABLE, type ApiFailure, type StreamLine, type StreamOutcome } from "../../lib/client/api";
 import { currentLocation, type CurrentLocation } from "../../lib/client/geolocation";
 import { rememberOrigin } from "../../lib/client/lastOrigin";
 import { usePlaceSuggestions } from "../../lib/client/placeSuggest";
@@ -51,8 +51,6 @@ const SUGGEST_LIST_ID = "fetch-place-suggestions";
 export type FetchOrigin = { lat: number; lng: number } | { place: string };
 
 export type FetchResult = { fetchId: string; items: ResultItem[]; party: number; from: FetchOrigin | null };
-
-type FetchOk = { fetchId: string; items: ResultItem[] };
 
 /** 現在地の座標。地名に直せたかどうかとは別に持つ（直せなくても座標で探せる）。 */
 type Point = { lat: number; lng: number };
@@ -162,7 +160,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
     const point = { lat: located.lat, lng: located.lng };
     setHere(point);
     setLocate("located");
-    const answer = await apiCall<{ label?: unknown }>("GET", `/api/customer/place?lat=${point.lat}&lng=${point.lng}`);
+    const answer = await callApi("GET /api/customer/place", { query: { lat: point.lat, lng: point.lng } });
     const label = !isFailure(answer) && typeof answer.label === "string" && answer.label !== "" ? answer.label : null;
     setHereLabel(label);
     // 客がもう自分で書き換えていたら上書きしない（書きかけを消さない）。
@@ -231,7 +229,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
     const next = phoneToStore(phone);
     if (next === storedPhoneRef.current || next === savingPhoneRef.current) return;
     savingPhoneRef.current = next;
-    const result = await apiCall("PATCH", "/api/customer/profile", { nickname, phone: next, genres: profile?.genres ?? [], budgetMax: profile?.budgetMax ?? null });
+    const result = await callApi("PATCH /api/customer/profile", { body: { nickname, phone: next, genres: profile?.genres ?? [], budgetMax: profile?.budgetMax ?? null } });
     if (savingPhoneRef.current === next) savingPhoneRef.current = null;
     if (isFailure(result)) {
       setPhoneFailure(result);
@@ -304,7 +302,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       if (isFailure(streamed)) setFailure(streamed);
       return;
     }
-    const result = await apiCall<FetchOk>("POST", "/api/customer/fetch", payload);
+    const result = await callApi("POST /api/customer/fetch", { body: payload });
     if (isFailure(result)) {
       setFailure(result);
       return;

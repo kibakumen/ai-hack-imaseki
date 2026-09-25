@@ -3,6 +3,7 @@
 // （設計書「客の識別子」）。時刻の比較が要る問い合わせは、束縛した「今」を引数で受ける。
 
 import type { Deps } from "../ports";
+import { parseStringList } from "./d1";
 import type { CustomerProfile } from "../schemas/customer";
 
 type Db = Deps["db"];
@@ -17,22 +18,20 @@ export type NewCustomer = {
   tokenHash: string;
 };
 
+/**
+ * Cookie の客の識別子（の SHA-256）から客の番号を引く。無い・消去済みなら null（入口が 401 に倒す）。
+ * 2026-09-25 監査の指摘 設計-13 で入口の層（http/guards）から移した。
+ */
+export const findCustomerIdByTokenHash = async (db: Db, tokenHash: string): Promise<string | null> => {
+  const row = await db.prepare(`SELECT id FROM customers WHERE token_hash = ?1 AND deleted_at IS NULL`).bind(tokenHash).first<{ id: string }>();
+  return row ? row.id : null;
+};
+
 export const insertCustomer = async (db: Db, customer: NewCustomer): Promise<void> => {
   await db
     .prepare(`INSERT INTO customers (id, nickname, phone, genres, budget_max, token_hash) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`)
     .bind(customer.id, customer.nickname, customer.phone, customer.genres, customer.budgetMax, customer.tokenHash)
     .run();
-};
-
-/** 壊れた JSON は「1つも選んでいない」として読む（表示が止まらないようにする）。 */
-const parseGenres = (raw: unknown): string[] => {
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-  } catch {
-    return [];
-  }
 };
 
 /**
@@ -67,7 +66,7 @@ export const findCustomerProfile = async (db: Db, customerId: string): Promise<C
   return {
     nickname: (row.nickname as string | null) ?? "",
     phone: (row.phone as string | null) ?? "",
-    genres: parseGenres(row.genres),
+    genres: parseStringList(row.genres),
     budgetMax: (row.budget_max as number | null) ?? null,
   };
 };

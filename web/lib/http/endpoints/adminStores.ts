@@ -10,23 +10,19 @@ import { adminStoreDetail, adminStoreList } from "../../usecases/adminStores";
 import { approveStore } from "../../usecases/approveStore";
 import { banStore } from "../../usecases/banStore";
 import { restoreStore } from "../../usecases/restoreStore";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
-
-/** 見つからない店（404）。運営にも店の有無より先の中身は返さない。 */
-const notFound = { status: 404, body: { ok: false, error: { kind: "invalid_input" } } };
-
-/**
- * 状況が合わないので断る（承認済みの店を承認する・未承認の店を止める、など）。
- * 確保への操作と同じ「今の状態を返す」形（設計書「入力の断りの応答の形」の境界の②）。
- */
-const stateConflict = (state: string) => ({ status: 409, body: { ok: false, current: { state } } });
+// 見つからない店は 404・not_found（運営にも店の有無より先の中身は返さない）。状況が合わない
+// （承認済みの店を承認する・未承認の店を止める、など）ときは、確保への操作と同じ「今の状態を返す」形
+// （設計書「入力の断りの応答の形」の境界の②）。どちらも http/refusals の1つを使う。
+import { notFound, refusal, stateConflict } from "../refusals";
 
 const adminStoreListRoute = defineRoute({
   method: "GET",
   path: "/api/admin/stores",
   auth: "admin",
   input: adminStoreQuerySchema,
-  handler: async ({ input, deps }) => ({ status: 200, body: await adminStoreList(deps, input) }),
+  handler: async ({ input, deps }) => respond("GET /api/admin/stores", await adminStoreList(deps, input)),
 });
 
 const adminStoreDetailRoute = defineRoute({
@@ -35,7 +31,7 @@ const adminStoreDetailRoute = defineRoute({
   auth: "admin",
   handler: async ({ params, deps }) => {
     const store = await adminStoreDetail(deps, params.id);
-    return store ? { status: 200, body: { store } } : notFound;
+    return store ? respond("GET /api/admin/stores/:id", { store }) : notFound();
   },
 });
 
@@ -45,14 +41,11 @@ const approveStoreRoute = defineRoute({
   auth: "admin",
   handler: async ({ params, deps }) => {
     const result = await approveStore(deps, params.id);
-    if (result.ok) return { status: 200, body: { ok: true } };
-    if (result.kind === "not_found") return notFound;
+    if (result.ok) return respond("POST /api/admin/stores/:id/approve", { ok: true });
+    if (result.kind === "not_found") return notFound();
     if (result.kind === "state") return stateConflict(result.state);
     // 足りないもの（許可書・カード）を項目として返す（基準 25.2・設計書「入力の誤りの出し方」の 25.2 の行）。
-    return {
-      status: 409,
-      body: { ok: false, error: { kind: "approval_missing", fields: result.missing.map((name) => ({ name, reason: "required" })) } },
-    };
+    return refusal("approval_missing", { fields: result.missing.map((name) => ({ name, reason: "required" as const })) });
   },
 });
 
@@ -62,8 +55,8 @@ const banStoreRoute = defineRoute({
   auth: "admin",
   handler: async ({ params, deps }) => {
     const result = await banStore(deps, params.id);
-    if (result.ok) return { status: 200, body: { ok: true } };
-    return result.kind === "not_found" ? notFound : stateConflict(result.state);
+    if (result.ok) return respond("POST /api/admin/stores/:id/ban", { ok: true });
+    return result.kind === "not_found" ? notFound() : stateConflict(result.state);
   },
 });
 
@@ -77,8 +70,8 @@ const restoreStoreRoute = defineRoute({
   auth: "admin",
   handler: async ({ params, deps }) => {
     const result = await restoreStore(deps, params.id);
-    if (result.ok) return { status: 200, body: { ok: true } };
-    return result.kind === "not_found" ? notFound : stateConflict(result.state);
+    if (result.ok) return respond("POST /api/admin/stores/:id/restore", { ok: true });
+    return result.kind === "not_found" ? notFound() : stateConflict(result.state);
   },
 });
 

@@ -2,6 +2,7 @@
 // どの問い合わせも店の番号で絞る——別の店のクーポンに当たる経路を作らないため（基準 16.4）。
 
 import type { Deps } from "../ports";
+import { parseStringList } from "./d1";
 import { publishingOfferCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
@@ -56,17 +57,6 @@ export const deleteCoupon = async (db: Db, storeId: string, couponId: string): P
   await db.prepare(`DELETE FROM coupons WHERE id = ?1 AND store_id = ?2`).bind(couponId, storeId).run();
 };
 
-/** offers.coupon_ids は番号の JSON の並び。壊れていれば「見せていない」に倒す（落ちない・要件29）。 */
-const parseCouponIds = (raw: unknown): string[] => {
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
 /**
  * 公開中のオファーがそのクーポンを見せているか（基準 16.5）。
  *
@@ -80,7 +70,7 @@ export const isCouponShownByPublishingOffer = async (db: Db, storeId: string, co
     .prepare(`SELECT coupon_ids FROM offers AS o WHERE o.store_id = ?1 AND ${publishingOfferCondition("o", "?2")}`)
     .bind(storeId, nowIso)
     .all();
-  return ((result.results ?? []) as Array<Record<string, unknown>>).some((row) => parseCouponIds(row.coupon_ids).includes(couponId));
+  return ((result.results ?? []) as Array<Record<string, unknown>>).some((row) => parseStringList(row.coupon_ids).includes(couponId));
 };
 
 // ⚠️ 2026-09-21 の並列の実装で、タスク7（店のホームが返すクーポンの一覧）が読みの1本を足した。

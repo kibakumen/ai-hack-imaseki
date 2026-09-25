@@ -112,6 +112,10 @@ const httpAndApiBoundary = {
   },
 };
 
+// 画面の束に入るファイルは zod（大きい版）を値として読まない（2026-09-25 監査の指摘 設計-09）。
+// `import { z } from "zod"` は約40言語の文言を名前空間ごと抱えていて組み立てで削れず、客の画面の JS の約4割を占めた。
+const NO_FULL_ZOD = { name: "zod", message: "画面の束に入るファイルは zod（大きい版）を読めません。zod/mini から名前を指定して読んでください（設計-09）。", allowTypeImports: true };
+
 const uiBoundary = {
   files: ["components/**/*.{ts,tsx}", "app/**/*.{ts,tsx}", "lib/client/**/*.{ts,tsx}"],
   ignores: ["app/api/**"],
@@ -133,6 +137,36 @@ const uiBoundary = {
             message: "components・app・lib/client が lib/schemas から値として読めるのは schemas/limits だけです（依存の向き）。",
           },
         ],
+        paths: [NO_FULL_ZOD],
+      },
+    ],
+  },
+};
+
+// lib/client だけは、成功した応答の形の表（schemas/responses）を値として読める（2026-09-25 監査の指摘 設計-07）。
+// 画面が応答を確かめる形を、サーバーと同じ定義から取るため。表は zod の小さい版（zod/mini）だけで書く
+// （設計-09・画面の束に zod の文言を入れない）。部品・画面は lib/client の型を通して名乗る。
+const clientBoundary = {
+  files: ["lib/client/**/*.{ts,tsx}"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: ["**/repo/**", "**/usecases/**", "**/adapters/**", "**/http/**"],
+            message: "lib/client は lib/repo・lib/usecases・lib/adapters・lib/http を読めません（依存の向き）。",
+          },
+          {
+            group: ["**/domain/**", "!**/domain/texts"],
+            message: "lib/client が lib/domain から値として読めるのは domain/texts だけです（依存の向き）。",
+          },
+          {
+            group: ["**/schemas/**", "!**/schemas/limits", "!**/schemas/responses"],
+            message: "lib/client が lib/schemas から値として読めるのは schemas/limits と schemas/responses だけです（依存の向き）。",
+          },
+        ],
+        paths: [NO_FULL_ZOD],
       },
     ],
   },
@@ -165,4 +199,5 @@ export default defineConfig([
   adaptersBoundary,
   httpAndApiBoundary,
   uiBoundary,
+  clientBoundary,
 ]);

@@ -8,7 +8,27 @@ import { componentOf, installFakeApi, refusal, unauthorized, type FakeApi } from
 import { TID } from "./_types";
 
 const storeDetail = (over: Record<string, unknown> = {}) => ({
-  json: { store: { id: "store-1", name: "検査の店", address: "東京都渋谷区1-1", email: "s@example.com", status: "pending", genres: ["和食"], menus: ["刺身"], budgetMin: 1000, budgetMax: 3000, url: null, license: true, cardRegistered: true, ...over } },
+  json: {
+    store: {
+      id: "store-1",
+      name: "検査の店",
+      address: "東京都渋谷区1-1",
+      email: "s@example.com",
+      status: "pending",
+      publishing: false,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      claims: 0,
+      offerRemaining: null,
+      genres: ["和食"],
+      menus: ["刺身"],
+      budgetMin: 1000,
+      budgetMax: 3000,
+      url: null,
+      license: true,
+      cardRegistered: true,
+      ...over,
+    },
+  },
 });
 
 describeTask("8", "店の一覧と詳細の画面", () => {
@@ -25,7 +45,7 @@ describeTask("8", "店の一覧と詳細の画面", () => {
     render(<StoreList />);
     await screen.findByTestId("stores-empty");
     cleanup();
-    items = [{ id: "s1", name: "店A", address: "住所A", email: "a@example.com", status: "approved" }];
+    items = [{ id: "s1", name: "店A", address: "住所A", email: "a@example.com", status: "approved", publishing: false, createdAt: "2026-09-01T00:00:00.000Z", claims: 0, budgetMin: null, offerRemaining: null }];
     render(<StoreList />);
     await screen.findByText("店A");
     expect(screen.queryByTestId("stores-empty")).toBeNull();

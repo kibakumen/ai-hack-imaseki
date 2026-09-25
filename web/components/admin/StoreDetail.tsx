@@ -19,27 +19,16 @@
 //   ⚠️ 色の値はここに書かない（構造の検査 34）。全部 `admin.module.css` が持つ。
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { useCallback, useState, type ReactNode } from "react";
+import { callApi, isFailure, type AdminStoreDetailDto, type ApiFailure } from "../../lib/client/api";
+import { useLoad } from "../../lib/client/useLoad";
 import { FormMessage } from "../ui/InputRefusal";
+import { LoadView, RefreshFailedBand } from "../ui/LoadState";
 import styles from "./admin.module.css";
 
-type StoreStatus = "pending" | "approved" | "banned";
-
-type StoreDetailDto = {
-  id: string;
-  name: string;
-  address: string | null;
-  email: string | null;
-  status: StoreStatus;
-  url: string | null;
-  genres: string[];
-  menus: string[];
-  budgetMin: number | null;
-  budgetMax: number | null;
-  license: boolean;
-  cardRegistered: boolean;
-};
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type StoreDetailDto = AdminStoreDetailDto;
+type StoreStatus = StoreDetailDto["status"];
 
 type Props = { storeId: string };
 
@@ -170,7 +159,7 @@ const ConfirmBox = ({ testId, label, text, confirmTestId = "btn-confirm", confir
 );
 
 export const StoreDetail = ({ storeId }: Props) => {
-  const [store, setStore] = useState<StoreDetailDto | null>(null);
+  /** 操作（承認・停止・戻す・仮のパスワード）の断り。読み込みの断りは useLoad の状態が持つ */
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [confirmingBan, setConfirmingBan] = useState(false);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
@@ -180,7 +169,7 @@ export const StoreDetail = ({ storeId }: Props) => {
 
   /** 【最終日】仮のパスワードの発行（基準 14.10〜14.13）。2026-09-22 に足した——入口は在ったが画面から呼ぶ道が無かった。 */
   const issueTemp = async () => {
-    const result = await apiCall<{ tempPassword: string }>("POST", `/api/admin/stores/${storeId}/temp-password`, {});
+    const result = await callApi("POST /api/admin/stores/:id/temp-password", { params: { id: storeId }, body: {} });
     if (isFailure(result)) {
       setFailure(result);
       return;
@@ -190,27 +179,17 @@ export const StoreDetail = ({ storeId }: Props) => {
     setTempPassword(result.tempPassword);
   };
 
-  const load = useCallback(async () => {
-    const result = await apiCall<{ store: StoreDetailDto }>("GET", `/api/admin/stores/${storeId}`);
-    return isFailure(result) ? { store: null, failure: result } : { store: result.store, failure: null };
+  const load = useCallback(async (): Promise<StoreDetailDto | ApiFailure> => {
+    const result = await callApi("GET /api/admin/stores/:id", { params: { id: storeId } });
+    return isFailure(result) ? result : result.store;
   }, [storeId]);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const next = await load();
-      if (!alive) return;
-      setStore(next.store);
-      setFailure(next.failure);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [load]);
+  // 読めなかった（ログインが切れた・見つからない・通信に失敗した）ときは、その語の文と読み直す道を出す
+  // （2026-09-25 監査の指摘 横断-01。それまで 401 も 404 も「入れた内容を確かめてください」だった）。
+  const { state, reload } = useLoad(load);
 
   /** 承認・停止・復帰のあとは、詳細を取り直して今の状況を映す（断られたときはその場に留まる）。 */
-  const act = async (path: string) => {
-    const result = await apiCall("POST", `/api/admin/stores/${storeId}/${path}`, {});
+  const act = async (path: "approve" | "ban" | "restore") => {
+    const result = await callApi(`POST /api/admin/stores/:id/${path}` as const, { params: { id: storeId }, body: {} });
     if (isFailure(result)) {
       setFailure(result);
       return;
@@ -218,23 +197,26 @@ export const StoreDetail = ({ storeId }: Props) => {
     setFailure(null);
     setConfirmingBan(false);
     setConfirmingRestore(false);
-    const next = await load();
-    setStore(next.store);
+    // 取り直しが失敗しても、今の中身は残して「更新できていません」を出す（空の画面へ落とさない）。
+    await reload();
   };
 
-  if (!store) {
+  if (state.status !== "ready" && state.status !== "empty") {
     return (
       <main className={styles.page}>
-        {failure === null && <p className={styles.noData}>読み込んでいます…</p>}
-        <FormMessage failure={failure} />
+        <LoadView state={state} onRetry={() => void reload()}>
+          {() => null}
+        </LoadView>
       </main>
     );
   }
 
+  const store = state.data;
   const missing = missingLabels(store);
 
   return (
     <main className={styles.page}>
+      <RefreshFailedBand state={state} />
       <header className={`${styles.card} ${styles.detailHead}`}>
         <Link href="/admin" className={styles.backLink}>
           ← 店の一覧へ

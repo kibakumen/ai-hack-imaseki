@@ -17,36 +17,18 @@
 // 0 の棒を並べず「まだ呼び出しがありません」と書く（本人の指示）。
 
 import { useEffect, useState } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type AdminMetricsDto, type ApiFailure } from "../../lib/client/api";
 import { FormMessage } from "../ui/InputRefusal";
 import styles from "./admin.module.css";
 
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type MetricsResponse = AdminMetricsDto;
+
 /** モデル別の表の1行（第4周の追記・タスク28 が表を描く）。 */
-type ByModelRow = {
-  model: string | null;
-  count: number;
-  avgCostUsd: number | null;
-  avgDurationMs: number;
-  validationFailedRate: number;
-  fellBackRate: number;
-};
+type ByModelRow = AdminMetricsDto["byModel"][number];
 
 /** 用途別の1行（2026-09-22）。`purpose` は "select" | "pitch" | "pitch_eval"（下の PURPOSE_LABELS）。 */
-type ByPurposeRow = {
-  purpose: string;
-  count: number;
-  totalCostUsd: number;
-  avgDurationMs: number;
-};
-
-type MetricsResponse = {
-  ai: { calls: number; avgCostUsd: number; avgDurationMs: number; succeeded: number; failed: number };
-  fetch: { count: number; avgDurationMs: number; aiUsed: number; fellBack: number };
-  reservations: { total: number; expiredRate: number };
-  byModel: ByModelRow[];
-  byPurpose: ByPurposeRow[];
-  fallbackCount: number;
-};
+type ByPurposeRow = NonNullable<AdminMetricsDto["byPurpose"]>[number];
 
 /**
  * 割合を百分率で出す（0.3 → 「30%」）。
@@ -205,7 +187,7 @@ export const Metrics = () => {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const result = await apiCall<MetricsResponse>("GET", "/api/admin/metrics");
+      const result = await callApi("GET /api/admin/metrics");
       if (!alive) return;
       if (isFailure(result)) {
         setFailure(result);

@@ -2,6 +2,9 @@
 // 登録の時に作るのは店名と状態だけで、住所・位置・ジャンル・予算はタスク5（店の情報）が入れる。
 
 import type { Deps } from "../ports";
+import { insertAccountStatement, type NewAccount } from "./accounts";
+import { parseStringList } from "./d1";
+import { insertSessionStatement, type NewSession } from "./sessions";
 import type { StoreProfile } from "../schemas/store";
 
 type Db = Deps["db"];
@@ -13,9 +16,18 @@ export type NewStore = { id: string; name: string; createdAtIso: string };
 
 export type StoreSummary = { id: string; name: string; status: StoreStatus };
 
-/** 1つの文にまとめて流すための文（店の登録は店・アカウント・セッションを1度に書く）。 */
-export const insertStoreStatement = (db: Db, store: NewStore) =>
-  db.prepare(`INSERT INTO stores (id, name, created_at, status) VALUES (?1, ?2, ?3, 'pending')`).bind(store.id, store.name, store.createdAtIso);
+/**
+ * 店の登録（基準 12.1）。店・アカウント・セッションを1つのまとまり（`db.batch`）で書く——途中で落ちて、
+ * 店だけが残る形を作らない。メールアドレスの重複は表の UNIQUE が例外で教える（呼ぶ側が
+ * `isEmailTakenError` で受ける）。2026-09-25 監査の指摘 設計-13 で手続きの中から移した。
+ */
+export const insertStoreWithAccountAndSession = async (db: Db, input: { store: NewStore; account: NewAccount; session: NewSession }): Promise<void> => {
+  await db.batch([
+    db.prepare(`INSERT INTO stores (id, name, created_at, status) VALUES (?1, ?2, ?3, 'pending')`).bind(input.store.id, input.store.name, input.store.createdAtIso),
+    insertAccountStatement(db, input.account),
+    insertSessionStatement(db, input.session),
+  ]);
+};
 
 /** 店の番号で1件。無ければ null（アカウントは在るのに店が消えている、は起きない想定）。 */
 export const findStoreSummary = async (db: Db, storeId: string): Promise<StoreSummary | null> => {
@@ -25,17 +37,6 @@ export const findStoreSummary = async (db: Db, storeId: string): Promise<StoreSu
 };
 
 // ---------- 店の情報（タスク5・要件15） ----------
-
-/** 列に入っている文字列の並び（genres・menus）を配列へ。壊れていれば空（読み出しで落とさない）。 */
-const parseList = (raw: unknown): string[] => {
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-};
 
 /** 保存する店の情報（位置は住所から直したもの・基準 15.9）。 */
 export type StoreProfileRecord = {
@@ -61,8 +62,8 @@ export const findStoreProfile = async (db: Db, storeId: string): Promise<StorePr
     name: row.name as string,
     address: (row.address as string | null) ?? "",
     url: (row.url as string | null) ?? null,
-    genres: parseList(row.genres),
-    menus: parseList(row.menus),
+    genres: parseStringList(row.genres),
+    menus: parseStringList(row.menus),
     budgetMin: (row.budget_min as number | null) ?? null,
     budgetMax: (row.budget_max as number | null) ?? null,
   };
@@ -103,17 +104,6 @@ export type StoreHomeRow = StoreSummary &
     budgetMax: number | null;
   };
 
-/** `genres` の列（JSON の文字列）を配列へ。壊れていれば空（画面を落とさない）。 */
-const parseGenres = (raw: unknown): string[] => {
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((g): g is string => typeof g === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
 /** 書類の3つだけ。許可書を読む入口（店・運営）が使う。無ければ null＝そんな店は無い。 */
 export const findStoreDocuments = async (db: Db, storeId: string): Promise<StoreDocuments | null> => {
   const row = await db.prepare(`SELECT license_key, license_mime, card_registered_at FROM stores WHERE id = ?1`).bind(storeId).first();
@@ -137,7 +127,7 @@ export const findStoreHomeRow = async (db: Db, storeId: string): Promise<StoreHo
     name: row.name as string,
     status: row.status as StoreStatus,
     address: (row.address as string | null) ?? null,
-    genres: parseGenres(row.genres),
+    genres: parseStringList(row.genres),
     budgetMin: (row.budget_min as number | null) ?? null,
     budgetMax: (row.budget_max as number | null) ?? null,
     licenseKey: (row.license_key as string | null) ?? null,

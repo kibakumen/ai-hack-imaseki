@@ -2,6 +2,8 @@
 // lib/http/defineRoute はこの型だけを知って呼ぶ。実物は lib/adapters（この型を満たす）。
 // 受け入れ検査の契約は tests/acceptance/v2/_types.ts（この型と同じ形に合わせてある）。
 
+import type { D1Database } from "./repo/d1";
+
 export type Clock = { now(): Date; after(ms: number): Promise<void> };
 export type Rng = { bytes(n: number): Uint8Array };
 export type Hasher = {
@@ -106,8 +108,8 @@ export type FileStore = {
 export type AppConfig = { turnstileSiteKey: string; vapidPublicKey: string; contactEmail: string | null; orcarouterModel: string };
 
 export type Deps = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- D1Database（wrangler の getPlatformProxy／実物の Worker 束縛）。型は各アダプタ・repo が持つ
-  db: any;
+  /** D1（wrangler の getPlatformProxy／実物の Worker 束縛）。型は使う分だけを repo/d1.ts が持つ（設計-14） */
+  db: D1Database;
   files: FileStore;
   ai: AiSelector;
   /** 紹介文の層（任意）。渡さなければ紹介文を書かせない＝選定の結果だけを返す */

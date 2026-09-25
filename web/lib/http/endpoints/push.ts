@@ -6,6 +6,7 @@
 import { pushMessage } from "../../usecases/pushMessage";
 import { savePushSubscription } from "../../repo/push";
 import { pushSubscriptionSchema } from "../../schemas/push";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 
 const pushSubscriptionRoute = defineRoute({
@@ -15,7 +16,7 @@ const pushSubscriptionRoute = defineRoute({
   input: pushSubscriptionSchema,
   handler: async ({ input, deps, ctx }) => {
     await savePushSubscription(deps.db, ctx.customerId, input.subscription);
-    return { status: 200, body: { ok: true } };
+    return respond("POST /api/customer/push-subscription", { ok: true });
   },
 });
 
@@ -23,7 +24,7 @@ const pushMessageRoute = defineRoute({
   method: "GET",
   path: "/api/customer/push-message",
   auth: "customer",
-  handler: async ({ deps, ctx }) => ({ status: 200, body: await pushMessage(deps, ctx.customerId) }),
+  handler: async ({ deps, ctx }) => respond("GET /api/customer/push-message", await pushMessage(deps, ctx.customerId)),
 });
 
 export const pushRoutes: RouteDefinition[] = [pushSubscriptionRoute, pushMessageRoute];

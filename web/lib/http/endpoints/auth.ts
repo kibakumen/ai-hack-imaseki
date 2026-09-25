@@ -5,7 +5,9 @@
 import { login, logout } from "../../usecases/login";
 import { loginSchema } from "../../schemas/account";
 import { SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, expireCookie, parseCookies, serializeCookie } from "../cookies";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { refusal } from "../refusals";
 
 const loginRoute = defineRoute({
   method: "POST",
@@ -16,12 +18,10 @@ const loginRoute = defineRoute({
   handler: async ({ input, deps }) => {
     const result = await login(deps, input);
     // どちらが違うかは言わない（基準 14.2）。状態も本文も1通りだけ。
-    if (!result.ok) return { status: 401, body: { ok: false, error: { kind: result.kind } } };
-    return {
-      status: 200,
-      body: { ok: true, role: result.role, mustChangePassword: result.mustChangePassword },
-      cookies: [serializeCookie(SESSION_COOKIE_NAME, result.session.token, SESSION_COOKIE_MAX_AGE_SECONDS)],
-    };
+    if (!result.ok) return refusal(result.kind);
+    return respond("POST /api/auth/login", { ok: true, role: result.role, mustChangePassword: result.mustChangePassword }, 200, [
+      serializeCookie(SESSION_COOKIE_NAME, result.session.token, SESSION_COOKIE_MAX_AGE_SECONDS),
+    ]);
   },
 });
 
@@ -32,7 +32,7 @@ const logoutRoute = defineRoute({
   handler: async ({ req, deps }) => {
     // 見分けを求めない（切れた・でたらめな値でも同じ応答）。表に在れば消し、Cookie も失効させる。
     await logout(deps, parseCookies(req.headers.get("cookie"))[SESSION_COOKIE_NAME] ?? null);
-    return { status: 200, body: { ok: true }, cookies: [expireCookie(SESSION_COOKIE_NAME)] };
+    return respond("POST /api/auth/logout", { ok: true }, 200, [expireCookie(SESSION_COOKIE_NAME)]);
   },
 });
 

@@ -8,8 +8,8 @@ import { componentOf, installFakeApi, invalidInput, offerDto, refusal, storeHome
 import { TID } from "./_types";
 
 const COUPONS = [
-  { id: "c1", name: "生ビール", note: "" },
-  { id: "c2", name: "デザート", note: "" },
+  { id: "c1", name: "生ビール", note: "", createdAt: "2026-09-01T00:00:00Z" },
+  { id: "c2", name: "デザート", note: "", createdAt: "2026-09-02T00:00:00Z" },
 ];
 
 describeTask("9", "公開のフォームと公開中のカード", () => {

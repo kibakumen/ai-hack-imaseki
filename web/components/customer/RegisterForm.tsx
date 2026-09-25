@@ -5,7 +5,7 @@
 // （設計書「入力の誤りの出し方」の規則5）。入力欄の属性は打ち間違いを減らす補助で、正本ではない。
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { apiCall, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
 import { TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, NICKNAME_MAX, NICKNAME_MIN, PHONE_MAX_LENGTH } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
@@ -55,12 +55,14 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall("POST", "/api/register/customer", {
-      nickname,
-      phone,
-      genres,
-      budgetMax: budgetToSend(budgetMax),
-      humanToken,
+    const result = await callApi("POST /api/register/customer", {
+      body: {
+        nickname,
+        phone,
+        genres,
+        budgetMax: budgetToSend(budgetMax),
+        humanToken,
+      },
     });
     if (isFailure(result)) {
       setFailure(result);

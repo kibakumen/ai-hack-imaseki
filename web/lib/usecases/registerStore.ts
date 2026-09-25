@@ -3,9 +3,8 @@
 // （AI判断・タスク表）。役割は必ず store——入力に role が乗っていても見ない（基準 14.8）。
 
 import type { Deps } from "../ports";
-import { findAccountByEmail, insertAccountStatement, isEmailTakenError } from "../repo/accounts";
-import { insertSessionStatement } from "../repo/sessions";
-import { insertStoreStatement } from "../repo/stores";
+import { findAccountByEmail, isEmailTakenError } from "../repo/accounts";
+import { insertStoreWithAccountAndSession } from "../repo/stores";
 import type { StoreRegisterInput } from "../schemas/account";
 import { ID_BYTES } from "../schemas/limits";
 import { tokenFromBytes } from "../domain/token";
@@ -35,11 +34,11 @@ export const registerStore = async (deps: Deps, input: StoreRegisterInput): Prom
   // 先回りと同じ断りへ倒す——受けないと、先に登録した人と後から登録した人で応答が 409 と 500 に
   // 割れる（2026-09-22 タスク25 が足した。タスク4の監査の指摘 F1）。
   try {
-    await deps.db.batch([
-      insertStoreStatement(deps.db, { id: storeId, name: input.name, createdAtIso: deps.clock.now().toISOString() }),
-      insertAccountStatement(deps.db, { id: accountId, email: input.email, role: "store", storeId, passwordHash }),
-      insertSessionStatement(deps.db, { tokenHash: session.tokenHash, accountId, expiresAtIso: session.expiresAtIso }),
-    ]);
+    await insertStoreWithAccountAndSession(deps.db, {
+      store: { id: storeId, name: input.name, createdAtIso: deps.clock.now().toISOString() },
+      account: { id: accountId, email: input.email, role: "store", storeId, passwordHash },
+      session: { tokenHash: session.tokenHash, accountId, expiresAtIso: session.expiresAtIso },
+    });
   } catch (error) {
     // メールアドレスの重複だけを断りへ倒す。ほかの落ち方（書き込みそのものの失敗）は握りつぶさず、
     // そのまま上へ返す＝入口が 500 として扱う。

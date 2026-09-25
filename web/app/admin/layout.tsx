@@ -5,6 +5,7 @@
 // 導線だけを置く殻で、中身は各画面の部品が持つ。運営の画面は PC 向けなので常に3つとも出す。
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { SessionExpiredNotice } from "../../components/ui/SessionExpired";
 import { ThemeToggle } from "../../components/ui/ThemeToggle";
 
 const ADMIN_PAGES = [
@@ -20,6 +21,8 @@ type AdminLayoutProps = Readonly<{ children: ReactNode }>;
 export default function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <>
+      {/* ログインが切れたときの知らせ（/login への道）。どの画面で 401 を受けてもここに出る（横断-01） */}
+      <SessionExpiredNotice />
       <nav aria-label="運営の画面" data-testid="admin-nav">
         {ADMIN_PAGES.map((page) => (
           <Link key={page.href} href={page.href}>

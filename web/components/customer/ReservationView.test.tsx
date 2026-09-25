@@ -12,6 +12,9 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+/** 客の登録の4項目。入口は必ず4つとも返す（形の表 schemas/responses が確かめる・2026-09-25 設計-07）。 */
+const PROFILE = { nickname: "けんさ", phone: "09012345678", genres: [], budgetMax: null };
 import { CustomerApp } from "./CustomerApp";
 
 vi.mock("../../lib/client/geolocation", () => ({ currentLocation: async () => ({ ok: true, lat: 35.6, lng: 139.7 }) }));
@@ -36,7 +39,7 @@ const installHome = (reservation: Record<string, unknown>) => {
     const path = new URL(String(input), "http://localhost").pathname;
     const json =
       path === "/api/customer/home"
-        ? { kind: "active", profile: {}, reservation }
+        ? { kind: "active", profile: PROFILE, reservation }
         : path === "/api/config/public"
           ? { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null }
           : { ok: true };

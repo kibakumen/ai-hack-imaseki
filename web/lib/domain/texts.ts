@@ -41,9 +41,27 @@ const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   store_banned: () => "運営に止められているため、完了済みにできません。",
   human_check_failed: () => "人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください。",
   rate_limited: () => "しばらく待ってからお試しください。",
+  // 横断-01・設計-15（2026-09-25）。ログインへ戻る道は、店と運営の画面が文の下に出す。
+  unauthenticated: () => "ログインが切れました。もう一度ログインしてください。",
+  forbidden: () => "この操作はできません。ログインし直してからお試しください。",
+  not_found: () => "見つかりませんでした。一覧から開き直してください。",
+  internal: () => "サーバーで問題が起きました。しばらくしてからもう一度お試しください。",
   location_required: () => "場所を文字で入れてください。",
   network: () => "通信に失敗しました。もう一度お試しください。",
 };
+
+// ---------- 客に出すときだけ文を差し替える語（2026-09-25 レビューの指摘） ----------
+// 客にはログインが無く、/login は店と運営の入口。客の画面の操作が 401・403 を受けたときに
+// 上の「ログインが切れました」「ログインし直して」を出すと、客は次に何をすればよいか分からない。
+// 読み込み直せば客の入口（components/customer/GuestEntry）が識別子を作り直すので、客にはそれを言う。
+// 載っていない語は上の文をそのまま使う（読み手で文が変わるのは、この2語だけ）。
+const CUSTOMER_INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
+  unauthenticated: () => "登録が見つかりませんでした。ページを読み込み直してください。",
+  forbidden: () => "この操作はできませんでした。ページを読み込み直してから、もう一度お試しください。",
+};
+
+/** 断りの文の読み手。`staff` は店と運営（ログインがある）、`customer` は客（ログインが無い）。 */
+export type RefusalAudience = "staff" | "customer";
 
 // ---------- 項目ごとの理由（reason） ----------
 const FIELD_REASON_TEXTS: Record<string, (ctx: Ctx) => string> = {
@@ -98,12 +116,24 @@ const GENRE_OPTIONS = ["和食", "寿司・海鮮", "焼肉", "焼き鳥・串",
 
 export const TEXTS = {
   genres: GENRE_OPTIONS,
-  inputRefusal: (kind: string, ctx: Ctx = {}): string => (INPUT_REFUSAL_TEXTS[kind] ?? (() => "入れた内容を確かめてください。"))(ctx),
+  /** 読み手（`audience`）を渡さなければ店と運営の文。客の画面は `customer` を渡す（components/ui/InputRefusal が決める）。 */
+  inputRefusal: (kind: string, ctx: Ctx = {}, audience: RefusalAudience = "staff"): string =>
+    ((audience === "customer" ? CUSTOMER_INPUT_REFUSAL_TEXTS[kind] : undefined) ?? INPUT_REFUSAL_TEXTS[kind] ?? (() => "入れた内容を確かめてください。"))(ctx),
   fieldReason: (reason: string, ctx: Ctx = {}): string => (FIELD_REASON_TEXTS[reason] ?? (() => "入れ直してください。"))(ctx),
   receiveRefusal: (kind: string, ctx: Ctx = {}): string => (RECEIVE_REFUSAL_TEXTS[kind] ?? (() => "受け取れませんでした。"))(ctx),
   nextStep: (step: string, ctx: Ctx = {}): string => (NEXT_STEP_TEXTS[step] ?? (() => "探し直す"))(ctx),
   push: (scene: string): { title: string; body: string } => (PUSH_TEXTS[scene] ?? (() => ({ title: "お知らせ", body: "アプリを開いて確かめてください。" })))(),
   fallbackReason: "今の条件で近い順に選びました",
+} as const;
+
+// ---------- 読み込みの状態とログインの切れ（2026-09-25 監査の指摘 横断-01） ----------
+// 画面の部品（components/ui/LoadState・SessionExpired）が出す決まった文。
+export const LOAD_TEXTS = {
+  loading: "読み込んでいます…",
+  retry: "もう一度読み込む",
+  /** 取り直しが続けて失敗している間の帯。前に取れた時刻（日本時間の HH:MM）を添える */
+  stale: (hhmm: string): string => `最終更新 ${hhmm}・更新できていません`,
+  relogin: "ログインし直す",
 } as const;
 
 // ---------- クーポンの画面の断りの文（要件16の基準 16.2・16.5） ----------

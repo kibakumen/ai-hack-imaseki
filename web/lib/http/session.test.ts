@@ -115,15 +115,6 @@ describe("店の入口の見分け", () => {
     const { deps } = fakeDeps(sessionRow(minutesFromNow(90), { store_id: null }));
     const res = await route.handle(requestWithCookie(), deps);
     expect(res.status).toBe(403);
-    expect((await res.json()).ok).toBe(false);
-  });
-
-  // 見分けの断りに入力の断りの語（invalid_input）を使っていて、画面が「入れた内容を確かめてください」を出す。
-  // 断りの語に forbidden を足して 403 を置き換える（以前の検査は invalid_input を正しい形として固めていた・設計-04）。
-  // 直したら、受け入れ検査の道具の forbidden()・unauthorized()（tests/acceptance/v2/_fakes.ts）も同じ語へ揃える。
-  it.fails("既知の不具合（横断-01）: 役割の違いの 403 は、断りの語 forbidden で返る", async () => {
-    const { deps } = fakeDeps(sessionRow(minutesFromNow(90), { store_id: null }));
-    const res = await route.handle(requestWithCookie(), deps);
     expect(await res.json()).toEqual({ ok: false, error: { kind: "forbidden" } });
   });
 });

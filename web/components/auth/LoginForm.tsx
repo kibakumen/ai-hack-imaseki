@@ -5,15 +5,13 @@
 // （設計書「入力の誤りの出し方」の規則5。文の正本は domain/texts）。
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { apiCall, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
 import { EMAIL_MAX, PASSWORD_MAX } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
 const FIELD_NAMES = ["email", "password"];
 const HOME_BY_ROLE: Record<string, string> = { store: "/store", admin: "/admin" };
-
-type LoginOk = { role?: string };
 
 export const LoginForm = () => {
   const [email, setEmail] = useState("");
@@ -43,7 +41,7 @@ export const LoginForm = () => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall<LoginOk>("POST", "/api/auth/login", { email, password, humanToken });
+    const result = await callApi("POST /api/auth/login", { body: { email, password, humanToken } });
     if (isFailure(result)) {
       setFailure(result);
       // 入れたメールアドレスは残す（基準 14.2）。パスワードだけ打ち直してもらう。

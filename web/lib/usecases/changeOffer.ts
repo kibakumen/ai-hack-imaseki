@@ -13,7 +13,7 @@
 //
 // 断り方は設計書「入力の断りの応答の形」に揃える——語は `domain/inputRefusal`、人が読む文は載せない。
 
-import type { InputRefusalKind } from "../domain/inputRefusal";
+import type { ServerRefusalKind } from "../domain/inputRefusal";
 import { resolveUntil } from "../domain/until";
 import type { Deps } from "../ports";
 import { addLiveOfferCapacity, findLiveOffer, reduceLiveOfferCapacity, updateLiveOfferPartyMax, updateLiveOfferUntil } from "../repo/offers";
@@ -24,17 +24,13 @@ import { liveOfferView } from "./storeHomeOffer";
 
 export type ChangeOfferResult =
   | { ok: true; offer: OfferView }
-  | { ok: false; status: 400 | 409; kind: InputRefusalKind; fields?: FieldError[] };
+  /** 断りは種類だけ。状態コードへの対応は入口の表（http/refusals）が持つ（設計-13） */
+  | { ok: false; kind: ServerRefusalKind; fields?: FieldError[] };
 
 /** 終わったオファーへの変更（基準 19.12）。画面はこの語だけホームを取り直して公開のフォームへ戻る。 */
-const ENDED: ChangeOfferResult = { ok: false, status: 409, kind: "offer_ended" };
+const ENDED: ChangeOfferResult = { ok: false, kind: "offer_ended" };
 
-const countRefusal = (reason: FieldError["reason"]): ChangeOfferResult => ({
-  ok: false,
-  status: 400,
-  kind: "invalid_input",
-  fields: [{ name: "count", reason }],
-});
+const countRefusal = (reason: FieldError["reason"]): ChangeOfferResult => ({ ok: false, kind: "invalid_input", fields: [{ name: "count", reason }] });
 
 /**
  * 変えたあとのカードを読んで返す。
@@ -91,9 +87,9 @@ export const changeOfferUntil = async (deps: Deps, storeId: string, input: Offer
 
   const resolved = resolveUntil({ input: input.until, publishedAt: new Date(live.publishedAt), now });
   // 形は入口の検査が見ているので、ここへ来るのは形が合っている値だけ（念のための倒し先）
-  if (!resolved) return { ok: false, status: 400, kind: "invalid_input", fields: [{ name: "until", reason: "bad_format" }] };
-  if (resolved.kind === "in_past") return { ok: false, status: 409, kind: "until_in_past" };
-  if (resolved.kind === "over_window") return { ok: false, status: 409, kind: "until_over_window" };
+  if (!resolved) return { ok: false, kind: "invalid_input", fields: [{ name: "until", reason: "bad_format" }] };
+  if (resolved.kind === "in_past") return { ok: false, kind: "until_in_past" };
+  if (resolved.kind === "over_window") return { ok: false, kind: "until_over_window" };
 
   const updated = await updateLiveOfferUntil(deps.db, { storeId, nowIso, untilAtIso: resolved.at.toISOString() });
   return updated ? changedCard(deps, storeId) : ENDED;

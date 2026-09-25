@@ -249,17 +249,28 @@ describeTask("25", "全入口の横断: 入口の一覧・依存の向き・断�
     expect(paths).toContain("/api/config/public");
   });
 
-  it("29.4 画面と部品が fetch を直接呼ばず、client/api.ts が応答をスキーマで検査している", () => {
+  it("29.4 画面と部品が fetch を直接呼ばず、全部の呼び出しが入口の鍵で callApi を通り、client/api.ts が成功の応答も形の表で検査している", () => {
+    // 2026-09-25 監査の指摘 設計-07 で強めた: それまでは api.ts に safeParse の字が在るかだけを見ていて、
+    // 成功の応答の形を渡している呼び出しは1つも無かった。今は入口の鍵（`"GET /api/store/home"`）で呼ぶ
+    // callApi だけが部品に開いていて、形は schemas/responses の表から必ず引かれる。
     const apiFile = path.join(WEB, "lib", "client", "api.ts");
-    expect(read(apiFile)).toMatch(/\bfetch\(/);
-    expect(read(apiFile)).toMatch(/\.safeParse\(|\.parse\(/);
+    const api = read(apiFile);
+    expect(api).toMatch(/\bfetch\(/);
+    expect(api).toMatch(/\.safeParse\(/);
+    expect(api).toMatch(/export const callApi = async <K extends RouteKey>/);
+    expect(api).toMatch(/RESPONSES\[route\]/);
     for (const f of [...srcUnder("components"), ...srcUnder("app"), ...srcUnder("lib/client")]) {
       if (f === apiFile) continue;
       expect(read(f), rel(f)).not.toMatch(/\bfetch\(/);
+      // 部品は method と path で呼ぶ低い層（apiCall）を使わない——入口の鍵で呼べば形の表が必ず引かれる
+      if (!/\.test\.tsx?$/.test(f)) expect(read(f), rel(f)).not.toMatch(/\bapiCall\(/);
     }
+    const responses = read(path.join(WEB, "lib", "schemas", "responses.ts"));
+    expect(responses).toMatch(/export const RESPONSES = \{/);
+    expect(valueImports(responses)).not.toContain("zod");
   });
 
-  it("依存の向き: components・app・lib/client が lib/domain から値として読むのは domain/texts だけ、lib/schemas は limits だけ。repo・usecases・adapters・http を読まない", () => {
+  it("依存の向き: components・app・lib/client が lib/domain から値として読むのは domain/texts だけ、lib/schemas は limits だけ（lib/client は responses も）。repo・usecases・adapters・http を読まない", () => {
     const DOMAIN_FILES = /domain\/(filter|score|selection|customerHome|storeHome|reservation|remaining|until|receiveRefusal|inputRefusal|offer|geo|token|password|code|genres|fileType|customer)\b/;
     for (const f of [...srcUnder("components"), ...srcUnder("app"), ...srcUnder("lib/client")]) {
       const imports = valueImports(read(f));
@@ -267,7 +278,9 @@ describeTask("25", "全入口の横断: 入口の一覧・依存の向き・断�
         expect(s, `${rel(f)} → ${s}`).not.toMatch(/lib\/(repo|usecases|adapters|http)\b|\/(repo|usecases|adapters|http)\//);
         if (/domain/.test(s)) expect(s, `${rel(f)} → ${s}`).toMatch(/domain\/texts$/);
         expect(s, `${rel(f)} → ${s}`).not.toMatch(DOMAIN_FILES);
-        if (/schemas/.test(s)) expect(s, `${rel(f)} → ${s}`).toMatch(/schemas\/limits$/);
+        // lib/client だけは成功した応答の形の表（schemas/responses）も読める（2026-09-25 監査の指摘 設計-07）
+        const schemasAllowed = rel(f).includes(path.join("lib", "client")) ? /schemas\/(limits|responses)$/ : /schemas\/limits$/;
+        if (/schemas/.test(s)) expect(s, `${rel(f)} → ${s}`).toMatch(schemasAllowed);
       }
     }
     for (const f of srcUnder("lib/domain")) {

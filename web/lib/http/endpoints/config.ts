@@ -2,6 +2,7 @@
 // 無記名で通り、画面の3つのフォーム（人かどうかの確かめ）と client/push がここから値を受け取る。
 
 import type { PublicConfig } from "../../schemas/config";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 
 const publicConfigRoute = defineRoute({
@@ -15,7 +16,7 @@ const publicConfigRoute = defineRoute({
       vapidPublicKey: deps.config.vapidPublicKey,
       contactEmail: deps.config.contactEmail ?? null,
     };
-    return { status: 200, body };
+    return respond("GET /api/config/public", body);
   },
 });
 

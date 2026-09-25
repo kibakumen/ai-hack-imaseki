@@ -680,10 +680,10 @@ const matchRoute = (key: string, method: string, pathname: string) => {
 export const invalidInput = (fields: Array<{ name: string; reason: string }>) => ({ status: 400, json: { ok: false, error: { kind: "invalid_input", fields } } });
 /**
  * 見分けの断り（401 未ログイン・ログイン切れ／403 役割違い）の応答。**形はここ1か所**（2026-09-25 設計-04。
- * 以前は入口の検査と画面の検査で3通りに食い違っていた）。入口の実物（web/lib/http/defineRoute.ts）と同じ形。
+ * 以前は入口の検査と画面の検査で3通りに食い違っていた）。入口の実物（web/lib/http/defineRoute.ts・refusals.ts）と同じ形。
  */
-export const unauthorized = () => ({ status: 401, json: { ok: false, error: { kind: "invalid_input" } } });
-export const forbidden = () => ({ status: 403, json: { ok: false, error: { kind: "invalid_input" } } });
+export const unauthorized = () => ({ status: 401, json: { ok: false, error: { kind: "unauthenticated" } } });
+export const forbidden = () => ({ status: 403, json: { ok: false, error: { kind: "forbidden" } } });
 export const refusal = (kind: string, extra: Record<string, unknown> = {}) => ({ status: 409, json: { ok: false, error: { kind, ...extra } } });
 
 export const homeFetch = (over: Partial<import("./_types").HomeDto> = {}): import("./_types").HomeDto => ({ kind: "fetch", profile: { ...CUSTOMER }, ...over });
@@ -709,6 +709,7 @@ export const storeHomeDto = (over: Partial<import("./_types").StoreHomeDto> = {}
   publishPrefill: { couponIds: [], capacity: null, partyMax: null, until: null },
   coupons: [],
   arrivals: [],
+  mustChangePassword: false,
   ...over,
 });
 export const offerDto = (over: Partial<import("./_types").OfferDto> = {}): import("./_types").OfferDto => ({

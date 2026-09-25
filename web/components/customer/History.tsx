@@ -11,20 +11,12 @@
 // ⚠️ 状態の文は `domain/texts` から引くだけで、語で分岐しない（設計書「概要」の芯の1）。
 
 import { useEffect, useState } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { RESERVATION_STATUS_TEXTS } from "../../lib/domain/texts";
 import { FormMessage } from "../ui/InputRefusal";
 
-type HistoryItem = {
-  id: string;
-  code: string;
-  status: string;
-  storeName: string;
-  storeAddress: string;
-  storeUrl: string | null;
-};
-
-type HistoryResponse = { items: HistoryItem[] };
+// 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type HistoryItem = ResponseOf<"GET /api/customer/history">["items"][number];
 
 const EMPTY_MESSAGE = "まだ受け取ったお店がありません。";
 
@@ -35,7 +27,7 @@ export const History = () => {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const result = await apiCall<HistoryResponse>("GET", "/api/customer/history");
+      const result = await callApi("GET /api/customer/history");
       if (!alive) return;
       if (isFailure(result)) {
         setFailure(result);

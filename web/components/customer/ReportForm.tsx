@@ -9,7 +9,7 @@
 //   その店へは通報できない（report_not_allowed） … 「送る」の直下（FormMessage）
 
 import { useState, type FormEvent } from "react";
-import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { REPORT_REASON_MAX, REPORT_REASON_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
@@ -27,7 +27,7 @@ export const ReportForm = ({ storeId, storeName, onClose }: Props) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiCall("POST", "/api/customer/reports", { storeId, reason });
+    const result = await callApi("POST /api/customer/reports", { body: { storeId, reason } });
     if (isFailure(result)) {
       setFailure(result);
       return;

@@ -3,19 +3,12 @@
 //
 // ⚠️ 2026-09-21: タスク8が最小の形（状況の書き換えとオファーの終わり）を置き、**タスク21 が
 // 確保の取り消し・その記録・購読のある客へのプッシュを足した**。4つの文は1つのまとまり
-// （`db.batch`）で流す——止められた店に公開中のオファーが残る／オファーは終わったのに確保だけ
-// 確保中で残る、という形を作らないため。
-//
-// **文の順に意味が在る**（記録の文がまだ `status='active'` の行を選ぶので、状態を変える文より前）:
-//   1. 店の状況を banned にする（前の状況 approved を WHERE に入れた1つの UPDATE）
-//   2. 公開中のオファーを終わりにする（終わった理由は banned・基準 25.7）
-//   3. これから取り消す確保の、状態の変化の記録を足す（基準 27.4）
-//   4. 確保中の確保を全部「運営に取り消された」にする（基準 25.8・25.11）
+// （`db.batch`）で流す——その4文と順番は repo/adminStores の `banApprovedStore` が持つ
+// （2026-09-25 監査の指摘 設計-13: 手続きの中から D1 を直接呼んでいたのを repo へ移した）。
 
 import type { Deps } from "../ports";
-import { banStoreStatement, endPublishedOffersStatement, findStoreStatus } from "../repo/adminStores";
-import { adminCancelledEventsStatement } from "../repo/logs";
-import { adminCancelReservationsStatement, listActiveReservationsOfStore } from "../repo/reservations";
+import { banApprovedStore, findStoreStatus } from "../repo/adminStores";
+import { listActiveReservationsOfStore } from "../repo/reservations";
 import type { StoreStatus } from "../repo/stores";
 import { sendCancellationPushes } from "./pushMessage";
 
@@ -40,14 +33,8 @@ export const banStore = async (deps: Deps, storeId: string): Promise<BanStoreRes
   // 知らせの相手は**取り消す前に**読む（取り消したあとでは「確保中だった客」を選べない・基準 22.2）。
   const affected = await listActiveReservationsOfStore(deps.db, storeId, nowIso);
 
-  const [banned] = await deps.db.batch([
-    banStoreStatement(deps.db, storeId),
-    endPublishedOffersStatement(deps.db, storeId, nowIso),
-    adminCancelledEventsStatement(deps.db, storeId, nowIso),
-    adminCancelReservationsStatement(deps.db, storeId, nowIso),
-  ]);
-  const changes: unknown = banned?.meta?.changes;
-  if (typeof changes === "number" && changes === 0) return { ok: false, kind: "state", state: status };
+  // 同時に来た操作に負けた・変わった行の数が分からないときは「当たらなかった」側へ倒す（repo/d1 の changedRows）。
+  if (!(await banApprovedStore(deps.db, storeId, nowIso))) return { ok: false, kind: "state", state: status };
 
   deps.logger.log({ event: "ban_store", id: storeId });
   // 取り消した確保を1件ずつ残す（`id` は確保の番号。客を指す値は載せない・基準 27.6）。

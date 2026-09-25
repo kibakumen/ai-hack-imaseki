@@ -6,13 +6,14 @@
 //    （`ctx.storeId`）ので、別の店の番号を送っても他店の実績は読めない（基準 2.5・14.5）。
 
 import { storeResults } from "../../usecases/storeResults";
+import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 
 const storeResultsRoute = defineRoute({
   method: "GET",
   path: "/api/store/results",
   auth: "store",
-  handler: async ({ deps, ctx }) => ({ status: 200, body: { items: await storeResults(deps, ctx.storeId) } }),
+  handler: async ({ deps, ctx }) => respond("GET /api/store/results", { items: await storeResults(deps, ctx.storeId) }),
 });
 
 export const storeResultsRoutes: RouteDefinition[] = [storeResultsRoute];
