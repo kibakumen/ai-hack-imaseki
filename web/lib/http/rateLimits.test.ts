@@ -15,13 +15,16 @@ import { fakeClock, openDb, type Db } from "../../../tests/acceptance/v2/_fakes"
 import type { Deps } from "../ports";
 import { rememberLoginDevice } from "../repo/loginDevices";
 import {
+  AI_DAILY_CALL_LIMIT,
   CUSTOMER_REGISTER_RATE_LIMIT,
+  FETCH_IP_HOURLY_LIMIT,
   FETCH_IP_RATE_LIMIT,
   FETCH_IP_RATE_WINDOW_MS,
   FETCH_RATE_LIMIT,
   LOGIN_DEVICE_TRUST_MS,
   LOGIN_FAILURE_LIMIT,
   LOGIN_IP_FAILURE_LIMIT,
+  MAPS_DAILY_CALL_LIMIT,
   PLACE_IP_RATE_LIMIT,
   PLACE_IP_RATE_WINDOW_MS,
   PLACE_SUGGEST_IP_RATE_LIMIT,
@@ -233,6 +236,35 @@ describe("抑止を掛ける入口と鍵", () => {
     }
   });
 
+  // 2026-09-26 のレビュー（安全-03 の残り）: 1分の窓の接続元ごとの天井だけだと、1つの回線から1時間に取得を1800回・
+  // 場所の候補を7200回踏めて、アプリ全体の1日の上限（AI・地図とも2000回）を1時間足らずで使い切れた（その日は全員が止まる）。
+  it("1つの接続元が1時間に踏める回数は、アプリ全体の1日の上限の小さな割合まで（入口ごとに1割・地図を呼ぶ入口の合計で4分の1）", () => {
+    const HOUR_MS = 60 * 60 * 1000;
+    /** 1つの接続元が1時間に踏める回数の上限（接続元で数える規則のうち、いちばん狭いもの。1時間以上の窓は、1時間の中でも上限いっぱいまで踏める） */
+    const perIpPerHour = (method: string, routePath: string): number =>
+      Math.min(
+        ...rateRulesFor(method, routePath)
+          .filter((r) => r.by === "ip")
+          .map((r) => r.limit * Math.max(1, HOUR_MS / r.windowMs)),
+      );
+    // 取得と少しずつ届く取得は同じ鍵で合わせて数えるので、どちらの入口から見ても同じ天井。取得1回に選定の AI は1回
+    // （紹介文の AI は取得1回に最大20回重なり、この天井では1割に収まらない。limits.ts の FETCH_IP_HOURLY_LIMIT の注と CHANGES の6節）
+    for (const routePath of ["/api/customer/fetch", "/api/customer/fetch/stream"]) {
+      expect(perIpPerHour("POST", routePath), routePath).toBeLessThanOrEqual(AI_DAILY_CALL_LIMIT / 10);
+    }
+    // 地図の1日の上限は、場所の候補・地名・取得（場所の文字を座標に直す）が分け合う
+    const mapsRoutes: Array<[string, string]> = [
+      ["GET", "/api/customer/place-suggest"],
+      ["GET", "/api/customer/place"],
+      ["POST", "/api/customer/fetch"],
+    ];
+    for (const [method, routePath] of mapsRoutes) {
+      expect(perIpPerHour(method, routePath), `${method} ${routePath}`).toBeLessThanOrEqual(MAPS_DAILY_CALL_LIMIT / 10);
+    }
+    const mapsPerHour = mapsRoutes.reduce((sum, [method, routePath]) => sum + perIpPerHour(method, routePath), 0);
+    expect(mapsPerHour).toBeLessThanOrEqual(MAPS_DAILY_CALL_LIMIT / 4);
+  });
+
   it("表の経路は全部、実在の入口と字面まで一致する（経路の名前が変わったら、黙って抑止が外れないようにここが落ちる）", () => {
     // 以前は表の8経路のうち3つしか見ていなかった（設計-04）。表そのものを歩く
     const known = new Set(ROUTE_DEFINITIONS.map((r) => `${r.method} ${r.path}`));
@@ -358,6 +390,33 @@ describe("30.1・30.5 同じ客の取得は1分に5回まで", () => {
     expect(results.filter((r) => r.status === 200)).toHaveLength(FETCH_RATE_LIMIT);
     expect(results.filter((r) => r.status === 429)).toHaveLength(20 - FETCH_RATE_LIMIT);
     expect(handled).toBe(FETCH_RATE_LIMIT);
+  });
+
+  it("安全-03 の残り: 識別子を作り直して1分ごとの天井の内側で送り続けても、同じ接続元は1時間の天井を超えた回で断られ、1時間たつとまた通る", async () => {
+    let handled = 0;
+    const route = fetchRoute(() => {
+      handled++;
+    });
+    // 1回ごとに新しい客（客ごとの天井には1度も届かない）。接続元の1分の天井いっぱいずつ、分をまたいで送る
+    const tokens = Array.from({ length: FETCH_IP_HOURLY_LIMIT + 1 }, (_, i) => `tok-hour-${i}`);
+    const { deps, clock } = await makeDeps(Object.fromEntries(tokens.map((token, i) => [hashOf(token), `cus-hour-${i}`])));
+    const call = (token: string) => route.handle(post("/api/customer/fetch", { party: 2 }, { ...cookieOf(token), "cf-connecting-ip": "198.51.100.77" }), deps);
+    const minuteOf = (i: number) => Math.floor(i / FETCH_IP_RATE_LIMIT);
+
+    for (let i = 0; i < FETCH_IP_HOURLY_LIMIT; i++) {
+      clock.set(at(minuteOf(i)));
+      expect((await call(tokens[i])).status, String(i)).toBe(200);
+    }
+    const lastMinute = minuteOf(FETCH_IP_HOURLY_LIMIT - 1);
+    // 1分の天井は明けているが、1時間の天井で断る（手続きは動かない＝AI も地図も呼ばない）
+    clock.set(at(lastMinute + 1));
+    const refused = await call(tokens[FETCH_IP_HOURLY_LIMIT]);
+    expect(refused.status).toBe(429);
+    expect((await jsonOf(refused)).error?.kind).toBe("rate_limited");
+    expect(handled).toBe(FETCH_IP_HOURLY_LIMIT);
+    // 天井に届いた回から1時間たつと通る
+    clock.set(at(lastMinute + 61));
+    expect((await call(tokens[FETCH_IP_HOURLY_LIMIT])).status).toBe(200);
   });
 });
 

@@ -22,6 +22,7 @@ import {
   CARD_RATE_LIMIT,
   CARD_RATE_WINDOW_MS,
   CUSTOMER_REGISTER_RATE_LIMIT,
+  FETCH_IP_HOURLY_LIMIT,
   FETCH_IP_RATE_LIMIT,
   FETCH_IP_RATE_WINDOW_MS,
   FETCH_RATE_LIMIT,
@@ -30,10 +31,12 @@ import {
   LOGIN_FAILURE_LIMIT,
   LOGIN_IP_FAILURE_LIMIT,
   LOGIN_LOCK_WINDOW_MS,
+  PLACE_IP_HOURLY_LIMIT,
   PLACE_IP_RATE_LIMIT,
   PLACE_IP_RATE_WINDOW_MS,
   PLACE_RATE_LIMIT,
   PLACE_RATE_WINDOW_MS,
+  PLACE_SUGGEST_IP_HOURLY_LIMIT,
   PLACE_SUGGEST_IP_RATE_LIMIT,
   PLACE_SUGGEST_IP_RATE_WINDOW_MS,
   PLACE_SUGGEST_RATE_LIMIT,
@@ -130,20 +133,26 @@ const FETCH_IP_RULE: RateRule = { name: "fetchIp", limit: FETCH_IP_RATE_LIMIT, w
 const PLACE_SUGGEST_IP_RULE: RateRule = { name: "placeSuggestIp", limit: PLACE_SUGGEST_IP_RATE_LIMIT, windowMs: PLACE_SUGGEST_IP_RATE_WINDOW_MS, by: "ip", counts: "requests" };
 const PLACE_IP_RULE: RateRule = { name: "placeIp", limit: PLACE_IP_RATE_LIMIT, windowMs: PLACE_IP_RATE_WINDOW_MS, by: "ip", counts: "requests" };
 const RECEIVE_IP_RULE: RateRule = { name: "receiveIp", limit: RECEIVE_IP_RATE_LIMIT, windowMs: RECEIVE_IP_RATE_WINDOW_MS, by: "ip", counts: "requests" };
+// 1時間の窓の天井（2026-09-26 の第2周のレビュー・安全-03 の残り）。1分の窓だけだと、1つの回線から1時間に取得を1800回・
+// 場所の候補を7200回踏めて、アプリ全体の1日の上限（AI・地図とも2000回）に1時間足らずで届いた。1分の窓の規則に重ねる。
+const HOUR_MS = 60 * 60 * 1000;
+const FETCH_IP_HOURLY_RULE: RateRule = { name: "fetchIpHour", limit: FETCH_IP_HOURLY_LIMIT, windowMs: HOUR_MS, by: "ip", counts: "requests" };
+const PLACE_SUGGEST_IP_HOURLY_RULE: RateRule = { name: "placeSuggestIpHour", limit: PLACE_SUGGEST_IP_HOURLY_LIMIT, windowMs: HOUR_MS, by: "ip", counts: "requests" };
+const PLACE_IP_HOURLY_RULE: RateRule = { name: "placeIpHour", limit: PLACE_IP_HOURLY_LIMIT, windowMs: HOUR_MS, by: "ip", counts: "requests" };
 
 /** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則。1つの入口に複数あれば全部で数える）。ここに無い入口には1度も表を引かない。 */
 const RULES_BY_ROUTE: ReadonlyMap<string, readonly RateRule[]> = new Map([
-  ["POST /api/customer/fetch", [FETCH_RULE, FETCH_IP_RULE]],
+  ["POST /api/customer/fetch", [FETCH_RULE, FETCH_IP_RULE, FETCH_IP_HOURLY_RULE]],
   // 少しずつ届ける入口（NDJSON）も同じ規則・同じ鍵（客ごと・接続元ごと）で数える。別扱いにすると、
   // そちらから同じ回数だけ AI を呼べてしまい、抑止が黙って外れる。
-  ["POST /api/customer/fetch/stream", [FETCH_RULE, FETCH_IP_RULE]],
+  ["POST /api/customer/fetch/stream", [FETCH_RULE, FETCH_IP_RULE, FETCH_IP_HOURLY_RULE]],
   ["POST /api/register/customer", [CUSTOMER_REGISTER_RULE]],
   ["POST /api/register/store", [STORE_REGISTER_RULE]],
   ["POST /api/customer/reports", [REPORT_RULE]],
   ["POST /api/auth/login", [LOGIN_RULE, LOGIN_IP_RULE]],
   ["GET /api/customer/store-image", [STORE_IMAGE_RULE]],
-  ["GET /api/customer/place-suggest", [PLACE_SUGGEST_RULE, PLACE_SUGGEST_IP_RULE]],
-  ["GET /api/customer/place", [PLACE_RULE, PLACE_IP_RULE]],
+  ["GET /api/customer/place-suggest", [PLACE_SUGGEST_RULE, PLACE_SUGGEST_IP_RULE, PLACE_SUGGEST_IP_HOURLY_RULE]],
+  ["GET /api/customer/place", [PLACE_RULE, PLACE_IP_RULE, PLACE_IP_HOURLY_RULE]],
   ["PUT /api/store/profile", [STORE_PROFILE_RULE]],
   ["POST /api/store/card/setup", [CARD_RULE]],
   ["POST /api/store/card/confirm", [CARD_RULE]],
