@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
-import { TEXTS } from "../../lib/domain/texts";
+import { PERSONAL_DATA_TEXTS, TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, NICKNAME_MAX, NICKNAME_MIN, PHONE_MAX_LENGTH } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
@@ -89,8 +89,10 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
         通り道では出ない画面（`GuestEntry` が開いた瞬間に裏で登録を済ませる）。ここが出るのは
         自動の登録が通らなかったときだけなので、何のために聞くのかを1行で添える
         （2026-09-22 の本人の指摘「電話番号も入力不要でいい（任意、店が緊急時に連絡できる旨を注釈として）」）。
+        前の版は「呼び名はお店に伝わりません」と書いていたが、ここで入れた呼び名は受け取った店の一覧に出る
+        （基準 20.1）ので、事実に合わせた（2026-09-25 監査の指摘 安全-16 の案1）。
       */}
-      <p>呼び名はお店に伝わりません。電話番号は、お店が当日どうしても連絡を取りたいときにだけ使います。</p>
+      <p>{PERSONAL_DATA_TEXTS.registerNotice}</p>
 
       <label htmlFor="register-nickname">呼び名</label>
       <input

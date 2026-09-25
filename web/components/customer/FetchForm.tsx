@@ -30,7 +30,7 @@ import { apiStream, callApi, isFailure, STREAM_UNAVAILABLE, type ApiFailure, typ
 import { currentLocation, type CurrentLocation } from "../../lib/client/geolocation";
 import { rememberOrigin } from "../../lib/client/lastOrigin";
 import { usePlaceSuggestions } from "../../lib/client/placeSuggest";
-import { TEXTS } from "../../lib/domain/texts";
+import { PERSONAL_DATA_TEXTS, TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, GUEST_PHONE_PLACEHOLDER, PARTY_MAX, PARTY_MIN, PHONE_MAX_LENGTH, PLACE_MAX } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 import { EMPTY_RESULT_TEXT, type ResultItem } from "./ResultList";
@@ -463,7 +463,8 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
 
         {/* いちばん下に電話番号（任意・本人の指摘「こだわり条件の下に任意で電話番号を登録できるように」） */}
         <label htmlFor="fetch-phone">電話番号（任意）</label>
-        <p className="fetch-phone-note">お店が緊急時に連絡できるようにするためのものです。入れなくても探せます。</p>
+        {/* どの店にいつまで見えるかも書く（2026-09-25 監査の指摘 安全-17 の案3） */}
+        <p className="fetch-phone-note">{PERSONAL_DATA_TEXTS.fetchPhoneNote}</p>
         <input
           id="fetch-phone"
           data-testid="field-phone"
