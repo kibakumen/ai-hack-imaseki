@@ -39,7 +39,7 @@ const guestNickname = (): string => `guest-${Math.random().toString(36).slice(2,
 const PLACEHOLDER_PHONE = GUEST_PHONE_PLACEHOLDER;
 
 /**
- * 人かどうかの確かめの値を待つ上限。これを過ぎたら値なしで送る（＝断られて手の登録へ倒れる）。
+ * 人かどうかの確かめの値を待つ上限。これを過ぎたら送らずに手の登録へ倒れる（値なしでは送らない・不具合-04）。
  * ⚠️ 確かめが働いていない間（サイトキーのホスト名の設定が合っていない等）は、客はここで待たされた
  * あとに手の登録の画面を見る。**自動の登録は確かめが通ることに依っている**——守りを緩めて通す道は
  * 作らない（設計書「人かどうかの確かめ」: 確かめが取れないときも断る・本人選択）。
@@ -61,7 +61,17 @@ type Phase =
   /** 識別子が無い。人かどうかの確かめの値を待って、裏で登録する */
   | "registering"
   /** 登録の要否が決まった（通ったか、諦めたか）。`CustomerApp` に渡す */
-  | "ready";
+  | "ready"
+  /**
+   * 登録が混み合って断られた（429・rate_limited・不具合-04）。手の登録の入力へ落とさない——
+   * 同じ回線から送り直しても同じ断りを受けるだけなので、待ってから開き直す道を出す。
+   */
+  | "busy";
+
+/** 登録を1回送った結果。混み合いの断りだけは、手の登録へ倒さずに分けて扱う。 */
+type RegisterOutcome = "registered" | "refused" | "busy";
+
+const isRateLimited = (answer: unknown): boolean => isFailure(answer) && answer.error?.kind === "rate_limited";
 
 export const GuestEntry = () => {
   const [phase, setPhase] = useState<Phase>("checking");
@@ -108,8 +118,7 @@ export const GuestEntry = () => {
         await new Promise((resolve) => setTimeout(resolve, TOKEN_POLL_MS));
         if (!alive) return;
       }
-      const register = async (): Promise<boolean> => {
-        const humanToken = tokenRef.current;
+      const register = async (humanToken: string): Promise<RegisterOutcome> => {
         tokenRef.current = null;
         const answer = await callApi("POST /api/register/customer", {
           body: {
@@ -120,15 +129,22 @@ export const GuestEntry = () => {
             humanToken,
           },
         });
-        return !isFailure(answer);
+        if (isRateLimited(answer)) return "busy";
+        return isFailure(answer) ? "refused" : "registered";
       };
 
-      if (await register()) {
-        if (!alive) return;
+      // 値が無いまま送らない（不具合-04）——値の無い登録は必ず断られるうえ、以前は接続元の登録の回数を減らしていた。
+      const firstToken = tokenRef.current;
+      const first: RegisterOutcome = firstToken === null ? "refused" : await register(firstToken);
+      if (!alive) return;
+      if (first === "registered") {
         setPhase("ready");
         return;
       }
-      if (!alive) return;
+      if (first === "busy") {
+        setPhase("busy");
+        return;
+      }
 
       // 1回目が通らなかった。**画面は先に出す**——待たせ続けるより、手で登録できる状態を見せる。
       // そのうえで裏で値の到着を待ち続け、遅れて届いたらもう一度だけ送る（2026-09-22）。
@@ -138,9 +154,10 @@ export const GuestEntry = () => {
         await new Promise((resolve) => setTimeout(resolve, TOKEN_POLL_MS));
         if (!alive) return;
       }
-      if (tokenRef.current === null) return;
+      const lateToken = tokenRef.current;
+      if (lateToken === null) return;
       // 通れば `CustomerApp` がホームを取り直して取得の画面へ変わる。通らなければ登録の入力のまま。
-      if (await register()) window.location.reload();
+      if ((await register(lateToken)) === "registered") window.location.reload();
     })();
 
     return () => {
@@ -149,6 +166,17 @@ export const GuestEntry = () => {
   }, []);
 
   if (phase === "ready") return <CustomerApp />;
+
+  if (phase === "busy") {
+    return (
+      <main data-testid="guest-entry-busy">
+        <p role="alert">ただいま混み合っています。少し時間をおいてから、このページを開き直してください。</p>
+        <button type="button" onClick={() => window.location.reload()}>
+          開き直す
+        </button>
+      </main>
+    );
+  }
 
   return (
     <main aria-busy="true" data-testid="guest-entry">
