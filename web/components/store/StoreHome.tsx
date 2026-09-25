@@ -15,7 +15,7 @@ import { useLoad } from "../../lib/client/useLoad";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
 import { LoadView } from "../ui/LoadState";
 import { ArrivalsList } from "./ArrivalsList";
-import { confirmCardSetup } from "./cardReturn";
+import { confirmCardSetup, takeAutoConfirmTurn } from "./cardReturn";
 import { SoundUnlock } from "./SoundUnlock";
 import { useArrivalSignals, type ArrivalSignals } from "./useArrivalSignals";
 import { useWakeLock } from "./useWakeLock";
@@ -112,13 +112,16 @@ export const StoreHome = () => {
   };
 
   // カードの登録を始めたまま確かめていない店（決済会社の画面から戻る前にタブを閉じた店）は、ホームを開いたときにも
-  // 確かめを1回送る（2026-09-25 カード登録が画面から完了しない件（不具合-01））。通らなくても文は出さない
+  // 確かめを送る（2026-09-25 カード登録が画面から完了しない件（不具合-01））。通らなくても文は出さない
   // （入力を終えていないだけかもしれない。やり直しは書類の画面から）。
+  // **書類の画面と合わせて1つのブラウザのセッションで1回だけ**（開くたびに送ると、開始と同じ回数の制限を使い切り、
+  // 本当に押した「カードを登録する」まで断られた・カード登録の自動の確かめのレビュー）。
   const cardChecked = useRef(false);
   const pendingCard = state.status === "ready" && state.data.cardSetupPending && !state.data.checklist.card;
   useEffect(() => {
     if (!pendingCard || cardChecked.current) return;
     cardChecked.current = true;
+    if (!takeAutoConfirmTurn()) return;
     void (async () => {
       if ((await confirmCardSetup()) === null) await reload();
     })();

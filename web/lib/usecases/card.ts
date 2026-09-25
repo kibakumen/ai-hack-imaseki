@@ -2,7 +2,7 @@
 // 戻ってきた店の結果を確かめるのの2つ。カードの番号・有効期限・確認の番号はここを通らない（基準 13.7）。
 
 import type { Deps } from "../ports";
-import { findCardSetupSession, markCardRegistered, saveCardSetupSession } from "../repo/stores";
+import { clearCardSetupSession, findCardSetupSession, markCardRegistered, saveCardSetupSession } from "../repo/stores";
 
 export type CardSetupResult = { ok: true; url: string } | { ok: false };
 
@@ -27,12 +27,19 @@ export type CardConfirmResult = { ok: true } | { ok: false };
  * **照会する番号は、この店のために控えたものだけ**（2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1）。
  * 画面は番号を持たない（戻り先の URL に番号を載せない）ので、要求の本文からは受け取らない。控えが無ければ
  * 外のサービスを呼ばずに断る。
+ *
+ * 決済会社のセッションの期限が切れていたら控えを消す（2026-09-25 カード登録の自動の確かめのレビュー）。消さないと、
+ * 入力を終えなかった店が画面を開くたびに決済会社へ問い合わせ、開始と同じ回数の制限を使い切っていた。
  */
 export const confirmCardSetup = async (deps: Deps, storeId: string): Promise<CardConfirmResult> => {
   const sessionId = await findCardSetupSession(deps.db, storeId);
   if (!sessionId) return { ok: false };
   const confirmed = await deps.card.confirmSetup(sessionId);
-  if (!confirmed.ok || confirmed.clientReference !== storeId) return { ok: false };
+  if (!confirmed.ok) {
+    if (confirmed.expired === true) await clearCardSetupSession(deps.db, storeId, sessionId);
+    return { ok: false };
+  }
+  if (confirmed.clientReference !== storeId) return { ok: false };
   await markCardRegistered(deps.db, storeId, deps.clock.now().toISOString());
   return { ok: true };
 };

@@ -15,7 +15,7 @@ import { DOCUMENTS_TEXTS } from "../../lib/domain/texts";
 import { ContactEmail } from "../ui/ContactEmail";
 import { FieldKindMessage, FormMessage } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
-import { cameBackFromCardSetup, clearCardReturnMark, confirmCardSetup } from "./cardReturn";
+import { cameBackFromCardSetup, clearCardReturnMark, confirmCardSetup, resetAutoConfirmTurn, takeAutoConfirmTurn } from "./cardReturn";
 
 /** 店のホームの応答のうち、この画面が読む分（型は schemas/responses の表から・設計-07）。 */
 type DocumentsView = Pick<StoreHomeDto, "checklist" | "cardSetupPending" | "status">;
@@ -37,6 +37,7 @@ export const DocumentsPanel = () => {
 
   // 決済会社の画面から戻ってきた（`?card=returned`）か、始めたまままだ確かめていない（`cardSetupPending`）なら、
   // 開いたときに確かめを1回送る（2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1）。
+  // 戻ってきた印の無い自動の確かめは、ホームと合わせて1つのブラウザのセッションで1回だけ（cardReturn の注）。
   // 戻ってきたのに通らなかったときだけ断りの文を出す——始めただけの店は、入力を終えていないだけかもしれない。
   const loaded = state.status === "ready" || state.status === "empty" ? state.data : null;
   useEffect(() => {
@@ -44,7 +45,8 @@ export const DocumentsPanel = () => {
     cardChecked.current = true;
     const returned = cameBackFromCardSetup();
     clearCardReturnMark();
-    if (loaded.checklist.card || !(returned || loaded.cardSetupPending)) return;
+    if (loaded.checklist.card) return;
+    if (!returned && !(loaded.cardSetupPending && takeAutoConfirmTurn())) return;
     void (async () => {
       const failure = await confirmCardSetup();
       if (failure === null) {
@@ -99,6 +101,8 @@ export const DocumentsPanel = () => {
       return;
     }
     setCardFailure(null);
+    // やり直したので、戻らずにタブを閉じても次に開いたとき1回は確かめる
+    resetAutoConfirmTurn();
     // カードを打つのは外の画面（この画面には欄が無い・基準 13.7）。
     window.location.assign(result.url);
   };

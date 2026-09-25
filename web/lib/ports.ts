@@ -113,9 +113,13 @@ export type StoreImageFetcher = {
  * 呼ぶ側（usecases/pushMessage）が数秒で鳴らす（2026-09-25 監査の指摘 不具合-08）。
  */
 export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number; signal?: AbortSignal }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
+/**
+ * カードの登録の口。`confirmSetup` の `expired` は、決済会社のセッションの期限が切れてもう完了しないこと
+ * （呼ぶ側が控えを消す・2026-09-25 カード登録の自動の確かめのレビュー）。入力の途中・問い合わせの失敗では付けない。
+ */
 export type CardRegistrar = {
   createSetupSession(input: { storeId: string; returnUrl: string }): Promise<{ ok: true; url: string; sessionId: string } | { ok: false }>;
-  confirmSetup(sessionId: string): Promise<{ ok: true; clientReference: string } | { ok: false }>;
+  confirmSetup(sessionId: string): Promise<{ ok: true; clientReference: string } | { ok: false; expired?: boolean }>;
 };
 /**
  * 人かどうかの確かめ（Turnstile）。`expectedHostname` と `expectedAction` を渡すと、答えの解かれた場所と

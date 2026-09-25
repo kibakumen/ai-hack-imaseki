@@ -240,6 +240,14 @@ export const saveCardSetupSession = async (db: Db, storeId: string, sessionId: s
 };
 
 /**
+ * 控えの番号を消す（決済会社のセッションの期限が切れた・2026-09-25 カード登録の自動の確かめのレビュー）。
+ * **読んだ番号のままのときだけ**当たる——確かめている間に店が登録をやり直したら、新しい控えは消さない。
+ */
+export const clearCardSetupSession = async (db: Db, storeId: string, sessionId: string): Promise<void> => {
+  await db.prepare(`UPDATE stores SET card_setup_session_id = NULL WHERE id = ?1 AND card_setup_session_id = ?2`).bind(storeId, sessionId).run();
+};
+
+/**
  * 確かめに使う控えの番号（2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1）。画面は番号を持たないので、
  * 確かめの入口はここで読んだ番号だけを外のサービスに照会する。控えが無ければ null。
  */

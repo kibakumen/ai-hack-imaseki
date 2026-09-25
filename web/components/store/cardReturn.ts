@@ -5,7 +5,10 @@
 // 決済会社の画面は、入力を終えると戻り先 `/store/documents?card=returned` へ戻す。番号は戻り先に載らない
 // ——確かめの入口（POST /api/store/card/confirm）が、サーバーの控えた番号を照会する。画面は本文なしで送るだけ。
 // 戻る前にタブを閉じた店のために、ホームの `cardSetupPending`（始めたがまだ確かめていない）が立っていれば、
-// 書類の画面とホームを開いたときにも1回送る。
+// 書類の画面かホームを開いたときにも送る——ただし**戻ってきた印の無い自動の確かめは、1つのブラウザのセッションで
+// 1回だけ**（2026-09-25 カード登録の自動の確かめのレビュー）。確かめは開始と同じ回数の制限で数えるので、開くたびに
+// 送ると、入力を終えなかった店が制限を使い切り、本当に押した「カードを登録する」まで断られた。
+// 「カードを登録する」を押してやり直したら、また1回送れる（`resetAutoConfirmTurn`）。
 
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 
@@ -31,4 +34,43 @@ export const clearCardReturnMark = (): void => {
 export const confirmCardSetup = async (): Promise<ApiFailure | null> => {
   const result = await callApi("POST /api/store/card/confirm", { body: {} });
   return isFailure(result) ? result : null;
+};
+
+/** 自動の確かめを使った印（sessionStorage＝1つのブラウザのセッションの間だけ残る） */
+const AUTO_CONFIRM_KEY = "imaseki.cardAutoConfirmed";
+/** sessionStorage が使えない（プライベートの窓・保存を止めた設定）ときの控え。読み込み直しで消える */
+let autoConfirmedWithoutStorage = false;
+
+const autoConfirmUsed = (): boolean => {
+  try {
+    return window.sessionStorage.getItem(AUTO_CONFIRM_KEY) === "1";
+  } catch {
+    return autoConfirmedWithoutStorage;
+  }
+};
+
+const markAutoConfirm = (used: boolean): void => {
+  autoConfirmedWithoutStorage = used;
+  try {
+    if (used) window.sessionStorage.setItem(AUTO_CONFIRM_KEY, "1");
+    else window.sessionStorage.removeItem(AUTO_CONFIRM_KEY);
+  } catch {
+    // 控え（autoConfirmedWithoutStorage）だけで数える
+  }
+};
+
+/**
+ * 戻ってきた印の無い、自動の確かめを送ってよいか。送ってよければ true を返し、同時に使った印を付ける
+ * （ホームと書類の画面が同じ1回を分け合う）。
+ */
+export const takeAutoConfirmTurn = (): boolean => {
+  if (typeof window === "undefined" || autoConfirmUsed()) return false;
+  markAutoConfirm(true);
+  return true;
+};
+
+/** 登録をやり直した（「カードを登録する」を押した）。次に開いたとき、また1回だけ自動の確かめを送れる。 */
+export const resetAutoConfirmTurn = (): void => {
+  if (typeof window === "undefined") return;
+  markAutoConfirm(false);
 };

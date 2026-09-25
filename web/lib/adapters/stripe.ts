@@ -60,6 +60,9 @@ export const createCardRegistrar = ({ secretKey, fetch: fetchImpl = globalThis.f
 
     confirmSetup: async (sessionId) => {
       const session = await readSession(`/checkout/sessions/${encodeURIComponent(sessionId)}`, { method: "GET" });
+      // 入力を終えないまま期限（24時間）が切れたセッションは、もう完了しない。呼ぶ側が控えを消せるように見分けて返す
+      // （2026-09-25 カード登録の自動の確かめのレビュー。見分けないと、控えが永久に残って開くたびに問い合わせ続けた）。
+      if (session?.status === "expired") return { ok: false, expired: true };
       if (!session || session.status !== "complete") return { ok: false };
       const clientReference = asString(session.client_reference_id);
       if (!clientReference) return { ok: false };
