@@ -5,6 +5,7 @@
 
 import type { Deps } from "../ports";
 import type { AccountRole } from "./accounts";
+import type { D1PreparedStatement } from "./d1";
 
 type Db = Deps["db"];
 
@@ -69,7 +70,7 @@ export const deleteSession = async (db: Db, tokenHash: string): Promise<void> =>
  * パスワードを取り替えるだけでは、既に開いている画面はそのまま使えてしまう。
  */
 export const deleteSessionsByAccount = async (db: Db, accountId: string): Promise<void> => {
-  await db.prepare(`DELETE FROM sessions WHERE account_id = ?1`).bind(accountId).run();
+  await deleteSessionsByAccountStatement(db, accountId).run();
 };
 
 /**
@@ -80,3 +81,7 @@ export const deleteSessionsByAccount = async (db: Db, accountId: string): Promis
 export const deleteOtherSessionsOfAccount = async (db: Db, accountId: string, keepTokenHash: string): Promise<void> => {
   await db.prepare(`DELETE FROM sessions WHERE account_id = ?1 AND token_hash <> ?2`).bind(accountId, keepTokenHash).run();
 };
+
+/** そのアカウントのセッションを全部切る文（流さずに返す・仮のパスワードの発行が `db.batch` に入れる）。 */
+export const deleteSessionsByAccountStatement = (db: Db, accountId: string): D1PreparedStatement =>
+  db.prepare(`DELETE FROM sessions WHERE account_id = ?1`).bind(accountId);

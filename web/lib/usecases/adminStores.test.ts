@@ -66,7 +66,7 @@ beforeAll(async () => {
   await approvedStoreWithSeed({ key: "expired", name: "時間切れの店", email: "expired@example.com" });
   await seedOffer(ids.expired, { untilAt: at(-HOUR) });
   await approvedStoreWithSeed({ key: "banned", name: "止められた店", email: "banned@example.com" });
-  expect((await admin.post(`/api/admin/stores/${ids.banned}/ban`, {})).status).toBe(200);
+  expect((await admin.post(`/api/admin/stores/${ids.banned}/ban`, { reason: "検査の停止" })).status).toBe(200);
 });
 
 afterAll(async () => {
@@ -124,8 +124,9 @@ describe("運営の店の一覧（要件24）", () => {
 
   it("24.8・24.9 いちばん上の集計は、公開中のオファーの数と未承認の店の数。絞り込みで変わらない", async () => {
     const json = await list();
-    expect(json.summary).toEqual({ publishing: 2, pending: 1 });
-    expect((await list("?filter=banned")).summary).toEqual({ publishing: 2, pending: 1 });
+    // awaiting は未承認のうち「連絡済み」でない店（運営-05）、total は全部の店（運営-11）。
+    expect(json.summary).toEqual({ publishing: 2, pending: 1, awaiting: 1, total: json.items.length });
+    expect((await list("?filter=banned")).summary).toEqual({ publishing: 2, pending: 1, awaiting: 1, total: json.items.length });
   });
 });
 
@@ -192,7 +193,7 @@ describe("止める（要件25・タスク8の持ち場の分）", () => {
   it("25.6・25.7 承認済みの店を止めると「止められている」になり、公開中のオファーが終わる", async () => {
     const store = await approvedStoreWithSeed({ key: "toBan", name: "止める店", email: "to-ban@example.com" });
     await seedOffer(store.id);
-    expect((await admin.post(`/api/admin/stores/${store.id}/ban`, {})).status).toBe(200);
+    expect((await admin.post(`/api/admin/stores/${store.id}/ban`, { reason: "検査の停止" })).status).toBe(200);
     expect((await ctx.db.prepare("SELECT status FROM stores WHERE id = ?1").bind(store.id).first()).status).toBe("banned");
     const offer = await ctx.db.prepare("SELECT ended_at, end_reason FROM offers WHERE store_id = ?1").bind(store.id).first();
     expect(offer.ended_at).toBe(T0);
@@ -201,18 +202,18 @@ describe("止める（要件25・タスク8の持ち場の分）", () => {
 
   it("25.4 未承認の店と、もう止めた店は止められない（状況は変わらない）", async () => {
     const pending = await seedStore({ key: "banPending", name: "未承認のまま止めようとする店", email: "ban-pending@example.com" });
-    const refused = await admin.post(`/api/admin/stores/${pending.id}/ban`, {});
+    const refused = await admin.post(`/api/admin/stores/${pending.id}/ban`, { reason: "検査の停止" });
     expect(refused.status).toBe(409);
     expect(refused.json.current.state).toBe("pending");
     expect((await ctx.db.prepare("SELECT status FROM stores WHERE id = ?1").bind(pending.id).first()).status).toBe("pending");
-    const twice = await admin.post(`/api/admin/stores/${ids.banned}/ban`, {});
+    const twice = await admin.post(`/api/admin/stores/${ids.banned}/ban`, { reason: "検査の停止" });
     expect(twice.status).toBe(409);
     expect((await ctx.db.prepare("SELECT status FROM stores WHERE id = ?1").bind(ids.banned).first()).status).toBe("banned");
   });
 
   it("運営の入口は店のセッションでは 403、ログインしていなければ 401", async () => {
     const store = await seedStore({ key: "otherStore", name: "関係ない店", email: "other-store@example.com" });
-    expect((await store.api.post(`/api/admin/stores/${ids.approved}/ban`, {})).status).toBe(403);
+    expect((await store.api.post(`/api/admin/stores/${ids.approved}/ban`, { reason: "検査の停止" })).status).toBe(403);
     expect((await store.api.get("/api/admin/stores")).status).toBe(403);
     expect((await ctx.api().get("/api/admin/stores")).status).toBe(401);
   });

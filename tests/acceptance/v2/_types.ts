@@ -28,7 +28,7 @@ export type RouteInfo = {
 export type Clock = { now(): Date; after(ms: number): Promise<void> };
 export type Rng = { bytes(n: number): Uint8Array };
 export type Hasher = { sha256Hex(input: string): Promise<string>; derive(password: string, saltB64: string, iterations: number): Promise<string> };
-export type Logger = { log(entry: { event: string; id?: string | number; durationMs?: number; errorKind?: string }): void };
+export type Logger = { log(entry: { event: string; id?: string | number; actor?: string; durationMs?: number; errorKind?: string }): void };
 
 export type AiSelectInput = {
   party: number;

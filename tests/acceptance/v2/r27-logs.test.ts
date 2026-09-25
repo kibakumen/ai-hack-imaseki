@@ -90,7 +90,7 @@ describeTask("24", "記録は追加だけ（27.7）", () => {
     requireInResults(f, s.offer.id);
     expect((await receive(s.customer.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId })).status).toBe(200);
     await s.store.api.post("/api/store/offers/current/stop", {});
-    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
     await ctx.admin!.api.get("/api/admin/metrics");
     for (const t of LOG_TABLES) {
       const after = await rows(ctx.db, `SELECT * FROM "${t}" ORDER BY rowid`);

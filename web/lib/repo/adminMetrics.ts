@@ -11,11 +11,16 @@
 //    AVG と SUM は NULL を返すので、読む側で 0 に倒す（下の toNumber）。
 
 import type { Deps } from "../ports";
-import { expiredReservationCondition } from "./sqlFragments";
+import { activeReservationCondition, expiredReservationCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
 
-/** AI の呼び出しの合計（基準 33.1 の記録から数える）。 */
+/**
+ * 店の選定の AI の呼び出しの合計（基準 33.1 の記録から数える）。
+ * **用途「店の選定」だけ**を数える（2026-09-25 監査の指摘 不具合-10 の第一の案・AI判断）——紹介文の生成と判定は
+ * 1回の取得で何本も呼ぶので、混ぜると「1回あたりの実費」「答えた・倒れた」が選定の工夫を表さなくなる。
+ * 紹介文の分は用途別（byPurpose）に、全部の用途の実費の合計は costTotals に出す。
+ */
 export type AiCallTotals = {
   calls: number;
   /**
@@ -34,12 +39,23 @@ export type FetchTotals = {
   avgDurationMs: number;
   /** AI の選定を使えた取得の数 */
   aiUsed: number;
-  /** 点数順に倒れた取得の数 */
+  /**
+   * 候補が在るのに点数順に倒れた取得の数（AI の失敗・時間切れ・その日の予算切れ）。
+   * **候補0件の取得は入れない**——AI を呼ばない決まり（基準 7.11）で、倒れたのではない（不具合-10）。
+   */
   fellBack: number;
+  /** 候補0件で AI を呼ばなかった取得の数（不具合-10） */
+  noCandidates: number;
 };
 
-/** 確保の数と、自動で取り消された（期限切れの）数。 */
-export type ReservationTotals = { total: number; expired: number };
+/** AI の実費の合計（全部の用途。運営-08 の「今日いくら使ったか」）。 */
+export type CostTotals = { costUsd: number; calls: number };
+
+/**
+ * 確保の数と、自動で取り消された（期限切れの）数。`settled` は**もう終わった**確保の数
+ * （まだ確保中の行を除いた数・割合の分母・不具合-10）。
+ */
+export type ReservationTotals = { total: number; expired: number; settled: number };
 
 /**
  * `resolved_model` で括った1行（タスク28 の続き・第4周の追記）。`model` が null の行は、
@@ -91,7 +107,8 @@ export const aiCallTotals = async (db: Db): Promise<AiCallTotals> => {
               AVG(duration_ms) AS avg_duration_ms,
               SUM(CASE WHEN succeeded = 1 THEN 1 ELSE 0 END) AS succeeded,
               SUM(CASE WHEN succeeded = 0 THEN 1 ELSE 0 END) AS failed
-         FROM ai_calls`,
+         FROM ai_calls
+        WHERE purpose = 'select'`,
     )
     .first();
   return {
@@ -109,7 +126,8 @@ export const fetchTotals = async (db: Db): Promise<FetchTotals> => {
       `SELECT COUNT(*) AS count,
               AVG(duration_ms) AS avg_duration_ms,
               SUM(CASE WHEN ai_used = 1 THEN 1 ELSE 0 END) AS ai_used,
-              SUM(CASE WHEN ai_used = 0 THEN 1 ELSE 0 END) AS fell_back
+              SUM(CASE WHEN ai_used = 0 AND candidate_count > 0 THEN 1 ELSE 0 END) AS fell_back,
+              SUM(CASE WHEN candidate_count = 0 THEN 1 ELSE 0 END) AS no_candidates
          FROM fetch_logs`,
     )
     .first();
@@ -118,11 +136,26 @@ export const fetchTotals = async (db: Db): Promise<FetchTotals> => {
     avgDurationMs: toMilliseconds(row?.avg_duration_ms),
     aiUsed: toNumber(row?.ai_used),
     fellBack: toNumber(row?.fell_back),
+    noCandidates: toNumber(row?.no_candidates),
   };
 };
 
 /**
- * 確保の数と、自動で取り消された数（基準 33.4 の「確保のうち自動で取り消された割合」の分子と分母）。
+ * AI の実費の合計と回数（全部の用途）。`sinceIso` を渡すとその時刻以後だけ（今日＝日本時間の0時から・運営-08）。
+ * 実費が残っていない呼び出し（倒れた呼び出しは NULL）は0円として足す。
+ */
+export const costTotals = async (db: Db, sinceIso: string | null = null): Promise<CostTotals> => {
+  const row = await db
+    .prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS cost_usd, COUNT(*) AS calls FROM ai_calls WHERE ?1 IS NULL OR at >= ?1`)
+    .bind(sinceIso)
+    .first();
+  return { costUsd: toNumber(row?.cost_usd), calls: toNumber(row?.calls) };
+};
+
+/**
+ * 確保の数と、自動で取り消された数（基準 33.4 の「確保のうち自動で取り消された割合」の分子）と、
+ * もう終わった確保の数（その分母）。**まだ確保中の行は分母に入れない**——向かっている途中の客を
+ * 「自動で取り消されなかった」側に数えると、昼のピークほど割合が低く見える（2026-09-25 監査の指摘 不具合-10）。
  *
  * **期限切れは保存しない**——`status='active'` で今が期限以後のもの、と時刻から導く
  * （設計書「確保の状態と、残りの数え方」: 6つの状態のうち期限切れだけは列に持たない）。
@@ -136,12 +169,13 @@ export const reservationTotals = async (db: Db, nowIso: string): Promise<Reserva
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN ${expiredReservationCondition("reservations", "?1")} THEN 1 ELSE 0 END) AS expired
+              SUM(CASE WHEN ${expiredReservationCondition("reservations", "?1")} THEN 1 ELSE 0 END) AS expired,
+              SUM(CASE WHEN ${activeReservationCondition("reservations", "?1")} THEN 0 ELSE 1 END) AS settled
          FROM reservations`,
     )
     .bind(nowIso)
     .first();
-  return { total: toNumber(row?.total), expired: toNumber(row?.expired) };
+  return { total: toNumber(row?.total), expired: toNumber(row?.expired), settled: toNumber(row?.settled) };
 };
 
 /**

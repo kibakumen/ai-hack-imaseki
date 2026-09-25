@@ -40,8 +40,8 @@ describeTask("8", "承認", () => {
   });
 
   // どの直し方（承認を戻す・承認時の写しを残す・差し替えを断る）でも、承認に使った許可書は消さない（運営-02 の直し方）。
-  // 以前は、承認のあとの差し替えを確かめる検査が1本も無かった（設計-04）。
-  it.fails("既知の不具合（運営-02）: 承認したあとに店が許可書を上げ直しても、承認に使った許可書は消えない", async () => {
+  // 以前は、承認のあとの差し替えを確かめる検査が1本も無かった（設計-04）。2026-09-25 に案2（承認した時点の写し）で直した。
+  it("運営-02: 承認したあとに店が許可書を上げ直しても、承認に使った許可書は消えない", async () => {
     const s = await approvedStore(ctx);
     const reviewed = (await one(ctx.db, "SELECT license_key FROM stores WHERE id = ?", s.id)).license_key as string;
     expect(ctx.files.store.has(reviewed)).toBe(true);
@@ -76,7 +76,7 @@ describeTask("21", "緊急の停止と復帰", () => {
       expect(r.status).toBe(200);
       return { customer: c, reservation: r.json.reservation };
     })();
-    const ban = await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/ban`, {});
+    const ban = await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/ban`, { reason: "検査の停止" });
     expect(ban.status).toBe(200);
     expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).status).toBe("banned");
     const offer = await one(ctx.db, "SELECT ended_at, end_reason FROM offers WHERE id = ?", scene.offer.id);
@@ -95,16 +95,16 @@ describeTask("21", "緊急の停止と復帰", () => {
 
   it("25.4 未承認の店は止められない（承認済みだけ）。止めた店をもう一度止めても変わらない", async () => {
     const pending = await registerStore(ctx);
-    const r = await ctx.admin!.api.post(`/api/admin/stores/${pending.id}/ban`, {});
+    const r = await ctx.admin!.api.post(`/api/admin/stores/${pending.id}/ban`, { reason: "検査の停止" });
     expect(r.status).toBe(409);
     expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", pending.id)).status).toBe("pending");
   });
 
   it("25.9・25.10 止められている店を承認済みに戻せる。戻しても終わったオファーと取り消された確保は戻らない", async () => {
     const scene = await receivedScene(ctx);
-    await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/ban`, { reason: "検査の停止" });
     const before = await snapshot(ctx.db);
-    const restore = await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/restore`, {});
+    const restore = await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/restore`, { reason: "検査の戻し" });
     expect(restore.status).toBe(200);
     expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).status).toBe("approved");
     expect((await one(ctx.db, "SELECT ended_at FROM offers WHERE id = ?", scene.offer.id)).ended_at).toBeTruthy();
@@ -112,7 +112,7 @@ describeTask("21", "緊急の停止と復帰", () => {
     expect((await scene.store.api.get("/api/store/home")).json.status).toBe("approved");
     expect(before).not.toBe(await snapshot(ctx.db));
     const s2 = await approvedStore(ctx);
-    expect((await ctx.admin!.api.post(`/api/admin/stores/${s2.id}/restore`, {})).status).toBe(409);
+    expect((await ctx.admin!.api.post(`/api/admin/stores/${s2.id}/restore`, { reason: "検査の戻し" })).status).toBe(409);
   });
 
   it("25.7 止めたあと、その店は公開できず、取得の結果にも出ない", async () => {
@@ -122,7 +122,7 @@ describeTask("21", "緊急の停止と復帰", () => {
     const seen = await fetchOffers(other.api, { party: 2, ...scene.at });
     expect(seen.status).toBe(200);
     expect(seen.json.items.map((i: any) => i.storeId)).toContain(scene.store.id);
-    await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/ban`, { reason: "検査の停止" });
     const pub = await scene.store.api.post("/api/store/offers", { couponIds: [], capacity: 2, partyMax: 4, until: "23:00" });
     expect(pub.status).toBe(409);
     // 公開中が残っていたから断られた（offer_exists）のではなく、止められているから断られた
@@ -134,6 +134,6 @@ describeTask("21", "緊急の停止と復帰", () => {
 
   it("停止と復帰は運営の入口だけ（店のセッションでは 403）", async () => {
     const s = await approvedStore(ctx);
-    expect((await s.api.post(`/api/admin/stores/${s.id}/ban`, {})).status).toBe(403);
+    expect((await s.api.post(`/api/admin/stores/${s.id}/ban`, { reason: "検査の停止" })).status).toBe(403);
   });
 });

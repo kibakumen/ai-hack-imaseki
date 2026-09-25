@@ -45,7 +45,7 @@ describeTask("22", "オファーごとの実績", () => {
     const c = await customer();
     const f = await fetchOffers(c.api, { party: 2 });
     await receive(c.api, { offerId: second.id, party: 2, fetchId: f.json.fetchId });
-    await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, { reason: "検査の停止" });
     results = (await s.api.get("/api/store/results")).json.items;
     expect(results.map((r: any) => r.offerId)).toEqual([second.id, first.id]);
     expect(results[0]).toMatchObject({ shown: 1, received: 1, completed: 0, cancelled: { total: 1, admin: 1 } });

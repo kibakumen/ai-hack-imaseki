@@ -85,7 +85,7 @@ describeTask("9", "公開と停止", () => {
     await pending.api.put("/api/store/profile", { ...PROFILE, address: PROFILE.address + "-p" });
     expect((await pending.api.post("/api/store/offers", body())).status).toBe(409);
     const banned = await approvedStore(ctx);
-    await ctx.admin!.api.post(`/api/admin/stores/${banned.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${banned.id}/ban`, { reason: "検査の停止" });
     expect((await banned.api.post("/api/store/offers", body())).status).toBe(409);
     expect((await one(ctx.db, "SELECT COUNT(*) AS n FROM offers WHERE store_id IN (?, ?)", pending.id, banned.id)).n).toBe(0);
   });

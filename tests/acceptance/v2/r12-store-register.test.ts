@@ -115,7 +115,7 @@ describeTask("8", "承認の状況が店のホームに映る（12.6・12.9）",
     await registerCard(s.api);
     expect((await ctx.admin!.api.post(`/api/admin/stores/${s.id}/approve`, {})).status).toBe(200);
     expect((await s.api.get("/api/store/home")).json.status).toBe("approved");
-    expect((await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, {})).status).toBe(200);
+    expect((await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, { reason: "検査の停止" })).status).toBe(200);
     expect((await s.api.get("/api/store/home")).json.status).toBe("banned");
   });
 });

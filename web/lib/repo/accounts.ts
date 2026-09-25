@@ -3,6 +3,7 @@
 // メールアドレスの列は COLLATE NOCASE なので、= の比較が大文字小文字を区別しない（基準 12.2）。
 
 import type { Deps } from "../ports";
+import type { D1PreparedStatement } from "./d1";
 
 type Db = Deps["db"];
 
@@ -91,11 +92,16 @@ export const insertAccount = async (db: Db, account: NewAccount): Promise<void> 
  * （要件14の基準 14.14）。決め直したときは false に戻す（基準 14.16）。
  */
 export const updateAccountPassword = async (db: Db, accountId: string, passwordHash: string, mustChangePassword = false): Promise<void> => {
-  await db
-    .prepare(`UPDATE accounts SET password_hash = ?2, must_change_password = ?3 WHERE id = ?1`)
-    .bind(accountId, passwordHash, mustChangePassword ? 1 : 0)
-    .run();
+  await updateAccountPasswordStatement(db, accountId, passwordHash, mustChangePassword).run();
 };
+
+/**
+ * パスワードを置き換える文（流さずに返す）。仮のパスワードの発行が、セッションの削除と運営の操作の記録と
+ * 同じ `db.batch` に入れる——記録が書けずに落ちたとき、パスワードだけ変わって店が締め出される形を作らない
+ * （2026-09-25 監査の指摘 運営-01 のレビュー）。
+ */
+export const updateAccountPasswordStatement = (db: Db, accountId: string, passwordHash: string, mustChangePassword: boolean): D1PreparedStatement =>
+  db.prepare(`UPDATE accounts SET password_hash = ?2, must_change_password = ?3 WHERE id = ?1`).bind(accountId, passwordHash, mustChangePassword ? 1 : 0);
 
 /**
  * 店の番号からその店のアカウントを引く（【最終日】仮のパスワードの発行）。

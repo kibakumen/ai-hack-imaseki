@@ -16,7 +16,7 @@ describeTask("8", "店の一覧・絞り込み・検索・集計・詳細", () =
     await approvedStore(ctx, { name: "公開していない店", email: "idle@example.com", address: "東京都杉並区3-3" });
     const scene = await receivedScene(ctx, { capacity: 1, storeName: "受け取りの店" });
     const banned = await approvedStore(ctx, { name: "止められた店", email: "banned@example.com" });
-    await ctx.admin!.api.post(`/api/admin/stores/${banned.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${banned.id}/ban`, { reason: "検査の停止" });
     ids = { pending: pending.id, approved: approved.id, publishing: publishing.id, banned: banned.id, scene: scene.store.id };
   });
   afterAll(async () => {

@@ -333,7 +333,7 @@ flowchart LR
 | 登録の入口 | `POST /api/register/customer`・`POST /api/register/store`・`POST /api/auth/login`・`POST /api/auth/logout`・**`GET /api/config/public`**（公開してよい設定の値を返すだけ——`turnstileSiteKey`・`vapidPublicKey`・【最終日】`contactEmail`〔基準 14.17〕。第5周の直し。前の版の【最終日】`GET /api/auth/contact` はこれに吸収した。「秘密情報と個人データの扱い」の公開値の項）。**`POST` の4つのうち `logout` を除く3つは、人かどうかの確かめ（Turnstile）つき**——`defineRoute` の指定1つで入り、入力の検査のあと・手続きの前に確かめる。通らなければ、D1 に何も書かずに断る |
 | 客の入口 | `GET /api/customer/home`（表示の種類と確保。取り直しもこれ）・`POST /api/customer/fetch`（取得）・`POST /api/customer/reservations`（受け取り・受け取り直し。**応答の形は下の注**）・`POST /api/customer/reservations/[id]/cancel`・`POST /api/customer/reservations/[id]/party`・`GET /api/customer/recent`（最近行った店）・`POST /api/customer/reports`・`POST /api/customer/push-subscription`・`GET /api/customer/push-message`・【最終日】`PATCH /api/customer/profile`・`DELETE /api/customer`・`GET /api/customer/history` |
 | 店の入口 | `GET /api/store/home`・`GET`/`PUT /api/store/profile`・`GET`/`POST /api/store/coupons`・`PUT`/`DELETE /api/store/coupons/[id]`・`GET`/`POST /api/store/license`・`POST /api/store/card/setup`・`POST /api/store/card/confirm`・`POST /api/store/offers`（公開）・`POST /api/store/offers/current/stop`・`…/add`・`…/reduce`・`…/party-max`・`…/until`・`POST /api/store/reservations/[id]/complete`・`POST /api/store/reservations/[id]/cancel`・`GET /api/store/results`・【最終日】`POST /api/store/password` |
-| 運営の入口 | `GET /api/admin/stores`（絞り込み・検索・集計）・`GET /api/admin/stores/[id]`・`GET /api/admin/stores/[id]/license`・`POST /api/admin/stores/[id]/approve`・`…/ban`・`…/restore`・`GET /api/admin/reports`・`GET /api/admin/metrics`・【最終日】`POST /api/admin/stores/[id]/temp-password` |
+| 運営の入口 | `GET /api/admin/stores`（絞り込み・検索・集計）・`GET /api/admin/stores/[id]`・`GET /api/admin/stores/[id]/license`（`?version=approved` で承認した時点の写し）・`POST /api/admin/stores/[id]/approve`・`…/ban`・`…/restore`・**`…/note`**（運営のメモと「連絡済み」の印・監査の指摘 運営-05）・**`…/acknowledge`**（承認後の変更を確かめて写しを取り直す・運営-02）・`GET /api/admin/reports`・`GET /api/admin/metrics`・【最終日】`POST /api/admin/stores/[id]/temp-password`（運営自身の今のパスワードが要る・運営-01）。2026-09-25 の監査の指摘で足した約束: `ban` と `restore` は理由（`reason`・空白だけは断る）が要る。`approve` と `acknowledge` は運営が見た店名・住所・許可書を上げた時刻（`seen`・任意。画面は必ず載せる）を受け取り、今と違えば 409 の今の状況に `changed: true` を添えて断る。どれも「誰が・いつ・なぜ」を追加だけの表 `admin_actions` に残す（migration 0011） |
 
 確保の期限を延ばす入口・完了済みを戻す入口・終わったオファーを再開する入口・運営のアカウントを作る入口・承認を断る入口は**無い**（基準 11.4・20.10・17.15・14.8・25.3。入口の一覧そのものを構造の検査で見る）。
 
@@ -640,7 +640,7 @@ flowchart LR
 | 客の画面を開いたときにまず何が出るかの優先の順と、「来店を終えた直後」の幅 | 「画面と入口」の節の優先の順の表で決めた（確保中 ＞ 期限切れ20分 ＞ 取り消し ＞ 完了済みから3時間 ＞ 取得の画面）。幅の3時間は AI判断 |
 | 仮のパスワードの発行は【最終日】 | そのまま。入口と列（`must_change_password`）は【最終日】の印つきで計画に入れた。提出版では、パスワードを忘れた店の回復手段は無い（承知のうえの穴） |
 | 運営に止められた店の、期限切れの確保を持つ客には停止を伝えない | そのまま。止める処理が取り消すのは確保中の確保だけで、期限切れの客の画面を変える道は作らない。店の側は、止められている間「完了済み」のボタンが出ず、要求も断られる（基準 20.23〜20.25） |
-| 店か運営に確保を取り消された客と、期限切れのままの客は、その店へ通報できない | そのまま。通報の手続きが、その客の確保中の確保の店か、7日以内に完了済みになった確保の店かをサーバーで確かめる（基準 26.18） |
+| 店か運営に確保を取り消された客と、期限切れのままの客は、その店へ通報できない | そのまま。通報の手続きが、その客の確保中の確保の店か、7日以内に完了済みになった確保の店かをサーバーで確かめる（基準 26.18）。**2026-09-25 に一部を変えた**: 店に取り消された確保も、取り消されてから7日間は受け付ける（監査の指摘 横断-09 の案A・AI判断。決めたことと選ばなかった案は要件26の補足）。運営に取り消された客と期限切れのままの客は、そのまま断る |
 
 ## 第1周のあとの本人の回答の扱い（`04_v2の注文.md` の18節）
 
@@ -876,7 +876,7 @@ flowchart LR
 | 24.11 | 同 入口: 運営のセッションで営業許可書が開ける | 段1 | `usecases/readLicense` |
 | 25.1・25.2・25.4・25.6・25.7・25.8・25.9・25.10・25.11 | `r25-approve-ban.test.tsx` 手続き: 承認で承認済みになる／許可書かカードが無いと断り、足りないものが返る／止めると「止められている」になり、公開中のオファーが終わり、確保中の確保が全部取り消されてコードが使えない（1つのトランザクション）／戻せる／戻してもオファーと確保は戻らない | 段1 | `usecases/approveStore`・`usecases/banStore`・`usecases/restoreStore` |
 | 25.2・25.3・25.5（画面） | 同 部品: 足りないものがあると「承認する」が押せず足りないものが出る／偽の断りの応答（`approval_missing`・`fields` に `license`・`card`）で「承認する」の直下に文が出て、詳細の画面のまま（第6周の直し）／承認を断る操作が無い／止める前に確かめが出る | 段1 | `components/admin/StoreDetail`・`components/ui/InputRefusal` |
-| 26.2・26.3・26.4・26.18 | `r26-report.test.tsx` 手続き: 理由が空・空白だけ・501字は保存されない／保存される4項目／その客の確保中の店でも、7日以内に完了済みの店でもない店（行っていない店・取り消された店・期限切れのままの店・8日前の店）は断る | 段1 | `usecases/reportStore`・`schemas/report` |
+| 26.2・26.3・26.4・26.18 | `r26-report.test.tsx` 手続き: 理由が空・空白だけ・501字は保存されない／保存される4項目／その客の確保中の店でも、7日以内に完了済みの店でもない店（行っていない店・客が自分で取り消した店・期限切れのままの店・8日前の店）は断る。店に取り消されてから7日以内の店は通り、8日後は断る（横断-09・`web/lib/usecases/adminReview.test.ts`） | 段1 | `usecases/reportStore`・`schemas/report` |
 | 26.6・26.8 | 同 手続き: 運営の一覧が新しい順で、応答に客の電話番号と呼び名が無い | 段1 | `usecases/adminReports` |
 | 26.10・26.12・26.15 | 同 手続き: 最近行った店に出るのは完了済みから7日以内だけで、次の確保を作ったあとも出る／新しい順／偽の時計で7日を過ぎると出ない | 段1 | `usecases/recentStores` |
 | 26.1・26.3（画面）・26.5・26.7・26.9・26.11・26.13・26.14・26.16・26.17・26.19 | 同 部品: 確保中と完了済みの表示に通報ボタン／**偽の断りの応答（`invalid_input` で `reason` required・too_long）で理由の欄の直下に文が出て、書いた理由が残り、通報の入力のまま**（26.3 の画面・第6周の直し）／送れたことの文／運営の通報の行から店の詳細へ移れる／通報0件の文／最近行った店の行の項目（店名・日時・通報ボタンだけで、コード・住所・URL は無い）／入口が取得の画面・確保中の表示・完了済みの表示にある／0件の文／断られた時の文（26.19・`kind: report_not_allowed`〔AI判断〕を「送る」の直下に） | 段1 | `components/customer/ReportForm`・`RecentStores`・`components/admin/ReportList`・`components/ui/InputRefusal` |

@@ -44,15 +44,17 @@ export type ReportPermissionQuery = {
 
 /**
  * その客が、その店へ通報できるか（基準 26.18）。
- * 通るのは2つだけ——**確保中の確保の店**と、**7日以内に完了済みになった確保の店**。
- * 行っていない店・取り消された確保の店・期限切れのままの店・8日前の店は、どれも当たらない。
+ * 通るのは3つ——**確保中の確保の店**と、**7日以内に完了済みになった確保の店**と、
+ * **7日以内に店に確保を取り消された店**（2026-09-25 監査の指摘 横断-09 の案A・AI判断。店まで歩いて行って
+ * 断られた客が、いちばん不快な場面を運営へ届けられるように）。
+ * 行っていない店・自分で取り消した確保の店・期限切れのままの店・8日前の店は、どれも当たらない。
  */
 export const canReportStore = async (db: Db, query: ReportPermissionQuery): Promise<boolean> => {
   const row = await db
     .prepare(
       `SELECT 1 AS found FROM reservations res` +
         ` WHERE res.customer_id = ?1 AND res.store_id = ?2` +
-        ` AND ((${activeReservationCondition("res", "?3")}) OR (res.status = 'completed' AND res.status_at > ?4))` +
+        ` AND ((${activeReservationCondition("res", "?3")}) OR (res.status IN ('completed', 'store_cancelled') AND res.status_at > ?4))` +
         ` LIMIT 1`,
     )
     .bind(query.customerId, query.storeId, query.nowIso, query.recentFromIso)
@@ -94,29 +96,55 @@ export const listRecentStores = async (db: Db, customerId: string, recentFromIso
 
 // ---------- 読む（運営の通報の一覧・基準 26.6〜26.8） ----------
 
-/** 運営の一覧の1行。どの店か・理由・日時と、行から詳細へ移るための店の番号（基準 26.7）。 */
+/**
+ * 運営の一覧の1行。どの店か・理由・日時と、行から詳細へ移るための店の番号（基準 26.7）。
+ * `customerId` は通報した客の内部の番号で、**応答には載せない**——手続きが短い印に変えるためだけに読む
+ * （同じ客の連打を見分ける・要件26の補足・2026-09-25 監査の指摘 運営-09）。
+ */
 export type AdminReportRow = {
   id: string;
   storeId: string;
   storeName: string;
   reason: string;
   atIso: string;
+  customerId: string;
+  /** その店への通報の全部の数（運営-09） */
+  storeReportCount: number;
 };
+
+const toAdminReportRow = (row: Record<string, unknown>): AdminReportRow => ({
+  id: row.id as string,
+  storeId: row.store_id as string,
+  storeName: (row.store_name as string | null) ?? "",
+  reason: (row.reason as string | null) ?? "",
+  atIso: row.at as string,
+  customerId: row.customer_id as string,
+  storeReportCount: Number(row.store_report_count ?? 0),
+});
+
+const ADMIN_REPORT_COLUMNS =
+  `r.id, r.store_id, r.reason, r.at, r.customer_id, s.name AS store_name,` +
+  ` (SELECT COUNT(*) FROM reports sr WHERE sr.store_id = r.store_id) AS store_report_count`;
 
 /** 新しい順（基準 26.6）。同じ時刻の2件は、後から入った方を先に出す。 */
 export const listReportsForAdmin = async (db: Db): Promise<AdminReportRow[]> => {
   const result = await db
-    .prepare(
-      `SELECT r.id, r.store_id, r.reason, r.at, s.name AS store_name` +
-        ` FROM reports r JOIN stores s ON s.id = r.store_id` +
-        ` ORDER BY r.at DESC, r.rowid DESC`,
-    )
+    .prepare(`SELECT ${ADMIN_REPORT_COLUMNS} FROM reports r JOIN stores s ON s.id = r.store_id ORDER BY r.at DESC, r.rowid DESC`)
     .all();
-  return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({
-    id: row.id as string,
-    storeId: row.store_id as string,
-    storeName: (row.store_name as string | null) ?? "",
-    reason: (row.reason as string | null) ?? "",
-    atIso: row.at as string,
-  }));
+  return ((result.results ?? []) as Array<Record<string, unknown>>).map(toAdminReportRow);
+};
+
+/** その店への通報を新しい順に `limit` 件まで（店の詳細に出す・運営-03・運営-09）。件数は店ごとの全部の数。 */
+export const listReportsOfStoreForAdmin = async (db: Db, storeId: string, limit: number): Promise<AdminReportRow[]> => {
+  const result = await db
+    .prepare(`SELECT ${ADMIN_REPORT_COLUMNS} FROM reports r JOIN stores s ON s.id = r.store_id WHERE r.store_id = ?1 ORDER BY r.at DESC, r.rowid DESC LIMIT ?2`)
+    .bind(storeId, limit)
+    .all();
+  return ((result.results ?? []) as Array<Record<string, unknown>>).map(toAdminReportRow);
+};
+
+/** その店への通報の数（詳細の見出しの近くに出す）。 */
+export const countReportsOfStore = async (db: Db, storeId: string): Promise<number> => {
+  const row = await db.prepare(`SELECT COUNT(*) AS n FROM reports WHERE store_id = ?1`).bind(storeId).first();
+  return Number(row?.n ?? 0);
 };

@@ -17,7 +17,7 @@
 // 項目（`reservationView.origin`・`adminMetrics.byPurpose`・公開の設定）だけ。どれも理由を横に書く。
 // 手続き側の正本の型（usecases・domain）とずれたら、サーバーの `respond` の型検査が落ちる。
 
-import { array, boolean, enum as oneOf, literal, nullable, number, object, optional, string, union, type output, type ZodMiniType } from "zod/mini";
+import { array, boolean, enum as oneOf, literal, nullable, number, object, optional, record, string, union, type output, type ZodMiniType } from "zod/mini";
 
 // ---------- 共通の部品 ----------
 
@@ -167,6 +167,11 @@ const adminStoreRow = object({
   claims: number(),
   budgetMin: nullable(number()),
   offerRemaining: nullable(number()),
+  // 2026-09-25 監査の指摘 運営-02・運営-05・横断-09
+  changedSinceApproval: boolean(),
+  contacted: boolean(),
+  storeCancelled: number(),
+  storeCancelRate: number(),
 });
 
 const adminStoreDetail = object({
@@ -178,11 +183,38 @@ const adminStoreDetail = object({
   budgetMax: nullable(number()),
   license: boolean(),
   cardRegistered: boolean(),
+  // 2026-09-25 監査の指摘 運営-02・運営-03・運営-05
+  licenseUploadedAt: nullable(string()),
+  approval: nullable(object({ at: nullable(string()), name: string(), address: nullable(string()), license: boolean() })),
+  changes: object({ name: boolean(), address: boolean(), license: boolean() }),
+  activeReservations: number(),
+  duplicates: number(),
+  note: nullable(string()),
+  contactedAt: nullable(string()),
 });
 
+/** 運営の操作の記録の1行（2026-09-25 監査の指摘 運営-01）。`detail` は数と真偽だけ。 */
+const adminAction = object({
+  id: string(),
+  action: oneOf(["approve", "ban", "restore", "temp_password", "view_license", "note", "acknowledge"]),
+  actorEmail: nullable(string()),
+  reason: nullable(string()),
+  detail: record(string(), union([number(), boolean()])),
+  at: string(),
+});
+
+/** 通報の1行。`reporter` は通報した客の短い印（運営-09。客の内部の番号そのものではない）。 */
+const adminReport = object({ id: string(), storeId: string(), storeName: string(), reason: string(), at: string(), reporter: string(), storeReportCount: number() });
+
 const adminMetrics = object({
+  /** 数えた時点（2026-09-25 監査の指摘 運営-08。画面が「◯時◯分の時点」と出す） */
+  at: string(),
+  /** AI の実費の合計（全部の用途・全期間と今日＝日本時間。運営-08） */
+  cost: object({ totalUsd: number(), totalCalls: number(), todayUsd: number(), todayCalls: number() }),
+  /** 店の選定の AI の呼び出し（紹介文の生成と判定は byPurpose に分けて出す・不具合-10） */
   ai: object({ calls: number(), avgCostUsd: number(), avgDurationMs: number(), succeeded: number(), failed: number() }),
-  fetch: object({ count: number(), avgDurationMs: number(), aiUsed: number(), fellBack: number() }),
+  /** `fellBack` は候補が在るのに点数順になった取得、`noCandidates` は候補0件で AI を呼ばなかった取得（不具合-10） */
+  fetch: object({ count: number(), avgDurationMs: number(), aiUsed: number(), fellBack: number(), noCandidates: number(), fellBackRate: number() }),
   reservations: object({ total: number(), expiredRate: number() }),
   byModel: array(
     object({
@@ -197,6 +229,8 @@ const adminMetrics = object({
   /** 用途別の実費内訳（2026-09-22 に足した。古い形の応答には無いので任意） */
   byPurpose: optional(array(object({ purpose: string(), count: number(), totalCostUsd: number(), avgDurationMs: number() }))),
   fallbackCount: number(),
+  /** 予備のモデルが答えた割合（全部の呼び出しのうち・設計書「運営の画面」の数字） */
+  fallbackRate: number(),
 });
 
 // ---------- 入口 → 成功の本文の形 ----------
@@ -256,13 +290,19 @@ export const RESPONSES = {
   "POST /api/store/password": done,
 
   // 運営
-  "GET /api/admin/stores": object({ items: array(adminStoreRow), summary: object({ publishing: number(), pending: number() }) }),
-  "GET /api/admin/stores/:id": object({ store: adminStoreDetail }),
+  "GET /api/admin/stores": object({ items: array(adminStoreRow), summary: object({ publishing: number(), pending: number(), awaiting: number(), total: number() }) }),
+  "GET /api/admin/stores/:id": object({
+    store: adminStoreDetail,
+    reports: object({ count: number(), latest: array(object({ id: string(), reason: string(), at: string(), reporter: string() })) }),
+    history: array(adminAction),
+  }),
   "POST /api/admin/stores/:id/approve": done,
-  "POST /api/admin/stores/:id/ban": done,
+  "POST /api/admin/stores/:id/ban": object({ ok, cancelled: number(), notified: number() }),
   "POST /api/admin/stores/:id/restore": done,
+  "POST /api/admin/stores/:id/note": done,
+  "POST /api/admin/stores/:id/acknowledge": done,
   "POST /api/admin/stores/:id/temp-password": object({ ok, tempPassword: string() }),
-  "GET /api/admin/reports": object({ items: array(object({ id: string(), storeId: string(), storeName: string(), reason: string(), at: string() })) }),
+  "GET /api/admin/reports": object({ items: array(adminReport) }),
   "GET /api/admin/metrics": adminMetrics,
   "POST /api/admin/email": done,
   "POST /api/admin/password": done,
@@ -307,3 +347,5 @@ export type ArrivalDto = output<typeof arrival>;
 export type AdminStoreRowDto = output<typeof adminStoreRow>;
 export type AdminStoreDetailDto = output<typeof adminStoreDetail>;
 export type AdminMetricsDto = output<typeof adminMetrics>;
+export type AdminActionDto = output<typeof adminAction>;
+export type AdminReportDto = output<typeof adminReport>;

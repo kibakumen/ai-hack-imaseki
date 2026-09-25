@@ -152,7 +152,7 @@ describeTask("21", "運営の停止で客へ送る（22.2）", () => {
     const s = await receivedScene(ctx, { capacity: 3 });
     await s.customer.api.post("/api/customer/push-subscription", { subscription: SUBSCRIPTION });
     const before = ctx.push.calls.length;
-    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
     expect(ctx.push.calls.length).toBe(before + 1);
     expect((await s.customer.api.get("/api/customer/push-message")).json.scene).toBe("admin_cancelled");
   });
@@ -170,7 +170,7 @@ describeTask("21", "運営の停止で客へ送る（22.2）", () => {
     ctx.push.result = "hang";
     try {
       const armed = ctx.clock.armed();
-      const pending = ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+      const pending = ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
       await armed;
       // 並べて送る形なら、2人目の送信もこの間に始まって打ち切りの合図を作る
       await settledWithin(pending, 200);

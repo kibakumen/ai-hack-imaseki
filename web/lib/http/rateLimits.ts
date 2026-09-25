@@ -133,6 +133,8 @@ const RULES_BY_ROUTE: ReadonlyMap<string, readonly RateRule[]> = new Map([
   ["POST /api/store/email", [ACCOUNT_SECRET_RULE]],
   ["POST /api/admin/email", [ACCOUNT_SECRET_RULE]],
   ["POST /api/admin/password", [ACCOUNT_SECRET_RULE]],
+  // 仮のパスワードの発行も運営の今のパスワードを確かめる（運営-01 の案3）ので、同じ総当たりの的になる。
+  ["POST /api/admin/stores/:id/temp-password", [ACCOUNT_SECRET_RULE]],
   // 店のパスワードの変更も、今のパスワードを確かめる形になれば同じ総当たりの的になる（安全-07 と揃える）。
   ["POST /api/store/password", [ACCOUNT_SECRET_RULE]],
   ["POST /api/customer/reservations", [RECEIVE_RULE]],

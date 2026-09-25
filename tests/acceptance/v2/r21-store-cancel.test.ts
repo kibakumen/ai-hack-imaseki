@@ -93,7 +93,7 @@ describeTask("21", "運営に取り消された確保を店が取り消そうと
 
   it("21.6・21.7 状態も残りも変えずに断り、プッシュは送らない", async () => {
     const s = await receivedScene(ctx);
-    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
     const before = await snapshot(ctx.db);
     const pushBefore = ctx.push.calls.length;
     const r = await s.store.api.post(`/api/store/reservations/${s.reservation.id}/cancel`, {});

@@ -15,7 +15,9 @@ import { notifySessionExpired } from "./session";
 
 // 画面の部品は lib/schemas を読めない（依存の向き）ので、応答の型はここから名乗る。
 export type {
+  AdminActionDto,
   AdminMetricsDto,
+  AdminReportDto,
   AdminStoreDetailDto,
   AdminStoreRowDto,
   ArrivalDto,
@@ -39,7 +41,8 @@ export type ApiFailure = {
   ok: false;
   error?: { kind: string; fields?: FieldRefusal[]; [extra: string]: unknown };
   refusal?: { kind: string; nextStep: string; [extra: string]: unknown };
-  current?: { state: string };
+  /** `changed` は、運営が見たあとで店の内容が変わった断り（運営の承認と確かめ・運営-02） */
+  current?: { state: string; changed?: boolean };
   home?: unknown;
 };
 

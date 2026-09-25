@@ -4,33 +4,41 @@
 // 開いた時に詳細の入口を1回呼び、返ってきた中身を描く。承認を断る操作は置かない（基準 25.3）。
 // 止めるときは、何が起きるかを見せて確かめを取ってから入口を呼ぶ（基準 25.5）。
 //
-// 2026-09-21 タスク21 が「承認済みに戻す」（基準 25.9・25.10）を、「止める」と同じ形で足した
-// ——押すとその場で確かめが出て、確かめてから入口を呼ぶ。
+// 2026-09-21 タスク21 が「承認済みに戻す」（基準 25.9・25.10）を、「止める」と同じ形で足した。
+// 2026-09-22 速成版の磨き込みを移植（本人選択）: 停止のボタンの文言を「登録を取り消す」に（`btn-ban` は同じ）。
+// 2026-09-22 本人の指摘「UIが簡素すぎる」で、項目を「店の情報」「書類とカード」「操作」の3枚に束ねた。
 //
-// 2026-09-22 速成版の磨き込みを移植（本人選択）: 停止のボタンの文言を「止める」から
-// 「登録を取り消す」に変える（`btn-ban` の入口とテキストは変えていない・確かめの文言は
-// オファー／確保／取り消の3語を含んだまま・受け入れ検査 r24-admin.ui.test.tsx:65-73）。
-//
-// 2026-09-22 本人の指摘「UIが簡素すぎるので他の所と同じようにリッチにしてほしい」で見せ方を組み直した:
-//   - 項目を「店の情報」「書類とカード」「操作」の3枚に束ねる（`admin.module.css` の `.panel`）
-//   - 素の `<dl>` のぶら下げをやめ、`dt`/`dd` を2列のグリッドに（`.facts`）。空は `.noData` で淡く
-//   - 営業許可書・カードの有無は `.badge[data-status]` の印にする（一覧の状況バッジと同じ語彙）
-//   ⚠️ data-testid・ボタンの文言・確かめの文は変えていない（受け入れ検査が DOM を見ている）。
-//   ⚠️ 色の値はここに書かない（構造の検査 34）。全部 `admin.module.css` が持つ。
+// 2026-09-25 監査の指摘で組み直した:
+//   - 取り消しと戻すは理由を入れるまで押せない。仮のパスワードは運営の今のパスワードを求める（運営-01）
+//   - 止める前に「今 N 組が向かっています」、止めたあと「N 組を取り消し、M 人に通知しました」（運営-03）
+//   - 断り（409）が今の状況を持っていれば、詳細を取り直して「ほかの操作で、すでに『◯◯』に」と出す。
+//     送っている間は押せない（運営-04）
+//   - 断りは操作ごとに持つ（useAdminAction）。「やめる」で消す（運営-13）
+//   - 承認後の変更・審査の手がかり・通報・操作の履歴（運営-02・運営-05・運営-09）は StoreReviewPanel・StoreDetailPanels
+//   - 一覧の絞り込み・検索・並び順を持ったまま一覧へ戻る（運営-06）
+//   ⚠️ data-testid・ボタンの文言・確かめの文の3語（オファー／確保／取り消）は受け入れ検査が見ている。
+//   ⚠️ 色の値はここに書かない（構造の検査 34）。全部 `admin.module.css` が持つ。断りの文は InputRefusal が出す。
 
 import Link from "next/link";
-import { useCallback, useState, type ReactNode } from "react";
-import { callApi, isFailure, type AdminStoreDetailDto, type ApiFailure } from "../../lib/client/api";
+import { useCallback, useState } from "react";
+import { callApi, isFailure, type AdminStoreDetailDto, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { FormMessage } from "../ui/InputRefusal";
 import { LoadView, RefreshFailedBand } from "../ui/LoadState";
+import { ConfirmBox } from "./ConfirmBox";
+import { StoreDocuments, StoreFacts, StoreHistory, StoreImpact, StoreReportsPanel } from "./StoreDetailPanels";
+import { ApprovalChanges, CHANGED_SINCE_SEEN_TEXT, seenOf, StoreReviewPanel } from "./StoreReviewPanel";
+import { TempPasswordPanel } from "./TempPasswordPanel";
+import { useAdminAction, type AdminAction } from "./useAdminAction";
 import styles from "./admin.module.css";
 
 // 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
+type DetailResponse = ResponseOf<"GET /api/admin/stores/:id">;
 type StoreDetailDto = AdminStoreDetailDto;
 type StoreStatus = StoreDetailDto["status"];
 
-type Props = { storeId: string };
+/** `listQuery` は一覧の絞り込み・検索・並び順（`filter=…&q=…&sort=…`）。戻るリンクに付けて一覧へ返す（運営-06）。 */
+type Props = { storeId: string; listQuery?: string };
 
 const STATUS_LABELS: Record<StoreStatus, string> = {
   pending: "未承認",
@@ -38,168 +46,211 @@ const STATUS_LABELS: Record<StoreStatus, string> = {
   banned: "止められている",
 };
 
-const EMPTY_TEXT = "まだありません";
+const statusLabel = (state: string): string => STATUS_LABELS[state as StoreStatus] ?? state;
 
 /** 承認に足りないもの（基準 25.2）。表示の名前は画面の側が持つ（項目の名前と同じ扱い）。 */
-const missingLabels = (store: StoreDetailDto): string[] => [
-  ...(store.license ? [] : ["営業許可書"]),
-  ...(store.cardRegistered ? [] : ["カードの登録"]),
-];
+const missingLabels = (store: StoreDetailDto): string[] => [...(store.license ? [] : ["営業許可書"]), ...(store.cardRegistered ? [] : ["カードの登録"])];
 
-/** 空の値は淡く出す（埋まっている情報と同じ重さで並べない）。 */
-const Empty = () => <span className={styles.noData}>{EMPTY_TEXT}</span>;
+/**
+ * 操作が通ったあと・状況が先に変わっていたときに、操作の面の上に出す1行。`changed` は、状況は同じだが
+ * 開いている間に店名・住所・許可書が変わっていた断り（承認・運営-02 のレビュー）。
+ */
+type Notice = { kind: "result"; text: string } | { kind: "conflict"; state: string; changed: boolean };
 
-/** ジャンル・おすすめメニューは1つずつ札にする。無ければ空の印。 */
-const Chips = ({ items }: { items: string[] }) =>
-  items.length === 0 ? (
-    <Empty />
-  ) : (
-    <span className={styles.chips}>
-      {items.map((item) => (
-        <span key={item} className={styles.chip}>
-          {item}
-        </span>
-      ))}
-    </span>
-  );
+type OperationProps = { store: StoreDetailDto; onDone: (notice: Notice) => Promise<void> };
 
-const Budget = ({ store }: { store: StoreDetailDto }) =>
-  store.budgetMin === null || store.budgetMax === null ? (
-    <Empty />
-  ) : (
-    <span className={styles.tabularNums}>{`${store.budgetMin}円〜${store.budgetMax}円`}</span>
-  );
+/**
+ * 1つの操作を送り、結果を詳細へ返す。通れば `resultText`、状況が合わない断り（409 の `current`）なら
+ * 今の状況を知らせて取り直す（運営-04）。そのほかの断りは操作の欄の直下に残す（運営-13）。
+ */
+const sendOperation = async <T,>(action: AdminAction, send: () => Promise<T | ApiFailure>, onDone: OperationProps["onDone"], resultText: (response: T) => string): Promise<void> => {
+  const result = await action.run(send);
+  if (result === null) return;
+  if (!isFailure(result)) {
+    await onDone({ kind: "result", text: resultText(result) });
+    return;
+  }
+  const current = result.current;
+  if (!current) return;
+  action.clear();
+  await onDone({ kind: "conflict", state: current.state, changed: current.changed === true });
+};
 
-/** 店の情報（項目の2列）。`dt`/`dd` を直接グリッドに並べるので桁が揃う。 */
-const StoreFacts = ({ store }: { store: StoreDetailDto }) => (
-  <section className={styles.panel} aria-labelledby="store-facts-title">
-    <h2 id="store-facts-title" className={styles.panelTitle}>
-      店の情報
-    </h2>
-    <dl className={styles.facts}>
-      <dt>住所</dt>
-      <dd>{store.address ?? <Empty />}</dd>
-      <dt>メールアドレス</dt>
-      <dd>{store.email ? <a href={`mailto:${store.email}`}>{store.email}</a> : <Empty />}</dd>
-      <dt>ホームページ</dt>
-      <dd>
-        {store.url ? (
-          <a href={store.url} target="_blank" rel="noreferrer">
-            {store.url}
-          </a>
-        ) : (
-          <Empty />
-        )}
-      </dd>
-      <dt>ジャンル</dt>
-      <dd>
-        <Chips items={store.genres} />
-      </dd>
-      <dt>おすすめメニュー</dt>
-      <dd>
-        <Chips items={store.menus} />
-      </dd>
-      <dt>予算の幅</dt>
-      <dd>
-        <Budget store={store} />
-      </dd>
-    </dl>
-  </section>
-);
-
-type CheckRowProps = { testId: string; ready: boolean; readyLabel: string; missingLabel: string; children: ReactNode };
-
-/** 書類とカードの1行。揃っていれば「承認済み」の色、まだなら「未承認」の色の印を付ける。 */
-const CheckRow = ({ testId, ready, readyLabel, missingLabel, children }: CheckRowProps) => (
-  <li data-testid={testId} className={styles.checkRow} data-ready={ready ? "true" : "false"}>
-    <span className={styles.badge} data-status={ready ? "approved" : "pending"}>
-      {ready ? readyLabel : missingLabel}
-    </span>
-    <span>{children}</span>
-  </li>
-);
-
-const StoreDocuments = ({ store }: { store: StoreDetailDto }) => (
-  <section className={styles.panel} aria-labelledby="store-documents-title">
-    <h2 id="store-documents-title" className={styles.panelTitle}>
-      書類とカード
-    </h2>
-    <ul className={styles.checkList}>
-      <CheckRow testId="license-status" ready={store.license} readyLabel="提出済み" missingLabel="未提出">
-        {store.license ? (
-          <a href={`/api/admin/stores/${store.id}/license`} target="_blank" rel="noreferrer">
-            営業許可書を開く
-          </a>
-        ) : (
-          "営業許可書はまだ上がっていません"
-        )}
-      </CheckRow>
-      <CheckRow testId="card-status" ready={store.cardRegistered} readyLabel="登録済み" missingLabel="未登録">
-        {store.cardRegistered ? "カードは登録済みです" : "カードはまだ登録されていません"}
-      </CheckRow>
-    </ul>
-  </section>
-);
-
-type ConfirmProps = { testId: string; label: string; text: string; confirmTestId?: string; confirmLabel: string; danger?: boolean; onConfirm: () => void; onCancel: () => void };
-
-/** 押す前の確かめ（止める・戻す・仮のパスワード）。何が起きるかを先に見せて、確かめてから入口を呼ぶ。 */
-const ConfirmBox = ({ testId, label, text, confirmTestId = "btn-confirm", confirmLabel, danger = false, onConfirm, onCancel }: ConfirmProps) => (
-  <div data-testid={testId} role="group" aria-label={label} className={styles.confirmBox}>
-    <p className={styles.confirmText}>{text}</p>
-    <div className={styles.btnRow}>
-      <button type="button" data-testid={confirmTestId} className={danger ? styles.dangerBtn : undefined} onClick={onConfirm}>
-        {confirmLabel}
+/**
+ * 承認（基準 25.1・25.2）。足りないものがあれば押せず、足りないものを出す。
+ * この画面で見ている店名・住所・許可書を上げた日時を載せる——開いている間に店が変えていたら、サーバーが断る（運営-02 のレビュー）。
+ */
+const ApproveForm = ({ store, onDone }: OperationProps) => {
+  const approve = useAdminAction();
+  const missing = missingLabels(store);
+  const body = { seen: seenOf(store) };
+  const send = () =>
+    sendOperation(approve, () => callApi("POST /api/admin/stores/:id/approve", { params: { id: store.id }, body }), onDone, () => "承認しました。この店はオファーを公開できます。");
+  return (
+    <form
+      data-testid="form-approve"
+      className={`${styles.actionForm} ${styles.actionBlock}`}
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        void send();
+      }}
+    >
+      <h2>承認</h2>
+      {missing.length > 0 ? (
+        <p data-testid="approval-missing" className={styles.note}>{`${missing.join("と")}が揃うと承認できます。`}</p>
+      ) : (
+        <p className={styles.actionLead}>書類とカードが揃っています。承認すると、この店はオファーを公開できるようになります。</p>
+      )}
+      <button type="submit" data-testid="btn-approve" disabled={missing.length > 0 || approve.busy}>
+        承認する
       </button>
-      <button type="button" className={styles.quietBtn} onClick={onCancel}>
-        やめる
-      </button>
-    </div>
-  </div>
-);
+      <FormMessage failure={approve.failure} />
+    </form>
+  );
+};
 
-export const StoreDetail = ({ storeId }: Props) => {
-  /** 操作（承認・停止・戻す・仮のパスワード）の断り。読み込みの断りは useLoad の状態が持つ */
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
-  const [confirmingBan, setConfirmingBan] = useState(false);
-  const [confirmingRestore, setConfirmingRestore] = useState(false);
-  const [confirmingTemp, setConfirmingTemp] = useState(false);
-  /** 発行した仮のパスワード。入口が見せるただ1回（基準 14.13）なので、この画面を離れると消える。 */
-  const [tempPassword, setTempPassword] = useState<string | null>(null);
+type ReasonedOperation = {
+  path: "ban" | "restore";
+  formTestId: string;
+  title: string;
+  lead: string;
+  buttonTestId: string;
+  buttonLabel: string;
+  confirmTestId: string;
+  confirmText: (store: StoreDetailDto) => string;
+  reasonLabel: string;
+  danger: boolean;
+};
 
-  /** 【最終日】仮のパスワードの発行（基準 14.10〜14.13）。2026-09-22 に足した——入口は在ったが画面から呼ぶ道が無かった。 */
-  const issueTemp = async () => {
-    const result = await callApi("POST /api/admin/stores/:id/temp-password", { params: { id: storeId }, body: {} });
-    if (isFailure(result)) {
-      setFailure(result);
-      return;
-    }
-    setFailure(null);
-    setConfirmingTemp(false);
-    setTempPassword(result.tempPassword);
+const BAN: ReasonedOperation = {
+  path: "ban",
+  formTestId: "form-ban",
+  title: "登録の取り消し",
+  lead: "取り消したオファーと確保は戻せません（店の承認は戻せます）。押すと先に確かめが出ます。",
+  buttonTestId: "btn-ban",
+  buttonLabel: "登録を取り消す",
+  confirmTestId: "confirm-ban",
+  confirmText: (store) =>
+    `今 ${store.activeReservations} 組が向かっています。公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます（知らせを受け取れる方には通知が届きます）。登録を取り消しますか。`,
+  reasonLabel: "取り消す理由（記録に残ります。店への連絡にも使えます）",
+  danger: true,
+};
+
+const RESTORE: ReasonedOperation = {
+  path: "restore",
+  formTestId: "form-restore",
+  title: "承認済みに戻す",
+  lead: "この店がもう一度オファーを公開できるようにします。",
+  buttonTestId: "btn-restore",
+  buttonLabel: "承認済みに戻す",
+  confirmTestId: "confirm-restore",
+  // 何が戻らないかを先に見せる（基準 25.10。止めるときと同じ、押す前に結果を知らせる形）
+  confirmText: () => "終わったオファーと取り消されたお客さまの確保は戻りません。この店は公開し直せるようになります。戻しますか。",
+  reasonLabel: "戻す理由（記録に残ります）",
+  danger: false,
+};
+
+/** 止めたあとの1行（運営-03）。 */
+const banResultText = (response: ResponseOf<"POST /api/admin/stores/:id/ban">): string =>
+  `登録を取り消しました。${response.cancelled} 組の確保を取り消し、${response.notified} 人に通知しました。`;
+
+/** 理由を求める操作（取り消し・戻す・運営-01）。確かめの箱に理由の欄を出し、入れるまで押せない。 */
+const ReasonedForm = ({ store, onDone, op }: OperationProps & { op: ReasonedOperation }) => {
+  const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState("");
+  const action = useAdminAction();
+  const params = { params: { id: store.id }, body: { reason: reason.trim() } };
+  const send = () =>
+    op.path === "ban"
+      ? sendOperation(action, () => callApi("POST /api/admin/stores/:id/ban", params), onDone, banResultText)
+      : sendOperation(action, () => callApi("POST /api/admin/stores/:id/restore", params), onDone, () => "承認済みに戻しました。");
+  const cancel = () => {
+    setConfirming(false);
+    action.clear();
   };
+  return (
+    <div data-testid={op.formTestId} className={styles.actionBlock}>
+      <h2>{op.title}</h2>
+      <p className={styles.actionLead}>{op.lead}</p>
+      <div className={styles.btnRow}>
+        <button type="button" data-testid={op.buttonTestId} className={op.danger ? styles.dangerBtn : undefined} onClick={() => setConfirming(true)}>
+          {op.buttonLabel}
+        </button>
+      </div>
+      {confirming && (
+        <ConfirmBox
+          testId={op.confirmTestId}
+          label={`${op.title}の前の確かめ`}
+          text={op.confirmText(store)}
+          confirmLabel={op.buttonLabel}
+          danger={op.danger}
+          busy={action.busy}
+          reason={{ value: reason, onChange: setReason, label: op.reasonLabel }}
+          onConfirm={() => void send()}
+          onCancel={cancel}
+        >
+          <FormMessage failure={action.failure} />
+        </ConfirmBox>
+      )}
+    </div>
+  );
+};
 
-  const load = useCallback(async (): Promise<StoreDetailDto | ApiFailure> => {
-    const result = await callApi("GET /api/admin/stores/:id", { params: { id: storeId } });
-    return isFailure(result) ? result : result.store;
-  }, [storeId]);
-  // 読めなかった（ログインが切れた・見つからない・通信に失敗した）ときは、その語の文と読み直す道を出す
-  // （2026-09-25 監査の指摘 横断-01。それまで 401 も 404 も「入れた内容を確かめてください」だった）。
+const NoticeLine = ({ notice }: { notice: Notice | null }) => {
+  if (!notice) return null;
+  if (notice.kind === "conflict") {
+    return (
+      <p data-testid="state-conflict" className={styles.note} role="alert">
+        {notice.changed ? CHANGED_SINCE_SEEN_TEXT : `ほかの操作で、すでに『${statusLabel(notice.state)}』になっていました。今の状況に合わせて表示し直しました。`}
+      </p>
+    );
+  }
+  return (
+    <p data-testid="action-result" className={styles.resultNote} role="status">
+      {notice.text}
+    </p>
+  );
+};
+
+/** 操作の面（承認・取り消し・戻す・仮のパスワード）。状況ごとに出す操作を1つに絞る。 */
+const Operations = ({ store, onDone, notice }: OperationProps & { notice: Notice | null }) => (
+  <section className={styles.panel} aria-labelledby="store-actions-title">
+    <h2 id="store-actions-title" className={styles.panelTitle}>
+      操作
+    </h2>
+    <NoticeLine notice={notice} />
+    {/* 状況が変わったら操作の欄を作り直す（開いたままの確かめ・前の状況の断りを残さない・運営-04） */}
+    {store.status === "pending" && <ApproveForm key="approve" store={store} onDone={onDone} />}
+    {store.status === "approved" && <ReasonedForm key="ban" store={store} onDone={onDone} op={BAN} />}
+    {store.status === "banned" && <ReasonedForm key="restore" store={store} onDone={onDone} op={RESTORE} />}
+    <TempPasswordPanel store={store} />
+  </section>
+);
+
+/** 戻るリンク。一覧の絞り込み・検索・並び順が在れば付けて戻す（運営-06）。 */
+const backHref = (listQuery: string | undefined): string => (listQuery ? `/admin?${listQuery}` : "/admin");
+
+export const StoreDetail = ({ storeId, listQuery }: Props) => {
+  const [notice, setNotice] = useState<Notice | null>(null);
+
+  const load = useCallback(async (): Promise<DetailResponse | ApiFailure> => callApi("GET /api/admin/stores/:id", { params: { id: storeId } }), [storeId]);
+  // 読めなかった（ログインが切れた・見つからない・通信に失敗した）ときは、その語の文と読み直す道を出す（横断-01）。
   const { state, reload } = useLoad(load);
 
-  /** 承認・停止・復帰のあとは、詳細を取り直して今の状況を映す（断られたときはその場に留まる）。 */
-  const act = async (path: "approve" | "ban" | "restore") => {
-    const result = await callApi(`POST /api/admin/stores/:id/${path}` as const, { params: { id: storeId }, body: {} });
-    if (isFailure(result)) {
-      setFailure(result);
-      return;
-    }
-    setFailure(null);
-    setConfirmingBan(false);
-    setConfirmingRestore(false);
-    // 取り直しが失敗しても、今の中身は残して「更新できていません」を出す（空の画面へ落とさない）。
+  /** 操作が通った・状況が先に変わっていた——どちらも詳細を取り直して今の状況を映す（運営-04）。 */
+  const onDone = useCallback(
+    async (next: Notice) => {
+      setNotice(next);
+      await reload();
+    },
+    [reload],
+  );
+  /** メモ・変更の確かめのあと。前の操作の知らせは消す。 */
+  const refresh = useCallback(async () => {
+    setNotice(null);
     await reload();
-  };
+  }, [reload]);
 
   if (state.status !== "ready" && state.status !== "empty") {
     return (
@@ -211,142 +262,44 @@ export const StoreDetail = ({ storeId }: Props) => {
     );
   }
 
-  const store = state.data;
-  const missing = missingLabels(store);
+  const { store, reports, history } = state.data;
 
   return (
     <main className={styles.page}>
       <RefreshFailedBand state={state} />
       <header className={`${styles.card} ${styles.detailHead}`}>
-        <Link href="/admin" className={styles.backLink}>
+        <Link href={backHref(listQuery)} className={styles.backLink}>
           ← 店の一覧へ
         </Link>
         <div className={styles.cardHead}>
           <h1>{store.name}</h1>
           <p data-testid="store-status">
-            <span className={styles.badge} data-status={store.status}>{STATUS_LABELS[store.status]}</span>
+            <span className={styles.badge} data-status={store.status}>
+              {STATUS_LABELS[store.status]}
+            </span>
           </p>
+          {store.changedSinceApproval && (
+            <span className={styles.badge} data-status="pending">
+              承認後に変更あり
+            </span>
+          )}
         </div>
+        <StoreImpact store={store} reportCount={reports.count} />
       </header>
 
+      <ApprovalChanges store={store} onChanged={refresh} />
+
       <div className={styles.detailGrid}>
-        <StoreFacts store={store} />
+        <div className={styles.detailSide}>
+          <StoreFacts store={store} />
+          <StoreReviewPanel store={store} onChanged={refresh} />
+          <StoreHistory history={history} />
+        </div>
 
         <div className={styles.detailSide}>
           <StoreDocuments store={store} />
-
-          <section className={styles.panel} aria-labelledby="store-actions-title">
-            <h2 id="store-actions-title" className={styles.panelTitle}>
-              操作
-            </h2>
-
-            {store.status === "pending" && (
-              <form
-                data-testid="form-approve"
-                className={`${styles.actionForm} ${styles.actionBlock}`}
-                noValidate
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void act("approve");
-                }}
-              >
-                <h2>承認</h2>
-                {missing.length > 0 ? (
-                  <p data-testid="approval-missing" className={styles.note}>{`${missing.join("と")}が揃うと承認できます。`}</p>
-                ) : (
-                  <p className={styles.actionLead}>書類とカードが揃っています。承認すると、この店はオファーを公開できるようになります。</p>
-                )}
-                <button type="submit" data-testid="btn-approve" disabled={missing.length > 0}>
-                  承認する
-                </button>
-                <FormMessage failure={failure} />
-              </form>
-            )}
-
-            {store.status === "approved" && (
-              <div data-testid="form-ban" className={styles.actionBlock}>
-                <h2>登録の取り消し</h2>
-                <p className={styles.actionLead}>戻せない操作です。押すと先に確かめが出ます。</p>
-                <div className={styles.btnRow}>
-                  <button type="button" data-testid="btn-ban" className={styles.dangerBtn} onClick={() => setConfirmingBan(true)}>
-                    登録を取り消す
-                  </button>
-                </div>
-                {confirmingBan && (
-                  <ConfirmBox
-                    testId="confirm-ban"
-                    label="登録を取り消す前の確かめ"
-                    text="公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます。登録を取り消しますか。"
-                    confirmLabel="登録を取り消す"
-                    danger
-                    onConfirm={() => void act("ban")}
-                    onCancel={() => setConfirmingBan(false)}
-                  />
-                )}
-                <FormMessage failure={failure} />
-              </div>
-            )}
-
-            {store.status === "banned" && (
-              <div data-testid="form-restore" className={styles.actionBlock}>
-                <h2>承認済みに戻す</h2>
-                <p className={styles.actionLead}>この店がもう一度オファーを公開できるようにします。</p>
-                <div className={styles.btnRow}>
-                  <button type="button" data-testid="btn-restore" onClick={() => setConfirmingRestore(true)}>
-                    承認済みに戻す
-                  </button>
-                </div>
-                {confirmingRestore && (
-                  /* 何が戻らないかを先に見せる（基準 25.10。止めるときと同じ、押す前に結果を知らせる形） */
-                  <ConfirmBox
-                    testId="confirm-restore"
-                    label="承認済みに戻す前の確かめ"
-                    text="終わったオファーと取り消されたお客さまの確保は戻りません。この店は公開し直せるようになります。戻しますか。"
-                    confirmLabel="承認済みに戻す"
-                    onConfirm={() => void act("restore")}
-                    onCancel={() => setConfirmingRestore(false)}
-                  />
-                )}
-                <FormMessage failure={failure} />
-              </div>
-            )}
-
-            <section data-testid="form-temp-password" className={styles.actionBlock} aria-labelledby="store-temp-password-title">
-              <h2 id="store-temp-password-title">パスワードを忘れた店への対応</h2>
-              {tempPassword === null ? (
-                <>
-                  <p className={styles.actionLead}>仮のパスワードを発行して、あなたのメールで店へ伝えます。</p>
-                  <div className={styles.btnRow}>
-                    <button type="button" data-testid="btn-temp-password" onClick={() => setConfirmingTemp(true)}>
-                      仮のパスワードを発行する
-                    </button>
-                  </div>
-                  {confirmingTemp && (
-                    <ConfirmBox
-                      testId="confirm-temp-password"
-                      label="仮のパスワードを発行する前の確かめ"
-                      text="今のパスワードは使えなくなり、この店の開いている画面はすべてログアウトされます。仮のパスワードはここに1回だけ表示され、あなたのメールで店へ伝えます。発行しますか。"
-                      confirmTestId="btn-confirm-temp-password"
-                      confirmLabel="発行する"
-                      onConfirm={() => void issueTemp()}
-                      onCancel={() => setConfirmingTemp(false)}
-                    />
-                  )}
-                </>
-              ) : (
-                <div data-testid="temp-password-issued" className={styles.secret}>
-                  <p className={styles.secretLabel}>仮のパスワード</p>
-                  <code data-testid="temp-password" className={styles.secretCode}>
-                    {tempPassword}
-                  </code>
-                  <p className={styles.secretHint}>
-                    この値はここにしか表示されません。{store.email ? <a href={`mailto:${store.email}`}>{store.email}</a> : "店"} へあなたのメールで伝えてください。店は次のログインで新しいパスワードを決めます。
-                  </p>
-                </div>
-              )}
-              <FormMessage failure={failure} />
-            </section>
-          </section>
+          <Operations store={store} onDone={onDone} notice={notice} />
+          <StoreReportsPanel reports={reports} />
         </div>
       </div>
     </main>

@@ -46,7 +46,8 @@ describeTask("25", "ログに個人データを出さない", () => {
     expect(ctx.logger.entries.length).toBeGreaterThan(0);
     for (const e of ctx.logger.entries as any[]) {
       for (const [k, v] of Object.entries(e)) {
-        if (typeof v === "string") expect(["event", "errorKind", "id"], `Logger の項目 ${k} が自由な文字列`).toContain(k);
+        // actor は操作したアカウントの内部の番号（運営の強い操作の「誰が」・2026-09-25 監査の指摘 運営-01）。id と同じく自由な文字列ではない
+        if (typeof v === "string") expect(["event", "errorKind", "id", "actor"], `Logger の項目 ${k} が自由な文字列`).toContain(k);
         if (k === "event" || k === "errorKind") expect(v as string, k).toMatch(/^[a-z0-9_.-]+$/);
       }
     }

@@ -51,8 +51,11 @@ type RefusedReceive = { offerId: string | null; body: ReceiveRefusal };
  */
 const KEEPS_REFUSAL: ReadonlyArray<HomeDto["kind"]> = ["fetch", "expired"];
 
-/** 通報ボタンを置く表示（基準 26.1）。期限切れと取り消しの表示には置かない。 */
-const REPORT_VIEW_KINDS: ReadonlyArray<HomeDto["kind"]> = ["active", "completed"];
+/**
+ * 通報ボタンを置く表示（基準 26.1）。期限切れと運営が取り消した表示には置かない。
+ * 店が取り消した表示には置く（2026-09-25 監査の指摘 横断-09 の案A。入口も7日間は受け付ける）。
+ */
+const REPORT_VIEW_KINDS: ReadonlyArray<HomeDto["kind"]> = ["active", "completed", "store_cancelled"];
 /**
  * 「最近行った店」の入口を置く表示（基準 26.14）。客が画面を開いた
  * ときにまず出る3つで、期限切れと取り消しの表示には置かない（店へ向かう途中で出る表示・要件26の補足）。
@@ -340,7 +343,13 @@ const CustomerScreens = () => {
         </CompletedView>
       );
     }
-    if (home.kind === "store_cancelled") return <StoreCancelledView reservation={reservation} onSearchAgain={searchAgain} />;
+    if (home.kind === "store_cancelled") {
+      return (
+        <StoreCancelledView reservation={reservation} onSearchAgain={searchAgain}>
+          {reportEntry}
+        </StoreCancelledView>
+      );
+    }
     if (home.kind === "admin_cancelled") return <AdminCancelledView reservation={reservation} onSearchAgain={searchAgain} />;
     return null;
   };

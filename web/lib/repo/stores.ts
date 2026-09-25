@@ -147,9 +147,15 @@ export const findStoreHomeRow = async (db: Db, storeId: string): Promise<StoreHo
   };
 };
 
-/** 営業許可書の置き場と種類を差し替える（上げ直しは前のファイルを置き換える・基準 13.4）。 */
-export const updateStoreLicense = async (db: Db, storeId: string, licenseKey: string, licenseMime: string): Promise<void> => {
-  await db.prepare(`UPDATE stores SET license_key = ?2, license_mime = ?3 WHERE id = ?1`).bind(storeId, licenseKey, licenseMime).run();
+/**
+ * 営業許可書の置き場と種類を差し替える（上げ直しは前のファイルを置き換える・基準 13.4）。
+ * 上げた時刻も残す——運営が「上げ直された」ことに気づくため（2026-09-25 監査の指摘 運営-05・migrations/0011）。
+ */
+export const updateStoreLicense = async (db: Db, storeId: string, licenseKey: string, licenseMime: string, uploadedAtIso: string): Promise<void> => {
+  await db
+    .prepare(`UPDATE stores SET license_key = ?2, license_mime = ?3, license_uploaded_at = ?4 WHERE id = ?1`)
+    .bind(storeId, licenseKey, licenseMime, uploadedAtIso)
+    .run();
 };
 
 /** カードの登録の口を開いた印。戻ってきた要求を突き合わせるために持つ（カードの値そのものは持たない）。 */
