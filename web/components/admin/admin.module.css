@@ -651,3 +651,118 @@
   color: var(--color-text-muted);
   font-size: 0.8125rem;
 }
+
+/* ---------- 2026-09-25 監査の指摘で足した面（運営-01〜運営-13・横断-09） ---------- */
+
+/* 確かめの箱の中の欄（取り消し・戻すの理由、仮のパスワードの発行の今のパスワード・運営-01） */
+.reasonField {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.reasonField > textarea,
+.reasonField > input {
+  font-size: 0.875rem;
+  width: 100%;
+}
+
+/* 操作が通ったあとの1行（「N 組を取り消し、M 人に通知しました」・運営-03） */
+.resultNote {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-background));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+}
+
+/* 止める前に見るもの（見出しの近くの札・運営-03） */
+.impactRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+/* 数の札（一覧のカード・詳細の見出し）。data-strong は「0 でない・気にしたい数」、data-active は今の並びの元（運営-10） */
+.stat {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding: 0.1875rem 0.625rem;
+}
+
+.stat[data-strong="true"] {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-danger);
+}
+
+.stat[data-active="true"] {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-background));
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.statRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* 承認後に変更あり（運営-02）。highlight の縁で囲って、読み飛ばされにくくする */
+.changedPanel {
+  border-color: var(--color-highlight-edge);
+  box-shadow: 0 0 0 1px var(--color-highlight-edge);
+}
+
+.plainList {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reportItem,
+.historyItem {
+  border-top: 1px solid var(--color-border);
+  display: grid;
+  gap: 0.125rem;
+  padding-top: 0.5rem;
+}
+
+.reportItem:first-child,
+.historyItem:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* 理由・メモの本文（500字まで入る）。折り返して、行の区切りを保つ */
+.reportReason {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.checkLabel {
+  align-items: center;
+  display: flex;
+  font-size: 0.8125rem;
+  gap: 0.5rem;
+}
+
+/* 数字の1行の説明（運営-08）。数字より小さく淡く */
+.metricsGrid .metricHelp {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
