@@ -169,7 +169,8 @@ export const resolveColor = (expr: string, colors: Palette): string | null => {
  * 読めない色が1つでも在れば null。
  */
 export const fillColors = (value: string, colors: Palette): string[] | null => {
-  const gradient = /^(?:linear|radial)-gradient\(([\s\S]*)\)$/.exec(value.trim());
+  const bare = value.replace(/\s*!important\s*$/, "").trim();
+  const gradient = /^(?:linear|radial)-gradient\(([\s\S]*)\)$/.exec(bare);
   const parts: string[] = [];
   if (gradient) {
     let depth = 0;
@@ -184,7 +185,7 @@ export const fillColors = (value: string, colors: Palette): string[] | null => {
         from = k + 1;
       }
     }
-  } else parts.push(value.trim());
+  } else parts.push(bare);
   const stops = parts.filter((p) => !/^\d+deg$|^to\s/.test(p)).map((p) => p.replace(/\s+\d+(?:\.\d+)?%$/, ""));
   const resolved = stops.map((s) => resolveColor(s, colors));
   return resolved.some((c) => c === null) ? null : (resolved as string[]);

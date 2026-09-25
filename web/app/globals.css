@@ -180,10 +180,12 @@ p {
 
 /* ---------- 行き先 ---------- */
 
+/* 文字の橙は濃い方（--color-accent-strong）。明るい橙は明るい配色で 3.51:1 しかなく、基準の 4.5:1 に届かない
+   （2026-09-25 監査の指摘 横断-04 の案A: 塗りのボタンと橙の文字は濃い橙、明るい橙は飾り——縁・影・帯——にだけ使う）。 */
 a {
-  color: var(--color-accent);
+  color: var(--color-accent-strong);
   font-weight: 600;
-  text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--color-accent-strong) 45%, transparent);
   text-underline-offset: 0.2em;
 }
 
@@ -191,7 +193,8 @@ a {
    自分のホバーを書いたとき、ここに負けないようにする。 */
 @media (hover: hover) {
   :where(a):hover {
-    color: var(--color-accent-strong);
+    text-decoration-color: currentColor;
+    text-decoration-thickness: 2px;
   }
 }
 
@@ -214,8 +217,8 @@ nav > a {
 
 /* 今いる画面（運営の殻のナビ・運営-11）。押せる面のまま、塗りで「ここ」を示す */
 [data-testid="admin-nav"] > a[aria-current="page"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
   color: var(--color-accent-text);
 }
 
@@ -346,8 +349,9 @@ textarea:focus-visible {
   outline: none;
 }
 
+/* 薄めない（70% に透かすと 3.15:1 で、「空のままなら今いる場所で探します」の案内が読めなかった・横断-04） */
 input::placeholder {
-  color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+  color: var(--color-text-muted);
 }
 
 /* 断りが出ている欄は枠を赤くする（第1回の指摘「未入力欄があることがわかりにくい・枠とかを赤く」）。
@@ -405,9 +409,10 @@ fieldset:has(input[type="checkbox"]) > label:has(input:checked) {
 
 /* ---------- 押せるもの ---------- */
 
+/* 塗りのボタンは濃い橙の地に地の色の文字（明るい配色で 5.46:1・横断-04 の案A。明るい橙の地では 3.56:1 だった） */
 button {
-  background: var(--color-accent);
-  border: 1px solid var(--color-accent);
+  background: var(--color-accent-strong);
+  border: 1px solid var(--color-accent-strong);
   border-radius: var(--radius-sm);
   color: var(--color-accent-text);
   cursor: pointer;
@@ -488,8 +493,9 @@ form > button[type="submit"] {
   margin-top: 1.25rem;
 }
 
+/* 勾配の終わりは赤みへ寄せる（琥珀へ寄せると明るくなり、白い文字が 2.62:1 まで沈んでいた・横断-04） */
 .entry__primary {
-  background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 50%, var(--color-accent)));
+  background: linear-gradient(135deg, var(--color-accent-strong), color-mix(in srgb, var(--color-danger) 35%, var(--color-accent-strong)));
   border: none;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-raised);
@@ -503,7 +509,7 @@ form > button[type="submit"] {
 /* 塗り。`nav > a` の soft ホバーより詳細度が高い（(0,2,0) > (0,1,1)）ので、地も文字もここが決める */
 @media (hover: hover) {
   .entry__primary:hover {
-    background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 50%, var(--color-accent)));
+    background: linear-gradient(135deg, var(--color-accent-strong), color-mix(in srgb, var(--color-danger) 35%, var(--color-accent-strong)));
     color: var(--color-accent-text);
     filter: var(--hover-filled-filter);
   }

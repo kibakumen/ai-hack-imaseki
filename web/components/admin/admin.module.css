@@ -143,8 +143,9 @@
 }
 
 .filterBtn[aria-pressed="true"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+  color: var(--color-accent-text);
   box-shadow: var(--shadow-sm);
 }
 
