@@ -1,3 +1,7 @@
 .next
 .open-next
 .wrangler
+# ホーム画面のアイコン（組み立てのたびに scripts/make-app-icons.mjs が作る。.png は追跡しない決まり・構造の検査 34.6）
+/public/apple-touch-icon.png
+/public/icon-192.png
+/public/icon-512.png

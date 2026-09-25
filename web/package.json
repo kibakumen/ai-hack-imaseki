@@ -2,8 +2,8 @@
   "name": "ai-hack-v2-web",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/make-app-icons.mjs && next dev",
+    "build": "node scripts/make-app-icons.mjs && next build",
     "lint": "eslint .",
     "deploy": "opennextjs-cloudflare build && pnpm run migrate:remote && wrangler deploy",
     "migrate:remote": "wrangler d1 migrations apply ai-hack-v2 --remote"

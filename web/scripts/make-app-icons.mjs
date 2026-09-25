@@ -1,8 +1,11 @@
-// ホーム画面のアイコン（public/icon-*.png・public/apple-touch-icon.png）を作り直すスクリプト
+// ホーム画面のアイコン（public/icon-192.png・public/icon-512.png・public/apple-touch-icon.png）を作るスクリプト
 // （2026-09-25 監査の指摘 客-04 の案C。app/manifest.ts と app/layout.tsx の icons が指す）。
 //
-// 画像の道具を増やさないため、PNG を自前で組む（橙の地に白い椅子。形は public/icon.svg と同じ）。
-// 使い方: node web/scripts/make-app-icons.mjs  （出力を commit する。ビルドでは走らせない）
+// ⚠️ PNG は git で追跡しない——構造の検査 34.6 が「追跡しているファイルに .png が無い」ことを見張っている
+//    （営業許可書や個人の写真を入れないための決まり）。だから**組み立てのたびに作る**（web/package.json の
+//    build と dev がこのスクリプトを先に走らせる。出力は web/.gitignore が外す）。形は public/icon.svg と同じ。
+// 画像の道具を増やさないため、PNG を自前で組む（橙の地に白い椅子）。
+// 使い方: node web/scripts/make-app-icons.mjs  （引数に出力先のフォルダを渡せる。既定は web/public）
 
 import fs from "node:fs";
 import path from "node:path";
@@ -62,10 +65,17 @@ const png = (size) => {
   return Buffer.concat([signature, chunk("IHDR", header), chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))), chunk("IEND", Buffer.alloc(0))]);
 };
 
-for (const [name, size] of [
+/** 作るアイコン（ファイル名と1辺の px）。app/manifest.ts と app/layout.tsx が指す名前と揃える */
+export const ICONS = [
   ["apple-touch-icon.png", 180],
   ["icon-192.png", 192],
   ["icon-512.png", 512],
-]) {
-  fs.writeFileSync(path.join(PUBLIC, name), png(size));
-}
+];
+
+/** `dir` へアイコンを書き出す */
+export const writeIcons = (dir) => {
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [name, size] of ICONS) fs.writeFileSync(path.join(dir, name), png(size));
+};
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) writeIcons(process.argv[2] ?? PUBLIC);

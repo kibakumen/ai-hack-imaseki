@@ -7,7 +7,9 @@
 
 import React from "react";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { homeFetch, installFakeApi, reservationDto, type FakeApi } from "../../../tests/acceptance/v2/_fakes";
@@ -123,12 +125,31 @@ describe("iPhone のホーム画面の案内（客-04）", () => {
 });
 
 describe("manifest（客-04 の案C）", () => {
-  it("客の画面をホーム画面のアプリとして開く記述で、指しているアイコンが public に在る", () => {
+  it("客の画面をホーム画面のアプリとして開く記述で、指しているアイコンは追跡している SVG か、組み立てで作る PNG", async () => {
     const m = manifest();
     expect(m.start_url).toBe("/me");
     expect(m.display).toBe("standalone");
     expect(m.name).toBe("イマセキ");
-    for (const icon of m.icons ?? []) expect(fs.existsSync(path.join(__dirname, "..", "..", "public", icon.src))).toBe(true);
-    expect(fs.existsSync(path.join(__dirname, "..", "..", "public", "apple-touch-icon.png"))).toBe(true);
+    // PNG は追跡しない決まり（構造の検査 34.6）なので、組み立てのスクリプトが作る。作れる名前と大きさを確かめる
+    const script = (await import(/* @vite-ignore */ pathToFileURL(path.join(__dirname, "..", "..", "scripts", "make-app-icons.mjs")).href)) as {
+      ICONS: Array<[string, number]>;
+      writeIcons: (dir: string) => void;
+    };
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "imaseki-icons-"));
+    script.writeIcons(out);
+    const made = new Map(script.ICONS);
+    for (const icon of m.icons ?? []) {
+      if (icon.src.endsWith(".svg")) {
+        expect(fs.existsSync(path.join(__dirname, "..", "..", "public", icon.src))).toBe(true);
+        continue;
+      }
+      const name = icon.src.replace(/^\//, "");
+      expect(made.has(name), name).toBe(true);
+      const bytes = fs.readFileSync(path.join(out, name));
+      expect(bytes.subarray(1, 4).toString("ascii")).toBe("PNG");
+      // IHDR の幅（16〜19バイト目）が manifest の大きさと揃う
+      expect(`${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(16)}`).toBe(icon.sizes);
+    }
+    expect(made.get("apple-touch-icon.png")).toBe(180);
   });
 });
