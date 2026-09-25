@@ -9,9 +9,11 @@
 //   「来た客を完了にする」操作だから。公開の設定はその下（1日に何度も触るものではない）。
 // 画面のあいだの行き来はタブに変えた（StoreNav）。新しい客が増えた時は音で知らせる。
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { apiCall, isFailure } from "../../lib/client/api";
+import { useCallback, useRef, useState } from "react";
+import { apiCall, type ApiFailure } from "../../lib/client/api";
+import { useLoad } from "../../lib/client/useLoad";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
+import { LoadView } from "../ui/LoadState";
 import { ArrivalsList, type ArrivalsListRow } from "./ArrivalsList";
 import { playNotifyBeep } from "./beep";
 import { PublishForm, type PublishFormCoupon, type PublishFormPrefill } from "./PublishForm";
@@ -35,17 +37,44 @@ export type StoreHomeView = {
   mustChangePassword?: boolean;
 };
 
+const loadHome = (): Promise<StoreHomeView | ApiFailure> => apiCall<StoreHomeView>("GET", "/api/store/home");
+
+type HomeBodyProps = { home: StoreHomeView; trend: TrendPoint[]; onChanged: () => void };
+
+/** 取れたホームの中身（案内・状況の帯・向かっている客・公開の設定）。 */
+const HomeBody = ({ home, trend, onChanged }: HomeBodyProps) => {
+  // 公開の操作を出すのは承認済みのときだけ（未承認・止められている間は入口も断る・基準 17.10）。
+  const canPublish = home.status === "approved" && home.offer === null;
+  return (
+    <>
+      {/* 仮のパスワードで入った店への案内（基準 14.14）。`app/store/password` の注が「店のホームが
+          ここへ案内する」と言いながら、この道が無かった（2026-09-22 に足した）。 */}
+      {home.mustChangePassword && (
+        <p className="msg" role="alert" data-testid="must-change-password">
+          運営から受け取った仮のパスワードで入っています。<a href="/store/password">新しいパスワードを決めてください。</a>
+        </p>
+      )}
+
+      <StatusBanner status={home.status} />
+
+      {home.status === "pending" && <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />}
+
+      <ArrivalsList rows={home.arrivals ?? []} onChanged={onChanged} />
+
+      {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={onChanged} />}
+
+      {/* `key` はオファーの番号——クーポンを選び直して公開し直すと別のオファーになるので、
+          ダイヤルと選択を新しいオファーの値から作り直す（同じオファーの取り直しでは残す） */}
+      {home.offer ? <OfferPanel key={home.offer.id} offer={home.offer} coupons={home.coupons} trend={trend} onChanged={onChanged} /> : null}
+    </>
+  );
+};
+
 export const StoreHome = () => {
-  const [home, setHome] = useState<StoreHomeView | null>(null);
   /** 「今日の動き」の点。カードが作り直されても消えないように、ここで持つ */
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   /** 前に見た確保の番号。**初めの読み込みでは鳴らさない**（開いた瞬間に全員ぶん鳴るのを避ける） */
   const seenRef = useRef<Set<string> | null>(null);
-
-  const loadHome = useCallback(async (): Promise<StoreHomeView | null> => {
-    const result = await apiCall<StoreHomeView>("GET", "/api/store/home");
-    return isFailure(result) ? null : result;
-  }, []);
 
   /**
    * 取り直した中身を受け取ったときの1手ぶん——
@@ -60,54 +89,20 @@ export const StoreHome = () => {
     if (seen !== null && [...ids].some((id) => !seen.has(id))) playNotifyBeep();
     const at = Date.now();
     setTrend((prev) => appendTrend(prev, next.offer, at));
-    setHome(next);
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const next = await loadHome();
-      if (!alive) return;
-      if (next) absorb(next);
-      else setHome(null);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [loadHome, absorb]);
-
-  // 確保の追加と状態の変化を30秒以内に一覧へ映す（基準 20.4）。開いている間だけ動き、
-  // 取れなかった回は前の値のままにする（一覧が空に落ちて、向かっている客が消えないように）。
-  useEffect(() => {
-    let alive = true;
-    const timer = setInterval(() => {
-      void (async () => {
-        const next = await loadHome();
-        if (!alive || !next) return;
-        absorb(next);
-      })();
-    }, ARRIVALS_REFRESH_MS);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [loadHome, absorb]);
-
-  const reload = () => {
-    void (async () => {
-      const next = await loadHome();
-      if (next) absorb(next);
-      else setHome(null);
-    })();
+  // 確保の追加と状態の変化を30秒以内に一覧へ映す（基準 20.4）。開いている間だけ動く。
+  // 取れなかった回は前の値のまま残し（一覧が空に落ちて、向かっている客が消えないように）、
+  // **失敗していることは帯で出す**（「最終更新 HH:MM・更新できていません」・2026-09-25 監査の指摘 横断-01。
+  // それまでは失敗を黙って捨て、開きっぱなしのタブレットが古い一覧のまま音も鳴らなかった）。
+  const { state, reload } = useLoad(loadHome, { onLoaded: absorb, pollMs: ARRIVALS_REFRESH_MS });
+  const refresh = () => {
+    void reload();
   };
 
-  if (!home) return <main aria-busy="true" />;
-
-  // 公開の操作を出すのは承認済みのときだけ（未承認・止められている間は入口も断る・基準 17.10）。
-  const canPublish = home.status === "approved" && home.offer === null;
-
+  // 読めなかった・ログインが切れたときも、見出しとタブは出す（空の main で止めない・横断-01）。
   return (
-    <main className="store-main">
+    <main className="store-main" aria-busy={state.status === "loading"}>
       <div className="store-head">
         <div>
           <p className="store-eyebrow">店の画面</p>
@@ -117,25 +112,9 @@ export const StoreHome = () => {
 
       <StoreNav active="home" />
 
-      {/* 仮のパスワードで入った店への案内（基準 14.14）。`app/store/password` の注が「店のホームが
-          ここへ案内する」と言いながら、この道が無かった（2026-09-22 に足した）。 */}
-      {home.mustChangePassword && (
-        <p className="msg" role="alert" data-testid="must-change-password">
-          運営から受け取った仮のパスワードで入っています。<a href="/store/password">新しいパスワードを決めてください。</a>
-        </p>
-      )}
-
-      <StatusBanner status={home.status} />
-
-      {home.status === "pending" && <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />}
-
-      <ArrivalsList rows={home.arrivals ?? []} onChanged={reload} />
-
-      {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={reload} />}
-
-      {/* `key` はオファーの番号——クーポンを選び直して公開し直すと別のオファーになるので、
-          ダイヤルと選択を新しいオファーの値から作り直す（同じオファーの取り直しでは残す） */}
-      {home.offer ? <OfferPanel key={home.offer.id} offer={home.offer} coupons={home.coupons} trend={trend} onChanged={reload} /> : null}
+      <LoadView state={state} onRetry={refresh}>
+        {(home) => <HomeBody home={home} trend={trend} onChanged={refresh} />}
+      </LoadView>
     </main>
   );
 };

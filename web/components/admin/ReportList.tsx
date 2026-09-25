@@ -10,46 +10,44 @@
 //    当番が気づくのはこの画面を開いたとき（承知のうえの穴）。
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { apiCall, isFailure } from "../../lib/client/api";
+import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { useLoad } from "../../lib/client/useLoad";
+import { LoadView } from "../ui/LoadState";
 import { dateTimeInJst } from "../ui/jstTime";
 
 /** 入口の応答（`GET /api/admin/reports`）。形は検査していないので、在ることに頼らずに読む。 */
 type ReportRow = { id: string; storeId: string; storeName: string; reason: string; at: string };
 
+const loadReports = async (): Promise<ReportRow[] | ApiFailure> => {
+  const result = await apiCall<{ items: ReportRow[] }>("GET", "/api/admin/reports");
+  return isFailure(result) ? result : (result.items ?? []);
+};
+
+const isNoReport = (items: ReportRow[]): boolean => items.length === 0;
+
 export const ReportList = () => {
-  const [items, setItems] = useState<ReportRow[] | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const result = await apiCall<{ items: ReportRow[] }>("GET", "/api/admin/reports");
-      if (alive) setItems(isFailure(result) ? [] : (result.items ?? []));
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  if (items === null) return <main aria-busy="true" />;
+  // 読めなかった（ログインが切れた・通信に失敗した）ときに「通報はまだありません」を出さない
+  // ——この画面が通報に気づく唯一の入口なので、0件と取り違えると届いている通報を見落とす
+  // （2026-09-25 監査の指摘 横断-01）。
+  const { state, reload } = useLoad(loadReports, { isEmpty: isNoReport });
 
   return (
     <main>
       <h1>通報</h1>
 
-      {items.length === 0 && <p data-testid="reports-empty">通報はまだありません。</p>}
-
-      {items.length > 0 && (
-        <ul>
-          {items.map((report) => (
-            <li key={report.id} data-testid={`row-${report.id}`}>
-              <Link href={`/admin/stores/${report.storeId}`}>{report.storeName}</Link>
-              <span>{dateTimeInJst(report.at)}</span>
-              <p>{report.reason}</p>
-            </li>
-          ))}
-        </ul>
-      )}
+      <LoadView state={state} onRetry={() => void reload()} empty={<p data-testid="reports-empty">通報はまだありません。</p>}>
+        {(items) => (
+          <ul>
+            {items.map((report) => (
+              <li key={report.id} data-testid={`row-${report.id}`}>
+                <Link href={`/admin/stores/${report.storeId}`}>{report.storeName}</Link>
+                <span>{dateTimeInJst(report.at)}</span>
+                <p>{report.reason}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </LoadView>
     </main>
   );
 };

@@ -88,3 +88,14 @@ export const FormMessage = ({ failure, fieldNames = [], ctx, links }: FormMessag
     </p>
   );
 };
+
+/**
+ * 読み込みが断られた・失敗したときの文（2026-09-25 監査の指摘 横断-01）。読み込みの部品
+ * （components/ui/LoadState の LoadView）が出す。語の文をそのまま出し、0件の文とは混ぜない。
+ * 断りの中身を持たない失敗は、通信の失敗の文に倒す。
+ */
+export const LoadMessage = ({ failure }: { failure: ApiFailure }) => (
+  <p className="msg" role="alert" data-testid="msg-load">
+    {TEXTS.inputRefusal(failure.error?.kind ?? "network")}
+  </p>
+);

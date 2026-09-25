@@ -19,7 +19,7 @@
 // 断りの文とボタンの文は `RefusalNotice` が `domain/texts` から引く。
 
 import { useRef, useState } from "react";
-import { apiCall, isFailure, isNetworkFailure } from "../../lib/client/api";
+import { apiCall, isFailure, isTransientFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
 import { usePolling } from "../../lib/client/usePolling";
 import { AdminCancelledView } from "./AdminCancelledView";
@@ -102,8 +102,9 @@ export const CustomerApp = () => {
       keep(result);
       return;
     }
-    // 通信の失敗だけ、端末に残した内容へ倒す（基準 9.10・9.11）
-    if (isNetworkFailure(result)) {
+    // 通信の失敗とサーバーの不具合（500・internal）は、端末に残した内容へ倒す（基準 9.10・9.11）。
+    // サーバーの不具合を見分けの断りと取り違えて登録の入力へ倒さない（2026-09-25 監査の指摘 設計-15）。
+    if (isTransientFailure(result)) {
       const kept = home ?? loadCachedHome<HomeDto>();
       setHome(kept);
       setStale(kept !== null);

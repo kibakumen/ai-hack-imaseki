@@ -19,9 +19,11 @@
 //   ⚠️ 色の値はここに書かない（構造の検査 34）。全部 `admin.module.css` が持つ。
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { apiCall, isFailure, type ApiFailure } from "../../lib/client/api";
+import { useLoad } from "../../lib/client/useLoad";
 import { FormMessage } from "../ui/InputRefusal";
+import { LoadView, RefreshFailedBand } from "../ui/LoadState";
 import styles from "./admin.module.css";
 
 type StoreStatus = "pending" | "approved" | "banned";
@@ -170,7 +172,7 @@ const ConfirmBox = ({ testId, label, text, confirmTestId = "btn-confirm", confir
 );
 
 export const StoreDetail = ({ storeId }: Props) => {
-  const [store, setStore] = useState<StoreDetailDto | null>(null);
+  /** 操作（承認・停止・戻す・仮のパスワード）の断り。読み込みの断りは useLoad の状態が持つ */
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [confirmingBan, setConfirmingBan] = useState(false);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
@@ -190,23 +192,13 @@ export const StoreDetail = ({ storeId }: Props) => {
     setTempPassword(result.tempPassword);
   };
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<StoreDetailDto | ApiFailure> => {
     const result = await apiCall<{ store: StoreDetailDto }>("GET", `/api/admin/stores/${storeId}`);
-    return isFailure(result) ? { store: null, failure: result } : { store: result.store, failure: null };
+    return isFailure(result) ? result : result.store;
   }, [storeId]);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const next = await load();
-      if (!alive) return;
-      setStore(next.store);
-      setFailure(next.failure);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [load]);
+  // 読めなかった（ログインが切れた・見つからない・通信に失敗した）ときは、その語の文と読み直す道を出す
+  // （2026-09-25 監査の指摘 横断-01。それまで 401 も 404 も「入れた内容を確かめてください」だった）。
+  const { state, reload } = useLoad(load);
 
   /** 承認・停止・復帰のあとは、詳細を取り直して今の状況を映す（断られたときはその場に留まる）。 */
   const act = async (path: string) => {
@@ -218,23 +210,26 @@ export const StoreDetail = ({ storeId }: Props) => {
     setFailure(null);
     setConfirmingBan(false);
     setConfirmingRestore(false);
-    const next = await load();
-    setStore(next.store);
+    // 取り直しが失敗しても、今の中身は残して「更新できていません」を出す（空の画面へ落とさない）。
+    await reload();
   };
 
-  if (!store) {
+  if (state.status !== "ready" && state.status !== "empty") {
     return (
       <main className={styles.page}>
-        {failure === null && <p className={styles.noData}>読み込んでいます…</p>}
-        <FormMessage failure={failure} />
+        <LoadView state={state} onRetry={() => void reload()}>
+          {() => null}
+        </LoadView>
       </main>
     );
   }
 
+  const store = state.data;
   const missing = missingLabels(store);
 
   return (
     <main className={styles.page}>
+      <RefreshFailedBand state={state} />
       <header className={`${styles.card} ${styles.detailHead}`}>
         <Link href="/admin" className={styles.backLink}>
           ← 店の一覧へ

@@ -2,7 +2,8 @@
 // F2（応答を検査せず as T でキャストしていた）を固定する。
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { apiCall, apiStream, STREAM_UNAVAILABLE, type ApiFailure } from "./api";
+import { apiCall, apiStream, isTransientFailure, isUnauthenticated, STREAM_UNAVAILABLE, type ApiFailure } from "./api";
+import { onSessionExpired } from "./session";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -87,6 +88,42 @@ describe("client/api が応答の形を確かめてから返す", () => {
   it("形を渡さない成功の応答はそのまま返る", async () => {
     respondWith(200, { ok: true, id: "r2" });
     expect(await apiCall<Ok>("GET", "/api/customer/home")).toEqual({ ok: true, id: "r2" });
+  });
+});
+
+describe("ログインが切れた断りと、取り直せば直るかもしれない失敗（横断-01・設計-15）", () => {
+  it("401・unauthenticated は isUnauthenticated が true で、切れた知らせを1回出す", async () => {
+    const heard: number[] = [];
+    const stop = onSessionExpired(() => heard.push(1));
+    respondWith(401, { ok: false, error: { kind: "unauthenticated" } });
+    const failure = await apiCall<Ok>("GET", "/api/store/home");
+    stop();
+    expect(isUnauthenticated(failure)).toBe(true);
+    expect(heard).toHaveLength(1);
+  });
+
+  it("ログインの失敗（login_failed）・役割違い（forbidden）は、切れた知らせを出さない", async () => {
+    const heard: number[] = [];
+    const stop = onSessionExpired(() => heard.push(1));
+    respondWith(401, { ok: false, error: { kind: "login_failed" } });
+    expect(isUnauthenticated(await apiCall<Ok>("POST", "/api/auth/login", {}))).toBe(false);
+    respondWith(403, { ok: false, error: { kind: "forbidden" } });
+    expect(isUnauthenticated(await apiCall<Ok>("GET", "/api/admin/reports"))).toBe(false);
+    stop();
+    expect(heard).toHaveLength(0);
+  });
+
+  it("サーバーの不具合（internal）は通信の失敗（network）と分けて返り、どちらも取り直せば直るかもしれない失敗", async () => {
+    respondWith(500, { ok: false, error: { kind: "internal" } });
+    const internal = failureOf(await apiCall<Ok>("GET", "/api/customer/home"));
+    expect(internal.error?.kind).toBe("internal");
+    expect(isTransientFailure(internal)).toBe(true);
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    expect(isTransientFailure(await apiCall<Ok>("GET", "/api/customer/home"))).toBe(true);
+    respondWith(401, { ok: false, error: { kind: "unauthenticated" } });
+    expect(isTransientFailure(await apiCall<Ok>("GET", "/api/customer/home"))).toBe(false);
   });
 });
 

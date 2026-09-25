@@ -111,6 +111,16 @@ export const TEXTS = {
   fallbackReason: "今の条件で近い順に選びました",
 } as const;
 
+// ---------- 読み込みの状態とログインの切れ（2026-09-25 監査の指摘 横断-01） ----------
+// 画面の部品（components/ui/LoadState・SessionExpired）が出す決まった文。
+export const LOAD_TEXTS = {
+  loading: "読み込んでいます…",
+  retry: "もう一度読み込む",
+  /** 取り直しが続けて失敗している間の帯。前に取れた時刻（日本時間の HH:MM）を添える */
+  stale: (hhmm: string): string => `最終更新 ${hhmm}・更新できていません`,
+  relogin: "ログインし直す",
+} as const;
+
 // ---------- クーポンの画面の断りの文（要件16の基準 16.2・16.5） ----------
 // 汎用の INPUT_REFUSAL_TEXTS では足りない語が2つある:
 //   limit_reached … 汎用の文は個数を言わない（上の語は 15.7 のおすすめメニューとも共有なので、

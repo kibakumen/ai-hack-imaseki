@@ -8,6 +8,7 @@
 // 分岐せず domain/texts に文を引くだけなので、ここで確かめるのは形だけでよい。
 import { z, type ZodType } from "zod";
 import type { AppConfig } from "../ports";
+import { notifySessionExpired } from "./session";
 
 export type FieldRefusal = { name: string; reason: string };
 
@@ -48,6 +49,26 @@ export const isFailure = (value: unknown): value is ApiFailure => typeof value =
  */
 export const isNetworkFailure = (value: unknown): value is ApiFailure => isFailure(value) && value.error?.kind === "network";
 
+/**
+ * ログインが切れた・していない断り（401・unauthenticated）かどうか（2026-09-25 監査の指摘 横断-01）。
+ * ログインの失敗（login_failed）と役割違い（forbidden）は含めない——入り直しても直らない・別の断り。
+ * 店と運営の画面は、これを受けたら「ログインが切れました」と /login への道を出す（client/session の知らせ）。
+ */
+export const isUnauthenticated = (value: unknown): value is ApiFailure => isFailure(value) && value.error?.kind === "unauthenticated";
+
+/**
+ * 取り直せば直るかもしれない失敗（通信の失敗 network・サーバーの不具合 internal）かどうか（設計-15）。
+ * 画面は、この失敗では前に取れた内容を残す（登録の入力・空の一覧へ倒さない）。文は語ごとに別
+ * （「通信に失敗しました」と「サーバーで問題が起きました」）。
+ */
+export const isTransientFailure = (value: unknown): value is ApiFailure => isFailure(value) && (value.error?.kind === "network" || value.error?.kind === "internal");
+
+/** 断りを呼び出し元へ返す前に、ログインが切れた断りなら知らせる（聞くのは店と運営の画面の殻だけ）。 */
+const passFailure = (failure: ApiFailure): ApiFailure => {
+  if (isUnauthenticated(failure)) notifySessionExpired();
+  return failure;
+};
+
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 /**
@@ -77,7 +98,7 @@ export const apiCall = async <T = Record<string, unknown>>(method: HttpMethod, p
   }
   if (isFailure(json)) {
     // 検査した値ではなく元の値を返す（partyMax・home のような場面ごとの項目を落とさないため）。
-    return failureSchema.safeParse(json).success ? (json as ApiFailure) : networkFailure();
+    return failureSchema.safeParse(json).success ? passFailure(json as ApiFailure) : networkFailure();
   }
   // ここから先は `ok:false` を持たない応答。アプリ自身の断りは必ず `ok:false` を持つので、
   // 状態コードが 2xx でなければ**アプリの外**が返した既定の応答（プラットフォームの 502・
@@ -140,7 +161,7 @@ export const apiStream = async (path: string, body: unknown, onLine: (line: Stre
       return networkFailure();
     }
     if (!isFailure(json)) return networkFailure();
-    return failureSchema.safeParse(json).success ? (json as ApiFailure) : networkFailure();
+    return failureSchema.safeParse(json).success ? passFailure(json as ApiFailure) : networkFailure();
   }
   const reader = res.body?.getReader();
   // 本文を少しずつ読めない環境（古い browser・検査の偽物）では、普通の入口へ倒す
