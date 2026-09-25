@@ -67,7 +67,10 @@ const loadWorker = (opts: { fetch: (input: string | Request, init?: RequestInit)
     const waits: Array<Promise<unknown>> = [];
     handlers.get(type)?.({ ...event, respondWith: (p: Promise<Response>) => (responded = p), waitUntil: (p: Promise<unknown>) => waits.push(p) });
     await Promise.all(waits);
-    return responded === undefined ? undefined : await responded;
+    const response = responded === undefined ? undefined : await responded;
+    // 応答を返すまでの間に足された waitUntil（殻と部品の保存）も待つ（ブラウザは出来事が生きている間それを待つ）
+    await Promise.all(waits);
+    return response;
   };
   return { dispatch, caches, self };
 };
@@ -122,6 +125,75 @@ describe("sw.js の殻の保存（不具合-05）", () => {
     await worker.dispatch("activate", {});
     expect(await worker.caches.api.keys()).not.toContain("ai-sekitori-shell-v1");
     expect(await worker.caches.api.keys()).not.toContain("ai-sekitori-assets-v1");
+  });
+});
+
+// 2026-09-26 のレビュー（不具合-05 の残り）: install で保存するのは /me の HTML だけで、部品（/_next/static）は
+// Service Worker の下で取ったときにしか残らなかった。初めて /me を開いた回の部品は Service Worker が動く前に読まれる
+// ので残らず、そのまま地下で開き直すと、殻は出ても JS が読めず確保中の表示（基準 9.10〜9.12）が出なかった。
+describe("sw.js の部品の保存（不具合-05 の残り）", () => {
+  const ME_HTML = [
+    "<!doctype html><html><head>",
+    '<link rel="stylesheet" href="/_next/static/css/app-1.css" data-precedence="next"/>',
+    '<link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-2.js"/>',
+    '<link rel="preload" href="/_next/static/media/font-3.woff2" as="font" crossorigin=""/>',
+    '</head><body><script src="/_next/static/chunks/main-app-4.js" async=""></script>',
+    '<script>self.__next_f.push([1,"1:I[\\"/_next/static/chunks/app/me/page-5.js\\"]"])</script>',
+    '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>',
+    "</body></html>",
+  ].join("");
+  const ASSETS = ["/_next/static/css/app-1.css", "/_next/static/chunks/webpack-2.js", "/_next/static/media/font-3.woff2", "/_next/static/chunks/main-app-4.js", "/_next/static/chunks/app/me/page-5.js"];
+
+  const serve = (opts: { online: () => boolean; failing?: string[] }) => async (input: string | Request) => {
+    if (!opts.online()) throw new TypeError("offline");
+    const pathname = new URL(typeof input === "string" ? input : input.url, ORIGIN).pathname;
+    if (pathname === "/me") return new Response(ME_HTML, { status: 200, headers: { "content-type": "text/html" } });
+    if (opts.failing?.includes(pathname)) return new Response("", { status: 404 });
+    return new Response(`asset:${pathname}`, { status: 200 });
+  };
+
+  it("入れ替わり（install）で /me の殻と一緒に、殻が指す部品を保存する。通信が切れても殻と部品が返る", async () => {
+    let online = true;
+    const worker = loadWorker({ fetch: serve({ online: () => online }) });
+    await worker.dispatch("install", {});
+    online = false;
+    const shell = await worker.dispatch("fetch", asNavigation(navigate("/me")));
+    expect(await shell!.text()).toBe(ME_HTML);
+    for (const asset of ASSETS) {
+      const res = await worker.dispatch("fetch", { request: new Request(`${ORIGIN}${asset}`) });
+      expect(res, asset).toBeDefined();
+      expect(await res!.text(), asset).toBe(`asset:${asset}`);
+    }
+    // よそのオリジン（Turnstile）は保存しない
+    expect(await worker.caches.api.match("https://challenges.cloudflare.com/turnstile/v0/api.js")).toBeUndefined();
+  });
+
+  it("通信で /me を取り直したときも、殻が指す部品を保存する（新しい版の部品が次に電波の無い所で要る）", async () => {
+    let online = true;
+    const worker = loadWorker({ fetch: serve({ online: () => online }) });
+    await worker.dispatch("fetch", asNavigation(navigate("/me")));
+    online = false;
+    const res = await worker.dispatch("fetch", { request: new Request(`${ORIGIN}/_next/static/chunks/main-app-4.js`) });
+    expect(await res!.text()).toBe("asset:/_next/static/chunks/main-app-4.js");
+  });
+
+  it("部品の1つが取れなくても、殻とほかの部品は保存する（入れ替わりを止めない）", async () => {
+    let online = true;
+    const worker = loadWorker({ fetch: serve({ online: () => online, failing: ["/_next/static/chunks/webpack-2.js"] }) });
+    await worker.dispatch("install", {});
+    online = false;
+    expect(await (await worker.dispatch("fetch", asNavigation(navigate("/me"))))!.text()).toBe(ME_HTML);
+    expect(await (await worker.dispatch("fetch", { request: new Request(`${ORIGIN}/_next/static/chunks/main-app-4.js`) }))!.text()).toBe("asset:/_next/static/chunks/main-app-4.js");
+  });
+});
+
+describe("部品の長期保存の見出し（public/_headers・不具合-05 の残り）", () => {
+  it("/_next/static/* に1年の immutable を付ける（版ごとに URL が変わるので、ブラウザの保存から読める）", () => {
+    const headers = fs.readFileSync(path.join(__dirname, "..", "public", "_headers"), "utf8");
+    const lines = headers.split("\n").map((line) => line.trimEnd());
+    const at = lines.indexOf("/_next/static/*");
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(lines[at + 1]).toMatch(/^\s+Cache-Control:\s*public,\s*max-age=31536000,\s*immutable$/);
   });
 });
 

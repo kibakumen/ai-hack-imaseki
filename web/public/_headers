@@ -1,0 +1,5 @@
+# 部品の長期保存（2026-09-26 のレビュー・不具合-05 の残り）。Workers の静的な置き場（OpenNext が public/ を写す）が読む。
+# /_next/static の下は版ごとに URL が変わるので、1年の immutable にしてブラウザの保存から読ませる
+# （電波の無い所で /me を開き直したとき、Service Worker の保存に無い部品もブラウザの保存から読める）。
+/_next/static/*
+  Cache-Control: public,max-age=31536000,immutable
