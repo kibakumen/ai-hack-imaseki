@@ -207,6 +207,14 @@ export const PLACE_RATE_WINDOW_MS = 60 * 1000;
  */
 export const STORE_PROFILE_RATE_LIMIT = 30;
 export const STORE_PROFILE_RATE_WINDOW_MS = 60 * 60 * 1000;
+/**
+ * アプリ全体の1日（日本時間）の AI の予算（米ドル・安全-03 の「選ぶ部分」の第一の案・AI判断）。その日の ai_calls の
+ * 実費の合計がこれに届いたら、その日の残りは AI（選定も紹介文も）を呼ばずに点数順と決まった文で返す。
+ * OrcaRouter の鍵の1日の予算（README 7.2 の $1）より手前で止め、使い切られて全員が AI の失敗を待つ形を避ける。
+ */
+export const AI_DAILY_BUDGET_USD = 0.9;
+/** 実費が記録されない呼び出し（失敗・打ち切り）もあるので、その日の回数でも止める（AI判断） */
+export const AI_DAILY_CALL_LIMIT = 2000;
 /** 同じ店の、カードの登録の開始と確かめ（Stripe を呼ぶ）は、合わせて10分に10回まで（安全-03 の構造の検査・AI判断） */
 export const CARD_RATE_LIMIT = 10;
 export const CARD_RATE_WINDOW_MS = 10 * 60 * 1000;

@@ -16,6 +16,7 @@ import type { Deps } from "../ports";
 import { fallbackPitch } from "../domain/pitch";
 import type { FetchInput } from "../schemas/fetch";
 import type { StreamLineDto } from "../schemas/responses";
+import { aiBudgetLeft } from "./aiBudget";
 import { fetchOffers, type FetchOffersResult } from "./fetchOffers";
 import { writePitch, type PitchSource, type PitchTarget } from "./writePitch";
 
@@ -40,9 +41,11 @@ export const buildOffersStream = async (deps: Deps, customerId: string, input: F
   if (!result.ok) return result;
 
   const encoder = new TextEncoder();
+  const targets = [...result.pitchTargets];
+  // アプリ全体のその日の AI の予算が尽きていたら、紹介文も AI に書かせない（安全-03・決まった文で返す）
+  const pitchAllowed = deps.pitch !== undefined && targets.length > 0 && (await aiBudgetLeft(deps));
   // 蓋の合図は、最初の紹介文を頼むより前に作る（差し替えた時計は、進めたあとに作った合図を鳴らさない）
   const budget = deps.clock.after(STREAM_BUDGET_MS);
-  const targets = [...result.pitchTargets];
 
   const stream = new ReadableStream<Uint8Array>({
     start: (controller) => {
@@ -70,8 +73,8 @@ export const buildOffersStream = async (deps: Deps, customerId: string, input: F
 
       send({ type: "init", fetchId: result.fetchId, items: result.items });
 
-      // 紹介文の口が無い場面（受け入れ検査）では AI の層ごと走らせず、その場で書き切って閉じる
-      if (!deps.pitch || targets.length === 0) {
+      // 紹介文の口が無い場面（受け入れ検査）・その日の AI の予算が尽きた日は、AI の層ごと走らせず、その場で書き切って閉じる
+      if (!pitchAllowed) {
         finish();
         return;
       }
