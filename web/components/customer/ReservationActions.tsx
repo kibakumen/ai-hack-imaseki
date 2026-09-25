@@ -21,7 +21,7 @@
 import { useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { PARTY_MAX, PARTY_MIN } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage, type RefusalContext } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria, type RefusalContext } from "../ui/InputRefusal";
 
 /** この部品が読む確保の項目だけ（表示の全部は `ReservationView` が持つ）。 */
 export type ReservationActionsReservation = { id: string; party: number };
@@ -79,8 +79,9 @@ const PartyForm = ({ reservationId, party: current, onChanged }: { reservationId
         max={PARTY_MAX}
         value={party}
         onChange={(event) => setParty(event.target.value)}
+        {...fieldAria("party", failure, "reservation-party-field")}
       />
-      <FieldMessage name="party" failure={failure} ctx={PARTY_CTX} />
+      <FieldMessage inputId="reservation-party-field" name="party" failure={failure} ctx={PARTY_CTX} />
       <button type="submit" data-testid="btn-change-party">
         人数を変える
       </button>

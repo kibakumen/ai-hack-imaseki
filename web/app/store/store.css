@@ -696,6 +696,14 @@
   white-space: normal;
 }
 
+/* 裏の欄に断りが出ているあいだ、見た目のダイヤルの枠を赤くする（2026-09-25 監査の指摘 横断-05。裏の欄は目に
+   出さないので、欄の赤枠だけでは見えなかった） */
+.store-dial:has([aria-invalid="true"]) .store-dial__rail,
+.store-tune__dial:has([aria-invalid="true"]) .store-dial__rail {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 18%, transparent);
+}
+
 /* 裏の欄に焦点があるあいだ、見た目のダイヤルの枠にも輪を映す（どのダイヤルを動かしているかを示す） */
 .store-dial:has(.store-sr-only--focusable:focus-visible) .store-dial__rail,
 .store-tune__dial:has(.store-sr-only--focusable:focus-within) .store-dial__rail {

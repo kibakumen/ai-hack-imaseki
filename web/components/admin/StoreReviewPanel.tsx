@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { callApi, isFailure, type AdminStoreDetailDto } from "../../lib/client/api";
 import { ADMIN_NOTE_MAX } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { dateTimeInJst } from "../ui/jstTime";
 import { Empty } from "./StoreDetailPanels";
 import { useAdminAction } from "./useAdminAction";
@@ -128,8 +128,8 @@ const NoteForm = ({ store, onChanged }: ReloadProps) => {
       }}
     >
       <label htmlFor="admin-store-note">運営のメモ（店には見えません）</label>
-      <textarea id="admin-store-note" data-testid="field-note" rows={3} maxLength={ADMIN_NOTE_MAX} value={note} onChange={(event) => setNote(event.target.value)} />
-      <FieldMessage name="note" failure={save.failure} ctx={{ field: "メモ", min: 0, max: ADMIN_NOTE_MAX }} />
+      <textarea id="admin-store-note" data-testid="field-note" rows={3} maxLength={ADMIN_NOTE_MAX} value={note} onChange={(event) => setNote(event.target.value)} {...fieldAria("note", save.failure, "admin-store-note")} />
+      <FieldMessage inputId="admin-store-note" name="note" failure={save.failure} ctx={{ field: "メモ", min: 0, max: ADMIN_NOTE_MAX }} />
       <label className={styles.checkLabel}>
         <input type="checkbox" data-testid="field-contacted" checked={contacted} onChange={(event) => setContacted(event.target.checked)} />
         店へ連絡済み（未承認のあいだは承認待ちの数から外す。許可書が上げ直されたら、また数える）

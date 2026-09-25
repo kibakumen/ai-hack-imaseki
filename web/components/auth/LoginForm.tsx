@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
 import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 
 const FIELD_NAMES = ["email", "password"];
 const HOME_BY_ROLE: Record<string, string> = { store: "/store", admin: "/admin" };
@@ -84,8 +84,9 @@ export const LoginForm = () => {
         value={email}
         maxLength={EMAIL_MAX}
         onChange={(event) => setEmail(event.target.value)}
+        {...fieldAria("email", failure, "login-email")}
       />
-      <FieldMessage name="email" failure={failure} ctx={{ field: "メールアドレス", max: EMAIL_MAX }} />
+      <FieldMessage name="email" inputId="login-email" failure={failure} ctx={{ field: "メールアドレス", max: EMAIL_MAX }} />
 
       <label htmlFor="login-password">パスワード</label>
       <input
@@ -96,8 +97,9 @@ export const LoginForm = () => {
         value={password}
         maxLength={PASSWORD_MAX}
         onChange={(event) => setPassword(event.target.value)}
+        {...fieldAria("password", failure, "login-password")}
       />
-      <FieldMessage name="password" failure={failure} ctx={{ field: "パスワード", max: PASSWORD_MAX }} />
+      <FieldMessage name="password" inputId="login-password" failure={failure} ctx={{ field: "パスワード", max: PASSWORD_MAX }} />
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.login} onToken={handleToken} />}
 

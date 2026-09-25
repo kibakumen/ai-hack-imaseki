@@ -389,16 +389,16 @@ input::placeholder {
 }
 
 /* 断りが出ている欄は枠を赤くする（第1回の指摘「未入力欄があることがわかりにくい・枠とかを赤く」）。
-   断りの文（`.msg`）は欄の直下に置かれるので、直後の兄弟で見分けられる＝.tsx を触らずに効く。 */
-input:has(+ .msg),
-select:has(+ .msg),
-textarea:has(+ .msg) {
+   欄の aria-invalid で見分ける（components/ui/InputRefusal の fieldAria が付ける・2026-09-25 監査の指摘 横断-05）。
+   それまでは「欄の直後に断りの文」という DOM の並びで見分けていて、包まれた欄とダイヤルは赤くならなかった。 */
+[aria-invalid="true"] {
   border-color: var(--color-danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 18%, transparent);
 }
 
-fieldset:has(+ .msg) {
-  border-color: var(--color-danger);
+/* 押して選ぶ札の並び（チップ・予算）は、囲いの縁を赤くする */
+fieldset[aria-invalid="true"] {
+  box-shadow: none;
 }
 
 fieldset {

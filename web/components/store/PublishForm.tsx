@@ -17,7 +17,7 @@
 import { useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { WheelPicker } from "./WheelPicker";
 
 export type PublishFormCoupon = { id: string; name: string; note: string };
@@ -59,11 +59,14 @@ const UntilField = ({
   open,
   onToggle,
   onChange,
+  failure,
 }: {
   value: string;
   open: boolean;
   onToggle: () => void;
   onChange: (next: string) => void;
+  /** 断りが返っていれば、欄が文を指す（横断-05） */
+  failure: ApiFailure | null;
 }) => (
   <div className="store-timer">
     <div className="store-row">
@@ -76,7 +79,14 @@ const UntilField = ({
       <div className="store-field">
         <label htmlFor="publish-until">何時に終わるか（公開から12時間以内）</label>
         <div className="store-inline">
-          <input id="publish-until" data-testid="field-until" type="time" value={value} onChange={(event) => onChange(event.target.value)} />
+          <input
+            id="publish-until"
+            data-testid="field-until"
+            type="time"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            {...fieldAria("until", failure, "publish-until")}
+          />
           {value === "" ? null : (
             <button type="button" className="store-btn store-btn--quiet" onClick={() => onChange("")}>
               タイマーを外す
@@ -194,6 +204,7 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
           max={OFFER_CAPACITY_MAX}
           value={capacity}
           onChange={setCapacity}
+          aria={fieldAria("capacity", failure, "publish-capacity")}
         />
         <WheelPicker
           testId="field-partyMax"
@@ -204,13 +215,14 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
           max={OFFER_PARTY_MAX_MAX}
           value={partyMax}
           onChange={setPartyMax}
+          aria={fieldAria("partyMax", failure, "publish-party-max")}
         />
       </div>
-      <FieldMessage name="capacity" failure={failure} ctx={{ field: CAPACITY_LABEL, min: OFFER_CAPACITY_MIN, max: OFFER_CAPACITY_MAX }} />
-      <FieldMessage name="partyMax" failure={failure} ctx={{ field: PARTY_MAX_LABEL, min: OFFER_PARTY_MAX_MIN, max: OFFER_PARTY_MAX_MAX }} />
+      <FieldMessage inputId="publish-capacity" name="capacity" failure={failure} ctx={{ field: CAPACITY_LABEL, min: OFFER_CAPACITY_MIN, max: OFFER_CAPACITY_MAX }} />
+      <FieldMessage inputId="publish-party-max" name="partyMax" failure={failure} ctx={{ field: PARTY_MAX_LABEL, min: OFFER_PARTY_MAX_MIN, max: OFFER_PARTY_MAX_MAX }} />
 
-      <UntilField value={until} open={untilOpen} onToggle={() => setUntilOpen((open) => !open)} onChange={setUntil} />
-      <FieldMessage name="until" failure={failure} ctx={{ field: "何時まで" }} />
+      <UntilField value={until} open={untilOpen} onToggle={() => setUntilOpen((open) => !open)} onChange={setUntil} failure={failure} />
+      <FieldMessage inputId="publish-until" name="until" failure={failure} ctx={{ field: "何時まで" }} />
 
       <CouponChoices coupons={coupons} selected={couponIds} onToggle={toggleCoupon} />
 

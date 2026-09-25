@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { callApi, isFailure, type AdminStoreDetailDto } from "../../lib/client/api";
 import { PASSWORD_MAX } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { ConfirmBox } from "./ConfirmBox";
 import { useAdminAction } from "./useAdminAction";
 import styles from "./admin.module.css";
@@ -17,6 +17,8 @@ import styles from "./admin.module.css";
 const FIELD_NAMES = ["currentPassword"];
 /** 今のパスワードが合わない断りは、欄の直下に語の文で出す（理由の雛形では中身が言えない）。 */
 const MISMATCH_KINDS = ["password_mismatch"];
+/** 運営の今のパスワードの欄の id（断りの文がこの欄を指す・横断-05） */
+const CURRENT_PASSWORD_ID = "temp-password-current";
 
 export const TempPasswordPanel = ({ store }: { store: AdminStoreDetailDto }) => {
   const [confirming, setConfirming] = useState(false);
@@ -65,15 +67,17 @@ export const TempPasswordPanel = ({ store }: { store: AdminStoreDetailDto }) => 
               <label className={styles.reasonField}>
                 <span>あなた（運営）の今のパスワード</span>
                 <input
+                  id={CURRENT_PASSWORD_ID}
                   type="password"
                   data-testid="field-currentPassword"
                   autoComplete="current-password"
                   maxLength={PASSWORD_MAX}
                   value={currentPassword}
                   onChange={(event) => setCurrentPassword(event.target.value)}
+                  {...fieldAria("currentPassword", issue.failure, CURRENT_PASSWORD_ID, { kinds: MISMATCH_KINDS })}
                 />
               </label>
-              <FieldMessage name="currentPassword" failure={issue.failure} kinds={MISMATCH_KINDS} />
+              <FieldMessage name="currentPassword" inputId={CURRENT_PASSWORD_ID} failure={issue.failure} kinds={MISMATCH_KINDS} />
               <FormMessage failure={issue.failure} fieldNames={FIELD_NAMES} />
             </ConfirmBox>
           )}

@@ -31,7 +31,7 @@ import { isFailure, type ApiFailure } from "../../lib/client/api";
 import { rememberOrigin } from "../../lib/client/lastOrigin";
 import type { SpokenConditions } from "../../lib/client/voiceConditions";
 import { TEXTS } from "../../lib/domain/texts";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { BudgetChips } from "./BudgetChips";
 import { fetchButtonText, PartyStepper } from "./PartyStepper";
 import { PhoneField, useOptionalPhone } from "./PhoneField";
@@ -181,7 +181,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
         {/* 押して選ぶチップ（2026-09-25 監査の指摘 客-15・本人の指摘「予算も専用のフォームがあった方が入力しやすい」） */}
         <BudgetChips value={budgetMax} onChange={setBudgetMax} registered={profile?.budgetMax ?? null} failure={failure} />
 
-        <fieldset data-testid="field-genres">
+        <fieldset id="fetch-genres" data-testid="field-genres" {...fieldAria("genres", failure, "fetch-genres")}>
           <legend>今の気分のジャンル（この回だけ・登録は変わりません）</legend>
           {TEXTS.genres.map((genre) => (
             <label key={genre}>
@@ -190,7 +190,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
             </label>
           ))}
         </fieldset>
-        <FieldMessage name="genres" failure={failure} ctx={{ field: "ジャンル" }} />
+        <FieldMessage inputId="fetch-genres" name="genres" failure={failure} ctx={{ field: "ジャンル" }} />
 
         {/* いちばん下に電話番号（任意・本人の指摘「こだわり条件の下に任意で電話番号を登録できるように」） */}
         <PhoneField {...phone} />

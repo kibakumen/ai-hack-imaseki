@@ -9,9 +9,12 @@
 import { useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { EMAIL_MAX, PASSWORD_MAX } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 
 const FIELD_NAMES = ["email", "currentPassword"];
+/** 欄の直下に語の文で出す、項目に結びつけた規則の断り */
+const EMAIL_KINDS = ["email_taken"];
+const MISMATCH_KINDS = ["password_mismatch"];
 
 type Props = {
   /** 叩く入口。店は `/api/store/email`、運営は `/api/admin/email`。 */
@@ -61,8 +64,9 @@ export const EmailForm = ({ endpoint, onChanged }: Props) => {
         value={email}
         maxLength={EMAIL_MAX}
         onChange={(event) => setEmail(event.target.value)}
+        {...fieldAria("email", failure, "account-new-email", { kinds: EMAIL_KINDS })}
       />
-      <FieldMessage name="email" failure={failure} ctx={{ field: "メールアドレス", hint: "name@example.com の形", max: EMAIL_MAX }} kinds={["email_taken"]} />
+      <FieldMessage name="email" inputId="account-new-email" failure={failure} ctx={{ field: "メールアドレス", hint: "name@example.com の形", max: EMAIL_MAX }} kinds={EMAIL_KINDS} />
 
       <label htmlFor="account-current-password">今のパスワード</label>
       <input
@@ -73,8 +77,9 @@ export const EmailForm = ({ endpoint, onChanged }: Props) => {
         value={currentPassword}
         maxLength={PASSWORD_MAX}
         onChange={(event) => setCurrentPassword(event.target.value)}
+        {...fieldAria("currentPassword", failure, "account-current-password", { kinds: MISMATCH_KINDS })}
       />
-      <FieldMessage name="currentPassword" failure={failure} ctx={{ field: "今のパスワード" }} kinds={["password_mismatch"]} />
+      <FieldMessage name="currentPassword" inputId="account-current-password" failure={failure} ctx={{ field: "今のパスワード" }} kinds={MISMATCH_KINDS} />
 
       <button type="submit" data-testid="btn-change-email">
         メールアドレスを変える

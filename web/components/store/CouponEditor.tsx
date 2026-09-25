@@ -14,7 +14,7 @@ import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/
 import { useLoad } from "../../lib/client/useLoad";
 import { COUPON_TEXTS } from "../../lib/domain/texts";
 import { COUPON_MAX, COUPON_NAME_MAX, COUPON_NAME_MIN, COUPON_NOTE_MAX } from "../../lib/schemas/limits";
-import { FieldMessage } from "../ui/InputRefusal";
+import { FieldMessage, fieldAria } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
 
 // 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
@@ -136,8 +136,9 @@ const CouponRow = ({ coupon, draft, failure, saved, onChange, onSave, onDelete }
             value={draft.name}
             maxLength={COUPON_NAME_MAX}
             onChange={(event) => onChange({ ...draft, name: event.target.value })}
+            {...fieldAria("name", failure, `coupon-name-${coupon.id}`)}
           />
-          <FieldMessage name="name" failure={failure} ctx={NAME_CTX} />
+          <FieldMessage inputId={`coupon-name-${coupon.id}`} name="name" failure={failure} ctx={NAME_CTX} />
         </div>
 
         <div className="store-field">
@@ -149,8 +150,9 @@ const CouponRow = ({ coupon, draft, failure, saved, onChange, onSave, onDelete }
             value={draft.note}
             maxLength={COUPON_NOTE_MAX}
             onChange={(event) => onChange({ ...draft, note: event.target.value })}
+            {...fieldAria("note", failure, `coupon-note-${coupon.id}`)}
           />
-          <FieldMessage name="note" failure={failure} ctx={NOTE_CTX} />
+          <FieldMessage inputId={`coupon-note-${coupon.id}`} name="note" failure={failure} ctx={NOTE_CTX} />
         </div>
       </div>
 
@@ -207,8 +209,9 @@ const CouponCreateForm = ({ name, note, failure, onName, onNote, onSubmit }: Cre
         value={name}
         maxLength={COUPON_NAME_MAX}
         onChange={(event) => onName(event.target.value)}
+        {...fieldAria("name", failure, "coupon-new-name")}
       />
-      <FieldMessage name="name" failure={failure} ctx={NAME_CTX} />
+      <FieldMessage inputId="coupon-new-name" name="name" failure={failure} ctx={NAME_CTX} />
     </div>
 
     <div className="store-field">
@@ -221,8 +224,9 @@ const CouponCreateForm = ({ name, note, failure, onName, onNote, onSubmit }: Cre
         value={note}
         maxLength={COUPON_NOTE_MAX}
         onChange={(event) => onNote(event.target.value)}
+        {...fieldAria("note", failure, "coupon-new-note")}
       />
-      <FieldMessage name="note" failure={failure} ctx={NOTE_CTX} />
+      <FieldMessage inputId="coupon-new-note" name="note" failure={failure} ctx={NOTE_CTX} />
     </div>
 
     <button type="submit" data-testid="btn-create-coupon">

@@ -240,3 +240,17 @@ describe("指で押す部品の大きさ（横断-13）", () => {
     expect(adminNav && declOf(adminNav, "padding-inline-end")).toContain("var(--theme-toggle-size)");
   });
 });
+
+// ---------- 断りの出ている欄の赤枠（横断-05） ----------
+describe("断りの出ている欄の赤枠（横断-05）", () => {
+  it("赤枠は [aria-invalid] に付け、DOM の並び（欄の直後に断りの文）には頼らない", () => {
+    const rules = allRules();
+    expect(rules.filter((r) => /:has\(\+\s*\.msg\)/.test(r.selector)).map((r) => r.selector)).toEqual([]);
+    const invalid = rules.find((r) => r.selector.split(",").map((s) => s.trim()).includes('[aria-invalid="true"]'));
+    expect(invalid, '[aria-invalid="true"] の規則が無い').toBeDefined();
+    expect(declOf(invalid!, "border-color")).toBe("var(--color-danger)");
+    const dial = rules.find((r) => /:has\(\[aria-invalid="true"\]\)/.test(r.selector) && /store-dial__rail/.test(r.selector));
+    expect(dial, "ダイヤルの枠を赤くする規則が無い").toBeDefined();
+    expect(declOf(dial!, "border-color")).toBe("var(--color-danger)");
+  });
+});

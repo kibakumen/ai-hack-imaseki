@@ -32,7 +32,7 @@
 import { useState, type FormEvent } from "react";
 import type { OfferViewDto } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage, type RefusalContext } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria, type RefusalContext } from "../ui/InputRefusal";
 import { timeInJst } from "../ui/jstTime";
 import { useOfferChange, type OfferChange, type Outcome } from "./offerChange";
 import { CouponToggles, HiddenControl, NextValue, OfferStatusBadge, Remaining, StopConfirm, type OfferPanelCoupon } from "./OfferPanelParts";
@@ -288,8 +288,9 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
                     setAddCount(next);
                     setNothingToSend(false);
                   }}
+                  aria={fieldAria("count", add.failure, "offer-add-count")}
                 />
-                <FieldMessage name="count" failure={add.failure} ctx={ctxCount("追加で出す組数")} />
+                <FieldMessage inputId="offer-add-count" name="count" failure={add.failure} ctx={ctxCount("追加で出す組数")} />
                 <FormMessage failure={add.failure} fieldNames={["count"]} ctx={ctxCount("追加で出す組数")} />
               </form>
               <form className="store-tune__form" data-testid="form-reduce" noValidate onSubmit={submitReduce}>
@@ -307,8 +308,9 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
                     setReduceCount(next);
                     setNothingToSend(false);
                   }}
+                  aria={fieldAria("count", reduce.failure, "offer-reduce-count")}
                 />
-                <FieldMessage name="count" failure={reduce.failure} ctx={ctxCount("減らす組数")} />
+                <FieldMessage inputId="offer-reduce-count" name="count" failure={reduce.failure} ctx={ctxCount("減らす組数")} />
                 <FormMessage failure={reduce.failure} fieldNames={["count"]} ctx={ctxCount("減らす組数")} />
               </form>
             </div>
@@ -329,8 +331,9 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
                   max={OFFER_PARTY_MAX_MAX}
                   value={partyMax}
                   onChange={dialPartyMax}
+                  aria={fieldAria("partyMax", partyMaxChange.failure, "offer-party-max")}
                 />
-                <FieldMessage name="partyMax" failure={partyMaxChange.failure} ctx={ctxParty} />
+                <FieldMessage inputId="offer-party-max" name="partyMax" failure={partyMaxChange.failure} ctx={ctxParty} />
                 <FormMessage failure={partyMaxChange.failure} fieldNames={["partyMax"]} ctx={ctxParty} />
               </form>
             </div>

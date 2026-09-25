@@ -15,7 +15,10 @@
 import { useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { PASSWORD_MAX, PASSWORD_MIN } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+
+/** 今のパスワードが合わない断りは、欄の直下に語の文で出す */
+const MISMATCH_KINDS = ["password_mismatch"];
 
 type Props = {
   /** 決め直したあと呼ぶ側（店のホーム）が表示を取り直すため。 */
@@ -76,8 +79,9 @@ export const PasswordForm = ({ onChanged, endpoint = "/api/store/password", requ
             value={currentPassword}
             maxLength={PASSWORD_MAX}
             onChange={(event) => setCurrentPassword(event.target.value)}
+            {...fieldAria("currentPassword", failure, "current-password", { kinds: MISMATCH_KINDS })}
           />
-          <FieldMessage name="currentPassword" failure={failure} ctx={{ field: "今のパスワード" }} kinds={["password_mismatch"]} />
+          <FieldMessage name="currentPassword" inputId="current-password" failure={failure} ctx={{ field: "今のパスワード" }} kinds={MISMATCH_KINDS} />
         </>
       )}
 
@@ -90,8 +94,9 @@ export const PasswordForm = ({ onChanged, endpoint = "/api/store/password", requ
         value={password}
         maxLength={PASSWORD_MAX}
         onChange={(event) => setPassword(event.target.value)}
+        {...fieldAria("password", failure, "store-new-password")}
       />
-      <FieldMessage name="password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
+      <FieldMessage name="password" inputId="store-new-password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
 
       <button type="submit" data-testid="btn-change-password">
         {requireCurrent ? "パスワードを変える" : "パスワードを決める"}

@@ -11,7 +11,7 @@
 import { useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { REPORT_REASON_MAX, REPORT_REASON_MIN } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 
 const FIELD_NAMES = ["reason"];
 const REASON_CTX = { field: "理由", min: REPORT_REASON_MIN, max: REPORT_REASON_MAX };
@@ -55,8 +55,9 @@ export const ReportForm = ({ storeId, storeName, onClose }: Props) => {
         value={reason}
         maxLength={REPORT_REASON_MAX}
         onChange={(event) => setReason(event.target.value)}
+        {...fieldAria("reason", failure, "report-reason")}
       />
-      <FieldMessage name="reason" failure={failure} ctx={REASON_CTX} />
+      <FieldMessage name="reason" inputId="report-reason" failure={failure} ctx={REASON_CTX} />
 
       <button type="submit" data-testid="btn-send-report">
         送る

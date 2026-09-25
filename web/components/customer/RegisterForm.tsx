@@ -15,7 +15,7 @@ import { guestNickname, phoneOrPlaceholder } from "../../lib/client/guestIdentit
 import { PERSONAL_DATA_TEXTS, TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, HUMAN_CHECK_ACTIONS, NICKNAME_MAX, NICKNAME_MIN, PHONE_MAX_LENGTH } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 
 const FIELD_NAMES = ["nickname", "phone", "genres", "budgetMax"];
 const PHONE_HINT = "数字10桁か11桁";
@@ -108,8 +108,9 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
         value={nickname}
         maxLength={NICKNAME_MAX}
         onChange={(event) => setNickname(event.target.value)}
+        {...fieldAria("nickname", failure, "register-nickname")}
       />
-      <FieldMessage name="nickname" failure={failure} ctx={{ field: "呼び名", min: NICKNAME_MIN, max: NICKNAME_MAX }} />
+      <FieldMessage inputId="register-nickname" name="nickname" failure={failure} ctx={{ field: "呼び名", min: NICKNAME_MIN, max: NICKNAME_MAX }} />
 
       <label htmlFor="register-phone">電話番号（任意）</label>
       <input
@@ -120,10 +121,11 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
         value={phone}
         maxLength={PHONE_MAX_LENGTH}
         onChange={(event) => setPhone(event.target.value)}
+        {...fieldAria("phone", failure, "register-phone")}
       />
-      <FieldMessage name="phone" failure={failure} ctx={{ field: "電話番号", hint: PHONE_HINT }} />
+      <FieldMessage inputId="register-phone" name="phone" failure={failure} ctx={{ field: "電話番号", hint: PHONE_HINT }} />
 
-      <fieldset data-testid="field-genres">
+      <fieldset id="register-genres" data-testid="field-genres" {...fieldAria("genres", failure, "register-genres")}>
         <legend>好みのジャンル（いくつでも・選ばなくてもかまいません）</legend>
         {TEXTS.genres.map((genre) => (
           <label key={genre}>
@@ -132,7 +134,7 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
           </label>
         ))}
       </fieldset>
-      <FieldMessage name="genres" failure={failure} ctx={{ field: "好みのジャンル" }} />
+      <FieldMessage inputId="register-genres" name="genres" failure={failure} ctx={{ field: "好みのジャンル" }} />
 
       <label htmlFor="register-budget">1人あたりの予算の上限（任意）</label>
       <input
@@ -144,8 +146,9 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
         max={BUDGET_MAX_MAX}
         value={budgetMax}
         onChange={(event) => setBudgetMax(event.target.value)}
+        {...fieldAria("budgetMax", failure, "register-budget")}
       />
-      <FieldMessage name="budgetMax" failure={failure} ctx={{ field: "予算の上限", min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+      <FieldMessage inputId="register-budget" name="budgetMax" failure={failure} ctx={{ field: "予算の上限", min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.registerCustomer} onToken={handleToken} />}
 

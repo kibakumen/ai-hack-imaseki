@@ -13,7 +13,7 @@ import { useLoad } from "../../lib/client/useLoad";
 import { LICENSE_MAX_MEGABYTES } from "../../lib/schemas/limits";
 import { DOCUMENTS_TEXTS } from "../../lib/domain/texts";
 import { ContactEmail } from "../ui/ContactEmail";
-import { FieldKindMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldKindMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
 import { cameBackFromCardSetup, clearCardReturnMark, confirmCardSetup, resetAutoConfirmTurn, takeAutoConfirmTurn } from "./cardReturn";
 
@@ -132,8 +132,8 @@ export const DocumentsPanel = () => {
               </p>
 
               <label htmlFor="license-file">ファイルを選ぶ</label>
-              <input id="license-file" data-testid="field-file" type="file" accept={ACCEPTED_TYPES} onChange={chooseFile} />
-              <FieldKindMessage name="file" failure={licenseFailure} ctx={{ field: "ファイル", max: LICENSE_MAX_MEGABYTES }} />
+              <input id="license-file" data-testid="field-file" type="file" accept={ACCEPTED_TYPES} onChange={chooseFile} {...fieldAria("file", licenseFailure, "license-file")} />
+              <FieldKindMessage inputId="license-file" name="file" failure={licenseFailure} ctx={{ field: "ファイル", max: LICENSE_MAX_MEGABYTES }} />
 
               <button type="submit" data-testid="btn-upload-license" disabled={file === null}>
                 営業許可書を上げる

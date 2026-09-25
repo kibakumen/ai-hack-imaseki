@@ -2,6 +2,7 @@
 
 // 公開中のカード（OfferPanel）の小さな部品。値は持たず、渡されたものを描くだけ。
 
+import type { FieldAria } from "../ui/InputRefusal";
 import type { OfferAction } from "./offerChange";
 
 export type OfferPanelCoupon = { id: string; name: string; note: string };
@@ -22,6 +23,7 @@ export const HiddenControl = ({
   max,
   value,
   onChange,
+  aria = {},
 }: {
   action: OfferAction;
   inputId: string;
@@ -33,6 +35,8 @@ export const HiddenControl = ({
   max?: number;
   value: string;
   onChange: (next: string) => void;
+  /** 断りとの結びつき（components/ui/InputRefusal の fieldAria・横断-05） */
+  aria?: FieldAria;
 }) => (
   <div className="store-sr-only store-sr-only--focusable">
     <label htmlFor={inputId}>{label}</label>
@@ -45,6 +49,7 @@ export const HiddenControl = ({
       max={max}
       value={value}
       onChange={(event) => onChange(event.target.value)}
+      {...aria}
     />
     <button type="submit" data-testid={`btn-${action}`}>
       {button}
