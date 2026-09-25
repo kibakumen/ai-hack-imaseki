@@ -54,7 +54,7 @@ const installFetch = (respond: (method: string, path: string) => FakeResponse) =
   return { calls, restore: () => { globalThis.fetch = previous; } };
 };
 
-/** 少しずつ届く入口は持たない場面（普通の入口へ倒れる）。 */
+/** 取得は少しずつ届く入口（NDJSON）が0件を返す場面。普通の入口は、倒れたときの受け皿として同じ0件を返す。 */
 const routes = (method: string, path: string): FakeResponse => {
   if (path === "/api/customer/place") return { json: { label: LABEL } };
   // 取得は本番と同じく少しずつ届く入口（NDJSON）で返す（2026-09-25 設計-03。以前はわざと 404 にして普通の入口へ倒していた）
