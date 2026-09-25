@@ -95,6 +95,31 @@ export const updateStoreProfile = async (db: Db, storeId: string, profile: Store
     .run();
 };
 
+/** 保存済みの住所と位置（住所を変えていない保存で地図へ問い合わせないため・2026-09-25 監査の指摘 店-18）。 */
+export type StoreLocation = { address: string | null; lat: number | null; lng: number | null; url: string | null };
+
+export const findStoreLocation = async (db: Db, storeId: string): Promise<StoreLocation | null> => {
+  const row = await db.prepare(`SELECT address, lat, lng, url FROM stores WHERE id = ?1`).bind(storeId).first();
+  if (!row) return null;
+  return {
+    address: (row.address as string | null) ?? null,
+    lat: typeof row.lat === "number" ? row.lat : null,
+    lng: typeof row.lng === "number" ? row.lng : null,
+    url: (row.url as string | null) ?? null,
+  };
+};
+
+/**
+ * 店の情報だけを書き換え、位置（lat・lng・geocoded_at）は触らない（住所を変えていない保存・店-18）。
+ * 位置を直した時刻も触らないので、Google の利用条件の30日の手入れ（usecases/googleUpkeep）の起点はずれない。
+ */
+export const updateStoreDetails = async (db: Db, storeId: string, profile: Omit<StoreProfileRecord, "lat" | "lng">): Promise<void> => {
+  await db
+    .prepare(`UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8 WHERE id = ?1`)
+    .bind(storeId, profile.name, profile.address, profile.url, JSON.stringify(profile.genres), JSON.stringify(profile.menus), profile.budgetMin, profile.budgetMax)
+    .run();
+};
+
 // ---------- 営業許可書とカード（タスク7・要件13） ----------
 
 /** 店のホームと運営の詳細が見る、書類まわりの3つ。 */

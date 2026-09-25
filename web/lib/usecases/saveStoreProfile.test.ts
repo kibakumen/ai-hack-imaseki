@@ -43,12 +43,16 @@ describe("usecases/saveStoreProfile", () => {
     const { clock, advance } = fakeClock();
     let aborted = false;
     let wrote = false;
+    // 地図へ問い合わせ始めたら時計を進める（保存済みの住所を先に読むので、呼んだ直後には進めない・店-18）
+    let geocodeStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => (geocodeStarted = resolve));
     const deps = {
       clock,
       geocoder: {
         // 解かれるまで返らない（受け入れ検査の偽物の "hang" と同じ）。
         geocode: (_text: string, opts: { signal?: AbortSignal }) =>
           new Promise<{ ok: false }>((resolve) => {
+            geocodeStarted();
             opts.signal?.addEventListener("abort", () => {
               aborted = true;
               resolve({ ok: false });
@@ -58,6 +62,8 @@ describe("usecases/saveStoreProfile", () => {
       db: {
         prepare: () => ({
           bind: () => ({
+            // 保存済みの住所は無い（初めての保存）＝地図へ問い合わせる
+            first: async () => null,
             run: async () => {
               wrote = true;
             },
@@ -67,6 +73,7 @@ describe("usecases/saveStoreProfile", () => {
     } as unknown as Deps;
 
     const saving = saveStoreProfile(deps, "store-1", INPUT);
+    await started;
     advance(GEOCODE_TIMEOUT_MS);
 
     expect(await saving).toMatchObject({ ok: false, kind: "address_unresolved" });

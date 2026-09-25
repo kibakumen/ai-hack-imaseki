@@ -8,7 +8,7 @@
 import { inJapan } from "../domain/geo";
 import type { FieldReason } from "../domain/inputRefusal";
 import type { Deps } from "../ports";
-import { findStoreProfile, updateStoreProfile } from "../repo/stores";
+import { findStoreLocation, findStoreProfile, updateStoreDetails, updateStoreProfile } from "../repo/stores";
 import { GEOCODE_TIMEOUT_MS, MENUS_MAX } from "../schemas/limits";
 import type { StoreProfile, StoreProfileInput } from "../schemas/store";
 import { refreshStoreImage } from "./storeImage";
@@ -61,9 +61,6 @@ export const saveStoreProfile = async (deps: Deps, storeId: string, input: Store
   if (input.budgetMin > input.budgetMax) fields.push({ name: "budgetMin", reason: "min_over_max" });
   if (fields.length > 0) return { ok: false, kind: "invalid_input", fields };
 
-  const location = await locate(deps, input.address);
-  if (!location) return { ok: false, kind: "address_unresolved", fields: [{ name: "address", reason: "not_allowed" }] };
-
   // 空のままの URL は「入れていない」として null に揃える（基準 15.3）。
   const url = input.url === undefined || input.url === "" ? null : input.url;
   const record = {
@@ -76,9 +73,19 @@ export const saveStoreProfile = async (deps: Deps, storeId: string, input: Store
     budgetMax: input.budgetMax,
   };
 
-  const previousUrl = (await findStoreProfile(deps.db, storeId))?.url ?? null;
-  // 位置を Google で直した時刻も残す（利用条件の30日で取り直す起点・usecases/googleUpkeep・設計-20）
-  await updateStoreProfile(deps.db, storeId, { ...record, lat: location.lat, lng: location.lng, geocodedAt: deps.clock.now().toISOString() });
+  // 保存済みの住所と同じで、位置もあるなら、地図へ問い合わせずに前の位置のまま住所以外を書き換える
+  // （2026-09-25 監査の指摘 店-18: 予算だけを直しても毎回地図を呼び、地図の不調で何も保存できなかった）。
+  // 位置が消されている（利用条件の30日で消した・まだ無い）ときは問い合わせる。
+  const current = await findStoreLocation(deps.db, storeId);
+  const previousUrl = current?.url ?? null;
+  if (current && current.address === input.address && current.lat !== null && current.lng !== null) {
+    await updateStoreDetails(deps.db, storeId, record);
+  } else {
+    const location = await locate(deps, input.address);
+    if (!location) return { ok: false, kind: "address_unresolved", fields: [{ name: "address", reason: "not_allowed" }] };
+    // 位置を Google で直した時刻も残す（利用条件の30日で取り直す起点・usecases/googleUpkeep・設計-20）
+    await updateStoreProfile(deps.db, storeId, { ...record, lat: location.lat, lng: location.lng, geocodedAt: deps.clock.now().toISOString() });
+  }
   // 店の雰囲気画像は、ここで1回だけ取り直して置き場に置く（客の要求のたびに外へ取りに行かない・安全-12・安全-19）。
   // 画像は飾りなので、取れなくても保存は成り立つ（refreshStoreImage は例外を外へ出さない）。
   await refreshStoreImage(deps, storeId, { url, previousUrl });
