@@ -36,7 +36,8 @@
   --color-highlight: #fef3c7;
   --color-highlight-text: #7c4a09;
   --color-highlight-edge: #f0b429;
-  --color-success: #15803d;
+  /* 済んだ知らせの文字。淡い緑の地（10〜15%）の上でも 4.5:1 を保つ濃さ（#15803d では 4.03:1 だった・横断-04） */
+  --color-success: #166534;
 
   /* ---- 角丸 ---- */
   --radius-xs: 0.5rem;
@@ -585,6 +586,18 @@ form > button[type="submit"] {
   border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
   border-radius: var(--radius-xs);
   color: var(--color-danger);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+  padding: 0.375rem 0.625rem;
+}
+
+/* 済んだことの1行（components/ui/Submit の DoneNotice・横断-03）。断りの文と同じ形で、色だけ済んだ側 */
+.done-notice {
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+  border-radius: var(--radius-xs);
+  color: var(--color-success);
   font-size: 0.8125rem;
   font-weight: 600;
   margin-top: 0.25rem;

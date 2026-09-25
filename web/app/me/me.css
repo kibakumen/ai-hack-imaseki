@@ -1149,7 +1149,7 @@
   width: 1px;
 }
 .budget-chip:has(input:checked) {
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  background: var(--color-accent-soft);
   border-color: var(--color-accent);
   color: var(--color-accent-strong);
   font-weight: 700;

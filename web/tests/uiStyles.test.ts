@@ -2,7 +2,7 @@
 // jsdom は CSS を計算しないので、宣言の側を読んで確かめる（道具は tests/_css.ts）。
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { allRules, contrast, declOf, fillColors, palette, parseCss, WEB } from "./_css";
+import { allRules, contrast, declOf, fillColors, palette, parseCss, resolveColor, WEB } from "./_css";
 
 const GLOBALS = path.join(WEB, "app", "globals.css");
 
@@ -123,6 +123,26 @@ describe("明るさの比（横断-04）", () => {
         for (const stop of stops) {
           const ratio = contrast(colors["--color-accent-text"], stop);
           if (ratio < 4.5) offenders.push(`${theme}: ${path.basename(rule.file)}: ${rule.selector}（${stop} は ${ratio.toFixed(2)}:1）`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("同じ規則で文字の色と地を決めているところは、明暗の両方で 4.5:1 以上（地が読める色の式のときだけ）", () => {
+    const offenders: string[] = [];
+    for (const theme of ["light", "dark"] as const) {
+      const colors = palette(theme);
+      for (const rule of allRules()) {
+        const color = declOf(rule, "color");
+        const fill = declOf(rule, "background") ?? declOf(rule, "background-color");
+        if (color === undefined || fill === undefined) continue;
+        const fg = resolveColor(color, colors);
+        const stops = fillColors(fill, colors);
+        if (fg === null || stops === null) continue;
+        for (const stop of stops) {
+          const ratio = contrast(fg, stop);
+          if (ratio < 4.5) offenders.push(`${theme}: ${path.basename(rule.file)}: ${rule.selector}（${color} / ${stop} は ${ratio.toFixed(2)}:1）`);
         }
       }
     }
