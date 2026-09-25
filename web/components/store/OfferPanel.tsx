@@ -247,8 +247,9 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
             <div className={capacityChanged ? "store-tune__dial store-tune__dial--changed" : "store-tune__dial"} data-testid="dial-capacity">
               <p className="store-label">配信数</p>
               <Wheel min={range.min} max={range.max} value={String(capacityTarget)} onChange={dialCapacity} unit="組" size="lg" />
-              <NextValue now={String(offer.capacity)} next={capacityChanged ? String(capacityTarget) : null} unit=" 組" />
-              {range.sold > 0 ? <p className="store-note">受け取り済みの {range.sold} 組より下げられません</p> : null}
+              {/* ダイヤルは今の値を指しているので、「今 → 次」は変えたときだけ出す（縦を詰める・店-06） */}
+              {capacityChanged ? <NextValue now={String(offer.capacity)} next={String(capacityTarget)} unit=" 組" /> : null}
+              {range.sold > 0 ? <p className="store-note store-tune__floor">受け取り済みの {range.sold} 組より下げられません</p> : null}
               <form className="store-tune__form" data-testid="form-add" noValidate onSubmit={submitAdd}>
                 <HiddenControl
                   action="add"
@@ -292,7 +293,7 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
             <div className={partyChanged ? "store-tune__dial store-tune__dial--changed" : "store-tune__dial"}>
               <p className="store-label">何名まで</p>
               <Wheel min={OFFER_PARTY_MAX_MIN} max={OFFER_PARTY_MAX_MAX} value={partyTarget} onChange={dialPartyMax} unit="名" size="lg" />
-              <NextValue now={String(offer.partyMax)} next={partyChanged ? partyMax : null} unit=" 名" />
+              {partyChanged ? <NextValue now={String(offer.partyMax)} next={partyMax} unit=" 名" /> : null}
               <form className="store-tune__form" data-testid="form-party-max" noValidate onSubmit={submitPartyMax}>
                 <HiddenControl
                   action="party-max"

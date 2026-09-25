@@ -100,8 +100,15 @@ export const Remaining = ({ remaining, onCloseIntake, sending }: { remaining: nu
         <span className="store-remaining__unit">組</span>
       </span>
     </div>
-    <button type="button" className="store-btn store-btn--quiet store-btn--small" data-testid="btn-close-intake" disabled={remaining === 0 || sending} onClick={onCloseIntake}>
-      受付を締める（残りを0に）
+    <button
+      type="button"
+      className="store-btn store-btn--quiet store-btn--small"
+      data-testid="btn-close-intake"
+      title="残りを0にして、これ以上受け取られないようにします（配信数を足せばまた出ます）"
+      disabled={remaining === 0 || sending}
+      onClick={onCloseIntake}
+    >
+      受付を締める
     </button>
   </div>
 );

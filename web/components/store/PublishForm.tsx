@@ -107,7 +107,7 @@ const CouponChoices = ({
   <fieldset className="store-field store-coupon-set" data-testid="coupon-list">
     <legend>見せるクーポン（押して選ぶ・0個でもよい）</legend>
     {coupons.length === 0 ? <p className="store-empty">クーポンはまだありません。</p> : null}
-    <div className="store-coupons">
+    <div className="store-coupons store-coupons--wrap">
       {coupons.map((coupon) => {
         const on = selected.includes(coupon.id);
         return (
