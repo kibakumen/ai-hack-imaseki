@@ -182,8 +182,12 @@ const ARRIVAL_KIND_LABELS: Record<string, string> = {
   store_cancelled: "店が取り消し",
 };
 
-/** 断った理由＝その確保の今の状態（基準 20.20）。6つの状態のどれでも文が在る。 */
-const ARRIVAL_REFUSED_TEXTS: Record<string, string> = {
+/**
+ * 断った理由＝その確保の今の状態（基準 20.20）。6つの状態のどれでも文が在る。
+ * **操作ごとに表を分ける**（2026-09-25 監査の指摘 店-10）——それまでは完了向けの1つの表を取り消しでも引き、
+ * 取り消しが断られても「完了済みにできませんでした」「20分を過ぎたため」と出ていた。
+ */
+const ARRIVAL_COMPLETE_REFUSED_TEXTS: Record<string, string> = {
   active: "この確保の状態が変わったため、完了済みにできませんでした。",
   expired: "期限切れから20分を過ぎたため、完了済みにできませんでした。",
   completed: "この確保はすでに完了済みです。",
@@ -191,12 +195,30 @@ const ARRIVAL_REFUSED_TEXTS: Record<string, string> = {
   store_cancelled: "この確保は取り消されていました。",
   admin_cancelled: "運営が取り消していたため、完了済みにできませんでした。",
 };
+/** 期限から20分以内でも、客が新しく確保し直した行（基準 20.12）。20分を過ぎたとは言わない */
+const ARRIVAL_COMPLETE_NEWER_TEXT = "この客はあとから確保し直したため、この行は完了済みにできません。新しい確保の行で完了にしてください。";
+
+const ARRIVAL_CANCEL_REFUSED_TEXTS: Record<string, string> = {
+  active: "この確保の状態が変わったため、取り消せませんでした。",
+  expired: "期限が過ぎているため、取り消せません。期限が過ぎた確保は自動で終わり、枠も戻っています。",
+  completed: "この確保はすでに完了済みのため、取り消せません。",
+  customer_cancelled: "客が先に取り消していました。",
+  store_cancelled: "この確保はすでに取り消されています。",
+  admin_cancelled: "運営が先に取り消していました。",
+};
+
+/** 断りの応答の「今の状態」（`current`）のうち、文を選ぶのに要る所だけ。 */
+type ArrivalRefusedState = { state: string; newerReservation?: boolean };
 
 export const ARRIVALS_TEXTS = {
   /** 行の見出し（基準 20.1・20.5・20.14・20.16） */
   kindLabel: (kind: string): string => ARRIVAL_KIND_LABELS[kind] ?? "確保中",
-  /** 断られたときに行の下へ出す文（基準 20.20） */
-  refused: (state: string): string => ARRIVAL_REFUSED_TEXTS[state] ?? "この確保の状態が変わったため、完了済みにできませんでした。",
+  /** 断られたときに一覧の下へ出す文（基準 20.20）。押した操作（完了か取り消しか）で表を選ぶ（店-10） */
+  refused: (action: "complete" | "store-cancel", current: ArrivalRefusedState): string => {
+    if (action === "store-cancel") return ARRIVAL_CANCEL_REFUSED_TEXTS[current.state] ?? ARRIVAL_CANCEL_REFUSED_TEXTS.active;
+    if (current.state === "expired" && current.newerReservation === true) return ARRIVAL_COMPLETE_NEWER_TEXT;
+    return ARRIVAL_COMPLETE_REFUSED_TEXTS[current.state] ?? ARRIVAL_COMPLETE_REFUSED_TEXTS.active;
+  },
   /** 出す行が1件も無いとき（基準 20.18） */
   empty: "向かっている客はいません。",
   /** 行と確かめに出す客の呼び方。客が呼び名を決めていなければ「お客さま」（見分けはコード・横断-02） */

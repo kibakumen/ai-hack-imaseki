@@ -119,8 +119,8 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
       await newer.customer.api.post("/api/customer/reservations", { retryOf: newer.reservation.id });
       return [
         { name: "20分以内の期限切れ", scene: within20, minutes: 25, ok: true },
-        { name: "20分を過ぎた期限切れ", scene: over20, minutes: 41, ok: false, state: "expired" },
-        { name: "客が新しい確保を作った期限切れ", scene: newer, minutes: 25, ok: false, state: "expired" },
+        { name: "20分を過ぎた期限切れ", scene: over20, minutes: 41, ok: false, state: "expired", newer: false },
+        { name: "客が新しい確保を作った期限切れ", scene: newer, minutes: 25, ok: false, state: "expired", newer: true },
       ];
     })()) {
       at(ctx, r.minutes);
@@ -130,6 +130,8 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
       else {
         expect(res.status, r.name).toBe(409);
         expect(res.json.current.state, r.name).toBe(r.state);
+        // 同じ「期限切れ」でも、客が新しく確保し直したのか20分を過ぎたのかを分けて返す（画面が理由を取り違えない・店-10）
+        expect(res.json.current.newerReservation === true, r.name).toBe(r.newer);
         expect(await snapshot(ctx.db), r.name).toBe(before);
       }
     }
@@ -243,7 +245,7 @@ describeTask("21", "止められている店の完了済み（20.23・20.24）�
 
   // 画面が「運営に止められているため」と出せる理由が返る（基準 20.25）。以前は3つの語のどれでも通す正規表現で、
   // 実際に返っている expired（期限切れ）との取り違えを見逃していた（設計-04）。
-  it.fails("既知の不具合（店-10）: 止められている店が期限切れの行を完了済みにしようとすると、理由として store_banned が返る", async () => {
+  it("店-10 止められている店が期限切れの行を完了済みにしようとすると、理由として store_banned が返る", async () => {
     at(ctx, 0);
     const s = await receivedScene(ctx);
     at(ctx, 25);
@@ -251,7 +253,7 @@ describeTask("21", "止められている店の完了済み（20.23・20.24）�
     const res = await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {});
     at(ctx, 0);
     expect(res.status).toBe(409);
-    expect(res.json.error?.kind ?? res.json.current?.state).toBe("store_banned");
+    expect(res.json.error?.kind).toBe("store_banned");
   });
 
   it("20.15・20.19 運営に取り消された行は一覧から消え、その確保は完了済みにできない", async () => {

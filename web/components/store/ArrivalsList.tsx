@@ -116,6 +116,8 @@ const ConfirmDialog = ({
 export const ArrivalsList = ({ rows, onChanged }: Props) => {
   const [pending, setPending] = useState<{ action: ArrivalAction; row: ArrivalsListRow } | null>(null);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
+  /** 断られた操作（断りの文を操作ごとに選ぶ・店-10） */
+  const [failedAction, setFailedAction] = useState<ArrivalAction>("complete");
 
   const ask = (action: ArrivalAction, row: ArrivalsListRow) => {
     setFailure(null);
@@ -128,6 +130,7 @@ export const ArrivalsList = ({ rows, onChanged }: Props) => {
     const result = await callApi(ROUTE_OF[action], { params: { id: row.reservationId }, body: {} });
     const refused = isFailure(result);
     setFailure(refused ? result : null);
+    setFailedAction(action);
     // 手が離せない店でも気づけるように、通った時だけ音を鳴らす（鳴らせない環境では何も起きない）
     if (!refused) playNotifyBeep();
     // 断られたときも取り直す——古い行が残っているのが断りの原因なので（基準 20.21）
@@ -177,7 +180,7 @@ export const ArrivalsList = ({ rows, onChanged }: Props) => {
       {/* 断った理由は、状態による断り（今の状態）と、それ以外の断りで出し口が分かれる（設計書「入口の一覧」の3つの形） */}
       {failure?.current ? (
         <p className="msg" role="alert" data-testid="msg-form">
-          {ARRIVALS_TEXTS.refused(failure.current.state)}
+          {ARRIVALS_TEXTS.refused(failedAction, failure.current)}
         </p>
       ) : (
         <FormMessage failure={failure} />

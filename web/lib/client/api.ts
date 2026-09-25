@@ -41,8 +41,11 @@ export type ApiFailure = {
   ok: false;
   error?: { kind: string; fields?: FieldRefusal[]; [extra: string]: unknown };
   refusal?: { kind: string; nextStep: string; [extra: string]: unknown };
-  /** `changed` は、運営が見たあとで店の内容が変わった断り（運営の承認と確かめ・運営-02） */
-  current?: { state: string; changed?: boolean };
+  /**
+   * `changed` は、運営が見たあとで店の内容が変わった断り（運営の承認と確かめ・運営-02）。
+   * `newerReservation` は、期限から20分以内の期限切れでも客が確保し直したので完了済みにできない断り（店-10）
+   */
+  current?: { state: string; changed?: boolean; newerReservation?: boolean };
   home?: unknown;
 };
 

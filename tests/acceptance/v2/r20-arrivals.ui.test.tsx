@@ -102,6 +102,39 @@ describeTask("18", "店の取り消し（画面）: 21.2 確かめ、21.3 理由
     api?.restore();
   });
 
+  // 2026-09-25 断りの文が取り消しでも「完了済みにできませんでした」と出る件（店-10）: 断りの文は操作ごとに分ける。
+  it("店-10 取り消しが断られたときは取り消しの文が出る（「完了済み」「20分を過ぎた」と言わない）", async () => {
+    api = installFakeApi({
+      "GET /api/store/home": () => ({ json: storeHomeDto({ offer: offerDto(), arrivals: [row()] }) }),
+      "GET /api/config/public": publicConfig,
+      "POST /api/store/reservations/:id/cancel": () => ({ status: 409, json: { ok: false, current: { state: "expired" } } }),
+    });
+    const StoreHome = await componentOf("components/store/StoreHome", "StoreHome");
+    render(<StoreHome />);
+    await screen.findByTestId("arrivals");
+    fireEvent.click(within(screen.getByTestId(TID.row("r1"))).getByTestId(TID.btn("store-cancel")));
+    fireEvent.click(within(await screen.findByTestId("confirm-store-cancel")).getByTestId(TID.btn("confirm")));
+    const message = await screen.findByTestId(TID.msgForm);
+    expect(message.textContent).toMatch(/取り消せ/);
+    expect(message.textContent).not.toMatch(/完了済み|20分を過ぎた/);
+  });
+
+  it("店-10 客が新しく確保し直した期限切れの行の完了が断られたときは、20分を過ぎたとは言わず、確保し直したことを出す", async () => {
+    api = installFakeApi({
+      "GET /api/store/home": () => ({ json: storeHomeDto({ offer: offerDto(), arrivals: [row({ kind: "expired", canCancel: false })] }) }),
+      "GET /api/config/public": publicConfig,
+      "POST /api/store/reservations/:id/complete": () => ({ status: 409, json: { ok: false, current: { state: "expired", newerReservation: true } } }),
+    });
+    const StoreHome = await componentOf("components/store/StoreHome", "StoreHome");
+    render(<StoreHome />);
+    await screen.findByTestId("arrivals");
+    fireEvent.click(within(screen.getByTestId(TID.row("r1"))).getByTestId(TID.btn("complete")));
+    fireEvent.click(within(await screen.findByTestId("confirm-complete")).getByTestId(TID.btn("confirm")));
+    const message = await screen.findByTestId(TID.msgForm);
+    expect(message.textContent).toMatch(/確保し直/);
+    expect(message.textContent).not.toMatch(/20分を過ぎた/);
+  });
+
   it("21.2・21.3 取り消しを押すと客に知らせが送られることの確かめが出て、理由の欄が無く、確かめてから要求が出る", async () => {
     api = installFakeApi({ "GET /api/store/home": () => ({ json: storeHomeDto({ offer: offerDto(), arrivals: [row()] }) }), "GET /api/config/public": publicConfig, "POST /api/store/reservations/:id/cancel": () => ({ json: { ok: true } }) });
     const StoreHome = await componentOf("components/store/StoreHome", "StoreHome");
