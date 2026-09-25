@@ -269,6 +269,9 @@ describe("客の画面の入口（登録を客に見せない）", () => {
     const { container } = render(<GuestEntry />);
     await screen.findByTestId("human-check");
     expect(container.querySelector(".human-check-quiet")).toBeTruthy();
+    // 送り始める前に、どこへ何が送られるかを添える（安全-18）
+    expect(screen.getByTestId("human-check-note").textContent).toMatch(/Cloudflare/);
+    expect(screen.getByTestId("human-check-note").querySelector('a[href="/privacy"]')).toBeTruthy();
     expect(screen.queryByTestId("human-check-prompt")).toBeNull();
 
     await act(async () => {

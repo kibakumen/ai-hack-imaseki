@@ -28,6 +28,7 @@
 //     **部品を描いたまま**待つ。部品が失敗を知らせたら待たずに受け皿へ。遅れた値を拾う別の待ち（部品ごと
 //     外していたので値が二度と届かなかった）は消した。
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { callApi, getPublicConfig, isFailure, isUnauthenticated } from "../../lib/client/api";
 import { guestNickname, phoneOrPlaceholder } from "../../lib/client/guestIdentity";
@@ -174,6 +175,12 @@ export const GuestEntry = () => {
         <div className={slow ? "human-check-visible" : "human-check-quiet"}>
           <HumanCheck siteKey={siteKey} onToken={handleToken} onError={handleError} />
         </div>
+      ) : null}
+      {/* 送り始める前に、どこへ何が送られるかを1行で添える（2026-09-25 監査の指摘 安全-18） */}
+      {siteKey !== null ? (
+        <p className="human-check-note" data-testid="human-check-note">
+          人かどうかの確かめに Cloudflare Turnstile を使い、ブラウザの情報が Cloudflare に送られます（<Link href="/privacy">送信先の一覧</Link>）。
+        </p>
       ) : null}
     </main>
   );
