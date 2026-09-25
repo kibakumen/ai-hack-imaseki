@@ -170,9 +170,13 @@ describe("受け取ったあとの演出", () => {
   });
 
   describe("経路の出発地", () => {
-    it("探した起点が座標のとき（欄は現在地のまま）: その座標が origin に渡る", async () => {
+    // 2026-09-25 監査の指摘 客-11: 現在地で探した客にまで探した時点の座標を固定の出発地として付けていた。
+    // 歩き出したあとの経路が探した場所から引かれるので、現在地で探したときは付けない（マップが今の現在地から引く）。
+    it("探した起点が現在地（欄は現在地のまま）のとき: origin を付けない（マップが今の現在地から引く）", async () => {
       await receiveOne();
-      expect((await routeParams()).get("origin")).toBe("35.6,139.7");
+      const params = await routeParams();
+      expect(params.has("origin")).toBe(false);
+      expect(params.get("destination")).toBe("受け取りの店 東京都渋谷区道玄坂1-1");
     });
 
     it("打った場所の文字で探したとき: その文字が origin に渡る（現在地ではない）", async () => {

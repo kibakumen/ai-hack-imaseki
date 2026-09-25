@@ -384,6 +384,8 @@ const CustomerScreens = () => {
    *   3. そのタブで覚えた起点（`sessionStorage`）。新しいタブ・別のタブ・保存を止めた端末では空——
    *      2回目の直しがチームの環境で効かなかった理由。
    * どれも無ければ null＝渡さない（嘘の起点を付けるより、マップに現在地から引かせる方がまし）。
+   * **現在地で探したときは3つとも空**（サーバーは出発地を返さず、画面も覚えない・2026-09-25 監査の指摘 客-11）
+   * ——探した時点の座標を固定の出発地にすると、歩き出したあとの経路が探した場所から引かれる。
    */
   const routeFrom = reservation === undefined ? null : (reservation.origin ?? fetchResult?.from ?? recallOrigin());
 

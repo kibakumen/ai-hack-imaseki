@@ -66,8 +66,11 @@ const toCandidate = (origin: Point, row: CandidateRow) => ({
 
 type Candidate = ReturnType<typeof toCandidate>;
 
+/** 決まった起点と、その種類（現在地か、打った場所か・記録に残して経路の出発地に使う・客-11）。 */
+type ResolvedOrigin = { ok: true; origin: Point; kind: "here" | "place" };
+
 /** 起点を決める（基準 3.2・3.4・3.5・3.6）。文字があれば現在地は使わない。 */
-const resolveOrigin = async (deps: Deps, input: FetchInput, deadline: Promise<void>): Promise<{ ok: true; origin: Point } | { ok: false; refusal: FetchOffersResult }> => {
+const resolveOrigin = async (deps: Deps, input: FetchInput, deadline: Promise<void>): Promise<ResolvedOrigin | { ok: false; refusal: FetchOffersResult }> => {
   const place = typeof input.place === "string" ? input.place.trim() : "";
   if (place !== "") {
     const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deadline, (signal) => deps.geocoder.geocode(place, { signal }));
@@ -75,9 +78,9 @@ const resolveOrigin = async (deps: Deps, input: FetchInput, deadline: Promise<vo
     const point = { lat: answer.value.lat, lng: answer.value.lng };
     // 日本の外は「位置に直せなかった」として扱う（基準 3.6）
     if (!inJapan(point)) return { ok: false, refusal: PLACE_UNRESOLVED };
-    return { ok: true, origin: point };
+    return { ok: true, origin: point, kind: "place" };
   }
-  if (typeof input.lat === "number" && typeof input.lng === "number") return { ok: true, origin: { lat: input.lat, lng: input.lng } };
+  if (typeof input.lat === "number" && typeof input.lng === "number") return { ok: true, origin: { lat: input.lat, lng: input.lng }, kind: "here" };
   return { ok: false, refusal: ORIGIN_MISSING };
 };
 
@@ -187,7 +190,7 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   const coupons = await findCouponsForStores(deps.db, selections.map((selection) => selection.storeId));
   const items = buildItems(selections, ranked, coupons);
 
-  const fetchId = await record(deps, { customerId, input, origin, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
+  const fetchId = await record(deps, { customerId, input, origin, originKind: resolved.kind, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
   return { ok: true, fetchId, items, pitchTargets: buildPitchTargets(items, ranked) };
 };
 
@@ -224,6 +227,7 @@ type RecordInput = {
   customerId: string;
   input: FetchInput;
   origin: Point;
+  originKind: "here" | "place";
   genres: string[];
   budgetMax: number | null;
   startedAt: Date;
@@ -247,6 +251,7 @@ const record = async (deps: Deps, input: RecordInput): Promise<string> => {
     customerId: input.customerId,
     originLat: input.origin.lat,
     originLng: input.origin.lng,
+    originKind: input.originKind,
     party: input.input.party,
     genres: JSON.stringify(input.genres),
     budgetMax: input.budgetMax,
