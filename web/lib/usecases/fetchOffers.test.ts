@@ -131,18 +131,13 @@ describe("取得1回の記録は1つのまとまりで書く（不具合-08 の�
   });
 });
 
-describe("起点の出どころを記録に残す（設計-20: Google の中身かどうかで、30日の手入れの対象を分ける）", () => {
-  it("場所の文字を位置に直した起点は 'place'、端末の現在地は 'device' として残り、応答のあとの手入れを預ける", async () => {
+describe("Google から来た店の座標の手入れを預ける（設計-20）", () => {
+  it("取得のたびに、応答のあとの手入れ（1時間に1回まで・usecases/googleUpkeep）を預ける", async () => {
     const kept: Array<Promise<unknown>> = [];
     const deps: Deps = { ...ctx.deps, defer: (task) => kept.push(task) };
     ctx.geocoder.set("渋谷駅", SHIBUYA);
-    const byPlace = await fetchOffers(deps, customerId, { party: 2, place: "渋谷駅" });
-    const byDevice = await fetchOffers(deps, customerId, { party: 2, lat: SHIBUYA.lat, lng: SHIBUYA.lng });
-    const sourceOf = async (result: typeof byPlace) =>
-      (await one<{ origin_source: string | null }>(ctx.db, "SELECT origin_source FROM fetch_logs WHERE id = ?1", result.ok ? result.fetchId : ""))?.origin_source;
-    expect(await sourceOf(byPlace)).toBe("place");
-    expect(await sourceOf(byDevice)).toBe("device");
-    // 取得ごとに手入れを1つ預ける（走るのは1時間に1回まで・usecases/googleUpkeep）
+    await fetchOffers(deps, customerId, { party: 2, place: "渋谷駅" });
+    await fetchOffers(deps, customerId, { party: 2, lat: SHIBUYA.lat, lng: SHIBUYA.lng });
     expect(kept).toHaveLength(2);
     await Promise.all(kept);
   });

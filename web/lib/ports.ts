@@ -65,7 +65,12 @@ export type PitchWriter = {
 };
 
 export type Geocoder = {
-  geocode(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; lat: number; lng: number } | { ok: false }>;
+  /**
+   * 住所・場所の文字を位置へ直す。直せなかったときの `notFound: true` は「住所が位置に直らないと Google が答えた」
+   * （0件）で、打ち切り・通信の失敗・上限・鍵の拒否では付けない（2026-09-25 設計-20 のレビュー: 30日の手入れが、
+   * 外の一時的な障害と住所のせいを分けて扱うため）。付けない実物・偽物は、どちらか分からないものとして扱われる。
+   */
+  geocode(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; lat: number; lng: number } | { ok: false; notFound?: boolean }>;
   /**
    * 位置を地名へ直す（逆方向）。客の画面が**開いた瞬間に場所の欄へ地名を入れる**ために使う
    * （2026-09-22 の本人の指摘「開いた瞬間にここに現在地の文字に変換した場所が入っていて」）。

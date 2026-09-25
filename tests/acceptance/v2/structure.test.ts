@@ -330,23 +330,14 @@ describeTask("25", "全入口の横断: 入口の一覧・依存の向き・断�
     expect(valueReaders).toEqual([path.join("web", "lib", "usecases", "receiveOffer.ts")]);
   });
 
-  // ⚠️ 例外は1つだけ（2026-09-25 監査の指摘 設計-20 の案1・AI判断）: Google の利用条件（Geocoding の緯度と経度は連続30日まで）
-  // に沿わせるため、repo/googleData.ts の1文が、30日を過ぎた取得の起点の座標2列を約1kmに丸める。行は消さず、ほかの列も触らない。
-  // 要件27.7・28.10 の書き換えは文書の側へ申し送った（本人の確認待ち）。
-  const GOOGLE_RETENTION = path.join(WEB, "lib", "repo", "googleData.ts");
-  it("27.7 記録の5つの表に対する UPDATE と DELETE の文がリポジトリに無い（起点の座標を30日で丸める1文だけが例外）。repo/logs.ts は insert だけ", () => {
+  it("27.7 記録の5つの表に対する UPDATE と DELETE の文がリポジトリに無い。repo/logs.ts は insert だけ", () => {
     const LOG_TABLES = ["fetch_logs", "fetch_items", "selections", "reservation_events", "ai_calls"];
     for (const f of [...srcUnder("lib"), ...srcUnder("app")]) {
-      const text = f === GOOGLE_RETENTION ? read(f).replace(/UPDATE fetch_logs SET origin_lat = ROUND\(origin_lat, \?2\), origin_lng = ROUND\(origin_lng, \?2\)\s/, "") : read(f);
+      const text = read(f);
       for (const t of LOG_TABLES) {
         expect(text, `${rel(f)}: ${t}`).not.toMatch(new RegExp(`(UPDATE|DELETE\\s+FROM)\\s+"?${t}"?\\b`, "i"));
       }
     }
-    // 例外の1文は、30日より前の行の起点の座標2列を丸めるだけ（消さない・ほかの列を変えない）
-    const retention = read(GOOGLE_RETENTION);
-    expect(retention.match(/UPDATE fetch_logs/g) ?? []).toHaveLength(1);
-    expect(retention).toMatch(/UPDATE fetch_logs SET origin_lat = ROUND\(origin_lat, \?2\), origin_lng = ROUND\(origin_lng, \?2\)\s+WHERE at < \?1/);
-    expect(retention).not.toMatch(/DELETE\s+FROM\s+fetch_logs/i);
     const logs = read(path.join(WEB, "lib", "repo", "logs.ts"));
     expect(logs).toMatch(/INSERT/i);
     expect(logs).not.toMatch(/\bUPDATE\b|\bDELETE\b/i);

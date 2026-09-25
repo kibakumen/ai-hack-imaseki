@@ -3,7 +3,9 @@
 // 鍵を使うのはここだけで、画面には渡らない。打ち切りは呼ぶ側が AbortSignal で渡す
 // （店の住所は usecases/saveStoreProfile、場所の文字は取得の手続き）。
 //
-// 0件・失敗・応答の形が違う、のどれも { ok: false }（「直せなかった」）へ倒す。
+// 0件・失敗・応答の形が違う、のどれも { ok: false }（「直せなかった」）へ倒す。0件（ZERO_RESULTS）だけは
+// `notFound: true` を添える——住所が位置に直らないのか、外の障害なのかを、30日の手入れ（usecases/googleUpkeep）が
+// 分けて扱うため（2026-09-25 設計-20 のレビュー）。
 // 日本の範囲の外かどうかは呼ぶ側が domain/geo の inJapan で見る（基準 3.6・15.11）。
 
 import type { Geocoder } from "../ports";
@@ -90,8 +92,11 @@ export const createGeocoder = ({ apiKey, fetch: fetchImpl = globalThis.fetch, no
     }
   };
 
-  /** 問い合わせを1回投げて、当たった応答の `results` を返す（読めない・0件は null）。 */
-  const ask = async (params: Record<string, string>, signal: AbortSignal | undefined): Promise<GeocodeResponse["results"] | null> => {
+  /**
+   * 問い合わせを1回投げて、当たった応答の `results` を返す。0件（ZERO_RESULTS）は "not_found"、
+   * 読めない・上限・鍵の拒否・打ち切り・通信の失敗は null（どちらも呼ぶ側には「直せなかった」）。
+   */
+  const askFor = async (params: Record<string, string>, signal: AbortSignal | undefined): Promise<GeocodeResponse["results"] | "not_found" | null> => {
     try {
       const url = new URL(GEOCODE_URL);
       for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
@@ -101,13 +106,19 @@ export const createGeocoder = ({ apiKey, fetch: fetchImpl = globalThis.fetch, no
       const res = await fetchImpl(url, { signal });
       if (!res.ok) return null;
       const json = (await res.json()) as GeocodeResponse;
-      // ZERO_RESULTS・OVER_QUERY_LIMIT・REQUEST_DENIED はどれも「直せなかった」。
+      if (json.status === "ZERO_RESULTS") return "not_found";
+      // OVER_QUERY_LIMIT・REQUEST_DENIED・UNKNOWN_ERROR は「直せなかった」（住所のせいとは限らない）。
       if (json.status !== "OK") return null;
       return json.results ?? null;
     } catch {
       // 打ち切り・通信の失敗・JSON でない応答。
       return null;
     }
+  };
+  /** `askFor` の0件を null に畳む（0件と失敗を分けない問い合わせ用） */
+  const ask = async (params: Record<string, string>, signal: AbortSignal | undefined): Promise<GeocodeResponse["results"] | null> => {
+    const results = await askFor(params, signal);
+    return results === "not_found" ? null : results;
   };
 
   /** 2段目: Geocoding で1件に解決し、それを候補1件として返す（Geocoding は1問い合わせにつき1件しか返さない） */
@@ -123,7 +134,8 @@ export const createGeocoder = ({ apiKey, fetch: fetchImpl = globalThis.fetch, no
     geocode: async (text, opts) => {
       // 空の文字は外へ聞かずに「直せなかった」（呼ぶ側が断る）。
       if (text.trim() === "") return { ok: false };
-      const results = await ask({ address: text, region: "jp" }, opts.signal);
+      const results = await askFor({ address: text, region: "jp" }, opts.signal);
+      if (results === "not_found") return { ok: false, notFound: true };
       const location = results?.[0]?.geometry?.location;
       if (typeof location?.lat !== "number" || typeof location?.lng !== "number") return { ok: false };
       return { ok: true, lat: location.lat, lng: location.lng };

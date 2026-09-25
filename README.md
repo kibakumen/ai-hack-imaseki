@@ -183,6 +183,11 @@ migration の決まり:
 - **本番に当たった migration は書き換えない**（`0001`・`0002`、当てたあとの `0003` 以降も）。変えるときは新しい番号の migration を足す。適用済みの `0001` を後から書き換えた前例があり、`web/tests/deployProcedure.test.ts` が `0001`・`0002` の中身をハッシュで見張る
 - **番号は重ねない**（同じ番号の2本は、当てる順が名前の並びに任される。同じ検査が見張る）。本線に入っていない枝 `feat/email-verify` にも `0003_email_verification.sql` がある——合流させるときは、本番に当たっていない側を空いている次の番号へ付け替えてから合流する
 - migration を当てずにコードだけを出すと、列や制約が無いまま動いて500になる（`0002` のときに起きた）。`deploy` 以外の手で公開しない
+- `0009_google_terms.sql` は、それより前に座標を保存した店に「Google で位置に直した時刻」を店の登録の時刻で埋め、30日の取り直しの対象に入れる。**デモの店（座標を手で置いた店）はメールアドレスが `@example.com` であることで見分けて外す**ので、当てる前に本番のデモの店の数を確かめる（読むだけ。種データの店は6軒）:
+
+  ```bash
+  pnpm --dir web exec wrangler d1 execute ai-hack-v2 --remote --command "SELECT COUNT(*) AS demo_stores FROM accounts WHERE role = 'store' AND email LIKE '%@example.com'"
+  ```
 
 Worker の秘密（5.2 の6つ）は、初回の公開のあとに Cloudflare 側へ送る（未送信なら送る）:
 

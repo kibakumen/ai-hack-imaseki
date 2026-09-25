@@ -68,10 +68,7 @@ const toCandidate = (origin: Point, row: CandidateRow) => ({
 type Candidate = ReturnType<typeof toCandidate>;
 
 /** 起点を決める（基準 3.2・3.4・3.5・3.6）。文字があれば現在地は使わない。 */
-/** 起点の出どころ（'place' は Google で位置に直した・'device' は端末の現在地。記録に残す・設計-20） */
-type OriginSource = "place" | "device";
-
-const resolveOrigin = async (deps: Deps, input: FetchInput): Promise<{ ok: true; origin: Point; source: OriginSource } | { ok: false; refusal: FetchOffersResult }> => {
+const resolveOrigin = async (deps: Deps, input: FetchInput): Promise<{ ok: true; origin: Point } | { ok: false; refusal: FetchOffersResult }> => {
   const place = typeof input.place === "string" ? input.place.trim() : "";
   if (place !== "") {
     // 地図の打ち切りの合図は、地図を呼ぶ直前（この関数の最初の await より前）に作る（raceDeadline の注）
@@ -80,9 +77,9 @@ const resolveOrigin = async (deps: Deps, input: FetchInput): Promise<{ ok: true;
     const point = { lat: answer.value.lat, lng: answer.value.lng };
     // 日本の外は「位置に直せなかった」として扱う（基準 3.6）
     if (!inJapan(point)) return { ok: false, refusal: PLACE_UNRESOLVED };
-    return { ok: true, origin: point, source: "place" };
+    return { ok: true, origin: point };
   }
-  if (typeof input.lat === "number" && typeof input.lng === "number") return { ok: true, origin: { lat: input.lat, lng: input.lng }, source: "device" };
+  if (typeof input.lat === "number" && typeof input.lng === "number") return { ok: true, origin: { lat: input.lat, lng: input.lng } };
   return { ok: false, refusal: ORIGIN_MISSING };
 };
 
@@ -195,8 +192,8 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   const coupons = await findCouponsForStores(deps.db, selections.map((selection) => selection.storeId));
   const items = buildItems(selections, ranked, coupons);
 
-  const fetchId = await record(deps, { customerId, input, origin, originSource: resolved.source, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
-  // Google から来た座標の30日の手入れ（1時間に1回まで・応答のあとに走る・設計-20）
+  const fetchId = await record(deps, { customerId, input, origin, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
+  // Google から来た店の座標の30日の手入れ（1時間に1回まで・応答のあとに走る・設計-20）
   scheduleGoogleUpkeep(deps);
   return { ok: true, fetchId, items, pitchTargets: buildPitchTargets(items, ranked) };
 };
@@ -234,7 +231,6 @@ type RecordInput = {
   customerId: string;
   input: FetchInput;
   origin: Point;
-  originSource: OriginSource;
   genres: string[];
   budgetMax: number | null;
   startedAt: Date;
@@ -261,7 +257,6 @@ const record = async (deps: Deps, input: RecordInput): Promise<string> => {
       customerId: input.customerId,
       originLat: input.origin.lat,
       originLng: input.origin.lng,
-      originSource: input.originSource,
       party: input.input.party,
       genres: JSON.stringify(input.genres),
       budgetMax: input.budgetMax,
