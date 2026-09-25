@@ -277,6 +277,8 @@ export const StoreDetail = ({ storeId, listQuery }: Props) => {
   if (state.status !== "ready" && state.status !== "empty") {
     return (
       <main className={styles.page}>
+        {/* 読めるまでの見出し（横断-12。読めたら店名が h1 になる） */}
+        <h1>店の詳細</h1>
         <LoadView state={state} onRetry={() => void reload()}>
           {() => null}
         </LoadView>

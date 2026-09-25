@@ -49,6 +49,7 @@ import { RESERVATION_CODE_ID, ReservationView } from "./ReservationView";
 import { ResultList, type ResultItem } from "./ResultList";
 import { StoreCancelledView } from "./StoreCancelledView";
 import { useMeServiceWorker } from "./useMeServiceWorker";
+import { CustomerMain } from "./CustomerMain";
 import { CustomerRefusals } from "../ui/InputRefusal";
 import { DoneNotice } from "../ui/Submit";
 import { LoadView } from "../ui/LoadState";
@@ -360,28 +361,28 @@ const CustomerScreens = () => {
   };
   const togglePanel = (next: Panel) => setPanel((current) => (current === next ? "none" : next));
 
-  if (!loaded) return <main aria-busy="true" />;
+  if (!loaded) return <CustomerMain busy />;
 
   if (home === null && unreachable !== null) {
     return (
-      <main>
+      <CustomerMain>
         <LoadView state={{ status: "failed", failure: unreachable }} onRetry={polling.refreshNow}>
           {() => null}
         </LoadView>
-      </main>
+      </CustomerMain>
     );
   }
 
   if (home === null) {
     return (
-      <main>
+      <CustomerMain>
         {erased ? (
           <p className="msg" role="status" data-testid="erased-notice">
             この端末の登録を消しました。
           </p>
         ) : null}
         <RegisterForm onRegistered={polling.refreshNow} />
-      </main>
+      </CustomerMain>
     );
   }
 
@@ -486,7 +487,7 @@ const CustomerScreens = () => {
     ) : null;
 
   return (
-    <main>
+    <CustomerMain>
       {/* 読み上げの領域（目には見えない）。中身が変わると読み上げられる（客-08） */}
       <p className="visually-hidden" role="status" data-testid="live-status">
         {announcement}
@@ -571,7 +572,7 @@ const CustomerScreens = () => {
           polling.refreshNow();
         }}
       />
-    </main>
+    </CustomerMain>
   );
 };
 

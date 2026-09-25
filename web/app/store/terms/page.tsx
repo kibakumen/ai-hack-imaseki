@@ -13,7 +13,7 @@ import { ContactEmail } from "../../../components/ui/ContactEmail";
 import { STORE_TERMS_VERSION } from "../../../lib/schemas/limits";
 import "./terms.css";
 
-export const metadata: Metadata = { title: "店向けの利用規約 | イマセキ" };
+export const metadata: Metadata = { title: "店向けの利用規約" };
 
 export default function StoreTermsPage() {
   return (

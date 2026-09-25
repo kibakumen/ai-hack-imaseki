@@ -106,7 +106,10 @@ export const DocumentsPanel = () => {
 
   return (
     <section className="store-stack">
-      <h2>書類</h2>
+      {/* 画面の見出し（横断-12）。タブ（StoreNav）はページがこの前に置く */}
+      <div className="store-head">
+        <h1>書類</h1>
+      </div>
 
       <LoadView state={state} onRetry={() => void reload()}>
         {(view) => (

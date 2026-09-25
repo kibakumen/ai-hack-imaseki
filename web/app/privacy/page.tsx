@@ -11,7 +11,7 @@ import type { Metadata } from "next";
 import { ContactEmail } from "../../components/ui/ContactEmail";
 import "./privacy.css";
 
-export const metadata: Metadata = { title: "送信先と個人情報の扱い | イマセキ" };
+export const metadata: Metadata = { title: "送信先と個人情報の扱い" };
 
 type Destination = { key: string; to: string; what: string; when: string; why: string };
 

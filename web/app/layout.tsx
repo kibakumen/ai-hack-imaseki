@@ -5,7 +5,9 @@ import "./globals.css";
 import "./site-footer.css";
 
 export const metadata: Metadata = {
-  title: "イマセキ",
+  // 各ページが自分の名前（`metadata.title`）を持ち、タブと履歴では「◯◯ | イマセキ」と出る（2026-09-25 監査の指摘 横断-12。
+  // それまでは全画面「イマセキ」だけで見分けられなかった）。名前を持たない入口（/）だけが「イマセキ」。
+  title: { default: "イマセキ", template: "%s | イマセキ" },
   description: "近くのお店の空席を見つけるサービス",
   // ホーム画面に追加したときのアプリとしての記述（2026-09-25 監査の指摘 客-04 の案C）。manifest は app/manifest.ts が出す。
   // `appleWebApp.capable` は新しい名前（mobile-web-app-capable）だけを出すので、古い iOS が読む名前も並べて出す。
