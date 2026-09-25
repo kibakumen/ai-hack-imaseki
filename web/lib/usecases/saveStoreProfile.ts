@@ -11,6 +11,7 @@ import type { Deps } from "../ports";
 import { findStoreLocation, findStoreProfile, updateStoreDetails, updateStoreProfile } from "../repo/stores";
 import { GEOCODE_TIMEOUT_MS, MENUS_MAX } from "../schemas/limits";
 import type { StoreProfile, StoreProfileInput } from "../schemas/store";
+import { raceDeadline } from "./deadline";
 import { refreshStoreImage } from "./storeImage";
 
 export type FieldRefusal = { name: string; reason: FieldReason };
@@ -22,33 +23,17 @@ export type SaveStoreProfileResult =
   /** 住所を位置に直せなかった（409・基準 15.10）。 */
   | { ok: false; kind: "address_unresolved"; fields: FieldRefusal[] };
 
-/** 打ち切りに当たった印。地図が 3秒 返らなければ「直せなかった」に倒す（設計書「時間の割り振り」）。 */
-const TIMED_OUT: unique symbol = Symbol("geocode-timed-out");
-
 /**
  * 住所を位置へ直す。直せなければ null（0件・失敗・打ち切り・日本の外を同じ扱いにする・基準 15.10・15.11）。
- * 打ち切りは差し替えた時計と AbortSignal の両方で書く（偽の時計が after を進める）。
+ * 地図が 3秒 返らなければ「直せなかった」に倒す（設計書「時間の割り振り」）。打ち切りは usecases/deadline の
+ * raceDeadline（差し替えた時計と AbortSignal の両方・投げた場合も打ち切りと同じ扱い）。googleUpkeep の位置直しと同じ形
+ * （2026-09-25 監査の指摘 設計-11: それまで同じ競争をここに別に書いていた）。
  */
 const locate = async (deps: Deps, address: string): Promise<{ lat: number; lng: number } | null> => {
-  const controller = new AbortController();
-  const deadline = deps.clock.after(GEOCODE_TIMEOUT_MS);
-  const geocoding = (async () => {
-    try {
-      return await deps.geocoder.geocode(address, { signal: controller.signal });
-    } catch {
-      // 地図の呼び出しが投げた場合も「直せなかった」（基準 15.10）。
-      return { ok: false as const };
-    }
-  })();
-
-  const result = await Promise.race([geocoding, deadline.then((): typeof TIMED_OUT => TIMED_OUT)]);
-  if (result === TIMED_OUT) {
-    // 外への呼び出しを解く（実物の fetch はここで止まる）。
-    controller.abort();
-    return null;
-  }
-  if (!result.ok) return null;
-  return inJapan(result) ? { lat: result.lat, lng: result.lng } : null;
+  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deps.clock.after(GEOCODE_TIMEOUT_MS), (signal) => deps.geocoder.geocode(address, { signal }));
+  if (!answer.ok || !answer.value.ok) return null;
+  const point = answer.value;
+  return inJapan(point) ? { lat: point.lat, lng: point.lng } : null;
 };
 
 /** 店の情報を読む。見分けの直後に店が消えた場合だけ null。 */

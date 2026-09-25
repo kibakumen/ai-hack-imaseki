@@ -711,23 +711,6 @@ table {
   }
 }
 
-@keyframes claim-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-
-  70% {
-    opacity: 1;
-    transform: scale(1.04);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 /* 紙吹雪の1片が落ちて回る */
 @keyframes confetti-fall {
   0% {
@@ -782,42 +765,6 @@ table {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-highlight-edge) 0%, transparent);
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-/* 「ここを押せば戻せる」を静かに示す脈 */
-@keyframes attention-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent);
-  }
-
-  50% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-accent) 0%, transparent);
-  }
-}
-
-/* 入力の誤りを1度だけ揺らして知らせる */
-@keyframes shake-x {
-  10%,
-  90% {
-    transform: translateX(-1px);
-  }
-
-  20%,
-  80% {
-    transform: translateX(2px);
-  }
-
-  30%,
-  50%,
-  70% {
-    transform: translateX(-4px);
-  }
-
-  40%,
-  60% {
-    transform: translateX(4px);
   }
 }
 

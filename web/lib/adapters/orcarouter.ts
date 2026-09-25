@@ -59,6 +59,14 @@ const JUDGE_DENIED_MEMO_MS = 10 * 60 * 1000;
 /** 鍵の scope で断られた印（OrcaRouter が返す語） */
 const MODEL_ACCESS_DENIED = "model_access_denied";
 
+/**
+ * 判定役が鍵の scope で断られた覚え（鍵と判定役ごとの「次に試す時刻」）。**モジュールの外側**に置く——Deps（とこの口）は
+ * 要求ごとに作り直すので、口を作る関数の中に置くと1つの要求の中でしか残らず、店ごとに毎回 403 を踏みに行っていた
+ * （2026-09-25 監査の指摘 設計-11）。Workers の isolate が生きている間だけ残る（落ちたら、また1回試すだけ）。
+ */
+const judgeDeniedUntil = new Map<string, number>();
+const judgeMemoKey = (apiKey: string, judgeModel: string): string => `${judgeModel}\u0000${apiKey}`;
+
 export type OrcaRouterConfig = {
   apiKey: string;
   /** 呼ぶモデル。提出版は Named Router `orcarouter/ai-sekitori`（設定 ORCAROUTER_MODEL・adapters/env.ts） */
@@ -367,8 +375,8 @@ const toPitchResult = (outcome: CallOutcome): PitchResult =>
  */
 export const createOrcaRouterPitchWriter = (config: OrcaRouterConfig & { judgeModel?: string }): PitchWriter => {
   const judgeModel = config.judgeModel ?? JUDGE_MODEL;
-  // 403 を店ごとに何度も踏まない（1回 約0.2〜0.4秒の無駄）。一定時間だけ覚えて、また試す。
-  let judgeDeniedUntil = 0;
+  // 403 を店ごとに何度も踏まない（1回 約0.2〜0.4秒の無駄）。一定時間だけ覚えて、また試す（覚えは上の judgeDeniedUntil）。
+  const memoKey = judgeMemoKey(config.apiKey, judgeModel);
 
   /**
    * 検査官を1回呼ぶ。⚠️ `noThinking` は**判定役のときだけ false**——`orcarouter/akiseki-judge` は
@@ -399,10 +407,10 @@ export const createOrcaRouterPitchWriter = (config: OrcaRouterConfig & { judgeMo
 
     judge: async (input, opts): Promise<PitchResult> => {
       const user = judgeUser(input);
-      if (Date.now() < judgeDeniedUntil) return toPitchResult(await judgeWith(config.model, user, opts, true));
+      if (Date.now() < (judgeDeniedUntil.get(memoKey) ?? 0)) return toPitchResult(await judgeWith(config.model, user, opts, true));
       const first = await judgeWith(judgeModel, user, opts, false);
       if (first.ok || first.error !== MODEL_ACCESS_DENIED) return toPitchResult(first);
-      judgeDeniedUntil = Date.now() + JUDGE_DENIED_MEMO_MS;
+      judgeDeniedUntil.set(memoKey, Date.now() + JUDGE_DENIED_MEMO_MS);
       return toPitchResult(await judgeWith(config.model, user, opts, true));
     },
   };

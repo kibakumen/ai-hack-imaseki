@@ -304,7 +304,9 @@ describeTask("25", "全入口の横断: 入口の一覧・依存の向き・断�
     const ui = [...srcUnder("components"), ...srcUnder("app")];
     const readers = ui.filter((f) => /error\.(kind|fields)\b/.test(read(f))).map((f) => path.basename(f));
     expect(readers).toEqual(["InputRefusal.tsx"]);
-    const forms = ["RegisterForm", "FetchForm", "ReservationView", "LoginForm", "PasswordForm", "ProfileForm", "CouponEditor", "PublishForm", "OfferPanel", "DocumentsPanel", "ReportForm", "StoreDetail"];
+    // 確保中の表示の操作（取り消し・人数の変更）の断りを描くのは ReservationActions（ReservationView の中に置く部品）。
+    // ReservationView に残っていた、どこからも渡されない断りの口は 2026-09-25 監査の指摘 設計-11 で消した。
+    const forms = ["RegisterForm", "FetchForm", "ReservationActions", "LoginForm", "PasswordForm", "ProfileForm", "CouponEditor", "PublishForm", "OfferPanel", "DocumentsPanel", "ReportForm", "StoreDetail"];
     for (const name of forms) {
       const files = ui.filter((f) => path.basename(f) === `${name}.tsx`);
       expect(files.length, `${name}.tsx が無い`).toBeGreaterThan(0);
@@ -450,6 +452,47 @@ describeTask("34", "明暗の両対応: 色は変数でだけ指す", () => {
       }
     }
     for (const u of used) expect(defined.has(u.name), `${u.where} が定義されていない ${u.name} を使っている`).toBe(true);
+  });
+});
+
+describeTask("34", "CSS の定義と使用の突き合わせ", () => {
+  // 2026-09-25 監査の指摘 設計-11: 受け取りの演出を2つのタスクが別々に作り、統合で片方の部品しか消さなかったので、
+  // 使われない部品（ui/Confetti）と CSS（.claim-celebration の約100行）が残り、使われている方だけが #fff に固定されていた
+  // （暗い配色の半券の件・客-01）。直す場所を取り違えないよう、CSS が定義する class と @keyframes が、どこかで使われて
+  // いることを見る。class は画面のソースに名前が在るか、`名前の頭${…}` の形（状態で末尾を変える class）で組まれていれば使われている。
+  it("設計-11 CSS の class と @keyframes は、どれも使われている", () => {
+    const cssFiles = [...walk(path.join(WEB, "components"), (f) => f.endsWith(".css")), ...walk(path.join(WEB, "app"), (f) => f.endsWith(".css"))];
+    const sources = [...srcUnder("components"), ...srcUnder("app")].filter((f) => !/\.test\.tsx?$/.test(f)).map(read).join("\n");
+    const tokens = new Set(sources.match(/[A-Za-z_][-\w]*/g) ?? []);
+    const dynamicPrefixes = [...sources.matchAll(/([A-Za-z_][-\w]*(?:--|__|-))\$\{/g)].map((m) => m[1]);
+    const used = (name: string) => tokens.has(name) || dynamicPrefixes.some((prefix) => name.startsWith(prefix));
+    const unusedClasses: string[] = [];
+    const unusedKeyframes: string[] = [];
+    const allCss = cssFiles.map((f) => read(f).replace(/\/\*[\s\S]*?\*\//g, "")).join("\n");
+    for (const f of cssFiles) {
+      const text = read(f).replace(/\/\*[\s\S]*?\*\//g, "");
+      // 宣言の中身を除いた、規則の前置き（セレクタ）だけから class を拾う
+      const selectors = [...text.matchAll(/([^{};]+)\{/g)].map((m) => m[1].trim()).filter((sel) => !sel.startsWith("@"));
+      const classes = new Set(selectors.flatMap((sel) => [...sel.matchAll(/\.([A-Za-z_][-\w]*)/g)].map((m) => m[1])));
+      for (const name of classes) if (!used(name)) unusedClasses.push(`${rel(f)}: .${name}`);
+    }
+    for (const m of allCss.matchAll(/@keyframes\s+([-\w]+)/g)) {
+      if (!new RegExp(`animation(?:-name)?\\s*:[^;}]*\\b${m[1]}\\b`).test(allCss)) unusedKeyframes.push(m[1]);
+    }
+    expect(unusedClasses).toEqual([]);
+    expect(unusedKeyframes).toEqual([]);
+  });
+
+  it("設計-11 components の部品は、どれも検査の外から使われている", () => {
+    const sources = [...srcUnder("components"), ...srcUnder("app")].filter((f) => !/\.test\.tsx?$/.test(f));
+    const unused = srcUnder("components")
+      .filter((f) => !/\.test\.tsx?$/.test(f))
+      .filter((f) => {
+        const base = path.basename(f).replace(/\.tsx?$/, "");
+        return !sources.some((other) => other !== f && new RegExp(`from\\s+["'][^"']*/${base}["']`).test(read(other)));
+      })
+      .map(rel);
+    expect(unused).toEqual([]);
   });
 });
 

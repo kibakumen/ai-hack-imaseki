@@ -568,11 +568,6 @@
   }
 }
 
-/* 回す窓。3行ぶんだけ見せる（中央の1行が選ばれた値）。上下は霞ませて「続きがある」と分からせる */
-.store-dial__rail-wrap {
-  position: relative;
-}
-
 .store-dial__rail {
   background: var(--color-background);
   border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
@@ -750,11 +745,6 @@
   display: grid;
   gap: 0.125rem;
   min-width: 0;
-}
-
-.store-chip__note {
-  color: var(--color-text-muted);
-  font-size: 0.6875rem;
 }
 
 /* クーポンの札を並べる面。`globals.css` の `fieldset:has(input[type="checkbox"])`（flex）より

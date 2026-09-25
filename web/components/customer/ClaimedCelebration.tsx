@@ -21,41 +21,15 @@
 // （要件32の基準 32.3・構造の検査が .tsx に色の値が無いことを見張る）。見た目の仕上げは
 // `claimed-celebration` の class に当てる。
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { routeHref, type SearchOrigin } from "../../lib/client/lastOrigin";
 import { playNotifyBeep } from "../store/beep";
+import { Confetti } from "../ui/Confetti";
 import { CouponPickNote } from "./CouponPickNote";
 import type { ReservationDto } from "./home";
 
-/** 紙吹雪の数（多すぎると読みたい番号が埋まる）。 */
-const CONFETTI_COUNT = 18;
-const CONFETTI_MARKS = ["🎊", "✨", "🎉", "⭐"];
-
-/**
- * 紙吹雪。位置と間の取り方だけを持つ（落ちる動きは CSS の `confetti-piece` に当てる。
- * 動きが無い環境では、上の方に飾りが並ぶだけで読み上げには乗らない）。
- */
-const Confetti = () => {
-  const pieces = useMemo(
-    () =>
-      Array.from({ length: CONFETTI_COUNT }, (_, index) => ({
-        key: index,
-        left: `${Math.round((index / CONFETTI_COUNT) * 100)}%`,
-        delay: `${(index % 6) * 90}ms`,
-        mark: CONFETTI_MARKS[index % CONFETTI_MARKS.length],
-      })),
-    [],
-  );
-  return (
-    <div aria-hidden className="confetti" style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-      {pieces.map((piece) => (
-        <span key={piece.key} className="confetti-piece" style={{ position: "absolute", top: 0, left: piece.left, animationDelay: piece.delay }}>
-          {piece.mark}
-        </span>
-      ))}
-    </div>
-  );
-};
+// 紙吹雪は components/ui/Confetti（2026-09-25 監査の指摘 設計-11: 別のタスクが並行で作った同じ部品がここに
+// もう1つ在り、使われない方だけが残っていた。位置と間を並びの番号から決める ui の方へ一本化した）。
 
 // 経路のリンクの組み方は `lib/client/lastOrigin.ts` の `routeHref`（確保中の画面 `ReservationView` と共用）。
 
@@ -107,7 +81,7 @@ export const ClaimedCelebration = ({ reservation, from = null, onClose }: Claime
       aria-labelledby={TITLE_ID}
       style={{ position: "fixed", inset: 0, zIndex: 50, overflowY: "auto", background: "var(--color-background)" }}
     >
-      <Confetti />
+      <Confetti count={18} />
       <div className="claimed-celebration-inner" style={{ position: "relative" }}>
         <p className="claimed-eyebrow">席を確保しました</p>
         <h2 className="claimed-title" id={TITLE_ID} ref={titleRef} tabIndex={-1}>
