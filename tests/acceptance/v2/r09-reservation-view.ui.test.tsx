@@ -4,7 +4,7 @@ import React from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { describeTask } from "./_tasks";
-import { componentOf, homeFetch, installFakeApi, reservationDto, type FakeApi } from "./_fakes";
+import { componentOf, homeFetch, installFakeApi, reservationDto, unauthorized, type FakeApi } from "./_fakes";
 import { TID, type HomeDto } from "./_types";
 
 const publicConfig = () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } });
@@ -101,7 +101,7 @@ describeTask("14", "確保中の表示と取り直し", () => {
     const reservation = reservationDto({ code: "55556666" });
     await renderApp(() => {
       if (mode === "fail") throw new TypeError("Failed to fetch");
-      if (mode === "unauthorized") return { status: 401, json: { ok: false } };
+      if (mode === "unauthorized") return unauthorized();
       return { json: { ...homeFetch(), kind: "active", reservation } };
     });
     await screen.findByTestId(TID.view("active"));

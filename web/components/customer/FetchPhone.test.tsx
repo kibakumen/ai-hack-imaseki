@@ -18,6 +18,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FetchForm } from "./FetchForm";
+import { replyToResponse, streamOfResult, type FakeReply } from "../../../tests/acceptance/v2/_fakes";
 
 vi.mock("../../lib/client/geolocation", () => ({
   currentLocation: async () => ({ ok: false, error: { kind: "location_required", fields: [{ name: "place", reason: "required" }] } }),
@@ -25,7 +26,7 @@ vi.mock("../../lib/client/geolocation", () => ({
 
 type Call = { method: string; path: string; body: Record<string, unknown> | null };
 
-const installFetch = (respond: (method: string, path: string) => { status?: number; json?: unknown }) => {
+const installFetch = (respond: (method: string, path: string) => FakeReply) => {
   const calls: Call[] = [];
   const previous = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -33,7 +34,7 @@ const installFetch = (respond: (method: string, path: string) => { status?: numb
     const method = (init?.method ?? "GET").toUpperCase();
     calls.push({ method, path: url.pathname, body: typeof init?.body === "string" ? JSON.parse(init.body) : null });
     const out = respond(method, url.pathname);
-    return new Response(JSON.stringify(out.json ?? { ok: true }), { status: out.status ?? 200, headers: { "content-type": "application/json" } });
+    return replyToResponse(out);
   }) as typeof fetch;
   return { calls, restore: () => { globalThis.fetch = previous; } };
 };
@@ -41,7 +42,7 @@ const installFetch = (respond: (method: string, path: string) => { status?: numb
 type Profile = { nickname: string; phone: string; genres: string[]; budgetMax: number | null };
 const GUEST: Profile = { nickname: "guest-abc123", phone: "0000000000", genres: [], budgetMax: null };
 const patches = (calls: Call[]) => calls.filter((c) => c.method === "PATCH" && c.path === "/api/customer/profile");
-const fetches = (calls: Call[]) => calls.filter((c) => c.method === "POST" && c.path === "/api/customer/fetch");
+const fetches = (calls: Call[]) => calls.filter((c) => c.method === "POST" && (c.path === "/api/customer/fetch" || c.path === "/api/customer/fetch/stream"));
 
 describe("こだわり条件の並びと電話番号", () => {
   let fake: ReturnType<typeof installFetch> | null = null;
@@ -55,7 +56,8 @@ describe("こだわり条件の並びと電話番号", () => {
   const renderForm = (profile: Profile = GUEST, patchAnswer: { status?: number; json?: unknown } = { json: { ok: true, profile } }) => {
     fake = installFetch((method, path) => {
       if (method === "PATCH" && path === "/api/customer/profile") return patchAnswer;
-      if (path === "/api/customer/fetch/stream") return { status: 404, json: { ok: false } };
+      // 取得は本番と同じく少しずつ届く入口（NDJSON）で返す（2026-09-25 設計-03。以前はわざと 404 にして普通の入口へ倒していた）
+      if (method === "POST" && path === "/api/customer/fetch/stream") return { stream: streamOfResult({ fetchId: "f1", items: [] }) };
       if (method === "POST" && path === "/api/customer/fetch") return { json: { ok: true, fetchId: "f1", items: [] } };
       return { status: 404, json: { ok: false } };
     });

@@ -1,7 +1,7 @@
 // 要件7 AI の選定と理由。純粋（7.3・7.4・7.5・7.7・7.8）はタスク10、手続きと OrcaRouter の口はタスク11。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { approvedStore, fetchOffers, loadWeb, makeCtx, north, one, publishOffer, registerCustomer, rows, selectionText, SHIBUYA, type Ctx } from "./_fakes";
+import { approvedStore, fetchOffers, fetchOffersStream, loadWeb, makeCtx, north, one, publishOffer, registerCustomer, rows, selectionText, SHIBUYA, type Ctx } from "./_fakes";
 
 const IDS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
 const pick = (n: number, reason = "近くて好みに合います") => IDS.slice(0, n).map((storeId) => ({ storeId, reason }));
@@ -80,6 +80,31 @@ describeTask("11", "AI の呼び出し（手続き）と OrcaRouter の口", () 
     await fetchOffers(c2.api, { party: 2, genres: [], budgetMax: 1050 });
     expect(ctx.ai.calls.length).toBe(before + 2);
     expect(ctx.ai.calls.at(-1)!.stores.length).toBeLessThan(input.stores.length);
+  });
+
+  it("7.1 本番の画面が使う少しずつ届く入口（NDJSON）でも、選定の呼び出しは1回。紹介文の層は紹介文の口を通る", async () => {
+    // 以前の場面には紹介文の口が無く、本番で実際に動く道（紹介文を書かせる層）を一度も通っていなかった（設計-03）
+    const c = await newCustomer(7);
+    const aiBefore = ctx.ai.calls.length;
+    const pitchBefore = ctx.pitch.total();
+    const r = await fetchOffersStream(ctx, c.api, { party: 2, genres: ["和食"] });
+    expect(r.status).toBe(200);
+    expect(r.lines[0].type).toBe("init");
+    expect(r.lines.at(-1).type).toBe("done");
+    expect(ctx.ai.calls.length - aiBefore).toBe(1);
+    expect(ctx.pitch.total() - pitchBefore).toBeGreaterThan(0);
+    const pitches = r.lines.filter((l) => l.type === "pitch");
+    expect(pitches.map((l) => l.storeId).sort()).toEqual(r.lines[0].items.map((i: any) => i.storeId).sort());
+  });
+
+  // 要件7.2 は「取得1回につき AI の呼び出しは1回・選定のほかには使わない」。紹介文の層（書き手＋検査官）を
+  // 合わせると、取得1回で最大21回呼ぶ。数えるのは、取得1回あたりの**合計**。
+  it.fails("既知の不具合（設計-05）: 取得1回あたりの AI の呼び出しは、紹介文の書き手と検査官も合わせて1回（要件7.2）", async () => {
+    const c = await newCustomer(8);
+    const before = ctx.ai.calls.length + ctx.pitch.total();
+    const r = await fetchOffersStream(ctx, c.api, { party: 2, genres: ["和食"] });
+    expect(r.status).toBe(200);
+    expect(ctx.ai.calls.length + ctx.pitch.total() - before).toBe(1);
   });
 
   it("7.11 候補が0件なら AI を呼ばず0件", async () => {

@@ -13,19 +13,20 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CustomerApp } from "./CustomerApp";
+import { replyToResponse, streamOfResult, type FakeReply } from "../../../tests/acceptance/v2/_fakes";
 
 vi.mock("../../lib/client/geolocation", () => ({
   currentLocation: async () => ({ ok: false, error: { kind: "location_required", fields: [{ name: "place", reason: "required" }] } }),
 }));
 
-type Answer = { status?: number; json?: unknown };
+type Answer = FakeReply;
 
 const installFetch = (respond: (method: string, path: string) => Answer) => {
   const previous = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://localhost");
     const out = respond((init?.method ?? "GET").toUpperCase(), url.pathname);
-    return new Response(JSON.stringify(out.json ?? { ok: true }), { status: out.status ?? 200, headers: { "content-type": "application/json" } });
+    return replyToResponse(out);
   }) as typeof fetch;
   return () => {
     globalThis.fetch = previous;
@@ -47,7 +48,8 @@ describe("取得の画面の入れ物", () => {
     restore = installFetch((method, path) => {
       if (path === "/api/config/public") return { json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } };
       if (path === "/api/customer/home") return { json: HOME };
-      if (path === "/api/customer/fetch/stream") return { status: 404, json: { ok: false } };
+      // 取得は本番と同じく少しずつ届く入口（NDJSON）で返す（2026-09-25 設計-03。以前はわざと 404 にして普通の入口へ倒していた）
+      if (method === "POST" && path === "/api/customer/fetch/stream") return { stream: streamOfResult({ fetchId: "f1", items: items as Array<{ storeId: string; reason: string }> }) };
       if (method === "POST" && path === "/api/customer/fetch") return { json: { ok: true, fetchId: "f1", items } };
       return { status: 404, json: { ok: false } };
     });

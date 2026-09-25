@@ -562,6 +562,8 @@ export const streamOfResult = (result: { fetchId: string; items: Array<{ storeId
 });
 
 const jsonResponse = (status: number, json: unknown) => new Response(JSON.stringify(json), { status, headers: { "content-type": "application/json" } });
+/** 偽の返し方を応答にする（部品の検査が自前の偽の fetch から使ってもよい） */
+export const replyToResponse = (reply: FakeReply): Response => (reply.stream ? ndjsonResponse(reply.stream) : jsonResponse(reply.status ?? 200, reply.json ?? { ok: true }));
 const ndjsonResponse = (s: FakeStream): Response => {
   const encoder = new TextEncoder();
   const hold = s.holdAfter ?? s.lines.length;
@@ -622,9 +624,7 @@ export const installFakeApi = (routes: Record<string, FakeRoute> = {}): FakeApi 
     calls.push({ method, path: url.pathname, body });
     const handler = find(method, url.pathname) ?? (method === "POST" && url.pathname === FETCH_STREAM_PATH ? derivedStream : undefined);
     if (!handler) return jsonResponse(404, { ok: false, error: { kind: "not_found" } });
-    const out = await handler({ method, path: url.pathname, body, url });
-    if (out.stream) return ndjsonResponse(out.stream);
-    return jsonResponse(out.status ?? 200, out.json ?? { ok: true });
+    return replyToResponse(await handler({ method, path: url.pathname, body, url }));
   }) as typeof fetch;
   return {
     calls,
