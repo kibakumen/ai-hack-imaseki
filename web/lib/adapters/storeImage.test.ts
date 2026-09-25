@@ -118,6 +118,40 @@ describe("adapters/storeImage", () => {
     expect(await createStoreImageFetcher({ fetch: fetchImpl }).fetch("https://example.com/", {})).toEqual({ ok: false });
   });
 
+  // 安全-04: 以前は `<meta[^>]+…[^>]+…` の多段の正規表現を本文にそのまま掛けていて、閉じない meta を並べた
+  // ページで入力長のほぼ3乗の時間がかかった（20KB で約4秒）。同期で走るので、3秒の打ち切りでも止められない。
+  describe("細工したページでも読み取りは線形に終わる（ReDoS・安全-04）", () => {
+    const timed = async (html: string) => {
+      const fetchImpl = (async () => htmlResponse(html)) as unknown as typeof globalThis.fetch;
+      const started = performance.now();
+      const answer = await createStoreImageFetcher({ fetch: fetchImpl }).fetch("https://example.com/", {});
+      return { answer, ms: performance.now() - started };
+    };
+
+    it("閉じない meta を上限（200KB）まで並べたページでも 50ms 以内に終わり、取れなかったと答える", async () => {
+      const { answer, ms } = await timed('<meta content="x" '.repeat(Math.ceil(200_000 / 18)));
+      expect(answer).toEqual({ ok: false });
+      expect(ms).toBeLessThan(50);
+    });
+
+    it("最後にだけ閉じる meta・属性の途中で切れた meta を並べたページでも 50ms 以内に終わる", async () => {
+      for (const html of ['<meta content="x" '.repeat(10_000) + ">", '<meta property="og:image" content="'.repeat(5_000), "<meta ".repeat(30_000)]) {
+        const { ms } = await timed(html);
+        expect(ms, html.slice(0, 40)).toBeLessThan(50);
+      }
+    });
+
+    it("大文字の META・一重引用符・= の前後の空白・ほかの属性が先にある形も読む", async () => {
+      const { answer } = await timed(`<html><HEAD><Meta charset="utf-8"><META name = 'twitter:image' data-x="1" content = 'https://cdn.example.com/d.webp' /></HEAD>`);
+      expect(answer).toEqual({ ok: true, imageUrl: "https://cdn.example.com/d.webp" });
+    });
+
+    it("og:image でない meta は読み飛ばし、後ろの og:image を拾う", async () => {
+      const { answer } = await timed('<meta name="description" content="店"><meta property="og:title" content="t"><meta property="og:image" content="/e.png">');
+      expect(answer).toEqual({ ok: true, imageUrl: "https://example.com/e.png" });
+    });
+  });
+
   it("打ち切りの合図をそのまま fetch に渡す", async () => {
     const calls: Array<AbortSignal | null | undefined> = [];
     const fetchImpl = (async (_url: string, init: RequestInit) => {
