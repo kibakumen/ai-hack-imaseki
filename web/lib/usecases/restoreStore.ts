@@ -11,7 +11,7 @@
 // 断りの形は `banStore`・`approveStore` と同じ（`{ ok:false, current:{ state } }` の409）。
 
 import type { Deps } from "../ports";
-import { findStoreStatus, restoreBannedStore, type RestoredStatus } from "../repo/adminStores";
+import { findStoreStatus, restoreBannedStore, type RestoredStatus } from "../repo/adminStoreActions";
 import type { StoreStatus } from "../repo/stores";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { currentStateRefusal } from "./adminStoreConflict";

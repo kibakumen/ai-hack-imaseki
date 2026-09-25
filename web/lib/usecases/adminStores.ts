@@ -11,17 +11,8 @@
 
 import type { Deps } from "../ports";
 import { listAdminActionsForStore, type AdminActionRow } from "../repo/adminActions";
-import {
-  acknowledgeStoreChanges,
-  findStoreForAdmin,
-  findStoreReview,
-  listStoresForAdmin,
-  saveStoreNote,
-  summarizeStoresForAdmin,
-  type AdminStoreDetailRow,
-  type AdminStoreListRow,
-  type AdminStoreSummary,
-} from "../repo/adminStores";
+import { acknowledgeStoreChanges, findStoreReview, saveStoreNote } from "../repo/adminStoreActions";
+import { findStoreForAdmin, listStoresForAdmin, summarizeStoresForAdmin, type AdminStoreDetailRow, type AdminStoreListRow, type AdminStoreSummary } from "../repo/adminStores";
 import type { AdminSeenStore, AdminStoreNoteInput, AdminStoreQuery } from "../schemas/admin";
 import { ADMIN_HISTORY_MAX } from "../schemas/limits";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";

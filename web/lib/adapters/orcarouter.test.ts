@@ -5,7 +5,8 @@
 // 呼び先は ORCAROUTER_ENDPOINT を読んで突き合わせる。
 
 import { describe, expect, it } from "vitest";
-import { createOrcaRouterPitchWriter, createOrcaRouterSelector, FALLBACK_MODEL, JUDGE_MODEL, ORCAROUTER_ENDPOINT, PITCH_MAX_TOKENS, JUDGE_MAX_TOKENS } from "./orcarouter";
+import { createOrcaRouterSelector, FALLBACK_MODEL, JUDGE_MODEL, ORCAROUTER_ENDPOINT, PITCH_MAX_TOKENS, JUDGE_MAX_TOKENS } from "./orcarouter";
+import { createOrcaRouterPitchWriter } from "./orcarouterPitch";
 import type { AiSelectInput, PitchInput } from "../ports";
 import { unfoundedPraiseList } from "../domain/claims";
 

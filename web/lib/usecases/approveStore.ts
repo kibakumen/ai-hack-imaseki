@@ -2,7 +2,7 @@
 // 承認を断る手続きは無い（基準 25.3。断るときは運営が一覧のメールアドレスへ自分のメールで伝える）。
 
 import type { Deps } from "../ports";
-import { approvePendingStore, findStoreReview } from "../repo/adminStores";
+import { approvePendingStore, findStoreReview } from "../repo/adminStoreActions";
 import type { AdminSeenStore } from "../schemas/admin";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { matchesSeen, reviewRefusal, type StoreRefusal } from "./adminStoreConflict";

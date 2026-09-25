@@ -5,7 +5,7 @@
 // 画面は「ほかの操作で、すでに『承認済み』に」と、実際とは逆の文を出す。当たらなかったら読み直して、今を返す。
 
 import type { Deps } from "../ports";
-import { findStoreStatus, type StoreReview } from "../repo/adminStores";
+import { findStoreStatus, type StoreReview } from "../repo/adminStoreActions";
 import type { StoreStatus } from "../repo/stores";
 import type { AdminSeenStore } from "../schemas/admin";
 

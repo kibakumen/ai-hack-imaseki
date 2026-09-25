@@ -7,7 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { approvedStore, makeCtx, one, registerStore, type Ctx } from "../../../tests/acceptance/v2/_fakes";
 import type { NewAdminAction } from "./adminActions";
-import { approvePendingStore, banApprovedStore, findStoreReview, restoreBannedStore } from "./adminStores";
+import { approvePendingStore, banApprovedStore, findStoreReview, restoreBannedStore } from "./adminStoreActions";
 
 let ctx: Ctx;
 let seq = 0;

@@ -13,7 +13,7 @@ import type { Deps } from "../ports";
 import { tokenFromBytes } from "../domain/token";
 import { JST_OFFSET_MINUTES } from "../domain/until";
 import { findAccountByEmail, updateAccountPassword } from "../repo/accounts";
-import { approvePendingStore, findStoreReview, restoreBannedStore } from "../repo/adminStores";
+import { approvePendingStore, findStoreReview, restoreBannedStore } from "../repo/adminStoreActions";
 import { insertCouponWithinLimit, listCoupons } from "../repo/coupons";
 import { insertOfferIfNone } from "../repo/offers";
 import { deleteSessionsByAccount } from "../repo/sessions";

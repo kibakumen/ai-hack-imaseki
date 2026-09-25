@@ -7,7 +7,7 @@
 // （2026-09-25 監査の指摘 設計-13: 手続きの中から D1 を直接呼んでいたのを repo へ移した）。
 
 import type { Deps } from "../ports";
-import { banApprovedStore, findStoreStatus } from "../repo/adminStores";
+import { banApprovedStore, findStoreStatus } from "../repo/adminStoreActions";
 import type { StoreStatus } from "../repo/stores";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { currentStateRefusal } from "./adminStoreConflict";
