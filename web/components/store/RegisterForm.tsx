@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
 import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN } from "../../lib/schemas/limits";
+import { STORE_TERMS_TEXTS } from "../../lib/domain/texts";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
@@ -39,6 +40,9 @@ export const RegisterForm = () => {
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const humanRef = useRef<HumanCheckHandle | null>(null);
+  /** 店向けの利用規約への同意（店-21）。同意しないまま押したら送らずに、同意の欄の直下に文を出す */
+  const [agreed, setAgreed] = useState(false);
+  const [askAgree, setAskAgree] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -57,6 +61,10 @@ export const RegisterForm = () => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!agreed) {
+      setAskAgree(true);
+      return;
+    }
     const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken } });
     if (isFailure(result)) {
       setFailure(result);
@@ -123,6 +131,31 @@ export const RegisterForm = () => {
         パスワードを表示
       </label>
       <FieldMessage name="password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
+
+      {/* 店向けの利用規約（2026-09-25 監査の指摘 店-21 の案1）。カードを預かる目的と「今は請求しない」こと・
+          止める条件・客のデータの扱い・退会・問い合わせ先を先に示し、同意してから登録する。 */}
+      <label className="store-agree">
+        <input
+          type="checkbox"
+          data-testid="field-agreeTerms"
+          checked={agreed}
+          onChange={(event) => {
+            setAgreed(event.target.checked);
+            if (event.target.checked) setAskAgree(false);
+          }}
+        />
+        <span>
+          <a href="/store/terms" target="_blank" rel="noopener" data-testid="link-store-terms">
+            店向けの利用規約
+          </a>
+          （カードの扱い・止める条件・お客さまの情報の扱い）を読み、同意します
+        </span>
+      </label>
+      {askAgree ? (
+        <p className="msg" role="alert" data-testid="msg-agreeTerms">
+          {STORE_TERMS_TEXTS.agreeRequired}
+        </p>
+      ) : null}
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.registerStore} onToken={handleToken} />}
 

@@ -96,6 +96,8 @@ describeTask("4", "店の登録とログインのフォームの確かめの部�
     fireEvent.change(screen.getByTestId(TID.field("name")), { target: { value: "検査の店" } });
     fireEvent.change(screen.getByTestId(TID.field("email")), { target: { value: "s@example.com" } });
     fireEvent.change(screen.getByTestId(TID.field("password")), { target: { value: "store-pass-1234" } });
+    // 店向けの利用規約への同意（2026-09-25 店-21。同意しないと送らない）
+    fireEvent.click(screen.getByTestId(TID.field("agreeTerms")));
     fireEvent.click(screen.getByTestId(TID.btn("register")));
     expect((await screen.findByTestId(TID.msgForm)).textContent).toBe(TEXTS.inputRefusal("human_check_failed"));
     expect((screen.getByTestId(TID.field("name")) as HTMLInputElement).value).toBe("検査の店");

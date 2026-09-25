@@ -41,6 +41,8 @@ const fillAndSubmit = () => {
   fireEvent.change(screen.getByTestId("field-name"), { target: { value: "検査の店" } });
   fireEvent.change(screen.getByTestId("field-email"), { target: { value: "dup@example.com" } });
   fireEvent.change(screen.getByTestId("field-password"), { target: { value: "store-pass-1234" } });
+  // 店向けの利用規約への同意（店-21）
+  fireEvent.click(screen.getByTestId("field-agreeTerms"));
   fireEvent.click(screen.getByTestId("btn-register"));
 };
 
@@ -117,5 +119,34 @@ describe("店の登録のパスワードの欄（店-20）", () => {
     await submitWith({ status: 400, json: { ok: false, error: { kind: "human_check_failed" } } });
     await screen.findByTestId("msg-form");
     await waitFor(() => expect(passwordField().value).toBe(""));
+  });
+});
+
+describe("店向けの利用規約への同意（店-21）", () => {
+  it("規約へのリンクがあり、同意しないまま「登録する」を押すと送らずに同意の欄の直下に文が出る。同意すれば送る", async () => {
+    const posts: string[] = [];
+    const previous = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if ((init?.method ?? "GET") === "POST") posts.push(path);
+      const json = path === "/api/config/public" ? { turnstileSiteKey: "", vapidPublicKey: "v", contactEmail: null } : { ok: false, error: { kind: "email_taken", fields: [{ name: "email", reason: "not_allowed" }] } };
+      return new Response(JSON.stringify(json), { status: path === "/api/config/public" ? 200 : 409, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    restore = () => {
+      globalThis.fetch = previous;
+    };
+    render(<RegisterForm />);
+    const link = screen.getByTestId("link-store-terms") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/store/terms");
+    fireEvent.change(screen.getByTestId("field-name"), { target: { value: "検査の店" } });
+    fireEvent.change(screen.getByTestId("field-email"), { target: { value: "s@example.com" } });
+    fireEvent.change(screen.getByTestId("field-password"), { target: { value: "store-pass-1234" } });
+    fireEvent.click(screen.getByTestId("btn-register"));
+    expect((await screen.findByTestId("msg-agreeTerms")).textContent).toMatch(/同意/);
+    expect(posts.filter((p) => p === "/api/register/store")).toHaveLength(0);
+    fireEvent.click(screen.getByTestId("field-agreeTerms"));
+    expect(screen.queryByTestId("msg-agreeTerms")).toBeNull();
+    fireEvent.click(screen.getByTestId("btn-register"));
+    await waitFor(() => expect(posts.filter((p) => p === "/api/register/store")).toHaveLength(1));
   });
 });
