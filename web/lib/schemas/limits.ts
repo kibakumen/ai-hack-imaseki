@@ -144,15 +144,64 @@ export const TIME_OF_DAY_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** 同じ客の取得は1分に5回まで（基準 30.1） */
 export const FETCH_RATE_LIMIT = 5;
 export const FETCH_RATE_WINDOW_MS = 60 * 1000;
-/** 同じ接続元からの客の登録と店の登録は、合わせて1時間に10回まで（基準 30.2） */
+/**
+ * 同じ接続元からの**店の**登録は1時間に10回まで（基準 30.2）。
+ * ⚠️ 2026-09-25 監査の指摘 不具合-04 で、客の登録とは**別に数える**ようにした（AI判断・要件30.2 の変更として
+ * 仕様へ返す）。合わせて数えていた頃は、会場の Wi-Fi のように同じ回線から11人目が来ると、客の自動の登録も
+ * 店の登録も止まった。数えるのは人かどうかの確かめが通った要求だけ（空振りで回数を減らさない）。
+ */
 export const REGISTER_RATE_LIMIT = 10;
 export const REGISTER_RATE_WINDOW_MS = 60 * 60 * 1000;
+/**
+ * 同じ接続元からの**客の**登録は1時間に60回まで（不具合-04・AI判断。指摘の例示「60〜100回」の下の端）。
+ * /me を開くたびに裏で登録が走るので、同じ回線の客が多い場面（会場・会社・携帯の CGNAT）に合わせて広げた。
+ * 1回ごとに人かどうかの確かめ（Turnstile）が要るので、上限の役目は機械の大量の登録を遅らせることだけ。
+ */
+export const CUSTOMER_REGISTER_RATE_LIMIT = 60;
 /** 同じ客の通報は1時間に5回まで（基準 30.3） */
 export const REPORT_RATE_LIMIT = 5;
 export const REPORT_RATE_WINDOW_MS = 60 * 60 * 1000;
-/** 同じアカウントへのログインの失敗が10回続くと、15分そのアカウントへのログインを断る（基準 30.4） */
+/**
+ * 同じアカウントへの、**同じ接続元からの**ログインの失敗が10回続くと、15分そこからのログインを断る（基準 30.4）。
+ * ⚠️ 2026-09-25 監査の指摘 安全-10 の案1（AI判断）で、鍵を「メールアドレス × 接続元」にした。メールアドレスだけで
+ * 数えていた頃は、他人が狙いのアドレスで10回間違えるだけで、本人（運営・店）が15分ずつ締め出された。
+ */
 export const LOGIN_FAILURE_LIMIT = 10;
 export const LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
+/**
+ * 同じ接続元からのログインの失敗は、アカウントをまたいで15分に30回まで（安全-10 の案1・AI判断）。
+ * 1つの接続元から多数のアカウントへ1回ずつ試す手口（パスワードスプレー）を数える。通ったログインは
+ * その1回ぶんだけを返す（消さない）——自分のアカウントへの成功を挟んで数を戻す手を塞ぐため。
+ */
+export const LOGIN_IP_FAILURE_LIMIT = 30;
+/**
+ * 同じ客の、現在地を地名に直す問い合わせ（GET /api/customer/place）は1分に10回まで（安全-03・AI判断）。
+ * 1回ごとに地図のサービス（有料）を呼ぶ。画面が開いた瞬間に1回呼ぶだけの入口なので、10回は十分に広い。
+ */
+export const PLACE_RATE_LIMIT = 10;
+export const PLACE_RATE_WINDOW_MS = 60 * 1000;
+/**
+ * 同じ店の、店の情報の保存（PUT /api/store/profile）は1時間に30回まで（安全-03・AI判断）。
+ * 保存のたびに住所を地図へ問い合わせ、ホームページから画像を1回取る。
+ */
+export const STORE_PROFILE_RATE_LIMIT = 30;
+export const STORE_PROFILE_RATE_WINDOW_MS = 60 * 60 * 1000;
+/** 同じ店の、カードの登録の開始と確かめ（Stripe を呼ぶ）は、合わせて10分に10回まで（安全-03 の構造の検査・AI判断） */
+export const CARD_RATE_LIMIT = 10;
+export const CARD_RATE_WINDOW_MS = 10 * 60 * 1000;
+/**
+ * 同じアカウントの、今のパスワードを確かめる操作（メールアドレスの変更・パスワードの変更）の失敗は15分に10回まで
+ * （2026-09-25 監査の指摘 安全-22 の案1・AI判断）。今のパスワードの総当たりと、409 と 200 の違いでほかの
+ * アカウントのアドレスを割り出す手口を遅らせる。通った操作はその1回ぶんだけを返す。
+ */
+export const ACCOUNT_SECRET_FAILURE_LIMIT = 10;
+export const ACCOUNT_SECRET_WINDOW_MS = 15 * 60 * 1000;
+/**
+ * 同じ客の受け取り・受け取り直し（POST /api/customer/reservations）は10分に10回まで
+ * （2026-09-25 監査の指摘 安全-06 の案A・AI判断）。
+ */
+export const RECEIVE_RATE_LIMIT = 10;
+export const RECEIVE_RATE_WINDOW_MS = 10 * 60 * 1000;
 /**
  * 同じ客の店の画像の取得は1分に30回まで（AI判断 2026-09-22・要件に無い・要確認）。
  *

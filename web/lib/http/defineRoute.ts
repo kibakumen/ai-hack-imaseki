@@ -6,7 +6,7 @@ import type { ZodType } from "zod";
 import type { FieldReason } from "../domain/inputRefusal";
 import type { Deps } from "../ports";
 import { checkOrigin, identifyCustomer, identifySession, renewSession } from "./guards";
-import { passRateLimit, rateKeyFor, rateRuleFor, recordRateOutcome } from "./rateLimits";
+import { admitRequest, rateRulesFor, settleCharges } from "./rateLimits";
 import { forbidden, refusal, unauthenticated } from "./refusals";
 import { internalError } from "./unhandled";
 
@@ -236,18 +236,28 @@ const handleRoute = async <TInput, TAuth extends RouteAuth>(config: RouteConfig<
   if (!read.ok) return toResponse(read.result, renewCookies);
   const { raw, input } = read;
 
-  // 【最終日】連打の抑止（要件30）。見分けと入力の検査が済んだ時点で数え、手続きより手前で断る
-  // ——断った取得では AI も地図も呼ばれない（基準 30.5）。どの入口を数えるかは rateLimits.ts の表。
-  const rateRule = rateRuleFor(config.method, config.path);
-  const rateKey = rateRule ? rateKeyFor(rateRule, { ip: req.headers.get("cf-connecting-ip"), customerId: ctx.auth === "customer" ? ctx.customerId : null, input }) : null;
-  if (rateRule && rateKey && !(await passRateLimit(deps, rateRule, rateKey))) return toResponse(refusal("rate_limited"), renewCookies);
-
   if (humanDeadline && !(await passHumanCheck(deps, raw, humanDeadline))) return toResponse(refusal("human_check_failed"));
 
+  // 【最終日】連打の抑止（要件30）。見分け・入力の検査・人かどうかの確かめが済んだ時点で数え、手続きより
+  // 手前で断る——断った取得では AI も地図も呼ばれない（基準 30.5）。どの入口を数えるかは rateLimits.ts の表。
+  // 人かどうかの確かめより後で数えるのは、確かめに落ちた空振りで回数を減らさないため（不具合-04）——
+  // 先に数えると、同じ回線にいる人が確かめを解かずに送るだけで、その回線の全員の登録やログインを止められた。
+  const rateRules = rateRulesFor(config.method, config.path);
+  const admission =
+    rateRules.length === 0
+      ? null
+      : await admitRequest(deps, rateRules, {
+          ip: req.headers.get("cf-connecting-ip"),
+          customerId: ctx.auth === "customer" ? ctx.customerId : null,
+          accountId: ctx.auth === "store" || ctx.auth === "admin" ? ctx.accountId : null,
+          input,
+        });
+  if (admission?.refused) return toResponse(refusal("rate_limited"), renewCookies);
+
   const result = await runHandler(config, { input, params, req, deps, ctx: ctx as RouteAuthContextFor<TAuth> });
-  // 落ちた要求だけを数える規則（ログインの失敗・基準 30.4）は、結果が出てからでないと数えられない。
-  // 例外で終わった要求（500）も「落ちた」として数える（受け止めたので、ここまで必ず来る）。
-  if (rateRule && rateKey && rateRule.counts === "failures") await recordRateOutcome(deps, rateRule, rateKey, result.status < 400);
+  // 落ちた要求だけを数える規則（ログインの失敗・基準 30.4 など）は、先に数えた1回ぶんを、通ったときだけ取り消す。
+  // 例外で終わった要求（500）も「落ちた」として数えたまま（受け止めたので、ここまで必ず来る）。
+  if (admission) await settleCharges(deps, admission.charges, result.status < 400);
   return toResponse(result, renewCookies);
 };
 
