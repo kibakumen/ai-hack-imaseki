@@ -11,6 +11,7 @@ import { banApprovedStore, countNotifiableCustomersOfStore, findStoreStatus } fr
 import { listActiveReservationsOfStore } from "../repo/reservations";
 import type { StoreStatus } from "../repo/stores";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
+import { currentStateRefusal } from "./adminStoreConflict";
 import { sendCancellationPushes } from "./pushMessage";
 
 export type BanStoreResult =
@@ -31,8 +32,9 @@ export type BanStoreResult =
  */
 /**
  * 誰が・なぜ止めたか（と取り消した数・通知した人数）を、停止と同じまとまりで記録する（運営-01）。
+ * 理由は必須（運営-01 の案2・入口の形の検査が空白だけの理由も断る）。
  */
-export const banStore = async (deps: Deps, storeId: string, actor: AdminActor, reason: string | null = null): Promise<BanStoreResult> => {
+export const banStore = async (deps: Deps, storeId: string, actor: AdminActor, reason: string): Promise<BanStoreResult> => {
   const status = await findStoreStatus(deps.db, storeId);
   if (!status) return { ok: false, kind: "not_found" };
   if (status !== "approved") return { ok: false, kind: "state", state: status };
@@ -44,7 +46,8 @@ export const banStore = async (deps: Deps, storeId: string, actor: AdminActor, r
   const action = newAdminAction(deps, actor, "ban", storeId, { reason, detail: { cancelled: affected.length, notified } });
 
   // 同時に来た操作に負けた・変わった行の数が分からないときは「当たらなかった」側へ倒す（repo/d1 の changedRows）。
-  if (!(await banApprovedStore(deps.db, storeId, nowIso, action))) return { ok: false, kind: "state", state: status };
+  // そのときは今の状況を読み直して返す——先に読んだ approved を返すと、画面が逆の文を出す（運営-04 のレビュー）。
+  if (!(await banApprovedStore(deps.db, storeId, nowIso, action))) return currentStateRefusal(deps, storeId);
 
   deps.logger.log({ event: "ban_store", id: storeId, actor: actor.accountId });
   // 取り消した確保を1件ずつ残す（`id` は確保の番号。客を指す値は載せない・基準 27.6）。

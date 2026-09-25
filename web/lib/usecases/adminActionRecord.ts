@@ -10,7 +10,10 @@ import { ID_BYTES } from "../schemas/limits";
 /** 操作した運営（入口がセッションから渡す・defineRoute の ctx.accountId）。 */
 export type AdminActor = { accountId: string };
 
-/** 空白だけの理由は「理由なし」として残す（入口の形の検査は字数だけを見る）。 */
+/**
+ * 空白だけの理由は「理由なし」として残す。取り消し・戻すの理由は入口の形の検査が空白だけを断るので、ここに来るのは
+ * 空でよいもの（運営のメモ）と、入口を通らずに手続きを直に呼ぶ道具の値だけ。
+ */
 const normalizeReason = (reason: string | null | undefined): string | null => {
   const trimmed = reason?.trim() ?? "";
   return trimmed === "" ? null : trimmed;

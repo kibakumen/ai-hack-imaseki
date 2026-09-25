@@ -5,6 +5,7 @@
 //     確かめたら「今の内容を確かめた」で写しを取り直す（印を出しっぱなしにすると読み飛ばされるようになる）
 //   - 登録日時・許可書を上げた日時・承認した日時・同じ店名か住所の登録の数
 //   - 運営のメモと「連絡済み」の印（連絡済みの未承認は承認待ちの数から外れる。許可書が上げ直されたらまた数える）
+//   - 承認と確かめには、この画面で見ている店名・住所・許可書を上げた日時を載せる（`seenOf`・運営-02 のレビュー）
 // 断りの語を読むのは InputRefusal だけ（構造の検査）。ここは受け取った断りを渡すだけ。
 
 import Link from "next/link";
@@ -23,15 +24,35 @@ type ReloadProps = { store: StoreDetailDto; onChanged: () => Promise<void> };
 
 const FIELD_NAMES = ["note"];
 
+/**
+ * 運営がこの画面で見ている店の内容（運営-02 のレビュー）。承認と「今の内容を確かめた」に載せ、サーバーが今の値と
+ * 突き合わせる——見たあとで店が変えていたら、見ていない内容を写しに入れずに断る（409 の `changed`）。
+ */
+export const seenOf = (store: StoreDetailDto) => ({ name: store.name, address: store.address, licenseUploadedAt: store.licenseUploadedAt });
+
+/** 見たあとで店の内容が変わっていた断り（409 の `changed`）を受けたときの1行。承認の欄と確かめの欄が使う。 */
+export const CHANGED_SINCE_SEEN_TEXT = "開いている間に、店名・住所・営業許可書のどれかが変わりました。今の内容に合わせて表示し直したので、見直してからもう一度押してください。";
+
 /** 承認後の変更（運営-02）。写しの無い店・変わっていない店では何も出さない。 */
 export const ApprovalChanges = ({ store, onChanged }: ReloadProps) => {
   const acknowledge = useAdminAction();
+  const [changedWhileOpen, setChangedWhileOpen] = useState(false);
   if (!store.changedSinceApproval || !store.approval) return null;
   const approval = store.approval;
 
   const confirmChanges = async () => {
-    const result = await acknowledge.run(() => callApi("POST /api/admin/stores/:id/acknowledge", { params: { id: store.id }, body: {} }));
-    if (result !== null && !isFailure(result)) await onChanged();
+    setChangedWhileOpen(false);
+    const result = await acknowledge.run(() => callApi("POST /api/admin/stores/:id/acknowledge", { params: { id: store.id }, body: { seen: seenOf(store) } }));
+    if (result === null) return;
+    if (!isFailure(result)) {
+      await onChanged();
+      return;
+    }
+    // 見たあとで変わっていた・状況が動いていた（409 の今の状況）なら、詳細を取り直して今の内容を見せる（運営-04 と同じ形）
+    if (!result.current) return;
+    acknowledge.clear();
+    setChangedWhileOpen(result.current.changed === true);
+    await onChanged();
   };
 
   return (
@@ -70,6 +91,11 @@ export const ApprovalChanges = ({ store, onChanged }: ReloadProps) => {
           今の内容を確かめた
         </button>
       </div>
+      {changedWhileOpen && (
+        <p data-testid="acknowledge-conflict" className={styles.note} role="alert">
+          {CHANGED_SINCE_SEEN_TEXT}
+        </p>
+      )}
       <FormMessage failure={acknowledge.failure} />
     </section>
   );

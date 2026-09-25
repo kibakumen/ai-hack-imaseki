@@ -146,6 +146,41 @@ describe("状況が先に変わっていたとき（運営-04）と、断りの�
     expect(screen.queryByTestId("confirm-ban")).toBeNull();
   });
 
+  it("承認は、詳細で見た店名・住所・許可書を上げた日時を載せて送る。見たあとで変わっていた断り（current.changed）なら、そう出して詳細を取り直す", async () => {
+    let uploadedAt = "2026-09-02T01:00:00.000Z";
+    api = installFakeApi({
+      "GET /api/admin/stores/:id": () => detail({ status: "pending", approval: null, licenseUploadedAt: uploadedAt }),
+      "POST /api/admin/stores/:id/approve": () => {
+        uploadedAt = "2026-09-02T02:00:00.000Z";
+        return { status: 409, json: { ok: false, current: { state: "pending", changed: true } } };
+      },
+    });
+    render(<StoreDetail storeId="store-1" />);
+    fireEvent.click(await screen.findByTestId("btn-approve"));
+    const notice = await screen.findByTestId("state-conflict");
+    expect(notice.textContent).toMatch(/店名・住所・営業許可書のどれかが変わりました/);
+    expect(postsTo("/approve")[0].body).toEqual({ seen: { name: STORE.name, address: STORE.address, licenseUploadedAt: "2026-09-02T01:00:00.000Z" } });
+    await waitFor(() => expect(detailLoads().length).toBeGreaterThanOrEqual(2));
+    fireEvent.click(screen.getByTestId("btn-approve"));
+    await waitFor(() => expect(postsTo("/approve")).toHaveLength(2));
+    expect(postsTo("/approve")[1].body).toMatchObject({ seen: { licenseUploadedAt: "2026-09-02T02:00:00.000Z" } });
+  });
+
+  it("「今の内容を確かめた」も見た内容を載せて送り、見たあとで変わっていた断りなら、そう出して詳細を取り直す", async () => {
+    const changedStore = { name: "近所の有名店", changedSinceApproval: true, changes: { name: true, address: false, license: false } };
+    api = installFakeApi({
+      "GET /api/admin/stores/:id": () => detail(changedStore),
+      "POST /api/admin/stores/:id/acknowledge": () => ({ status: 409, json: { ok: false, current: { state: "approved", changed: true } } }),
+    });
+    render(<StoreDetail storeId="store-1" />);
+    const box = await screen.findByTestId("approval-changes");
+    fireEvent.click(within(box).getByTestId("btn-acknowledge"));
+    await waitFor(() => expect(postsTo("/acknowledge")).toHaveLength(1));
+    expect(postsTo("/acknowledge")[0].body).toEqual({ seen: { name: "近所の有名店", address: STORE.address, licenseUploadedAt: STORE.licenseUploadedAt } });
+    expect((await screen.findByTestId("acknowledge-conflict")).textContent).toMatch(/店名・住所・営業許可書のどれかが変わりました/);
+    await waitFor(() => expect(detailLoads().length).toBeGreaterThanOrEqual(2));
+  });
+
   it("送っている間は確かめのボタンを押せない", async () => {
     let release: (value: { json: unknown }) => void = () => {};
     api = installFakeApi({

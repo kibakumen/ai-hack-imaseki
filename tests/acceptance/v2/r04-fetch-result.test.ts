@@ -28,10 +28,10 @@ describeTask("11", "取得の結果", () => {
     const seven = await fetchOffers(c.api, { party: 2 });
     expect(seven.status).toBe(200);
     expect(seven.json.items).toHaveLength(5);
-    for (const s of stores.slice(3)) await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, {});
+    for (const s of stores.slice(3)) await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, { reason: "検査の停止" });
     const three = await fetchOffers(c.api, { party: 2 });
     expect(three.json.items).toHaveLength(3);
-    for (const s of stores.slice(0, 3)) await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, {});
+    for (const s of stores.slice(0, 3)) await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, { reason: "検査の停止" });
     const zero = await fetchOffers(c.api, { party: 2 });
     expect(zero.status).toBe(200);
     expect(zero.json).toMatchObject({ ok: true, items: [] });

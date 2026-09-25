@@ -95,7 +95,7 @@ describeTask("13", "受け取りと確保", () => {
       },
       { name: "店が止めた", party: 2, after: ({ store }) => store.api.post("/api/store/offers/current/stop", {}), kind: "offer_ended" },
       { name: "何時までを過ぎた", party: 2, over: { until: "15:30" }, after: async () => ctx.clock.set("2026-09-22T06:31:00.000Z"), kind: "offer_ended" },
-      { name: "運営が止めた", party: 2, after: ({ store }) => ctx.admin!.api.post(`/api/admin/stores/${store.id}/ban`, {}), kind: "store_banned" },
+      { name: "運営が止めた", party: 2, after: ({ store }) => ctx.admin!.api.post(`/api/admin/stores/${store.id}/ban`, { reason: "検査の停止" }), kind: "store_banned" },
       {
         name: "人数超",
         party: 3,
@@ -311,7 +311,7 @@ describeTask("21", "運営が止めたあとの客のホーム（9.7）", () => 
 
   it("9.7 運営が店を止めると、運営が停止したために取り消されたことの表示（admin_cancelled）になる", async () => {
     const s = await receivedScene(ctx);
-    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
     const home = (await s.customer.api.get("/api/customer/home")).json;
     expect(home.kind).toBe("admin_cancelled");
     expect(home.reservation.status).toBe("admin_cancelled");

@@ -177,7 +177,7 @@ describeTask("21", "運営の停止で残りが1戻る（18.6）", () => {
   });
   it("18.6 運営が店を止めると確保が取り消され、残りが戻る（オファーは終わっている）", async () => {
     const s = await receivedScene(ctx, { capacity: 3 });
-    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
     await assertTsMatchesSql(ctx, s.offer.id, 3);
     expect((await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", s.reservation.id)).status).toBe("admin_cancelled");
   });

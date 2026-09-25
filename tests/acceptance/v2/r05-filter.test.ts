@@ -66,7 +66,7 @@ describeTask("11", "絞り込み（手続き）: 公開中×残りの表と、TS
     await publishOffer(timedOut.api, { until: "15:05" });
     const banned = await mk("運営が止めた店");
     await publishOffer(banned.api);
-    await ctx.admin!.api.post(`/api/admin/stores/${banned.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${banned.id}/ban`, { reason: "検査の停止" });
     const one = await mk("残り1の店");
     await publishOffer(one.api, { capacity: 1 });
     // 残り0の店（受け取られて尽きた）は受け取りのタスク（13）の r08 で見る

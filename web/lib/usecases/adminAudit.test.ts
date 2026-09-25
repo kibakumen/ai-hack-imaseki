@@ -4,7 +4,22 @@
 // 承認のあとに店名・住所・許可書を差し替えると、審査した許可書が消えていた。
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { approvedStore, makeCtx, one, PDF_BYTES, PNG_BYTES, PUSH_SUBSCRIPTION, receivedScene, registerStore, rows, seedAdmin, uploadLicense, type Ctx } from "../../../tests/acceptance/v2/_fakes";
+import {
+  approvedStore,
+  makeCtx,
+  MIN,
+  one,
+  PDF_BYTES,
+  PNG_BYTES,
+  PUSH_SUBSCRIPTION,
+  receivedScene,
+  registerCard,
+  registerStore,
+  rows,
+  seedAdmin,
+  uploadLicense,
+  type Ctx,
+} from "../../../tests/acceptance/v2/_fakes";
 import { ADMIN_REASON_MAX } from "../schemas/limits";
 
 let ctx: Ctx;
@@ -80,6 +95,20 @@ describe("運営の操作の記録（運営-01）", () => {
     await expect(ctx.db.prepare("UPDATE admin_actions SET reason = 'x' WHERE store_id = ?").bind(store.id).run()).rejects.toThrow();
     await expect(ctx.db.prepare("DELETE FROM admin_actions WHERE store_id = ?").bind(store.id).run()).rejects.toThrow();
     expect(await actionsOf(store.id)).toHaveLength(1);
+  });
+
+  it("取り消しと戻すは、入口でも理由が要る。無い・空白だけなら 400 で、店の状況も記録も変わらない", async () => {
+    const store = await approvedStore(ctx, { name: "理由の無い停止を断る店" });
+    for (const body of [{}, { reason: "" }, { reason: "   " }]) {
+      const r = await ctx.admin!.api.post(`/api/admin/stores/${store.id}/ban`, body);
+      expect(r.status, JSON.stringify(body)).toBe(400);
+      expect(r.json.error.fields.map((f: { name: string }) => f.name)).toContain("reason");
+    }
+    expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", store.id)).status).toBe("approved");
+    expect((await ctx.admin!.api.post(`/api/admin/stores/${store.id}/ban`, { reason: "確かめた" })).status).toBe(200);
+    expect((await ctx.admin!.api.post(`/api/admin/stores/${store.id}/restore`, {})).status).toBe(400);
+    expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", store.id)).status).toBe("banned");
+    expect((await actionsOf(store.id)).map((a) => a.action)).toEqual(["approve", "ban"]);
   });
 
   it(`理由は ${ADMIN_REASON_MAX} 字まで。超えると 400 で、店は止まらない`, async () => {
@@ -180,5 +209,95 @@ describe("承認した時点の写し（運営-02）", () => {
     expect((await actionsOf(store.id)).map((a) => a.action)).toEqual(["approve", "acknowledge"]);
     const pending = await registerStore(ctx, { name: "写しの無いまま確かめる店" });
     expect((await ctx.admin!.api.post(`/api/admin/stores/${pending.id}/acknowledge`, {})).status).toBe(409);
+  });
+});
+
+/** 運営が詳細で見た内容（承認と「今の内容を確かめた」に載せる・運営-02 のレビュー）。 */
+const seenOf = async (storeId: string) => {
+  const store = (await ctx.admin!.api.get(`/api/admin/stores/${storeId}`)).json.store;
+  return { name: store.name as string, address: store.address as string | null, licenseUploadedAt: store.licenseUploadedAt as string | null };
+};
+
+/** 時計を1分進める（上げ直した許可書の時刻が、運営が見た時刻と分かれるように）。 */
+const tick = () => ctx.clock.set(new Date(ctx.clock.now().getTime() + MIN).toISOString());
+
+const keysOf = async (storeId: string) =>
+  (await one(ctx.db, "SELECT license_key, approved_license_key FROM stores WHERE id = ?", storeId)) as { license_key: string | null; approved_license_key: string | null };
+
+describe("運営が見た内容で承認する（運営-02 のレビュー）", () => {
+  it("見たあとで店が許可書を上げ直していたら 409（今の状況と changed）で断り、未承認のまま。見直してから送れば、写しは今の許可書になる", async () => {
+    const store = await registerStore(ctx, { name: "審査の間に差し替える店" });
+    await uploadLicense(store.api, PDF_BYTES);
+    await registerCard(store.api);
+    const seen = await seenOf(store.id);
+    tick();
+    expect((await uploadLicense(store.api, PNG_BYTES, "replaced.png", "image/png")).status).toBe(200);
+
+    const refused = await ctx.admin!.api.post(`/api/admin/stores/${store.id}/approve`, { seen });
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual({ ok: false, current: { state: "pending", changed: true } });
+    expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", store.id)).status).toBe("pending");
+    expect(await actionsOf(store.id)).toEqual([]);
+
+    expect((await ctx.admin!.api.post(`/api/admin/stores/${store.id}/approve`, { seen: await seenOf(store.id) })).status).toBe(200);
+    const keys = await keysOf(store.id);
+    expect(keys.approved_license_key).toBe(keys.license_key);
+  });
+
+  it("見たあとで店名か住所が変わっていても断る", async () => {
+    const store = await registerStore(ctx, { name: "審査の間に名前を変える店" });
+    await uploadLicense(store.api, PDF_BYTES);
+    await registerCard(store.api);
+    const seen = await seenOf(store.id);
+    const r = await ctx.admin!.api.post(`/api/admin/stores/${store.id}/approve`, { seen: { ...seen, name: "審査で見た別の名前" } });
+    expect(r.status).toBe(409);
+    expect(r.json.current).toEqual({ state: "pending", changed: true });
+  });
+
+  it("もう承認済みなら、見た内容に関わらず今の状況だけを返す（changed は付けない）", async () => {
+    const store = await approvedStore(ctx, { name: "見た内容より先に承認された店" });
+    const r = await ctx.admin!.api.post(`/api/admin/stores/${store.id}/approve`, { seen: await seenOf(store.id) });
+    expect(r.status).toBe(409);
+    expect(r.json).toEqual({ ok: false, current: { state: "approved" } });
+  });
+});
+
+describe("変更を確かめたあとの、前の写しの許可書（運営-02 のレビュー）", () => {
+  it("写しを取り直すと、前の写しだけが指していた許可書は置き場から消える", async () => {
+    const store = await approvedStore(ctx, { name: "確かめで古い許可書を消す店" });
+    const reviewed = (await keysOf(store.id)).license_key as string;
+    tick();
+    await uploadLicense(store.api, PNG_BYTES, "replaced.png", "image/png");
+    const current = (await keysOf(store.id)).license_key as string;
+    expect(ctx.files.store.has(reviewed)).toBe(true);
+
+    const ack = await ctx.admin!.api.post(`/api/admin/stores/${store.id}/acknowledge`, { seen: await seenOf(store.id) });
+    expect(ack.status).toBe(200);
+    expect(await keysOf(store.id)).toEqual({ license_key: current, approved_license_key: current });
+    expect(ctx.files.store.has(reviewed)).toBe(false);
+    expect(ctx.files.store.has(current)).toBe(true);
+  });
+
+  it("許可書が変わっていない（店名だけ変わった）なら、写しの許可書は今の許可書なので消さない", async () => {
+    const store = await approvedStore(ctx, { name: "名前だけ変える店" });
+    await store.api.put("/api/store/profile", { ...store.profile, name: "名前だけ変える店・改" });
+    const key = (await keysOf(store.id)).license_key as string;
+    expect((await ctx.admin!.api.post(`/api/admin/stores/${store.id}/acknowledge`, { seen: await seenOf(store.id) })).status).toBe(200);
+    expect(ctx.files.store.has(key)).toBe(true);
+  });
+
+  it("見たあとで店が許可書を上げ直していたら 409（changed）で断り、写しも置き場も変えない", async () => {
+    const store = await approvedStore(ctx, { name: "確かめの間に差し替える店" });
+    const reviewed = (await keysOf(store.id)).license_key as string;
+    await store.api.put("/api/store/profile", { ...store.profile, name: "確かめの間に差し替える店・改" });
+    const seen = await seenOf(store.id);
+    tick();
+    await uploadLicense(store.api, PNG_BYTES, "replaced.png", "image/png");
+    const r = await ctx.admin!.api.post(`/api/admin/stores/${store.id}/acknowledge`, { seen });
+    expect(r.status).toBe(409);
+    expect(r.json.current).toEqual({ state: "approved", changed: true });
+    expect((await keysOf(store.id)).approved_license_key).toBe(reviewed);
+    expect(ctx.files.store.has(reviewed)).toBe(true);
+    expect((await actionsOf(store.id)).map((a) => a.action)).toEqual(["approve"]);
   });
 });

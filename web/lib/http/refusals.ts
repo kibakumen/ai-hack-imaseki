@@ -73,8 +73,11 @@ export const unauthenticated = (): RouteHandlerResult => refusal("unauthenticate
 /** 役割が違う・書き込みの Origin が合わない（403）。 */
 export const forbidden = (): RouteHandlerResult => refusal("forbidden");
 
-/** 今の状態による断り（409）。確保への操作・承認／停止／戻すが、今の状態を返して断る。 */
-export const stateConflict = (state: string): RouteHandlerResult => ({ status: 409, body: { ok: false, current: { state } } });
+/**
+ * 今の状態による断り（409）。確保への操作・承認／停止／戻すが、今の状態を返して断る。
+ * `extra` は今の状態に添える印（運営の承認と確かめが、見たあとで店の内容が変わったことを `changed: true` で添える・運営-02）。
+ */
+export const stateConflict = (state: string, extra: Record<string, boolean> = {}): RouteHandlerResult => ({ status: 409, body: { ok: false, current: { state, ...extra } } });
 
 /** 受け取りの断り（409）。理由・次の一手・新しいホームを1つの応答で返す（描くのは RefusalNotice）。 */
 export const receiveRefused = (refusalBody: unknown, home: unknown): RouteHandlerResult => ({ status: 409, body: { ok: false, refusal: refusalBody, home } });

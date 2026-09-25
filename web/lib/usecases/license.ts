@@ -38,13 +38,16 @@ export const uploadLicense = async (deps: Deps, storeId: string, file: LicenseFi
   if (!contentType) return { ok: false, kind: "file_unsupported" };
 
   const previous = await findStoreDocuments(deps.db, storeId);
-  const approved = await findApprovedLicense(deps.db, storeId);
   const key = licenseKeyFor(deps, storeId);
   await deps.files.put(key, file.bytes, contentType);
   await updateStoreLicense(deps.db, storeId, key, contentType, deps.clock.now().toISOString());
 
   // 表が新しい鍵を指したあとで古いファイルを消す（順を逆にすると、途中で落ちたとき
   // 表が指す先のファイルが無くなる）。消せなくても登録そのものは成り立っている。
+  //
+  // 承認の写しが指す鍵は、**表を書き換えたあとで**読む（2026-09-25 のレビュー）。書き換える前に読むと、その間に入った
+  // 承認が前の鍵を写し、直後にこの手続きがそのファイルを消してしまう。書き換えたあとなら、以後の承認は新しい鍵を写す。
+  const approved = await findApprovedLicense(deps.db, storeId);
   if (previous?.licenseKey && previous.licenseKey !== key && previous.licenseKey !== approved?.key) {
     try {
       await deps.files.delete(previous.licenseKey);

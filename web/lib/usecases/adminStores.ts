@@ -14,7 +14,7 @@ import { listAdminActionsForStore, type AdminActionRow } from "../repo/adminActi
 import {
   acknowledgeStoreChanges,
   findStoreForAdmin,
-  findStoreStatus,
+  findStoreReview,
   listStoresForAdmin,
   saveStoreNote,
   summarizeStoresForAdmin,
@@ -22,11 +22,11 @@ import {
   type AdminStoreListRow,
   type AdminStoreSummary,
 } from "../repo/adminStores";
-import type { StoreStatus } from "../repo/stores";
-import type { AdminStoreNoteInput, AdminStoreQuery } from "../schemas/admin";
+import type { AdminSeenStore, AdminStoreNoteInput, AdminStoreQuery } from "../schemas/admin";
 import { ADMIN_HISTORY_MAX } from "../schemas/limits";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { storeReportsForAdmin, type StoreReports } from "./adminReports";
+import { matchesSeen, reviewRefusal, type StoreRefusal } from "./adminStoreConflict";
 
 export type AdminStoreListItem = AdminStoreListRow;
 
@@ -56,7 +56,8 @@ export const adminStoreDetail = async (deps: Deps, storeId: string): Promise<Adm
   return { store, reports, history };
 };
 
-export type AdminStoreChangeResult = { ok: true } | { ok: false; kind: "not_found" } | { ok: false; kind: "state"; state: StoreStatus };
+/** 書き換えの結果。`changed` は、運営が見たあとで店名・住所・許可書が変わった（運営-02 のレビュー）。 */
+export type AdminStoreChangeResult = { ok: true } | StoreRefusal;
 
 /** 運営のメモと「連絡済み」の印を書く（運営-05 の A）。空白だけのメモは「メモなし」。 */
 export const saveAdminStoreNote = async (deps: Deps, storeId: string, actor: AdminActor, input: AdminStoreNoteInput): Promise<AdminStoreChangeResult> => {
@@ -67,10 +68,32 @@ export const saveAdminStoreNote = async (deps: Deps, storeId: string, actor: Adm
 
 /**
  * 承認後の変更を確かめた（運営-02）。今の値で写しを取り直す。写しの無い店（未承認）は今の状況を返して断る。
+ * 運営が見た内容（`seen`）が今と違う・読んでから書くまでの間に変わったときは、写しを取り直さずに `changed` を返す
+ * （運営が見ていない内容を「確かめた」ことにしない・運営-02 のレビュー）。
+ *
+ * **前の写しだけが指していた許可書は、取り直したあとで置き場から消す**（AI判断・運営-02 のレビュー）。
+ * 許可書は個人が特定できる書類で、写しから外れると表からも記録からも指されず、誰も開けないまま残り続ける。
+ * 運営はそれを確かめたうえで今の許可書を認めたので、前の許可書は証跡として要らない（何を・誰が・いつ確かめたかは
+ * 記録の `acknowledge` の行が持つ）。選ばなかった案: 記録の `detail` に前の鍵を残して後から開けるようにする
+ * ——記録は数と真偽だけを置く決め（repo/adminActions）で、鍵を載せると個人データを指す値が追加だけの表に永く残る。
  */
-export const acknowledgeAdminStoreChanges = async (deps: Deps, storeId: string, actor: AdminActor): Promise<AdminStoreChangeResult> => {
-  const status = await findStoreStatus(deps.db, storeId);
-  if (!status) return { ok: false, kind: "not_found" };
-  if (await acknowledgeStoreChanges(deps.db, storeId, newAdminAction(deps, actor, "acknowledge", storeId))) return { ok: true };
-  return { ok: false, kind: "state", state: status };
+export const acknowledgeAdminStoreChanges = async (deps: Deps, storeId: string, actor: AdminActor, seen?: AdminSeenStore): Promise<AdminStoreChangeResult> => {
+  const review = await findStoreReview(deps.db, storeId);
+  if (!review) return { ok: false, kind: "not_found" };
+  if (!review.approved) return { ok: false, kind: "state", state: review.status };
+  if (!matchesSeen(review, seen)) return { ok: false, kind: "changed", state: review.status };
+  if (!(await acknowledgeStoreChanges(deps.db, storeId, review, newAdminAction(deps, actor, "acknowledge", storeId)))) return reviewRefusal(deps, storeId);
+
+  const replaced = review.approvedLicenseKey;
+  if (replaced && replaced !== review.licenseKey) await deleteReplacedLicense(deps, storeId, replaced);
+  return { ok: true };
+};
+
+/** 写しから外れた許可書を消す。消せなくても確かめそのものは成り立っている（記録に残して続ける）。 */
+const deleteReplacedLicense = async (deps: Deps, storeId: string, key: string): Promise<void> => {
+  try {
+    await deps.files.delete(key);
+  } catch {
+    deps.logger.log({ event: "approved_license_delete_failed", id: storeId });
+  }
 };

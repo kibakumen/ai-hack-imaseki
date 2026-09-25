@@ -113,7 +113,7 @@ describeTask("21", "確保中でない5つの状態への取り消し（10.3）"
       if (state === "completed") await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {});
       if (state === "customer_cancelled") await s.customer.api.post(`/api/customer/reservations/${s.reservation.id}/cancel`, {});
       if (state === "store_cancelled") await s.store.api.post(`/api/store/reservations/${s.reservation.id}/cancel`, {});
-      if (state === "admin_cancelled") await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+      if (state === "admin_cancelled") await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
       if (state === "expired") ctx.clock.set("2026-09-22T06:21:00.000Z");
       return s;
     };

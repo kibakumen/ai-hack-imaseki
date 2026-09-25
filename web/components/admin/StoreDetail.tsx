@@ -27,7 +27,7 @@ import { FormMessage } from "../ui/InputRefusal";
 import { LoadView, RefreshFailedBand } from "../ui/LoadState";
 import { ConfirmBox } from "./ConfirmBox";
 import { StoreDocuments, StoreFacts, StoreHistory, StoreImpact, StoreReportsPanel } from "./StoreDetailPanels";
-import { ApprovalChanges, StoreReviewPanel } from "./StoreReviewPanel";
+import { ApprovalChanges, CHANGED_SINCE_SEEN_TEXT, seenOf, StoreReviewPanel } from "./StoreReviewPanel";
 import { TempPasswordPanel } from "./TempPasswordPanel";
 import { useAdminAction, type AdminAction } from "./useAdminAction";
 import styles from "./admin.module.css";
@@ -51,8 +51,11 @@ const statusLabel = (state: string): string => STATUS_LABELS[state as StoreStatu
 /** 承認に足りないもの（基準 25.2）。表示の名前は画面の側が持つ（項目の名前と同じ扱い）。 */
 const missingLabels = (store: StoreDetailDto): string[] => [...(store.license ? [] : ["営業許可書"]), ...(store.cardRegistered ? [] : ["カードの登録"])];
 
-/** 操作が通ったあと・状況が先に変わっていたときに、操作の面の上に出す1行。 */
-type Notice = { kind: "result"; text: string } | { kind: "conflict"; state: string };
+/**
+ * 操作が通ったあと・状況が先に変わっていたときに、操作の面の上に出す1行。`changed` は、状況は同じだが
+ * 開いている間に店名・住所・許可書が変わっていた断り（承認・運営-02 のレビュー）。
+ */
+type Notice = { kind: "result"; text: string } | { kind: "conflict"; state: string; changed: boolean };
 
 type OperationProps = { store: StoreDetailDto; onDone: (notice: Notice) => Promise<void> };
 
@@ -67,18 +70,22 @@ const sendOperation = async <T,>(action: AdminAction, send: () => Promise<T | Ap
     await onDone({ kind: "result", text: resultText(result) });
     return;
   }
-  const state = result.current?.state;
-  if (!state) return;
+  const current = result.current;
+  if (!current) return;
   action.clear();
-  await onDone({ kind: "conflict", state });
+  await onDone({ kind: "conflict", state: current.state, changed: current.changed === true });
 };
 
-/** 承認（基準 25.1・25.2）。足りないものがあれば押せず、足りないものを出す。 */
+/**
+ * 承認（基準 25.1・25.2）。足りないものがあれば押せず、足りないものを出す。
+ * この画面で見ている店名・住所・許可書を上げた日時を載せる——開いている間に店が変えていたら、サーバーが断る（運営-02 のレビュー）。
+ */
 const ApproveForm = ({ store, onDone }: OperationProps) => {
   const approve = useAdminAction();
   const missing = missingLabels(store);
+  const body = { seen: seenOf(store) };
   const send = () =>
-    sendOperation(approve, () => callApi("POST /api/admin/stores/:id/approve", { params: { id: store.id }, body: {} }), onDone, () => "承認しました。この店はオファーを公開できます。");
+    sendOperation(approve, () => callApi("POST /api/admin/stores/:id/approve", { params: { id: store.id }, body }), onDone, () => "承認しました。この店はオファーを公開できます。");
   return (
     <form
       data-testid="form-approve"
@@ -195,7 +202,7 @@ const NoticeLine = ({ notice }: { notice: Notice | null }) => {
   if (notice.kind === "conflict") {
     return (
       <p data-testid="state-conflict" className={styles.note} role="alert">
-        {`ほかの操作で、すでに『${statusLabel(notice.state)}』になっていました。今の状況に合わせて表示し直しました。`}
+        {notice.changed ? CHANGED_SINCE_SEEN_TEXT : `ほかの操作で、すでに『${statusLabel(notice.state)}』になっていました。今の状況に合わせて表示し直しました。`}
       </p>
     );
   }

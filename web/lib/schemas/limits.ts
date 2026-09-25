@@ -157,6 +157,11 @@ export const ADMIN_SEARCH_MAX = 254;
 export const ADMIN_REASON_MAX = 500;
 /** 店ごとの運営のメモの上限 */
 export const ADMIN_NOTE_MAX = 1000;
+/**
+ * 承認に載せる「運営が見た許可書の時刻」の長さの上限（運営-02 のレビュー）。ISO 8601 の時刻（24字）が入れば足りる。
+ * 突き合わせるだけの値なので形は見ない（AI判断）。
+ */
+export const ADMIN_SEEN_TIME_MAX = 40;
 /** 店の詳細に出す操作の履歴の件数 */
 export const ADMIN_HISTORY_MAX = 20;
 /** 店の詳細に出す、その店への通報の直近の件数（運営-03） */

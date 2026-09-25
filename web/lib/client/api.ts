@@ -41,7 +41,8 @@ export type ApiFailure = {
   ok: false;
   error?: { kind: string; fields?: FieldRefusal[]; [extra: string]: unknown };
   refusal?: { kind: string; nextStep: string; [extra: string]: unknown };
-  current?: { state: string };
+  /** `changed` は、運営が見たあとで店の内容が変わった断り（運営の承認と確かめ・運営-02） */
+  current?: { state: string; changed?: boolean };
   home?: unknown;
 };
 

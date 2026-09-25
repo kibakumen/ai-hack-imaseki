@@ -15,6 +15,8 @@ let ctx: Ctx;
 let seq = 0;
 /** 操作した運営（記録の表は運営のアカウントを外部キーで縛らないので、番号だけでよい・運営-01）。 */
 const ACTOR = { accountId: "admin-for-ban-restore-test" };
+/** 止める・戻すの理由（入口でも手続きでも要る・運営-01）。 */
+const REASON = "検査の理由";
 
 beforeAll(async () => {
   ctx = await makeCtx();
@@ -37,7 +39,7 @@ describe("banStore", () => {
   it("25.6・25.7・25.8・27.4 止めると状況が変わり、オファーが終わり、確保中の確保が全部取り消されて記録が1件ずつ付く", async () => {
     const scene = await receivedScene(ctx, { capacity: 3 });
     const second = await anotherReceive(scene.offer.id, scene.at);
-    expect(await banStore(ctx.deps, scene.store.id, ACTOR)).toEqual({ ok: true, cancelled: 2, notified: 0 });
+    expect(await banStore(ctx.deps, scene.store.id, ACTOR, REASON)).toEqual({ ok: true, cancelled: 2, notified: 0 });
 
     expect(await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).toMatchObject({ status: "banned" });
     expect(await one(ctx.db, "SELECT end_reason FROM offers WHERE id = ?", scene.offer.id)).toMatchObject({ end_reason: "banned" });
@@ -49,7 +51,7 @@ describe("banStore", () => {
 
   it("18.6 取り消された確保は枠を押さえないので、残りは募集する組数まで戻る", async () => {
     const scene = await receivedScene(ctx, { capacity: 2 });
-    await banStore(ctx.deps, scene.store.id, ACTOR);
+    await banStore(ctx.deps, scene.store.id, ACTOR, REASON);
     const held = await rows(ctx.db, "SELECT status FROM reservations WHERE offer_id = ? AND status IN ('active','store_cancelled')", scene.offer.id);
     expect(held).toEqual([]);
   });
@@ -58,7 +60,7 @@ describe("banStore", () => {
     const scene = await receivedScene(ctx, { capacity: 3 });
     ctx.clock.set(new Date(ctx.clock.now().getTime() + 25 * MIN).toISOString());
     const fresh = await anotherReceive(scene.offer.id, scene.at);
-    await banStore(ctx.deps, scene.store.id, ACTOR);
+    await banStore(ctx.deps, scene.store.id, ACTOR, REASON);
     expect(await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", scene.reservation.id)).toMatchObject({ status: "active" });
     expect(await rows(ctx.db, "SELECT status FROM reservation_events WHERE reservation_id = ? AND status = 'admin_cancelled'", scene.reservation.id)).toEqual([]);
     expect(await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", fresh.id)).toMatchObject({ status: "admin_cancelled" });
@@ -68,24 +70,24 @@ describe("banStore", () => {
   it("25.4 未承認の店ともう止めた店は止められない（D1 を1文字も変えない）", async () => {
     const pending = await registerStore(ctx, { name: "未承認のまま止めようとする店" });
     let before = await snapshot(ctx.db);
-    expect(await banStore(ctx.deps, pending.id, ACTOR)).toEqual({ ok: false, kind: "state", state: "pending" });
+    expect(await banStore(ctx.deps, pending.id, ACTOR, REASON)).toEqual({ ok: false, kind: "state", state: "pending" });
     expect(await snapshot(ctx.db)).toBe(before);
 
     const store = await approvedStore(ctx, { name: "二度止める店" });
-    await banStore(ctx.deps, store.id, ACTOR);
+    await banStore(ctx.deps, store.id, ACTOR, REASON);
     before = await snapshot(ctx.db);
-    expect(await banStore(ctx.deps, store.id, ACTOR)).toEqual({ ok: false, kind: "state", state: "banned" });
+    expect(await banStore(ctx.deps, store.id, ACTOR, REASON)).toEqual({ ok: false, kind: "state", state: "banned" });
     expect(await snapshot(ctx.db)).toBe(before);
 
-    expect(await banStore(ctx.deps, "no-such-store", ACTOR)).toEqual({ ok: false, kind: "not_found" });
+    expect(await banStore(ctx.deps, "no-such-store", ACTOR, REASON)).toEqual({ ok: false, kind: "not_found" });
   });
 });
 
 describe("restoreStore", () => {
   it("25.9・25.10 止められている店は戻せる。終わったオファーと取り消された確保は戻らない", async () => {
     const scene = await receivedScene(ctx);
-    await banStore(ctx.deps, scene.store.id, ACTOR);
-    expect(await restoreStore(ctx.deps, scene.store.id, ACTOR)).toEqual({ ok: true });
+    await banStore(ctx.deps, scene.store.id, ACTOR, REASON);
+    expect(await restoreStore(ctx.deps, scene.store.id, ACTOR, REASON)).toEqual({ ok: true });
 
     expect(await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).toMatchObject({ status: "approved" });
     expect((await one(ctx.db, "SELECT ended_at FROM offers WHERE id = ?", scene.offer.id))?.ended_at).toBeTruthy();
@@ -96,9 +98,9 @@ describe("restoreStore", () => {
     const approved = await approvedStore(ctx, { name: "戻す必要の無い店" });
     const pending = await registerStore(ctx, { name: "未承認のまま戻そうとする店" });
     const before = await snapshot(ctx.db);
-    expect(await restoreStore(ctx.deps, approved.id, ACTOR)).toEqual({ ok: false, kind: "state", state: "approved" });
-    expect(await restoreStore(ctx.deps, pending.id, ACTOR)).toEqual({ ok: false, kind: "state", state: "pending" });
-    expect(await restoreStore(ctx.deps, "no-such-store", ACTOR)).toEqual({ ok: false, kind: "not_found" });
+    expect(await restoreStore(ctx.deps, approved.id, ACTOR, REASON)).toEqual({ ok: false, kind: "state", state: "approved" });
+    expect(await restoreStore(ctx.deps, pending.id, ACTOR, REASON)).toEqual({ ok: false, kind: "state", state: "pending" });
+    expect(await restoreStore(ctx.deps, "no-such-store", ACTOR, REASON)).toEqual({ ok: false, kind: "not_found" });
     expect(await snapshot(ctx.db)).toBe(before);
   });
 });

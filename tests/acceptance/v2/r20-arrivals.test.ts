@@ -201,7 +201,7 @@ describeTask("21", "止められている店の完了済み（20.23・20.24）�
     const s = await receivedScene(ctx);
     at(ctx, 25);
     expect((await s.store.api.get("/api/store/home")).json.arrivals[0].canComplete).toBe(true);
-    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
     const list = (await s.store.api.get("/api/store/home")).json.arrivals;
     // 一覧が空でも通ってしまわないように、その期限切れの行が一覧に残っていることから確かめる（基準 20.5・設計-04）
     expect(list.map((r: any) => r.reservationId)).toContain(s.reservation.id);
@@ -219,7 +219,7 @@ describeTask("21", "止められている店の完了済み（20.23・20.24）�
     at(ctx, 0);
     const s = await receivedScene(ctx);
     at(ctx, 25);
-    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
     const res = await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {});
     at(ctx, 0);
     expect(res.status).toBe(409);
@@ -229,7 +229,7 @@ describeTask("21", "止められている店の完了済み（20.23・20.24）�
   it("20.15・20.19 運営に取り消された行は一覧から消え、その確保は完了済みにできない", async () => {
     at(ctx, 0);
     const s = await receivedScene(ctx);
-    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, { reason: "検査の停止" });
     expect((await s.store.api.get("/api/store/home")).json.arrivals).toEqual([]);
     const before = await snapshot(ctx.db);
     const res = await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {});

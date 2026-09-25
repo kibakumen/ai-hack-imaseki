@@ -263,6 +263,51 @@ export const findStoreForAdmin = async (db: Db, storeId: string, nowIso: string)
   };
 };
 
+/**
+ * 承認と「今の内容を確かめた」が読む、店の今の内容（運営-02 のレビュー）。承認の写しに入る3つ（店名・住所・許可書）と、
+ * 運営が画面で見た内容と突き合わせる許可書を上げた時刻、承認に要るカードの有無、今の写しが指す許可書。
+ */
+export type StoreReview = {
+  status: StoreStatus;
+  name: string;
+  address: string | null;
+  licenseKey: string | null;
+  licenseUploadedAt: string | null;
+  cardRegistered: boolean;
+  /** 承認した時点の写しが在るか（未承認の店は false） */
+  approved: boolean;
+  /** 今の写しが指す許可書（写しが無い・許可書なしで写した店は null） */
+  approvedLicenseKey: string | null;
+};
+
+/** 写しに入れる3つ。書き込みの WHERE に入れて、読んでから書くまでの間に変わったら当てない。 */
+export type StoreReviewSnapshot = Pick<StoreReview, "name" | "address" | "licenseKey">;
+
+/** 店の今の内容（承認・確かめの前の見立て）。無ければ null。 */
+export const findStoreReview = async (db: Db, storeId: string): Promise<StoreReview | null> => {
+  const row = await db
+    .prepare(
+      `SELECT status, name, address, license_key, license_uploaded_at, card_registered_at, approved_name, approved_license_key
+         FROM stores WHERE id = ?1`,
+    )
+    .bind(storeId)
+    .first();
+  if (!row) return null;
+  return {
+    status: row.status as StoreStatus,
+    name: row.name as string,
+    address: (row.address as string | null) ?? null,
+    licenseKey: (row.license_key as string | null) ?? null,
+    licenseUploadedAt: (row.license_uploaded_at as string | null) ?? null,
+    cardRegistered: row.card_registered_at !== null && row.card_registered_at !== undefined,
+    approved: row.approved_name !== null && row.approved_name !== undefined,
+    approvedLicenseKey: (row.approved_license_key as string | null) ?? null,
+  };
+};
+
+/** 写しに入れる3つが、読んだときのままか（`IS` は NULL どうしも同じと見る）。置き場所は ?3・?4・?5。 */
+const UNCHANGED_SINCE_READ = "name IS ?3 AND address IS ?4 AND license_key IS ?5";
+
 /** 承認に使った許可書の置き場と種類（運営-02）。写しが無ければ null。 */
 export const findApprovedLicense = async (db: Db, storeId: string): Promise<{ key: string; mime: string | null } | null> => {
   const row = await db.prepare(`SELECT approved_license_key, approved_license_mime FROM stores WHERE id = ?1`).bind(storeId).first();
@@ -273,17 +318,19 @@ export const findApprovedLicense = async (db: Db, storeId: string): Promise<{ ke
 /**
  * 承認する（基準 25.1）。未承認の店だけが承認済みになる——前の状況を WHERE に入れた1つの UPDATE で、
  * 同時に来た操作が二重に効かないようにする。同じ文で、承認した時点の店名・住所・許可書を写す（運営-02）。
+ * **写すのは `read`（手続きが読んだ内容）と同じときだけ**——読んでから書くまでの間に店が許可書を上げ直したり
+ * 店名を変えたりしたら当てない（運営が見ていない内容を写しに入れない・運営-02 のレビュー）。
  * 記録（運営-01）は同じまとまりの中で、状況が変わったときだけ足す。当たれば true。
  */
-export const approvePendingStore = async (db: Db, storeId: string, action: NewAdminAction): Promise<boolean> => {
+export const approvePendingStore = async (db: Db, storeId: string, read: StoreReviewSnapshot, action: NewAdminAction): Promise<boolean> => {
   const [approved] = await db.batch([
     db
       .prepare(
         `UPDATE stores SET status = 'approved', approved_at = ?2, approved_name = name, approved_address = address,
                 approved_license_key = license_key, approved_license_mime = license_mime
-          WHERE id = ?1 AND status = 'pending'`,
+          WHERE id = ?1 AND status = 'pending' AND ${UNCHANGED_SINCE_READ}`,
       )
-      .bind(storeId, action.atIso),
+      .bind(storeId, action.atIso, read.name, read.address, read.licenseKey),
     insertAdminActionIfChangedStatement(db, action),
   ]);
   return changedRows(approved) > 0;
@@ -332,16 +379,23 @@ export const banApprovedStore = async (db: Db, storeId: string, nowIso: string, 
 
 /**
  * 承認後の変更を確かめた（運営-02）。今の店名・住所・許可書で写しを取り直し、「承認後に変更あり」を消す。
- * 写しの無い店（未承認）には当たらない。前の写しの許可書は置き場に残す（消さない）。当たれば true。
+ * 写しの無い店（未承認）には当たらない。承認と同じく、`read` から変わっていたら当てない。さらに、取り替える前の
+ * 写しが `read.approvedLicenseKey` のままのときだけ当てる——手続きは、当たったあとでその許可書を置き場から消すので、
+ * 消す鍵と取り替えた鍵が食い違わないようにする（運営-02 のレビュー）。当たれば true。
  */
-export const acknowledgeStoreChanges = async (db: Db, storeId: string, action: NewAdminAction): Promise<boolean> => {
+export const acknowledgeStoreChanges = async (
+  db: Db,
+  storeId: string,
+  read: StoreReviewSnapshot & { approvedLicenseKey: string | null },
+  action: NewAdminAction,
+): Promise<boolean> => {
   const [updated] = await db.batch([
     db
       .prepare(
         `UPDATE stores SET approved_name = name, approved_address = address, approved_license_key = license_key, approved_license_mime = license_mime
-          WHERE id = ?1 AND approved_name IS NOT NULL`,
+          WHERE id = ?1 AND approved_name IS NOT NULL AND approved_license_key IS ?2 AND ${UNCHANGED_SINCE_READ}`,
       )
-      .bind(storeId),
+      .bind(storeId, read.approvedLicenseKey, read.name, read.address, read.licenseKey),
     insertAdminActionIfChangedStatement(db, action),
   ]);
   return changedRows(updated) > 0;

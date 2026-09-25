@@ -5,11 +5,14 @@
 // 足した。止めたときの確保の取り消しとプッシュ（基準 25.8・25.11・22.2）は `usecases/banStore` の側。
 // `GET /api/admin/stores/:id/license`（基準 24.11 の読み口）はタスク7の持ち場。
 //
-// 2026-09-25 監査の指摘 運営-01: 操作した運営（ctx.accountId）を手続きへ渡し、取り消しと戻すは理由を受け取る。
+// 2026-09-25 監査の指摘 運営-01: 操作した運営（ctx.accountId）を手続きへ渡し、取り消しと戻すは理由を受け取る（必須）。
 // 運営-05・運営-02 で、メモと「連絡済み」の印（/note）と、承認後の変更の確かめ（/acknowledge）を足した。
+// 運営-02 のレビューで、承認と確かめは「運営が見た内容」（seen・任意）を受け取り、見たあとで変わっていれば
+// 409 の今の状況に `changed: true` を添えて断る（画面が詳細を取り直す）。
 
-import { adminActionReasonSchema, adminStoreNoteSchema, adminStoreQuerySchema } from "../../schemas/admin";
-import { acknowledgeAdminStoreChanges, adminStoreDetail, adminStoreList, saveAdminStoreNote, type AdminStoreChangeResult } from "../../usecases/adminStores";
+import { adminActionReasonSchema, adminReviewSchema, adminStoreNoteSchema, adminStoreQuerySchema } from "../../schemas/admin";
+import { acknowledgeAdminStoreChanges, adminStoreDetail, adminStoreList, saveAdminStoreNote } from "../../usecases/adminStores";
+import type { StoreRefusal } from "../../usecases/adminStoreConflict";
 import { approveStore } from "../../usecases/approveStore";
 import { banStore } from "../../usecases/banStore";
 import { restoreStore } from "../../usecases/restoreStore";
@@ -38,15 +41,24 @@ const adminStoreDetailRoute = defineRoute({
   },
 });
 
+/**
+ * 店を指す操作の断りを応答へ（見つからない 404・状況が合わない 409）。見たあとで内容が変わった（`changed`）ときも
+ * 409 の今の状況で返し、`changed: true` を添える——画面は状況の文ではなく「店名・住所・許可書が変わった」を出す。
+ */
+const storeRefusal = (result: StoreRefusal): RouteHandlerResult => {
+  if (result.kind === "not_found") return notFound();
+  return result.kind === "changed" ? stateConflict(result.state, { changed: true }) : stateConflict(result.state);
+};
+
 const approveStoreRoute = defineRoute({
   method: "POST",
   path: "/api/admin/stores/:id/approve",
   auth: "admin",
-  handler: async ({ params, deps, ctx }) => {
-    const result = await approveStore(deps, params.id, { accountId: ctx.accountId });
+  input: adminReviewSchema,
+  handler: async ({ params, input, deps, ctx }) => {
+    const result = await approveStore(deps, params.id, { accountId: ctx.accountId }, input.seen);
     if (result.ok) return respond("POST /api/admin/stores/:id/approve", { ok: true });
-    if (result.kind === "not_found") return notFound();
-    if (result.kind === "state") return stateConflict(result.state);
+    if (result.kind !== "approval_missing") return storeRefusal(result);
     // 足りないもの（許可書・カード）を項目として返す（基準 25.2・設計書「入力の誤りの出し方」の 25.2 の行）。
     return refusal("approval_missing", { fields: result.missing.map((name) => ({ name, reason: "required" as const })) });
   },
@@ -58,10 +70,10 @@ const banStoreRoute = defineRoute({
   auth: "admin",
   input: adminActionReasonSchema,
   handler: async ({ params, input, deps, ctx }) => {
-    const result = await banStore(deps, params.id, { accountId: ctx.accountId }, input.reason ?? null);
+    const result = await banStore(deps, params.id, { accountId: ctx.accountId }, input.reason);
     // 取り消した確保の数と通知を送った人数を返す（画面が「N 組を取り消し、M 人に通知しました」と出す・運営-03）。
     if (result.ok) return respond("POST /api/admin/stores/:id/ban", result);
-    return result.kind === "not_found" ? notFound() : stateConflict(result.state);
+    return storeRefusal(result);
   },
 });
 
@@ -75,14 +87,11 @@ const restoreStoreRoute = defineRoute({
   auth: "admin",
   input: adminActionReasonSchema,
   handler: async ({ params, input, deps, ctx }) => {
-    const result = await restoreStore(deps, params.id, { accountId: ctx.accountId }, input.reason ?? null);
+    const result = await restoreStore(deps, params.id, { accountId: ctx.accountId }, input.reason);
     if (result.ok) return respond("POST /api/admin/stores/:id/restore", { ok: true });
-    return result.kind === "not_found" ? notFound() : stateConflict(result.state);
+    return storeRefusal(result);
   },
 });
-
-/** 書き換えの断りを応答へ（見つからない 404・状況が合わない 409）。 */
-const changeRefusal = (result: Exclude<AdminStoreChangeResult, { ok: true }>): RouteHandlerResult => (result.kind === "not_found" ? notFound() : stateConflict(result.state));
 
 /** 運営のメモと「連絡済み」の印（運営-05 の A）。 */
 const adminStoreNoteRoute = defineRoute({
@@ -92,18 +101,19 @@ const adminStoreNoteRoute = defineRoute({
   input: adminStoreNoteSchema,
   handler: async ({ params, input, deps, ctx }) => {
     const result = await saveAdminStoreNote(deps, params.id, { accountId: ctx.accountId }, input);
-    return result.ok ? respond("POST /api/admin/stores/:id/note", { ok: true }) : changeRefusal(result);
+    return result.ok ? respond("POST /api/admin/stores/:id/note", { ok: true }) : storeRefusal(result);
   },
 });
 
-/** 承認後の変更を確かめた（運営-02）。今の店名・住所・許可書で承認の写しを取り直す。 */
+/** 承認後の変更を確かめた（運営-02）。運営が見た内容のままなら、今の店名・住所・許可書で承認の写しを取り直す。 */
 const acknowledgeStoreChangesRoute = defineRoute({
   method: "POST",
   path: "/api/admin/stores/:id/acknowledge",
   auth: "admin",
-  handler: async ({ params, deps, ctx }) => {
-    const result = await acknowledgeAdminStoreChanges(deps, params.id, { accountId: ctx.accountId });
-    return result.ok ? respond("POST /api/admin/stores/:id/acknowledge", { ok: true }) : changeRefusal(result);
+  input: adminReviewSchema,
+  handler: async ({ params, input, deps, ctx }) => {
+    const result = await acknowledgeAdminStoreChanges(deps, params.id, { accountId: ctx.accountId }, input.seen);
+    return result.ok ? respond("POST /api/admin/stores/:id/acknowledge", { ok: true }) : storeRefusal(result);
   },
 });
 
