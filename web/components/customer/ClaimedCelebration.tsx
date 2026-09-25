@@ -147,7 +147,7 @@ export const ClaimedCelebration = ({ reservation, from = null, onClose }: Claime
             Googleマップで経路を開く
           </a>
         )}
-        <button type="button" data-testid="btn-close-celebration" onClick={onClose}>
+        <button type="button" className="claimed-close" data-testid="btn-close-celebration" onClick={onClose}>
           確保の画面へ
         </button>
       </div>

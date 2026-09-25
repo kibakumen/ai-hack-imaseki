@@ -393,6 +393,55 @@ describeTask("34", "明暗の両対応: 色は変数でだけ指す", () => {
       expect(read(f), rel(f)).not.toMatch(/\b(bg|text|border)-(white|black|gray|slate|zinc|neutral|red|blue|green)-?\d*\b/);
     }
   });
+
+  // 2026-09-25 監査の指摘 客-01: 上の検査は .tsx しか見ておらず、2026-09-22 に足した me.css の節が #fff を直に書き、
+  // 定義されていない変数（--color-on-accent・--shadow-md）を予備の値つきで使っていた。暗い配色で半券と「今すぐ探す」が
+  // 読めなくなったのはこのため。.css も同じ決めで見る。除くのは、変数を定義している宣言（`--x: #…`）・var() の予備の値・
+  // マスク（mask-image は透明度だけを使い、色として画面に出ない）の3つだけ。
+  it("32.3 .css も色の値を直接持たない（変数の定義・var() の予備・マスクを除く）。使っている変数はどれも定義されている", () => {
+    const cssFiles = [...walk(path.join(WEB, "components"), (f) => f.endsWith(".css")), ...walk(path.join(WEB, "app"), (f) => f.endsWith(".css"))];
+    expect(cssFiles.length).toBeGreaterThan(0);
+    /** `var(--x, 予備)` を `var(--x)` にする（予備の中の括弧も数える） */
+    const dropFallbacks = (value: string): string => {
+      let out = "";
+      let i = 0;
+      while (i < value.length) {
+        if (!value.startsWith("var(", i)) {
+          out += value[i];
+          i += 1;
+          continue;
+        }
+        let depth = 0;
+        let j = i + 3;
+        for (; j < value.length; j += 1) {
+          if (value[j] === "(") depth += 1;
+          if (value[j] === ")") depth -= 1;
+          if (depth === 0) break;
+        }
+        const inner = value.slice(i + 4, j);
+        out += `var(${inner.split(",")[0].trim()})`;
+        i = j + 1;
+      }
+      return out;
+    };
+    const defined = new Set<string>();
+    const used: Array<{ name: string; where: string }> = [];
+    for (const f of cssFiles) {
+      const text = read(f).replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const m of text.matchAll(/([-\w]+)\s*:\s*([^;{}]+)(?=[;}])/g)) {
+        const [prop, value] = [m[1], m[2]];
+        for (const u of value.matchAll(/var\(\s*(--[-\w]+)/g)) used.push({ name: u[1], where: `${rel(f)}: ${prop}` });
+        if (prop.startsWith("--")) {
+          defined.add(prop);
+          continue;
+        }
+        if (/mask/.test(prop)) continue;
+        const bare = dropFallbacks(value);
+        expect(bare, `${rel(f)}: ${prop}: ${value.trim()}`).not.toMatch(/#[0-9a-fA-F]{3,8}\b|\b(rgba?|hsla?)\(|\b(white|black)\b/);
+      }
+    }
+    for (const u of used) expect(defined.has(u.name), `${u.where} が定義されていない ${u.name} を使っている`).toBe(true);
+  });
 });
 
 describeTask("25", "応答の見出し", () => {
