@@ -122,7 +122,7 @@
     "vitest.config.ts の preserve-acceptance-import-meta-url プラグインは、_tasks.ts のソース文字列（new URL(\"../../../\", import.meta.url)）を書き換えず、Vite の静的解析が `new URL(リテラル, import.meta.url)` をアセット参照として特別扱いする既知の挙動を避けるためのものと読め、書き換え後の式は実行時に同じ値を返すため、受け入れ検査の振る舞いを変えるものではないと判断した（境界外の変更にはあたらない）",
     "web/migrations/0001_init.sql の全テーブル・列は design.md「データと状態」の一覧と対応し、web/wrangler.jsonc の name・d1_databases・r2_buckets・vars は tasks.md 21〜28行目の決めと一致していた",
     "web/migrations/0001_init.sql の全テーブル・列は design.md「データと状態」の列挙（ai_calls の3列・validation_failed・rate_counters を含む）と1対1で一致しており、欠けている表・列は見つからなかった。",
-    "web/wrangler.jsonc の vars は design.md「秘密が混ざらない見張り」が指定した3つの名前（ORCAROUTER_MODEL・VAPID_PUBLIC_KEY・TURNSTILE_SITE_KEY）だけで、値も `07_鍵と環境の準備.md` の控えと一致していた（過不足なし）。",
+    "web/wrangler.jsonc の vars は design.md「秘密が混ざらない見張り」が指定した3つの名前（ORCAROUTER_MODEL・VAPID_PUBLIC_KEY・TURNSTILE_SITE_KEY）だけで、値も `鍵と環境の準備のメモ` の控えと一致していた（過不足なし）。",
     "web/.dev.vars.example の6項目は「秘密情報と個人データの扱い」が列挙した5つの秘密＋ADMIN_CONTACT_EMAILと一致し、値はすべて空だった。",
     "ルート package.json の devDependencies は tasks.md 47行目が列挙した依存（vitest・typescript・wrangler・@testing-library/react・jsdom・react・react-dom・@types/react・zod）を過不足なく満たしていた。",
     "タスク1の差分にはまだ業務ロジック（usecases/domain/adapters）が無いため、受け入れ検査の入力だけを特別扱いする分岐や決め打ちの戻り値は見つからなかった（受け入れ検査への過剰適合の型は、この差分の範囲では崩せなかった）。"

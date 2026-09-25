@@ -178,6 +178,15 @@ describe("公開の文書: 私的な文書と開発ハーネスの内部（安�
     expect(hits).toEqual([]);
   });
 
+  // 2026-09-26 のレビュー（安全-27 の案A の残り）: パスは伏せたが、本人の手元の私的な文書のファイル名（番号つきの .md の名前）が
+  // 仕様と監査記録に残っていた。置き場所の手がかりになるので、中立の名札（本人の注文メモ（v2）・チームの設計案（v1）など）に置き換えた。
+  it("追跡しているどのファイルにも、本人の手元の私的な文書のファイル名（番号つきの .md の名前）が無い", () => {
+    const PRIVATE_DOC_NAME = /(?<![0-9A-Za-z_])(0[1-9]|1[0-9])_[^\s`'"()（）/]*\.md\b/;
+    const PRIVATE_DOC_STEM = /(?<![0-9A-Za-z_])0[1-7]_(v2の注文|要件|題材と注文|チームの|議事録|決定台帳|鍵と環境|AI開発フロー|dev最小版)/;
+    const hits = publicTextFiles.filter((f) => PRIVATE_DOC_NAME.test(read(f)) || PRIVATE_DOC_STEM.test(read(f)));
+    expect(hits).toEqual([]);
+  });
+
   it("監査記録の引用の元は、このリポジトリのファイルか、伏せた名札（（非公開）…）のどちらか", () => {
     const outside = evidence.filter((e) => !isAllowedSource(e.path));
     expect(outside.map((e) => `${e.file}: ${e.path}`)).toEqual([]);
