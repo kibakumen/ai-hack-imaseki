@@ -1,4 +1,8 @@
-// 承認済みへ戻す（要件25の基準 25.9・25.10）。止められている店だけが戻せる。
+// 止められている店を戻す（要件25の基準 25.9・25.10）。止められている店だけが戻せる。
+//
+// **戻した先は2つ**（2026-09-25 安全-20 のレビュー・基準 25.9 を変えた・AI判断）: 止めたときに営業許可書と承認の写しを
+// 消した店は承認待ちへ（店が上げ直し、運営が確かめてから承認する）、写しが残っている店は承認済みへ。
+// 運営の画面は、返した `status` で「承認済みに戻しました」と「承認待ちに戻しました」を出し分ける。
 //
 // **戻しても、終わったオファーと取り消された確保は戻らない**（基準 25.10）——この手続きが触るのは
 // `stores.status` の1列だけで、`offers.ended_at` にも `reservations.status` にも1文字も書かない。
@@ -7,13 +11,14 @@
 // 断りの形は `banStore`・`approveStore` と同じ（`{ ok:false, current:{ state } }` の409）。
 
 import type { Deps } from "../ports";
-import { findStoreStatus, restoreBannedStore } from "../repo/adminStores";
+import { findStoreStatus, restoreBannedStore, type RestoredStatus } from "../repo/adminStores";
 import type { StoreStatus } from "../repo/stores";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { currentStateRefusal } from "./adminStoreConflict";
 
 export type RestoreStoreResult =
-  | { ok: true }
+  /** 戻った。`status` は戻した先（承認済み／承認待ち） */
+  | { ok: true; status: RestoredStatus }
   | { ok: false; kind: "not_found" }
   /** 止められていない（未承認・もう承認済み）。今の状況を返して断る（基準 25.9） */
   | { ok: false; kind: "state"; state: StoreStatus };
@@ -31,8 +36,9 @@ export const restoreStore = async (deps: Deps, storeId: string, actor: AdminActo
   // 分からないときも「当たらなかった」側へ倒す（repo/d1 の changedRows・`approveStore` と同じ形）。
   // そのときは今の状況を読み直して返す（先に読んだ banned を返さない・運営-04 のレビュー）。
   const action = newAdminAction(deps, actor, "restore", storeId, { reason });
-  if (!(await restoreBannedStore(deps.db, storeId, action))) return currentStateRefusal(deps, storeId);
+  const restored = await restoreBannedStore(deps.db, storeId, action);
+  if (restored === null) return currentStateRefusal(deps, storeId);
 
   deps.logger.log({ event: "restore_store", id: storeId, actor: actor.accountId });
-  return { ok: true };
+  return { ok: true, status: restored };
 };

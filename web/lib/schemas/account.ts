@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import { isPlainLine } from "../domain/plainText";
-import { EMAIL_MAX, EMAIL_PATTERN, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN } from "./limits";
+import { EMAIL_MAX, EMAIL_PATTERN, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN, STORE_TERMS_VERSION } from "./limits";
 
 /** メールアドレス: @ をちょうど1つ、その前後に1字以上、254字以内（基準 12.4）。 */
 const emailSchema = z.string().max(EMAIL_MAX).regex(EMAIL_PATTERN);
@@ -17,6 +17,9 @@ export const storeRegisterSchema = z.object({
   name: z.string().min(STORE_NAME_MIN).max(STORE_NAME_MAX).refine(isPlainLine),
   email: emailSchema,
   password: passwordSchema,
+  // 同意した店向けの利用規約の版。**今の版と一致しなければ断る**（2026-09-25 監査の指摘 店-21 のレビュー。
+  // 同意は画面の中だけで、入口は同意なしでも通り、版も残らなかった）。通った登録は版と時刻を残す（registerStore）。
+  agreedTermsVersion: z.literal(STORE_TERMS_VERSION),
 });
 
 /**

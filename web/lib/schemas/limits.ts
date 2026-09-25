@@ -157,8 +157,6 @@ export const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
 export const LICENSE_UPLOAD_MAX_BODY_BYTES = LICENSE_MAX_BYTES + 64 * 1024;
 /** 画面の「◯MB まで」の文と、入力欄の補助に使う表示用の数（正本は上のバイト数） */
 export const LICENSE_MAX_MEGABYTES = 10;
-/** カードの登録の口が返す受け皿の番号の長さの上限（外の値をそのまま持ち歩かないため・AI判断） */
-export const CARD_SESSION_ID_MAX = 255;
 // 要件24（運営の店の一覧）の基準 24.5
 /** 検索の語の上限（AI判断。店名50字・住所・メールアドレス254字のどれにも当てられる長さ） */
 export const ADMIN_SEARCH_MAX = 254;
@@ -332,10 +330,19 @@ export const PUSH_ENDPOINT_MAX = 2048;
 export const PUSH_KEY_MAX = 255;
 // 要件20（向かっている客と完了済み）の基準 20.4（タスク17が足した）
 /**
- * 店のホームが開いている間、ホームを取り直す間隔（30秒）。基準 20.4 の「30秒以内に映す」の
- * 上限そのものなので、**これより長くしない**（値は基準のまま・AI判断ではない）。
+ * 店のホームが開いている間、ホームを取り直す間隔（10秒・AI判断）。基準 20.4 の「30秒以内に映す」は上限で、
+ * 10秒なら取り直しが1回失敗しても間に合う（客の側の取り直し `usePolling` の10秒と揃えた）。
+ * 2026-09-25 監査の指摘 店-08: それまでは上限と同じ30秒で、1回の失敗で約60秒かかり、客が店頭で番号を見せても
+ * スリープから戻ったばかりの一覧にはまだ行が無いことがあった。画面に戻ったときは、間隔を待たずにすぐ取り直す。
  */
-export const ARRIVALS_REFRESH_MS = 30_000;
+export const ARRIVALS_REFRESH_MS = 10_000;
+
+/**
+ * 期限切れのあと、店が完了済みにできる長さ（20分・本人選択）の画面の側の写し。遅れている客の「HH:MM まで
+ * 完了にできます」（店-02）が読む。判断の正本は `domain/reservation` の `EXPIRED_GRACE_MS`（画面は lib/domain の
+ * うち texts しか読めない）。2つが同じ値であることは web/tests/domain/reservation.test.ts が固定する。
+ */
+export const ARRIVAL_COMPLETE_GRACE_MS = 20 * 60 * 1000;
 
 // 人かどうかの確かめ（Turnstile）の用途（2026-09-25 監査の指摘 安全-23）
 /**
@@ -349,3 +356,19 @@ export const HUMAN_CHECK_ACTIONS = {
   registerCustomer: "register-customer",
 } as const;
 export type HumanCheckAction = (typeof HUMAN_CHECK_ACTIONS)[keyof typeof HUMAN_CHECK_ACTIONS];
+
+// 店向けの利用規約の版（2026-09-25 監査の指摘 店-21 のレビュー）
+/**
+ * 今の店向けの利用規約の版（日付）。登録の入口（schemas/account の agreedTermsVersion）が今の版への同意を求め、
+ * 通った登録は版と同意の時刻を店の行に残す（migration 0010 の stores.terms_version・terms_agreed_at）。登録の画面
+ * （components/store/RegisterForm）と規約のページ（app/store/terms）も読むので、両方が読めるここに置く。
+ *
+ * それまで同意は画面の中だけで持ち、入口は同意なしでも登録を通し、同意したことも版も残らなかった（争いになったとき
+ * 運営に拠り所が無い）。
+ *
+ * ⚠️ 規約の文面（app/store/terms）を変えたら、この版を上げる。上げると、開いたままの古い画面から送られた登録は断られ
+ *    （読み込み直せば通る）、以後の登録は新しい版で残る。受け入れ検査の場面づくり（tests/acceptance/v2/_fakes の
+ *    STORE_TERMS_AGREEMENT）も同じ値に上げる（schemas/storeTermsVersion.test.ts が見張る）。
+ * ⚠️ すでに登録した店に新しい版へ同意し直してもらう仕組みは無い（AI判断・今は請求しないので、版を上げる予定が無い）。
+ */
+export const STORE_TERMS_VERSION = "2026-09-25";

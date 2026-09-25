@@ -28,7 +28,8 @@ export type OfferView = {
 /** 「向かっている客」の1行（受け入れ検査の契約 `ArrivalRow`）。中身を埋めるのはタスク17。 */
 export type ArrivalView = {
   reservationId: string;
-  kind: "active" | "expired" | "completed" | "store_cancelled";
+  /** customer_cancelled は、客が取り消してから10分だけ残す行（2026-09-25 横断-08 の案A） */
+  kind: "active" | "expired" | "completed" | "store_cancelled" | "customer_cancelled";
   /**
    * 客の呼び名。客が自分で決めていない（自動の登録の `guest-…`・消した客の空）なら null——店の画面は
    * 「お客さま」と出し、見分けはコードに任せる（横断-02 の案A。客は自分の仮の呼び名を知らない）。
@@ -159,6 +160,13 @@ export const COMPLETED_ROW_VIEW_MS = 24 * 60 * 60 * 1000;
 export const STORE_CANCELLED_ROW_VIEW_MS = 20 * 60 * 1000;
 
 /**
+ * 客が取り消した行を「客が取り消しました」として残す長さ（10分・AI判断）。電話番号は出さない。
+ * 2026-09-25 監査の指摘 横断-08 の案A: それまで客の取り消しは一覧から黙って消え（基準 20.15 の AI判断）、
+ * 店は取り消されたことを知らないまま席を空けて待ち続けた。店が一覧を見に来る間に消えない程度に残す。
+ */
+export const CUSTOMER_CANCELLED_ROW_VIEW_MS = 10 * 60 * 1000;
+
+/**
  * 一覧に出しうる行のいちばん長い残り方。読む側（`repo/reservations` の問い合わせ）が
  * 「いつ以降の行を読めば足りるか」をこれで決める——上の3つの長さのうち最も長いもの。
  * 確保中・期限切れの行は受け取りから40分で消えるので、24時間で全部を覆える。
@@ -186,7 +194,8 @@ export type ArrivalRowInput = {
  *   期限切れ             → 期限から20分以内で、客が新しい確保を作っていないときだけ（基準 20.5・20.12）
  *   完了済み             → 完了済みにしてから24時間（基準 20.14）
  *   店が取り消した       → 取り消しから20分（基準 20.16）
- *   客が取り消した・運営に取り消された → 出さない（基準 20.15）
+ *   客が取り消した       → 取り消しから10分（横断-08 の案A。それまでは出さなかった）
+ *   運営に取り消された   → 出さない（基準 20.15。止められた店の帯が、取り消されて客に通知済みであることを言う・店-12）
  */
 const visibleKind = (row: ArrivalRowInput, now: Date): ArrivalView["kind"] | null => {
   const state = effectiveState(row, now);
@@ -195,6 +204,7 @@ const visibleKind = (row: ArrivalRowInput, now: Date): ArrivalView["kind"] | nul
   if (state === "expired") return isWithinExpiredGrace(row, now) && !row.hasNewerReservation ? "expired" : null;
   if (state === "completed") return sinceChange < COMPLETED_ROW_VIEW_MS ? "completed" : null;
   if (state === "store_cancelled") return sinceChange < STORE_CANCELLED_ROW_VIEW_MS ? "store_cancelled" : null;
+  if (state === "customer_cancelled") return sinceChange < CUSTOMER_CANCELLED_ROW_VIEW_MS ? "customer_cancelled" : null;
   return null;
 };
 
@@ -215,7 +225,8 @@ export const arrivalRows = (rows: readonly ArrivalRowInput[], now: Date, options
       kind,
       // 自動の登録の仮の値は、店へ渡す手前で外す（横断-02 の案A。見分けは `domain/guest` の1か所）
       nickname: isGuestNickname(row.nickname) ? null : row.nickname,
-      phone: isPlaceholderPhone(row.phone) ? null : row.phone,
+      // 客が取り消した行には電話番号を出さない（もう連絡の要らない客の番号を見せ続けない・横断-08）
+      phone: kind === "customer_cancelled" || isPlaceholderPhone(row.phone) ? null : row.phone,
       party: row.party,
       code: row.code,
       expiresAt: row.expiresAt.toISOString(),

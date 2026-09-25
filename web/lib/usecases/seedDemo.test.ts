@@ -125,6 +125,21 @@ describe("seedDemo", () => {
     expect((await one<{ status: string }>(ctx.db, "SELECT status FROM stores WHERE id = ?", account.store_id))!.status).toBe("approved");
   });
 
+  // 2026-09-25 安全-20 のレビュー: 運営の画面で止めると許可書と承認の写しが消え、戻すと承認待ちになる。種の入れ直しは
+  // デモの店を承認済みへ戻す道なので、承認待ちに戻った店はそのまま承認し直す（デモの店は許可書を持たない）。
+  it("運営の画面で止めた（承認の写しが消えた）デモの店も、種を入れ直すと承認済みへ戻る", async () => {
+    await seedDemo(ctx.deps, input());
+    const account = await storeAccount();
+    await ctx.db
+      .prepare("UPDATE stores SET status = 'banned', approved_at = NULL, approved_name = NULL, approved_address = NULL, approved_license_key = NULL WHERE id = ?1")
+      .bind(account.store_id)
+      .run();
+
+    await seedDemo(ctx.deps, input());
+
+    expect((await one<{ status: string }>(ctx.db, "SELECT status FROM stores WHERE id = ?", account.store_id))!.status).toBe("approved");
+  });
+
   it("店のメールアドレスが運営のアカウントに使われていれば、店に変えずに断る", async () => {
     const run = seedDemo(ctx.deps, input({ stores: [{ ...STORE, email: ADMIN.email }] }));
     await expect(run).rejects.toThrow(/店のアカウントに使われていません/);

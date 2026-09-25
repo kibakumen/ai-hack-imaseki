@@ -30,7 +30,8 @@ describe("安全-03 外のサービスを呼ぶ入口", () => {
     ctx.geocoder.set(PROFILE.address, { lat: 35.6595, lng: 139.7005 });
     for (let i = 0; i < STORE_PROFILE_RATE_LIMIT; i++) expect((await s.api.put("/api/store/profile", PROFILE)).status, String(i)).toBe(200);
     const geocodes = ctx.geocoder.calls.length;
-    const over = await s.api.put("/api/store/profile", PROFILE);
+    // 住所を変えた保存（通れば地図を呼ぶ形）で確かめる。同じ住所の保存は、上限と関係なく地図を呼ばない（店-18）
+    const over = await s.api.put("/api/store/profile", { ...PROFILE, address: `${PROFILE.address}-別の住所` });
     expect(over.status).toBe(429);
     expect(ctx.geocoder.calls.length).toBe(geocodes);
     // 別の店は数えない

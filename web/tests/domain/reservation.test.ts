@@ -45,3 +45,11 @@ describe("canCancelByStore", () => {
     }
   });
 });
+
+describe("画面の側の写し（店-02）", () => {
+  it("遅れている客の「HH:MM まで完了にできます」が読む長さは、完了済みにできる判断の長さと同じ", async () => {
+    const { ARRIVAL_COMPLETE_GRACE_MS } = await import("../../lib/schemas/limits");
+    const { EXPIRED_GRACE_MS } = await import("../../lib/domain/reservation");
+    expect(ARRIVAL_COMPLETE_GRACE_MS).toBe(EXPIRED_GRACE_MS);
+  });
+});

@@ -2,7 +2,7 @@
 // 確かめの値が無い／人でない／確かめが失敗／3秒返らない、のどれでも断り、D1 は変わらない。人であれば通る。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { CUSTOMER, loadWeb, makeCtx, snapshot, type Ctx } from "./_fakes";
+import { CUSTOMER, loadWeb, makeCtx, snapshot, STORE_TERMS_AGREEMENT, type Ctx } from "./_fakes";
 
 const customerBody = (token: string | undefined) => ({ ...CUSTOMER, phone: "08012340000", ...(token === undefined ? {} : { humanToken: token }) });
 
@@ -81,7 +81,7 @@ describeTask("4", "店の登録とログインを人かどうかの確かめが�
   });
 
   it("店の登録: 値なし／人でない／失敗／3秒返らない、で断り D1 が変わらない", async () => {
-    const body = { name: "検査の店", email: "human-check@example.com", password: "store-pass-1234" };
+    const body = { name: "検査の店", email: "human-check@example.com", password: "store-pass-1234", ...STORE_TERMS_AGREEMENT };
     ctx.human.mode = "human";
     await expectRefusedUnchanged(ctx, "/api/register/store", body, "値なし");
     ctx.human.mode = "bot";

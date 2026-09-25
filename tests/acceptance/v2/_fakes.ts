@@ -349,11 +349,18 @@ export const seedAdmin = async (ctx: AdminScene, input: { email?: string; passwo
   return admin;
 };
 
+/**
+ * 店の登録で送る「同意した店向けの利用規約の版」（2026-09-25 監査の指摘 店-21 のレビュー）。入口は今の版と一致しない
+ * 登録を断り、通った登録は版と同意の時刻を残す。版は入口と画面の正本（web/lib/schemas/limits の STORE_TERMS_VERSION）と同じ値
+ * ——ずれたら web/lib/schemas/storeTermsVersion.test.ts が落ちる（規約の版を上げたら、ここも上げる）。
+ */
+export const STORE_TERMS_AGREEMENT = { agreedTermsVersion: "2026-09-25" } as const;
+
 let storeSeq = 0;
 export const registerStore = async (ctx: ApiScene, over: { name?: string; email?: string; password?: string; humanToken?: string } = {}) => {
   const n = ++storeSeq;
   const input = { name: over.name ?? `店${n}`, email: over.email ?? `store${n}-${Date.now()}@example.com`, password: over.password ?? "store-pass-1234", humanToken: over.humanToken ?? "tok-ok" };
-  const r = await ctx.api().post("/api/register/store", input);
+  const r = await ctx.api().post("/api/register/store", { ...input, ...STORE_TERMS_AGREEMENT });
   if (![200, 201].includes(r.status)) throw new Error(`店の登録に失敗: ${r.status} ${r.text}`);
   let cookie = cookieOf(r);
   if (!cookie) {
@@ -397,20 +404,14 @@ export const registerCardAsPage = async (api: Api) => {
 };
 
 /**
- * 場面づくりのカードの登録。まず画面と同じ道（registerCardAsPage）を歩く。
- *
- * ⚠️ **既知の不具合（不具合-01）の迂回**: 今の実装は、戻り先に番号を載せず、控えた番号で確かめる入口も無いので、
- *    画面の道では登録済みにならない。承認済みの店を作れないと、ほかの全部の場面が作れなくなるため、
- *    その時だけ Stripe の側の控え（偽物の sessions）から番号を取って確かめる。画面の道が直ったかどうかは、
- *    r13 の「既知の不具合（不具合-01）」の検査が見る。**不具合-01 を直してその検査を it に戻すとき、この迂回も消す。**
+ * 場面づくりのカードの登録。画面と同じ道（registerCardAsPage）だけを歩く。
+ * （2026-09-25 まで、画面の道で登録済みにならない件（不具合-01）の迂回として Stripe の側の控えから番号を取っていた。
+ * 不具合-01 を直したので迂回は消した——画面の道で通らなければ、場面づくりも落ちる。）
  */
 export const registerCard = async (api: Api) => {
-  const { checkoutUrl, confirm } = await registerCardAsPage(api);
-  if (confirm.status === 200) return confirm;
-  const sessionId = cardOfCheckout(checkoutUrl).sessionIdOf(checkoutUrl);
-  const bypass = await api.post("/api/store/card/confirm", { sessionId });
-  if (bypass.status !== 200) throw new Error(`カードの登録の確かめに失敗: ${bypass.status} ${bypass.text}`);
-  return bypass;
+  const { confirm } = await registerCardAsPage(api);
+  if (confirm.status !== 200) throw new Error(`カードの登録の確かめに失敗: ${confirm.status} ${confirm.text}`);
+  return confirm;
 };
 
 /** 承認済みの店を1つ作る（登録→店の情報→許可書→カード→運営が承認） */
@@ -711,6 +712,7 @@ export const storeHomeDto = (over: Partial<import("./_types").StoreHomeDto> = {}
   arrivals: [],
   mustChangePassword: false,
   trend: [],
+  cardSetupPending: false,
   ...over,
 });
 export const offerDto = (over: Partial<import("./_types").OfferDto> = {}): import("./_types").OfferDto => ({

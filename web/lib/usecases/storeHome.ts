@@ -28,6 +28,8 @@ export type StoreHome = {
   trend: TrendBucket[];
   coupons: CouponRow[];
   arrivals: ArrivalView[];
+  /** カードの登録を始めて、まだ確かめていない。画面は開いたときに確かめを1回送る（不具合-01） */
+  cardSetupPending: boolean;
 };
 
 /** 一覧と期限切れの記録が読む幅の下限（残り方のいちばん長い24時間・設計-08）。 */
@@ -68,6 +70,7 @@ export const storeHome = async (deps: Deps, storeId: string): Promise<StoreHome 
     status: store.status,
     ...(await storeHomeOfferPart(deps, storeId, coupons)),
     checklist: { license: store.licenseKey !== null, card: store.cardRegisteredAt !== null },
+    cardSetupPending: store.cardSetupPending,
     missingProfile: missingProfileFields(store),
     coupons,
     arrivals: await storeArrivals(deps, storeId, store.status === "banned", now),

@@ -1,7 +1,7 @@
 import { completeReservation } from "../../usecases/completeReservation";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
-import { notFound, stateConflict } from "../refusals";
+import { notFound, refusal, stateConflict } from "../refusals";
 import { cancelByStore } from "../../usecases/cancelByStore";
 // 店から確保を操作する入口（設計書「入口（API）の一覧」の店の入口）。
 // 見分け（役割が店・自分の店の確保だけ）は defineRoute と手続きが済ませるので、ここは
@@ -21,9 +21,11 @@ const completeReservationRoute = defineRoute({
   handler: async ({ params, deps, ctx }) => {
     const result = await completeReservation(deps, ctx.storeId, params.id);
     if (result.ok) return respond("POST /api/store/reservations/:id/complete", { ok: true });
-    // 404 は「その店の確保ではない」。409 は状態による断り（今の状態を返す・基準 20.20）
+    // 404 は「その店の確保ではない」。409 は状態による断り（今の状態を返す・基準 20.20）と、
+    // 止められている店の断り（store_banned・基準 20.25・店-10）
     if (result.kind === "not_found") return notFound();
-    return stateConflict(result.state);
+    if (result.kind === "store_banned") return refusal("store_banned");
+    return stateConflict(result.state, result.newerReservation ? { newerReservation: true } : {});
   },
 });
 

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { canComplete } from "../../lib/domain/reservation";
-import { arrivalRows, COMPLETED_ROW_VIEW_MS, publishPrefill, STORE_CANCELLED_ROW_VIEW_MS, type ArrivalRowInput, type LastOffer } from "../../lib/domain/storeHome";
+import { arrivalRows, COMPLETED_ROW_VIEW_MS, CUSTOMER_CANCELLED_ROW_VIEW_MS, publishPrefill, STORE_CANCELLED_ROW_VIEW_MS, type ArrivalRowInput, type LastOffer } from "../../lib/domain/storeHome";
 
 const MIN = 60_000;
 const T0 = new Date("2026-09-22T06:00:00.000Z");
@@ -105,11 +105,19 @@ describe("arrivalRows", () => {
     expect(kindsAt([cancelled], 31)).toEqual([]);
   });
 
-  it("20.15 客が取り消した行と運営に取り消された行は、いつでも出さない", () => {
-    for (const status of ["customer_cancelled", "admin_cancelled"]) {
-      expect(kindsAt([row({ status, changedAt: 5 })], 6), status).toEqual([]);
-      expect(kindsAt([row({ status, changedAt: 5 })], 25), status).toEqual([]);
-    }
+  it("20.15 運営に取り消された行は、いつでも出さない", () => {
+    expect(kindsAt([row({ status: "admin_cancelled", changedAt: 5 })], 6)).toEqual([]);
+    expect(kindsAt([row({ status: "admin_cancelled", changedAt: 5 })], 25)).toEqual([]);
+  });
+
+  // 2026-09-25 客の取り消しが店の画面に合図なく反映される件（横断-08）の案A: 黙って消さず、数分「客が取り消した」として残す。
+  // 電話番号は出さない（もう連絡の要らない客・取り消した客の番号を店に見せ続けない）。
+  it("横断-08 客が取り消した行は10分だけ「客が取り消した」として残り、電話番号を出さず、操作もできない", () => {
+    const cancelled = row({ status: "customer_cancelled", changedAt: 5 });
+    expect(CUSTOMER_CANCELLED_ROW_VIEW_MS).toBe(10 * MIN);
+    expect(arrivalRows([cancelled], at(6), { storeBanned: false })[0]).toMatchObject({ kind: "customer_cancelled", phone: null, canComplete: false, canCancel: false });
+    expect(kindsAt([cancelled], 14)).toEqual(["customer_cancelled"]);
+    expect(kindsAt([cancelled], 15)).toEqual([]);
   });
 
   it("20.23 止められている店では、どの行も完了済みにできず取り消しもできない", () => {
@@ -121,7 +129,7 @@ describe("arrivalRows", () => {
 
   it("20.18 1件も無ければ空の一覧（出す行が全部消えたときも同じ）", () => {
     expect(arrivalRows([], at(5), { storeBanned: false })).toEqual([]);
-    expect(arrivalRows([row({ status: "customer_cancelled", changedAt: 1 })], at(5), { storeBanned: false })).toEqual([]);
+    expect(arrivalRows([row({ status: "customer_cancelled", changedAt: 1 })], at(12), { storeBanned: false })).toEqual([]);
   });
 });
 

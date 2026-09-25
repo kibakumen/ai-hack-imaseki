@@ -27,6 +27,8 @@ describeTask("4", "店の登録のフォーム（断りの表示）", () => {
     fireEvent.change(screen.getByTestId(TID.field("name")), { target: { value: "検査の店" } });
     fireEvent.change(screen.getByTestId(TID.field("email")), { target: { value: "dup@example.com" } });
     fireEvent.change(screen.getByTestId(TID.field("password")), { target: { value: "store-pass-1234" } });
+    // 店向けの利用規約への同意（2026-09-25 店-21。同意しないと送らない）
+    fireEvent.click(screen.getByTestId(TID.field("agreeTerms")));
     const submit = screen.getByTestId(TID.btn("register")) as HTMLButtonElement;
     fireEvent.click(submit);
     await screen.findByTestId(TID.msg("email"));

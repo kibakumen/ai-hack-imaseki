@@ -26,6 +26,7 @@ export const registerStore = async (deps: Deps, input: StoreRegisterInput): Prom
   const accountId = tokenFromBytes(deps.rng.bytes(ID_BYTES));
   const passwordHash = await hashPassword(deps, input.password);
   const session = await issueSession(deps);
+  const nowIso = deps.clock.now().toISOString();
 
   // 店・アカウント・セッションは1度に書く（途中で落ちて、店だけが残る形を作らない）。
   //
@@ -35,7 +36,9 @@ export const registerStore = async (deps: Deps, input: StoreRegisterInput): Prom
   // 割れる（2026-09-22 タスク25 が足した。タスク4の監査の指摘 F1）。
   try {
     await insertStoreWithAccountAndSession(deps.db, {
-      store: { id: storeId, name: input.name, createdAtIso: deps.clock.now().toISOString() },
+      // 同意した店向けの利用規約の版と時刻を、店と同じまとまりで残す（2026-09-25 監査の指摘 店-21 のレビュー。
+      // 版は入口の形の検査が今の版と突き合わせ済み）
+      store: { id: storeId, name: input.name, createdAtIso: nowIso, terms: { version: input.agreedTermsVersion, agreedAtIso: nowIso } },
       account: { id: accountId, email: input.email, role: "store", storeId, passwordHash },
       session: { tokenHash: session.tokenHash, accountId, expiresAtIso: session.expiresAtIso, createdAtIso: session.createdAtIso },
     });

@@ -34,20 +34,20 @@ const snapshotOf = async (storeId: string) => {
 };
 
 describe("当たらなかった batch は記録を残さない", () => {
-  it("未承認の店を止める・戻す batch は当たらず（止めるは null・戻すは false）、記録の行は増えない", async () => {
+  it("未承認の店を止める・戻す batch は当たらず（どちらも null）、記録の行は増えない", async () => {
     const pending = await registerStore(ctx, { name: "repo で止められない店" });
     const nowIso = ctx.clock.now().toISOString();
     expect(await banApprovedStore(ctx.db, pending.id, nowIso, actionFor(pending.id, "ban"))).toBeNull();
-    expect(await restoreBannedStore(ctx.db, pending.id, actionFor(pending.id, "restore"))).toBe(false);
+    expect(await restoreBannedStore(ctx.db, pending.id, actionFor(pending.id, "restore"))).toBeNull();
     expect(await countActions(pending.id)).toBe(0);
     expect((await one(ctx.db, "SELECT status FROM stores WHERE id = ?", pending.id)).status).toBe("pending");
   });
 
-  it("承認済みの店を承認する・戻す batch は false を返し、記録の行は増えない", async () => {
+  it("承認済みの店を承認する・戻す batch は当たらず（承認は false・戻すは null）、記録の行は増えない", async () => {
     const store = await approvedStore(ctx, { name: "repo で二度承認できない店" });
     const before = await countActions(store.id);
     expect(await approvePendingStore(ctx.db, store.id, await snapshotOf(store.id), actionFor(store.id, "approve"))).toBe(false);
-    expect(await restoreBannedStore(ctx.db, store.id, actionFor(store.id, "restore"))).toBe(false);
+    expect(await restoreBannedStore(ctx.db, store.id, actionFor(store.id, "restore"))).toBeNull();
     expect(await countActions(store.id)).toBe(before);
   });
 

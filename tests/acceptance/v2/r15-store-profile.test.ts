@@ -100,4 +100,24 @@ describeTask("5", "店の情報の保存と住所の位置直し", () => {
       expect(row.lat).toBeCloseTo(35.69, 3);
     }
   });
+
+  // 2026-09-25 監査の指摘 店-18: 住所を変えていないのに保存のたびに地図へ問い合わせ、地図の不調で住所と関係ない項目まで
+  // 保存できなかった。保存済みの住所と同じで位置もあるなら、問い合わせずに前の位置を使う。
+  it("店-18 住所を変えずに保存すると地図を呼ばず、前の位置のまま住所以外の項目を保存する（地図が不調でも通る）。住所を変えれば問い合わせる", async () => {
+    ctx.geocoder.set("東京都新宿区1-1", { lat: 35.69, lng: 139.7 });
+    expect((await put({ address: "東京都新宿区1-1" })).status).toBe(200);
+    const before = await one(ctx.db, "SELECT lat, lng, geocoded_at FROM stores WHERE id = ?", store.id);
+    const calls = ctx.geocoder.calls.length;
+    ctx.geocoder.set("東京都新宿区1-1", "fail");
+    const r = await put({ address: "東京都新宿区1-1", budgetMin: 1000 });
+    expect(r.status).toBe(200);
+    expect(ctx.geocoder.calls.length).toBe(calls);
+    const after = await one(ctx.db, "SELECT lat, lng, geocoded_at, budget_min FROM stores WHERE id = ?", store.id);
+    expect(after).toMatchObject({ lat: before.lat, lng: before.lng, geocoded_at: before.geocoded_at, budget_min: 1000 });
+    // 住所を変えれば問い合わせる（直せなければ何も保存しない・基準 15.10 はそのまま）
+    const moved = await put({ address: "どこにもない住所2", budgetMin: 1500 });
+    expect(moved.status).toBe(409);
+    expect(ctx.geocoder.calls.length).toBe(calls + 1);
+    expect((await one(ctx.db, "SELECT budget_min FROM stores WHERE id = ?", store.id)).budget_min).toBe(1000);
+  });
 });

@@ -1,7 +1,7 @@
 // 要件30 連打の抑止【最終日】（手続き・偽の時計）。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { approvedStore, CUSTOMER, fetchOffers, makeCtx, MIN, ORIGIN, publishOffer, receivedScene, registerCustomer, registerStore, type Ctx } from "./_fakes";
+import { approvedStore, CUSTOMER, fetchOffers, makeCtx, MIN, ORIGIN, publishOffer, receivedScene, registerCustomer, registerStore, STORE_TERMS_AGREEMENT, type Ctx } from "./_fakes";
 
 const at = (ctx: Ctx, minutes: number) => ctx.clock.set(new Date(new Date("2026-09-22T06:00:00.000Z").getTime() + minutes * MIN).toISOString());
 
@@ -39,7 +39,7 @@ describeTask("33", "連打の抑止", () => {
   it("30.2 同じ接続元からの店の登録は1時間に10回まで。11回目は断る。客の登録は店の数を分け合わない。別の接続元は数えない。1時間たつと通る", async () => {
     at(ctx, 10);
     const post = (path: string, body: unknown, ip: string) => ctx.app.fetch(new Request(`${ORIGIN}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN, "cf-connecting-ip": ip }, body: JSON.stringify(body) }));
-    const store = (i: number, ip = "203.0.113.5") => post("/api/register/store", { name: `店${i}`, email: `rate-${i}@example.com`, password: "store-pass-1234", humanToken: "tok-ok" }, ip);
+    const store = (i: number, ip = "203.0.113.5") => post("/api/register/store", { name: `店${i}`, email: `rate-${i}@example.com`, password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT }, ip);
     for (let i = 0; i < 10; i++) expect((await store(i)).status, `店${i}`).toBeLessThan(300);
     const eleventh = await store(10);
     expect(eleventh.status).toBe(429);
@@ -62,8 +62,8 @@ describeTask("33", "連打の抑止", () => {
   it("30.2 人かどうかの確かめに落ちた登録は数えない（不具合-04: 確かめを解かずに送るだけでは、同じ回線の人を止められない）", async () => {
     at(ctx, 90);
     const ip = "203.0.113.61";
-    for (let i = 0; i < 12; i++) expect((await ctx.api(null, { ip }).post("/api/register/store", { name: `空振り${i}`, email: `miss-${i}@example.com`, password: "store-pass-1234" })).status, String(i)).toBe(400);
-    expect((await ctx.api(null, { ip }).post("/api/register/store", { name: "本物", email: "real-after-miss@example.com", password: "store-pass-1234", humanToken: "tok-ok" })).status).toBeLessThan(300);
+    for (let i = 0; i < 12; i++) expect((await ctx.api(null, { ip }).post("/api/register/store", { name: `空振り${i}`, email: `miss-${i}@example.com`, password: "store-pass-1234", ...STORE_TERMS_AGREEMENT })).status, String(i)).toBe(400);
+    expect((await ctx.api(null, { ip }).post("/api/register/store", { name: "本物", email: "real-after-miss@example.com", password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT })).status).toBeLessThan(300);
   });
 
   it("30.3 同じ客の通報は1時間に5回まで。6回目は断る", async () => {
@@ -134,7 +134,7 @@ describeTask("33", "連打の抑止", () => {
     at(ctx, 400);
     const ip = "203.0.113.77";
     const results = await Promise.all(
-      Array.from({ length: 15 }, (_, i) => ctx.api(null, { ip }).post("/api/register/store", { name: `同時${i}`, email: `race-${i}@example.com`, password: "store-pass-1234", humanToken: "tok-ok" })),
+      Array.from({ length: 15 }, (_, i) => ctx.api(null, { ip }).post("/api/register/store", { name: `同時${i}`, email: `race-${i}@example.com`, password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT })),
     );
     expect(results.filter((r) => r.status < 300)).toHaveLength(10);
     expect(results.filter((r) => r.status === 429)).toHaveLength(5);

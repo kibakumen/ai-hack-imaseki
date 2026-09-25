@@ -3,7 +3,7 @@
 
 import type { Deps } from "../ports";
 import { insertAccountStatement, type NewAccount } from "./accounts";
-import { parseStringList } from "./d1";
+import { changedRows, parseStringList } from "./d1";
 import { insertSessionStatement, type NewSession } from "./sessions";
 import type { StoreProfile } from "../schemas/store";
 
@@ -12,12 +12,18 @@ type Db = Deps["db"];
 export type StoreStatus = "pending" | "approved" | "banned";
 
 /** `createdAtIso` は店の登録の時刻（同点・同距離のときの並び・要件6の基準 6.4。タスク9 で追加）。 */
-export type NewStore = { id: string; name: string; createdAtIso: string };
+/**
+ * 新しい店の行。`terms` は同意した店向けの利用規約の版と時刻（登録の画面を通った店だけ・店-21 のレビュー）。
+ * デモの種データの店は画面を通らないので持たない（NULL のまま）。
+ */
+export type NewStore = { id: string; name: string; createdAtIso: string; terms?: { version: string; agreedAtIso: string } };
 
 export type StoreSummary = { id: string; name: string; status: StoreStatus };
 
 const insertStoreStatement = (db: Db, store: NewStore) =>
-  db.prepare(`INSERT INTO stores (id, name, created_at, status) VALUES (?1, ?2, ?3, 'pending')`).bind(store.id, store.name, store.createdAtIso);
+  db
+    .prepare(`INSERT INTO stores (id, name, created_at, status, terms_version, terms_agreed_at) VALUES (?1, ?2, ?3, 'pending', ?4, ?5)`)
+    .bind(store.id, store.name, store.createdAtIso, store.terms?.version ?? null, store.terms?.agreedAtIso ?? null);
 
 /**
  * 店の登録（基準 12.1）。店・アカウント・セッションを1つのまとまり（`db.batch`）で書く——途中で落ちて、
@@ -95,6 +101,39 @@ export const updateStoreProfile = async (db: Db, storeId: string, profile: Store
     .run();
 };
 
+/** 保存済みの住所と位置（住所を変えていない保存で地図へ問い合わせないため・2026-09-25 監査の指摘 店-18）。 */
+export type StoreLocation = { address: string | null; lat: number | null; lng: number | null; url: string | null };
+
+export const findStoreLocation = async (db: Db, storeId: string): Promise<StoreLocation | null> => {
+  const row = await db.prepare(`SELECT address, lat, lng, url FROM stores WHERE id = ?1`).bind(storeId).first();
+  if (!row) return null;
+  return {
+    address: (row.address as string | null) ?? null,
+    lat: typeof row.lat === "number" ? row.lat : null,
+    lng: typeof row.lng === "number" ? row.lng : null,
+    url: (row.url as string | null) ?? null,
+  };
+};
+
+/**
+ * 店の情報だけを書き換え、位置（lat・lng・geocoded_at）は触らない（住所を変えていない保存・店-18）。
+ * 位置を直した時刻も触らないので、Google の利用条件の30日の手入れ（usecases/googleUpkeep）の起点はずれない。
+ *
+ * **保存済みの住所が今の住所のままで、位置が在るときだけ**当たる（店-18 のレビュー）。読んでから書くまでの間に
+ * 別のタブが住所と位置を変えていたら、ここで住所だけを書き戻すと「住所 X に Y の位置」が残り、客を違う場所へ案内する。
+ * 当たったら true。当たらなければ呼ぶ側が地図へ問い合わせる道へ戻る。
+ */
+export const updateStoreDetails = async (db: Db, storeId: string, profile: Omit<StoreProfileRecord, "lat" | "lng">): Promise<boolean> => {
+  const result = await db
+    .prepare(
+      `UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8 WHERE id = ?1
+          AND address = ?3 AND lat IS NOT NULL AND lng IS NOT NULL`,
+    )
+    .bind(storeId, profile.name, profile.address, profile.url, JSON.stringify(profile.genres), JSON.stringify(profile.menus), profile.budgetMin, profile.budgetMax)
+    .run();
+  return changedRows(result) > 0;
+};
+
 // ---------- 営業許可書とカード（タスク7・要件13） ----------
 
 /** 店のホームと運営の詳細が見る、書類まわりの3つ。 */
@@ -107,6 +146,8 @@ export type StoreHomeRow = StoreSummary &
     genres: string[];
     budgetMin: number | null;
     budgetMax: number | null;
+    /** カードの登録の口を開いて、まだ確かめていない（控えの番号が在り、登録済みでない）。不具合-01 */
+    cardSetupPending: boolean;
   };
 
 /**
@@ -134,11 +175,14 @@ export const findStoreDocuments = async (db: Db, storeId: string): Promise<Store
 /** 店のホームが要る列をまとめて1回で読む。 */
 export const findStoreHomeRow = async (db: Db, storeId: string): Promise<StoreHomeRow | null> => {
   const row = await db
-    .prepare(`SELECT id, name, status, address, genres, budget_min, budget_max, license_key, license_mime, card_registered_at FROM stores WHERE id = ?1`)
+    .prepare(
+      `SELECT id, name, status, address, genres, budget_min, budget_max, license_key, license_mime, card_registered_at, card_setup_session_id FROM stores WHERE id = ?1`,
+    )
     .bind(storeId)
     .first();
   if (!row) return null;
   return {
+    cardSetupPending: row.card_setup_session_id !== null && row.card_setup_session_id !== undefined && row.card_registered_at === null,
     id: row.id as string,
     name: row.name as string,
     status: row.status as StoreStatus,
@@ -163,12 +207,92 @@ export const updateStoreLicense = async (db: Db, storeId: string, licenseKey: st
     .run();
 };
 
+// ---------- 営業許可書を消す（2026-09-25 監査の指摘 安全-20 の案1） ----------
+
+/** 営業許可書のファイルの鍵（今の分と承認の写し）と店の状況。消す手続きが読む。 */
+export type StoreLicenseKeys = { status: StoreStatus; licenseKey: string | null; approvedLicenseKey: string | null };
+
+export const findStoreLicenseKeys = async (db: Db, storeId: string): Promise<StoreLicenseKeys | null> => {
+  const row = await db.prepare(`SELECT status, license_key, approved_license_key FROM stores WHERE id = ?1`).bind(storeId).first();
+  if (!row) return null;
+  return {
+    status: row.status as StoreStatus,
+    licenseKey: (row.license_key as string | null) ?? null,
+    approvedLicenseKey: (row.approved_license_key as string | null) ?? null,
+  };
+};
+
+/**
+ * 止められた店の許可書の鍵を表から外す（今の分と承認の写しの両方）。同じ文で**承認の写し全体**（承認の時刻・店名・住所）も
+ * 外す——承認の根拠の書類が無くなったので、戻すときは審査をやり直す印にする（`restoreBannedStore` がこれを見て承認待ちへ
+ * 戻す・安全-20 のレビュー）。
+ *
+ * **止められている間で、鍵が読んだときのままのときだけ**当たる（読んでから書くまでに戻された・上げ直された鍵を、
+ * ファイルを消さないまま外さない・安全-20 のレビュー）。`IS` は NULL どうしも同じと見る。当たれば true。
+ * ファイルそのものは呼ぶ側が置き場から消す。
+ */
+export const clearBannedStoreLicense = async (db: Db, storeId: string, read: Pick<StoreLicenseKeys, "licenseKey" | "approvedLicenseKey">): Promise<boolean> => {
+  const result = await db
+    .prepare(
+      `UPDATE stores SET license_key = NULL, license_mime = NULL, license_uploaded_at = NULL, approved_license_key = NULL, approved_license_mime = NULL,
+              approved_at = NULL, approved_name = NULL, approved_address = NULL
+        WHERE id = ?1 AND status = 'banned' AND license_key IS ?2 AND approved_license_key IS ?3`,
+    )
+    .bind(storeId, read.licenseKey, read.approvedLicenseKey)
+    .run();
+  return changedRows(result) > 0;
+};
+
+/**
+ * どれかの店の行が指している許可書の鍵（今の分と承認の写し）。どこからも指されていないファイルを消す掃除
+ * （usecases/licenseSweep・安全-20 のレビュー）が、消してはいけない鍵として読む。
+ */
+export const findReferencedLicenseKeys = async (db: Db): Promise<Set<string>> => {
+  const { results } = await db
+    .prepare(`SELECT license_key AS key FROM stores WHERE license_key IS NOT NULL UNION SELECT approved_license_key FROM stores WHERE approved_license_key IS NOT NULL`)
+    .all();
+  return new Set((results ?? []).map((row) => String((row as { key: unknown }).key)));
+};
+
+/**
+ * 承認の前の店が自分の許可書を取り下げる。**未承認のままで、読んだ鍵のままのときだけ**当たる——読んでから書くまでに
+ * 承認されたら（承認の写しがその鍵を指す）外さない。当たれば true。
+ */
+export const clearPendingStoreLicense = async (db: Db, storeId: string, licenseKey: string): Promise<boolean> => {
+  const result = await db
+    .prepare(`UPDATE stores SET license_key = NULL, license_mime = NULL, license_uploaded_at = NULL WHERE id = ?1 AND status <> 'approved' AND license_key = ?2`)
+    .bind(storeId, licenseKey)
+    .run();
+  return changedRows(result) > 0;
+};
+
 /** カードの登録の口を開いた印。戻ってきた要求を突き合わせるために持つ（カードの値そのものは持たない）。 */
 export const saveCardSetupSession = async (db: Db, storeId: string, sessionId: string): Promise<void> => {
   await db.prepare(`UPDATE stores SET card_setup_session_id = ?2 WHERE id = ?1`).bind(storeId, sessionId).run();
 };
 
-/** カードが登録済みになった時刻。画面と運営に出るのはこれが在るかどうかだけ（基準 13.8）。 */
+/**
+ * 控えの番号を消す（決済会社のセッションの期限が切れた・2026-09-25 カード登録の自動の確かめのレビュー）。
+ * **読んだ番号のままのときだけ**当たる——確かめている間に店が登録をやり直したら、新しい控えは消さない。
+ */
+export const clearCardSetupSession = async (db: Db, storeId: string, sessionId: string): Promise<void> => {
+  await db.prepare(`UPDATE stores SET card_setup_session_id = NULL WHERE id = ?1 AND card_setup_session_id = ?2`).bind(storeId, sessionId).run();
+};
+
+/**
+ * 確かめに使う控えの番号（2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1）。画面は番号を持たないので、
+ * 確かめの入口はここで読んだ番号だけを外のサービスに照会する。控えが無ければ null。
+ */
+export const findCardSetupSession = async (db: Db, storeId: string): Promise<string | null> => {
+  const row = await db.prepare(`SELECT card_setup_session_id FROM stores WHERE id = ?1`).bind(storeId).first();
+  const sessionId = (row as { card_setup_session_id?: unknown } | null)?.card_setup_session_id;
+  return typeof sessionId === "string" && sessionId !== "" ? sessionId : null;
+};
+
+/**
+ * カードが登録済みになった時刻。画面と運営に出るのはこれが在るかどうかだけ（基準 13.8）。
+ * 確かめ終えた控えの番号は消す（画面が開くたびに確かめ直さない・不具合-01）。
+ */
 export const markCardRegistered = async (db: Db, storeId: string, atIso: string): Promise<void> => {
-  await db.prepare(`UPDATE stores SET card_registered_at = ?2 WHERE id = ?1`).bind(storeId, atIso).run();
+  await db.prepare(`UPDATE stores SET card_registered_at = ?2, card_setup_session_id = NULL WHERE id = ?1`).bind(storeId, atIso).run();
 };

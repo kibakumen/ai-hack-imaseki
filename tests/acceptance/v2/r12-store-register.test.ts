@@ -1,7 +1,7 @@
 // 要件12 店の登録と承認の状況（手続き）。画面は r12-store-register.ui.test.tsx。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { makeCtx, one, PDF_BYTES, registerCard, registerStore, rows, seedAdmin, uploadLicense, type Ctx } from "./_fakes";
+import { makeCtx, one, PDF_BYTES, registerCard, registerStore, rows, seedAdmin, STORE_TERMS_AGREEMENT, uploadLicense, type Ctx } from "./_fakes";
 
 describeTask("4", "店の登録", () => {
   let ctx: Ctx;
@@ -12,8 +12,30 @@ describeTask("4", "店の登録", () => {
     await ctx.dispose();
   });
 
+  // 2026-09-25 監査の指摘 店-21 のレビュー: 同意は画面の中だけで、入口は同意なしでも通り、同意したことも規約の版も
+  // 残らなかった（争いになったとき運営に拠り所が無い）。入口が今の版への同意を求め、通った登録は版と時刻を残す。
+  it("店-21 同意した規約の版が無い・今の版と違う登録は断り、店もアカウントも作らない。通った登録は同意した版と時刻を残す", async () => {
+    const body = { name: "規約の店", email: "terms@example.com", password: "store-pass-1234", humanToken: "tok-ok" };
+    for (const [label, extra] of [
+      ["版なし", {}],
+      ["古い版", { agreedTermsVersion: "2000-01-01" }],
+    ] as const) {
+      const r = await ctx.api().post("/api/register/store", { ...body, ...extra });
+      expect(r.status, label).toBe(400);
+      expect(r.json.error.fields.map((f: { name: string }) => f.name), label).toContain("agreedTermsVersion");
+      expect(await rows(ctx.db, "SELECT id FROM accounts WHERE email = ?", body.email), label).toEqual([]);
+    }
+    const ok = await ctx.api().post("/api/register/store", { ...body, ...STORE_TERMS_AGREEMENT });
+    expect(ok.status).toBe(201);
+    const account = await one(ctx.db, "SELECT store_id FROM accounts WHERE email = ?", body.email);
+    expect(await one(ctx.db, "SELECT terms_version, terms_agreed_at FROM stores WHERE id = ?", account.store_id)).toEqual({
+      terms_version: STORE_TERMS_AGREEMENT.agreedTermsVersion,
+      terms_agreed_at: ctx.clock.now().toISOString(),
+    });
+  });
+
   it("12.1 ログインなしで作れて未承認になる", async () => {
-    const r = await ctx.api().post("/api/register/store", { name: "はじめの店", email: "first@example.com", password: "store-pass-1234", humanToken: "tok-ok" });
+    const r = await ctx.api().post("/api/register/store", { name: "はじめの店", email: "first@example.com", password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
     expect([200, 201]).toContain(r.status);
     const account = await one(ctx.db, "SELECT role, store_id FROM accounts WHERE email = ?", "first@example.com");
     expect(account.role).toBe("store");
@@ -25,7 +47,7 @@ describeTask("4", "店の登録", () => {
     await seedAdmin(ctx, { email: "boss@example.com", password: "admin-pass-1234" });
     for (const email of ["first@example.com", "FIRST@example.com", "boss@example.com", "Boss@Example.com"]) {
       const before = (await rows(ctx.db, "SELECT id FROM accounts")).length;
-      const r = await ctx.api().post("/api/register/store", { name: "重複", email, password: "store-pass-1234", humanToken: "tok-ok" });
+      const r = await ctx.api().post("/api/register/store", { name: "重複", email, password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
       expect(r.status, email).toBe(409);
       expect(r.json.error.kind).toBe("email_taken");
       expect((await rows(ctx.db, "SELECT id FROM accounts")).length).toBe(before);
@@ -34,7 +56,7 @@ describeTask("4", "店の登録", () => {
 
   it("12.3 パスワード 7字・129字は断り、8字・128字は通る", async () => {
     for (const [password, ok] of [["a".repeat(7), false], ["a".repeat(129), false], ["a".repeat(8), true], ["a".repeat(128), true]] as const) {
-      const r = await ctx.api().post("/api/register/store", { name: "pw", email: `pw-${password.length}@example.com`, password, humanToken: "tok-ok" });
+      const r = await ctx.api().post("/api/register/store", { name: "pw", email: `pw-${password.length}@example.com`, password, humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
       if (ok) expect([200, 201], String(password.length)).toContain(r.status);
       else {
         expect(r.status, String(password.length)).toBe(400);
@@ -45,7 +67,7 @@ describeTask("4", "店の登録", () => {
 
   it("12.4 メールアドレスの形: @ が0個・2個・前後が空・255字は断る", async () => {
     for (const email of ["no-at.example.com", "a@@example.com", "@example.com", "a@", `${"a".repeat(243)}@example.com`]) {
-      const r = await ctx.api().post("/api/register/store", { name: "mail", email, password: "store-pass-1234", humanToken: "tok-ok" });
+      const r = await ctx.api().post("/api/register/store", { name: "mail", email, password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
       expect(r.status, email).toBe(400);
       expect(r.json.error.fields.map((f: any) => f.name)).toContain("email");
     }
@@ -53,7 +75,7 @@ describeTask("4", "店の登録", () => {
 
   it("12.5 店名 0字・51字は断り、50字は通る", async () => {
     for (const [name, ok] of [["", false], ["店".repeat(51), false], ["店".repeat(50), true]] as const) {
-      const r = await ctx.api().post("/api/register/store", { name, email: `name-${name.length}@example.com`, password: "store-pass-1234", humanToken: "tok-ok" });
+      const r = await ctx.api().post("/api/register/store", { name, email: `name-${name.length}@example.com`, password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
       if (ok) expect([200, 201]).toContain(r.status);
       else {
         expect(r.status, String(name.length)).toBe(400);

@@ -11,6 +11,7 @@ import { banApprovedStore, findStoreStatus } from "../repo/adminStores";
 import type { StoreStatus } from "../repo/stores";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { currentStateRefusal } from "./adminStoreConflict";
+import { discardLicenseOfBannedStore } from "./license";
 import { sendCancellationPushes } from "./pushMessage";
 
 export type BanStoreResult =
@@ -60,6 +61,15 @@ export const banStore = async (deps: Deps, storeId: string, actor: AdminActor, r
     deps,
     banned.cancelled.map((reservation) => reservation.customerId),
   );
+
+  // 止めた店の営業許可書（今の分と承認の写し）を消す（2026-09-25 監査の指摘 安全-20 の案1）。止めることはもう成立している
+  // ので、消す手続きが D1 の失敗で投げても、止めたことの結果を返す（運営に 500 を返すと、止まっていないように見える・
+  // 安全-20 のレビュー）。消せなかったことは記録に残す（表は許可書を指したままなので、戻すと承認済みに戻る）。
+  try {
+    await discardLicenseOfBannedStore(deps, storeId);
+  } catch {
+    deps.logger.log({ event: "license_discard_failed", id: storeId });
+  }
 
   return { ok: true, cancelled: banned.cancelled.length, notified: banned.notified };
 };

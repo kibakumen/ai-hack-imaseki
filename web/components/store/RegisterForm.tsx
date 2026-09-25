@@ -9,11 +9,12 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
-import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN } from "../../lib/schemas/limits";
+import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN, STORE_TERMS_VERSION } from "../../lib/schemas/limits";
+import { STORE_TERMS_TEXTS } from "../../lib/domain/texts";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
-const FIELD_NAMES = ["name", "email", "password"];
+const FIELD_NAMES = ["name", "email", "password", "agreedTermsVersion"];
 /**
  * メールアドレスの欄は、形の誤りだけでなく「もう登録されている」も直下に出す（要件12の基準 12.2）。
  * 入口は 409 で `kind` に登録済みの語を、`fields` に `email`／`not_allowed` を返す。ここを渡さないと
@@ -27,6 +28,8 @@ const PASSWORD_HINT_ID = "store-register-password-hint";
 /** 断りのあとパスワードを消すか。パスワードの欄の断りと、人の確かめの断り（入れ直しを求める場面）だけ。 */
 const shouldClearPassword = (failure: ApiFailure): boolean =>
   failure.error?.kind === "human_check_failed" || (failure.error?.fields ?? []).some((field) => field.name === "password");
+/** 同意した規約の版が今の版と違うと断られたか（古い画面から送った・店-21 のレビュー） */
+const termsOutdated = (failure: ApiFailure | null): boolean => (failure?.error?.fields ?? []).some((field) => field.name === "agreedTermsVersion");
 /** 登録が済んだら店のホームへ（画面の遷移は1本だけ・呼ぶ側に渡さない） */
 const STORE_HOME_PATH = "/store";
 
@@ -39,6 +42,9 @@ export const RegisterForm = () => {
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const humanRef = useRef<HumanCheckHandle | null>(null);
+  /** 店向けの利用規約への同意（店-21）。同意しないまま押したら送らずに、同意の欄の直下に文を出す */
+  const [agreed, setAgreed] = useState(false);
+  const [askAgree, setAskAgree] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -57,7 +63,12 @@ export const RegisterForm = () => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken } });
+    if (!agreed) {
+      setAskAgree(true);
+      return;
+    }
+    // 同意した規約の版も送る（入口が今の版と突き合わせ、版と時刻を残す・店-21 のレビュー）
+    const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken, agreedTermsVersion: STORE_TERMS_VERSION } });
     if (isFailure(result)) {
       setFailure(result);
       if (shouldClearPassword(result)) setPassword("");
@@ -123,6 +134,36 @@ export const RegisterForm = () => {
         パスワードを表示
       </label>
       <FieldMessage name="password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
+
+      {/* 店向けの利用規約（2026-09-25 監査の指摘 店-21 の案1）。カードを預かる目的と「今は請求しない」こと・
+          止める条件・客のデータの扱い・退会・問い合わせ先を先に示し、同意してから登録する。 */}
+      <label className="store-agree">
+        <input
+          type="checkbox"
+          data-testid="field-agreeTerms"
+          checked={agreed}
+          onChange={(event) => {
+            setAgreed(event.target.checked);
+            if (event.target.checked) setAskAgree(false);
+          }}
+        />
+        <span>
+          <a href="/store/terms" target="_blank" rel="noopener" data-testid="link-store-terms">
+            店向けの利用規約
+          </a>
+          （カードの扱い・止める条件・お客さまの情報の扱い）を読み、同意します
+        </span>
+      </label>
+      {askAgree ? (
+        <p className="msg" role="alert" data-testid="msg-agreeTerms">
+          {STORE_TERMS_TEXTS.agreeRequired}
+        </p>
+      ) : null}
+      {termsOutdated(failure) ? (
+        <p className="msg" role="alert" data-testid="msg-agreedTermsVersion">
+          {STORE_TERMS_TEXTS.versionOutdated}
+        </p>
+      ) : null}
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.registerStore} onToken={handleToken} />}
 

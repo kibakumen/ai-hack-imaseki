@@ -180,10 +180,15 @@ const ARRIVAL_KIND_LABELS: Record<string, string> = {
   expired: "期限切れ",
   completed: "完了済み",
   store_cancelled: "店が取り消し",
+  customer_cancelled: "客が取り消しました",
 };
 
-/** 断った理由＝その確保の今の状態（基準 20.20）。6つの状態のどれでも文が在る。 */
-const ARRIVAL_REFUSED_TEXTS: Record<string, string> = {
+/**
+ * 断った理由＝その確保の今の状態（基準 20.20）。6つの状態のどれでも文が在る。
+ * **操作ごとに表を分ける**（2026-09-25 監査の指摘 店-10）——それまでは完了向けの1つの表を取り消しでも引き、
+ * 取り消しが断られても「完了済みにできませんでした」「20分を過ぎたため」と出ていた。
+ */
+const ARRIVAL_COMPLETE_REFUSED_TEXTS: Record<string, string> = {
   active: "この確保の状態が変わったため、完了済みにできませんでした。",
   expired: "期限切れから20分を過ぎたため、完了済みにできませんでした。",
   completed: "この確保はすでに完了済みです。",
@@ -191,18 +196,89 @@ const ARRIVAL_REFUSED_TEXTS: Record<string, string> = {
   store_cancelled: "この確保は取り消されていました。",
   admin_cancelled: "運営が取り消していたため、完了済みにできませんでした。",
 };
+/** 期限から20分以内でも、客が新しく確保し直した行（基準 20.12）。20分を過ぎたとは言わない */
+const ARRIVAL_COMPLETE_NEWER_TEXT = "この客はあとから確保し直したため、この行は完了済みにできません。新しい確保の行で完了にしてください。";
+
+const ARRIVAL_CANCEL_REFUSED_TEXTS: Record<string, string> = {
+  active: "この確保の状態が変わったため、取り消せませんでした。",
+  expired: "期限が過ぎているため、取り消せません。期限が過ぎた確保は自動で終わり、枠も戻っています。",
+  completed: "この確保はすでに完了済みのため、取り消せません。",
+  customer_cancelled: "客が先に取り消していました。",
+  store_cancelled: "この確保はすでに取り消されています。",
+  admin_cancelled: "運営が先に取り消していました。",
+};
+
+/** 断りの応答の「今の状態」（`current`）のうち、文を選ぶのに要る所だけ。 */
+type ArrivalRefusedState = { state: string; newerReservation?: boolean };
 
 export const ARRIVALS_TEXTS = {
   /** 行の見出し（基準 20.1・20.5・20.14・20.16） */
   kindLabel: (kind: string): string => ARRIVAL_KIND_LABELS[kind] ?? "確保中",
-  /** 断られたときに行の下へ出す文（基準 20.20） */
-  refused: (state: string): string => ARRIVAL_REFUSED_TEXTS[state] ?? "この確保の状態が変わったため、完了済みにできませんでした。",
+  /** 断られたときに一覧の下へ出す文（基準 20.20）。押した操作（完了か取り消しか）で表を選ぶ（店-10） */
+  refused: (action: "complete" | "store-cancel", current: ArrivalRefusedState): string => {
+    if (action === "store-cancel") return ARRIVAL_CANCEL_REFUSED_TEXTS[current.state] ?? ARRIVAL_CANCEL_REFUSED_TEXTS.active;
+    if (current.state === "expired" && current.newerReservation === true) return ARRIVAL_COMPLETE_NEWER_TEXT;
+    return ARRIVAL_COMPLETE_REFUSED_TEXTS[current.state] ?? ARRIVAL_COMPLETE_REFUSED_TEXTS.active;
+  },
   /** 出す行が1件も無いとき（基準 20.18） */
   empty: "向かっている客はいません。",
   /** 行と確かめに出す客の呼び方。客が呼び名を決めていなければ「お客さま」（見分けはコード・横断-02） */
   who: (nickname: string | null): string => (nickname ? `${nickname} さん` : "お客さま"),
   /** 電話番号の登録が無い行（発信のリンクを付けない・横断-02） */
   noPhone: "電話番号の登録なし（コードで照合）",
+  /** 人数の札（呼び名から切り離して、省かずに出す・店-11） */
+  party: (party: number): string => `${party}名`,
+  /** 見出しと小見出し（店-02: 遅れている客は開いたまま、済んだぶんだけを畳む） */
+  heading: "向かっている客",
+  lateHeading: "遅れている客",
+  lateUntil: (hhmm: string): string => `${hhmm} まで完了にできます`,
+  pastHeading: (count: number): string => `済んだぶん（${count}件）`,
+  /** 人数の変更の印（横断-08 の案B） */
+  partyChanged: (from: number, to: number): string => `人数が変わりました ${from}→${to} 名`,
+  /** 客が取り消した行の印（横断-08 の案A。10分で一覧から消える） */
+  customerCancelled: "客が取り消しました。この組の席の用意は要りません",
+  /** 確かめ（店-01）。取り消しは、残りの枠が戻らないことと、来ない客は期限で枠が戻ることも言う */
+  confirmComplete: (who: string, party: number, code: string): string => `${who}・${party} 名・コード ${code} の来店を確かめましたか。`,
+  confirmCancel: "取り消すと、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります）。この確保を取り消しますか。",
+  sending: "送っています…",
+  /** 取り直し（店-08） */
+  refresh: "今すぐ更新",
+  updatedAt: (hhmm: string): string => `最終更新 ${hhmm}`,
+  /** 音を鳴らせる状態にするボタン（店-07。iPhone などは画面に触れるまで音を鳴らせない） */
+  unlockSound: "音を鳴らす",
+  soundLockedNote: "この端末は、画面に一度触れるまで知らせの音を鳴らせません。",
+} as const;
+
+// ---------- 承認の状況の帯（要件12の基準 12.6・12.7・12.9。2026-09-25 監査の指摘 店-12） ----------
+// それまでは決まった1文だけで、承認を待つ店は何をすればよいか分からず、止められた店は向かっていた客が
+// どうなったか（取り消されて客に通知済み）を知らないまま席を空けて待っていた。連絡先は帯の部品が添える。
+
+export const STORE_STATUS_TEXTS = {
+  pending: "未承認です。運営の承認を待っています。承認されるまでオファーは公開できません。",
+  pendingDetail: "承認は、営業許可書とカードの登録が揃ったあと、運営が許可書を確かめてから行います。分からないことは運営へ連絡してください:",
+  banned: "運営に止められているため、オファーは公開できません。",
+  bannedDetail:
+    "向かっていた客の確保は取り消され、客には通知済みです。期限切れの方を完了にすることもできません。止められた理由と戻す手続きは、運営へ連絡してください:",
+} as const;
+
+// ---------- 書類の画面の説明（2026-09-25 監査の指摘 安全-20・店-21） ----------
+// 営業許可書を何に使い、いつ消すか（実装と一致させる: 止めたとき・承認の前に取り下げたときに消す）と、
+// カードを預かる目的と「今は請求しない」こと。詳しくは店向けの利用規約（/store/terms）。
+export const DOCUMENTS_TEXTS = {
+  licenseRetention:
+    "許可書は承認の確かめだけに使い、運営だけが見ます。運営が店を止めたとき・承認の前に取り下げたときに消します。個人のお名前やご住所が載っている場合は、その部分を隠した写真でもかまいません。",
+  termsLink: "店向けの利用規約",
+  contactLead: "。消してほしいときの連絡先: ",
+  deleteLicense: "営業許可書を消す",
+  deleteLicenseConfirm: "登録した営業許可書を消します。元に戻せません。承認を受けるには、もう一度上げてください。",
+  cardPurpose: "カードは承認の条件で、実在する事業者であることの確かめと、将来の利用料の支払いの準備のために登録していただきます。今は請求しません。",
+} as const;
+
+// ---------- 店向けの利用規約（2026-09-25 監査の指摘 店-21 の案1） ----------
+export const STORE_TERMS_TEXTS = {
+  agreeRequired: "登録するには、店向けの利用規約への同意が要ります。",
+  /** 入口が「同意した版が今の版と違う」で断った（開いたままの古い画面から送った・店-21 のレビュー） */
+  versionOutdated: "店向けの利用規約が新しくなりました。画面を読み込み直し、もう一度読んでから同意してください。",
 } as const;
 
 // ---------- 客の個人データがどこに出るかの説明（2026-09-25 監査の指摘 安全-16・安全-17 の案3） ----------

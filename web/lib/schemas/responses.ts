@@ -114,7 +114,8 @@ const recentStore = object({ reservationId: string(), storeId: string(), storeNa
 /** 向かっている客の1行（受け入れ検査の契約 `ArrivalRow`・domain/storeHome の ArrivalView）。 */
 const arrival = object({
   reservationId: string(),
-  kind: oneOf(["active", "expired", "completed", "store_cancelled"]),
+  // customer_cancelled は客が取り消してから10分だけ残る行（2026-09-25 横断-08 の案A）
+  kind: oneOf(["active", "expired", "completed", "store_cancelled", "customer_cancelled"]),
   // 客が決めた呼び名・登録された電話番号が無ければ null（自動の登録の仮の値を店へ渡さない・横断-02）
   nickname: nullable(string()),
   phone: nullable(string()),
@@ -139,6 +140,8 @@ const storeHome = object({
   mustChangePassword: boolean(),
   /** 公開中のオファーの「今日の動き」——15分ごとの結果に出た回数と受け取り（公開中が無ければ空・2026-09-25 店-15） */
   trend: array(object({ at: string(), shown: number(), received: number() })),
+  /** カードの登録を始めて（決済会社の画面を開いて）、まだ確かめていない。画面は開いたときに確かめを1回送る（2026-09-25 不具合-01） */
+  cardSetupPending: boolean(),
 });
 
 const storeProfile = object({
@@ -304,6 +307,8 @@ export const RESPONSES = {
   "POST /api/store/reservations/:id/cancel": done,
   "GET /api/store/results": object({ items: array(storeResult), summary: object({ today: resultTotals, week: resultTotals }) }),
   "POST /api/store/license": done,
+  // 承認の前の店が許可書を消す（2026-09-25 安全-20）
+  "DELETE /api/store/license": done,
   "POST /api/store/card/setup": object({ ok, url: string() }),
   "POST /api/store/card/confirm": object({ ok, cardRegistered: literal(true) }),
   "POST /api/store/email": done,
@@ -318,7 +323,8 @@ export const RESPONSES = {
   }),
   "POST /api/admin/stores/:id/approve": done,
   "POST /api/admin/stores/:id/ban": object({ ok, cancelled: number(), notified: number() }),
-  "POST /api/admin/stores/:id/restore": done,
+  // 戻した先（止めたときに許可書を消した店は承認待ち・2026-09-25 安全-20 のレビュー）
+  "POST /api/admin/stores/:id/restore": object({ ok, status: oneOf(["approved", "pending"]) }),
   "POST /api/admin/stores/:id/note": done,
   "POST /api/admin/stores/:id/acknowledge": done,
   "POST /api/admin/stores/:id/temp-password": object({ ok, tempPassword: string() }),

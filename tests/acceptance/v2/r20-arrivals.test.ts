@@ -78,16 +78,22 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
     expect(rows[0].party).toBe(4);
     const empty = await receivedScene(ctx);
     await empty.customer.api.post(`/api/customer/reservations/${empty.reservation.id}/cancel`, {});
+    // 客が取り消した行は10分だけ「客が取り消した」として残る（横断-08 の案A）。過ぎれば空
+    expect((await arrivals(empty.store.api)).map((r) => r.kind)).toEqual(["customer_cancelled"]);
+    at(ctx, 16);
     expect(await arrivals(empty.store.api)).toEqual([]);
   });
 
-  it("20.5・20.14・20.15 期限切れは20分・完了済みは24時間残る。客が取り消した行は出ない（店が取り消した行はタスク18、運営はタスク21のブロック）", async () => {
+  // 2026-09-25 横断-08 の案A: 客が取り消した行は黙って消さず、10分だけ「客が取り消した」として残す（電話番号は出さない）。
+  it("20.5・20.14・20.15 期限切れは20分・完了済みは24時間残る。客が取り消した行は10分だけ、操作も電話番号も無しで残る（店が取り消した行はタスク18、運営はタスク21のブロック）", async () => {
     at(ctx, 0);
     const expired = await receivedScene(ctx);
     const completed = await receivedScene(ctx);
     await completed.store.api.post(`/api/store/reservations/${completed.reservation.id}/complete`, {});
     const byCustomer = await receivedScene(ctx);
     await byCustomer.customer.api.post(`/api/customer/reservations/${byCustomer.reservation.id}/cancel`, {});
+    expect(await arrivals(byCustomer.store.api)).toMatchObject([{ kind: "customer_cancelled", phone: null, canComplete: false, canCancel: false }]);
+    at(ctx, 11);
     expect(await arrivals(byCustomer.store.api)).toEqual([]);
     at(ctx, 25);
     let list = await arrivals(expired.store.api);
@@ -119,8 +125,8 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
       await newer.customer.api.post("/api/customer/reservations", { retryOf: newer.reservation.id });
       return [
         { name: "20分以内の期限切れ", scene: within20, minutes: 25, ok: true },
-        { name: "20分を過ぎた期限切れ", scene: over20, minutes: 41, ok: false, state: "expired" },
-        { name: "客が新しい確保を作った期限切れ", scene: newer, minutes: 25, ok: false, state: "expired" },
+        { name: "20分を過ぎた期限切れ", scene: over20, minutes: 41, ok: false, state: "expired", newer: false },
+        { name: "客が新しい確保を作った期限切れ", scene: newer, minutes: 25, ok: false, state: "expired", newer: true },
       ];
     })()) {
       at(ctx, r.minutes);
@@ -130,6 +136,8 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
       else {
         expect(res.status, r.name).toBe(409);
         expect(res.json.current.state, r.name).toBe(r.state);
+        // 同じ「期限切れ」でも、客が新しく確保し直したのか20分を過ぎたのかを分けて返す（画面が理由を取り違えない・店-10）
+        expect(res.json.current.newerReservation === true, r.name).toBe(r.newer);
         expect(await snapshot(ctx.db), r.name).toBe(before);
       }
     }
@@ -243,7 +251,7 @@ describeTask("21", "止められている店の完了済み（20.23・20.24）�
 
   // 画面が「運営に止められているため」と出せる理由が返る（基準 20.25）。以前は3つの語のどれでも通す正規表現で、
   // 実際に返っている expired（期限切れ）との取り違えを見逃していた（設計-04）。
-  it.fails("既知の不具合（店-10）: 止められている店が期限切れの行を完了済みにしようとすると、理由として store_banned が返る", async () => {
+  it("店-10 止められている店が期限切れの行を完了済みにしようとすると、理由として store_banned が返る", async () => {
     at(ctx, 0);
     const s = await receivedScene(ctx);
     at(ctx, 25);
@@ -251,7 +259,7 @@ describeTask("21", "止められている店の完了済み（20.23・20.24）�
     const res = await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {});
     at(ctx, 0);
     expect(res.status).toBe(409);
-    expect(res.json.error?.kind ?? res.json.current?.state).toBe("store_banned");
+    expect(res.json.error?.kind).toBe("store_banned");
   });
 
   it("20.15・20.19 運営に取り消された行は一覧から消え、その確保は完了済みにできない", async () => {

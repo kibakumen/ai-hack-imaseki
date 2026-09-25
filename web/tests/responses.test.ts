@@ -94,9 +94,10 @@ const ALWAYS_SENT: ReadonlyArray<{ route: keyof typeof RESPONSES; body: unknown;
       arrivals: [],
       mustChangePassword: false,
       trend: [{ at: "2026-09-22T06:00:00.000Z", shown: 1, received: 0 }],
+      cardSetupPending: false,
     },
-    // trend は 2026-09-25 店-15 で足した（公開中が無ければ空の配列を必ず送る）
-    fields: ["mustChangePassword", "coupons.0.createdAt", "trend", "trend.0.shown"],
+    // trend は 2026-09-25 店-15 で足した（公開中が無ければ空の配列を必ず送る）。cardSetupPending は不具合-01 で足した
+    fields: ["mustChangePassword", "coupons.0.createdAt", "trend", "trend.0.shown", "cardSetupPending"],
   },
   {
     // 2026-09-25 店-13: 各行の条件と、今日・直近7日の合計

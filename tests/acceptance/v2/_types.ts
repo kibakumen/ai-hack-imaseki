@@ -80,6 +80,8 @@ export type FileStore = {
   put(key: string, body: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<{ body: Uint8Array; contentType: string } | null>;
   delete(key: string): Promise<void>;
+  /** 前置きで始まる鍵の一覧（任意。営業許可書の掃除が使う・2026-09-25 安全-20 のレビュー） */
+  list?(prefix: string): Promise<string[]>;
 };
 export type AppConfig = { turnstileSiteKey: string; vapidPublicKey: string; contactEmail: string | null; orcarouterModel: string };
 
@@ -154,6 +156,8 @@ export type StoreHomeDto = {
   mustChangePassword: boolean;
   /** 公開中のオファーの「今日の動き」——15分ごとの結果に出た回数と受け取り（公開中が無ければ空・2026-09-25 店-15） */
   trend: Array<{ at: string; shown: number; received: number }>;
+  /** カードの登録を始めた（決済会社の画面を開いた）が、まだ確かめていない。画面は開いたときに確かめを1回送る（2026-09-25 不具合-01） */
+  cardSetupPending: boolean;
 };
 export type OfferDto = {
   id: string;
@@ -170,7 +174,8 @@ export type OfferDto = {
 };
 export type ArrivalRow = {
   reservationId: string;
-  kind: "active" | "expired" | "completed" | "store_cancelled";
+  /** customer_cancelled は、客が取り消してから10分だけ残る行（2026-09-25 横断-08 の案A） */
+  kind: "active" | "expired" | "completed" | "store_cancelled" | "customer_cancelled";
   /** 客が決めた呼び名。自動の登録の仮の呼び名（guest-…）・消した客なら null（横断-02） */
   nickname: string | null;
   /** 受け取った時点の電話番号。登録が無い（仮の番号・空）なら null（横断-02・安全-17） */

@@ -131,8 +131,9 @@ const BAN: ReasonedOperation = {
   buttonTestId: "btn-ban",
   buttonLabel: "登録を取り消す",
   confirmTestId: "confirm-ban",
+  // 営業許可書も消えることを先に言う（2026-09-25 安全-20 のレビュー。戻すときは承認待ちになり、店の上げ直しと承認のやり直しが要る）
   confirmText: (store) =>
-    `今 ${store.activeReservations} 組が向かっています。公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます（知らせを受け取れる方には通知が届きます）。登録を取り消しますか。`,
+    `今 ${store.activeReservations} 組が向かっています。公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます（知らせを受け取れる方には通知が届きます）。営業許可書のファイルも消えるため、あとで戻すときは承認待ちになり、店の上げ直しと承認のやり直しが要ります。登録を取り消しますか。`,
   reasonLabel: "取り消す理由（記録に残ります。店への連絡にも使えます）",
   danger: true,
 };
@@ -151,9 +152,28 @@ const RESTORE: ReasonedOperation = {
   danger: false,
 };
 
+/**
+ * 止めたときに営業許可書と承認の写しを消した店（承認の写しが無い）を戻すとき（2026-09-25 安全-20 のレビュー・基準 25.9）。
+ * 承認待ちへ戻るので、承認済みに戻すとは書かない。
+ */
+const RESTORE_TO_PENDING: ReasonedOperation = {
+  ...RESTORE,
+  title: "止めるのをやめる（承認待ちへ）",
+  lead: "止めたときに営業許可書を消したため、戻すと承認待ちになります。店が許可書を上げ直したら、確かめてから承認してください。",
+  buttonLabel: "承認待ちに戻す",
+  confirmText: () => "終わったオファーと取り消されたお客さまの確保は戻りません。この店は承認待ちに戻り、営業許可書を上げ直して承認されるまで公開できません。戻しますか。",
+};
+
+/** 戻す操作の文。承認の写しが残っていれば承認済みへ、無ければ承認待ちへ戻る（サーバーの restoreBannedStore と同じ見分け） */
+const restoreOperation = (store: StoreDetailDto): ReasonedOperation => (store.approval === null ? RESTORE_TO_PENDING : RESTORE);
+
 /** 止めたあとの1行（運営-03）。 */
 const banResultText = (response: ResponseOf<"POST /api/admin/stores/:id/ban">): string =>
   `登録を取り消しました。${response.cancelled} 組の確保を取り消し、${response.notified} 人に通知しました。`;
+
+/** 戻したあとの1行。戻した先はサーバーが返す（安全-20 のレビュー） */
+const restoreResultText = (response: ResponseOf<"POST /api/admin/stores/:id/restore">): string =>
+  response.status === "pending" ? "承認待ちに戻しました。店が営業許可書を上げ直したら、確かめてから承認してください。" : "承認済みに戻しました。";
 
 /** 理由を求める操作（取り消し・戻す・運営-01）。確かめの箱に理由の欄を出し、入れるまで押せない。 */
 const ReasonedForm = ({ store, onDone, op }: OperationProps & { op: ReasonedOperation }) => {
@@ -164,7 +184,7 @@ const ReasonedForm = ({ store, onDone, op }: OperationProps & { op: ReasonedOper
   const send = () =>
     op.path === "ban"
       ? sendOperation(action, () => callApi("POST /api/admin/stores/:id/ban", params), onDone, banResultText)
-      : sendOperation(action, () => callApi("POST /api/admin/stores/:id/restore", params), onDone, () => "承認済みに戻しました。");
+      : sendOperation(action, () => callApi("POST /api/admin/stores/:id/restore", params), onDone, restoreResultText);
   const cancel = () => {
     setConfirming(false);
     action.clear();
@@ -223,7 +243,7 @@ const Operations = ({ store, onDone, notice }: OperationProps & { notice: Notice
     {/* 状況が変わったら操作の欄を作り直す（開いたままの確かめ・前の状況の断りを残さない・運営-04） */}
     {store.status === "pending" && <ApproveForm key="approve" store={store} onDone={onDone} />}
     {store.status === "approved" && <ReasonedForm key="ban" store={store} onDone={onDone} op={BAN} />}
-    {store.status === "banned" && <ReasonedForm key="restore" store={store} onDone={onDone} op={RESTORE} />}
+    {store.status === "banned" && <ReasonedForm key="restore" store={store} onDone={onDone} op={restoreOperation(store)} />}
     <TempPasswordPanel store={store} />
   </section>
 );

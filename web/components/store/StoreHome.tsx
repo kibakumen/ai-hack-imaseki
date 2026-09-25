@@ -9,13 +9,16 @@
 //   「来た客を完了にする」操作だから。公開の設定はその下（1日に何度も触るものではない）。
 // 画面のあいだの行き来はタブに変えた（StoreNav）。新しい客が増えた時は音で知らせる。
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { callApi, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
 import { LoadView } from "../ui/LoadState";
 import { ArrivalsList } from "./ArrivalsList";
-import { playNotifyBeep } from "./beep";
+import { confirmCardSetup, takeAutoConfirmTurn } from "./cardReturn";
+import { SoundUnlock } from "./SoundUnlock";
+import { useArrivalSignals, type ArrivalSignals } from "./useArrivalSignals";
+import { useWakeLock } from "./useWakeLock";
 import { PublishForm } from "./PublishForm";
 import { OfferPanel } from "./OfferPanel";
 import { SetupChecklist } from "./SetupChecklist";
@@ -31,10 +34,17 @@ export type StoreHomeView = StoreHomeDto;
 
 const loadHome = (): Promise<StoreHomeView | ApiFailure> => callApi("GET /api/store/home");
 
-type HomeBodyProps = { home: StoreHomeView; onChanged: () => void };
+type HomeBodyProps = {
+  home: StoreHomeView;
+  onChanged: () => void;
+  /** 新しい客・客の取り消し・人数の変更の印（店-07・横断-08） */
+  signals: Pick<ArrivalSignals, "newIds" | "cancelledIds" | "partyChanges">;
+  /** 最後に取れた時刻（「最終更新 HH:MM」・店-08） */
+  updatedAt: number | null;
+};
 
 /** 取れたホームの中身（案内・状況の帯・向かっている客・公開の設定）。 */
-const HomeBody = ({ home, onChanged }: HomeBodyProps) => {
+const HomeBody = ({ home, onChanged, signals, updatedAt }: HomeBodyProps) => {
   // 仮のパスワードで入った店への案内（基準 14.14）。`app/store/password` の注が「店のホームが
   // ここへ案内する」と言いながら、この道が無かった（2026-09-22 に足した）。
   // 決めるまでは、ホームとパスワードの変更のほかの入口が 403 で断る（2026-09-25 監査の指摘 安全-21）ので、
@@ -57,7 +67,16 @@ const HomeBody = ({ home, onChanged }: HomeBodyProps) => {
 
       {home.status === "pending" && <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />}
 
-      <ArrivalsList rows={home.arrivals ?? []} onChanged={onChanged} />
+      <SoundUnlock />
+      <ArrivalsList
+        rows={home.arrivals ?? []}
+        onChanged={onChanged}
+        newIds={signals.newIds}
+        cancelledIds={signals.cancelledIds}
+        partyChanges={signals.partyChanges}
+        updatedAt={updatedAt}
+        onRefresh={onChanged}
+      />
 
       {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={onChanged} />}
 
@@ -69,22 +88,21 @@ const HomeBody = ({ home, onChanged }: HomeBodyProps) => {
 };
 
 export const StoreHome = () => {
-  /** 前に見た確保の番号。**初めの読み込みでは鳴らさない**（開いた瞬間に全員ぶん鳴るのを避ける） */
-  const seenRef = useRef<Set<string> | null>(null);
+  // 新しい客・人数の変更を、音（鳴らせなければ振動）・カードの印・タブのタイトルの件数で知らせる（店-07・横断-08）。
+  // **初めの読み込みでは鳴らさない**（開いた瞬間に全員ぶん鳴るのを避ける）。比べ方は useArrivalSignals。
+  const signals = useArrivalSignals();
+  const { absorb: absorbArrivals } = signals;
+  // 開いている間は画面の消灯を防ぐ（消えると取り直しも音も止まる・店-07）
+  useWakeLock();
 
   /**
-   * 取り直した中身を受け取ったときの1手ぶん——新しく向かい始めた客がいれば音で知らせる（気づけないと客を
-   * 待たせるため）。描く途中ではなく**受け取った時**に済ませる（描き直しの連鎖を作らない）。
+   * 取り直した中身を受け取ったときの1手ぶん。描く途中ではなく**受け取った時**に済ませる（描き直しの連鎖を作らない）。
    * 「今日の動き」は入口が15分ごとの数を返すので、ここでは溜めない（店-15。溜めた点は開き直すと消えていた）。
    */
-  const absorb = useCallback((next: StoreHomeView) => {
-    const ids = new Set((next.arrivals ?? []).filter((row) => row.kind === "active").map((row) => row.reservationId));
-    const seen = seenRef.current;
-    seenRef.current = ids;
-    if (seen !== null && [...ids].some((id) => !seen.has(id))) playNotifyBeep();
-  }, []);
+  const absorb = useCallback((next: StoreHomeView) => absorbArrivals(next.arrivals ?? []), [absorbArrivals]);
 
-  // 確保の追加と状態の変化を30秒以内に一覧へ映す（基準 20.4）。開いている間だけ動く。
+  // 確保の追加と状態の変化を30秒以内に一覧へ映す（基準 20.4）。間隔は10秒で、画面に戻ったときはすぐ取り直す（店-08）。
+  // 画面が隠れていても止めない（隠れている間こそ新しい客の音が要る）。
   // 取れなかった回は前の値のまま残し（一覧が空に落ちて、向かっている客が消えないように）、
   // **失敗していることは帯で出す**（「最終更新 HH:MM・更新できていません」・2026-09-25 監査の指摘 横断-01。
   // それまでは失敗を黙って捨て、開きっぱなしのタブレットが古い一覧のまま音も鳴らなかった）。
@@ -92,6 +110,22 @@ export const StoreHome = () => {
   const refresh = () => {
     void reload();
   };
+
+  // カードの登録を始めたまま確かめていない店（決済会社の画面から戻る前にタブを閉じた店）は、ホームを開いたときにも
+  // 確かめを送る（2026-09-25 カード登録が画面から完了しない件（不具合-01））。通らなくても文は出さない
+  // （入力を終えていないだけかもしれない。やり直しは書類の画面から）。
+  // **書類の画面と合わせて1つのブラウザのセッションで1回だけ**（開くたびに送ると、開始と同じ回数の制限を使い切り、
+  // 本当に押した「カードを登録する」まで断られた・カード登録の自動の確かめのレビュー）。
+  const cardChecked = useRef(false);
+  const pendingCard = state.status === "ready" && state.data.cardSetupPending && !state.data.checklist.card;
+  useEffect(() => {
+    if (!pendingCard || cardChecked.current) return;
+    cardChecked.current = true;
+    if (!takeAutoConfirmTurn()) return;
+    void (async () => {
+      if ((await confirmCardSetup()) === null) await reload();
+    })();
+  }, [pendingCard, reload]);
 
   // 読めなかった・ログインが切れたときも、見出しとタブは出す（空の main で止めない・横断-01）。
   return (
@@ -102,7 +136,7 @@ export const StoreHome = () => {
       <h1 className="store-sr-only">今日のオファー</h1>
 
       <LoadView state={state} onRetry={refresh}>
-        {(home) => <HomeBody home={home} onChanged={refresh} />}
+        {(home) => <HomeBody home={home} onChanged={refresh} signals={signals} updatedAt={state.status === "ready" ? state.updatedAt : null} />}
       </LoadView>
     </main>
   );

@@ -1,7 +1,7 @@
 // 要件13 営業許可書とカードの登録（手続き・入口）。画面は r13-license-card.ui.test.tsx。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { GIF_BYTES, JPEG_BYTES, loadWeb, makeCtx, one, PDF_BYTES, PNG_BYTES, registerCardAsPage, registerCustomer, registerStore, seedAdmin, uploadLicense, type Ctx } from "./_fakes";
+import { approvedStore, GIF_BYTES, JPEG_BYTES, loadWeb, makeCtx, one, PDF_BYTES, PNG_BYTES, registerCardAsPage, registerCustomer, registerStore, seedAdmin, uploadLicense, type Ctx } from "./_fakes";
 
 describeTask("7", "営業許可書とカード", () => {
   let ctx: Ctx;
@@ -71,6 +71,8 @@ describeTask("7", "営業許可書とカード", () => {
     expect(admin.headers.get("cache-control")).toMatch(/no-store/);
   });
 
+  // 2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1: 確かめの入口は、要求が持ってくる番号を使わず、
+  // **その店のために控えた番号**だけを Stripe に照会する。番号を本文に載せても無視される（別の店の番号でも同じ）。
   it("13.6・13.8・13.9 偽のカードの口が成功→登録済み／失敗・別の店のセッション→登録済みにならず card_setup_failed。応答にあるのは登録済みかどうかだけ", async () => {
     const s = await registerStore(ctx);
     const other = await registerStore(ctx);
@@ -90,6 +92,10 @@ describeTask("7", "営業許可書とカード", () => {
     const wrong = await other.api.post("/api/store/card/confirm", { sessionId });
     expect(wrong.status).toBe(409);
     expect(wrong.json.error.kind).toBe("card_setup_failed");
+    expect((await other.api.get("/api/store/home")).json.checklist.card).toBe(false);
+    // 別の店が自分の登録を始めていても（控えが在っても）、他店の番号を載せて登録済みにはなれない
+    expect((await other.api.post("/api/store/card/setup", {})).status).toBe(200);
+    expect((await other.api.post("/api/store/card/confirm", { sessionId })).status).toBe(409);
     expect((await other.api.get("/api/store/home")).json.checklist.card).toBe(false);
     ctx.card.confirmOk = false;
     const failConfirm = await s.api.post("/api/store/card/confirm", { sessionId });
@@ -114,12 +120,75 @@ describeTask("7", "営業許可書とカード", () => {
     expect((await s.api.get("/api/store/home")).json.checklist.card).toBe(false);
   });
 
-  // 画面と同じ道（開始 → Stripe で入力を終える → 戻り先へ戻る → 画面が確かめを送る）で登録済みになること。
-  // 今は戻り先に番号が載らず、控えた番号で確かめる入口も無いので、画面から登録が完了しない。
-  it.fails("既知の不具合（不具合-01）: 画面と同じ道（開始 → Stripe で入力 → 戻り先へ戻る → 確かめ）で、カードが登録済みになる", async () => {
+  // 2026-09-25 営業許可書が消える道が無い件（安全-20 の案1）: 店主の氏名と住所が載りうる書類を、使う必要が無くなったら消す。
+  const licenseFilesOf = (storeId: string) => [...ctx.files.store.keys()].filter((key) => key.startsWith(`licenses/${storeId}/`));
+
+  it("安全-20 運営が店を止めると、営業許可書のファイル（今の分と承認の写し）が置き場から消え、店も運営も読めない", async () => {
+    const s = await approvedStore(ctx);
+    expect(licenseFilesOf(s.id).length).toBeGreaterThan(0);
+    // 承認のあとに上げ直す（承認の写しと今の分が別のファイルになる）
+    await uploadLicense(s.api, PNG_BYTES, "again.png", "image/png");
+    expect(licenseFilesOf(s.id).length).toBe(2);
+    expect((await ctx.admin!.api.post(`/api/admin/stores/${s.id}/ban`, { reason: "検査の停止" })).status).toBe(200);
+    expect(licenseFilesOf(s.id)).toEqual([]);
+    expect((await s.api.get("/api/store/license")).status).toBe(404);
+    expect((await ctx.admin!.api.get(`/api/admin/stores/${s.id}/license`)).status).toBe(404);
+    expect((await ctx.admin!.api.get(`/api/admin/stores/${s.id}/license?version=approved`)).status).toBe(404);
+    const row = await one(ctx.db, "SELECT license_key, license_mime, approved_license_key FROM stores WHERE id = ?", s.id);
+    expect(row).toMatchObject({ license_key: null, license_mime: null, approved_license_key: null });
+    expect((await s.api.get("/api/store/home")).json.checklist.license).toBe(false);
+  });
+
+  it("安全-20 承認の前の店は、自分の営業許可書を消せる（置き場からも消える）。承認済みの店は消せず、置き場も変わらない", async () => {
+    const pending = await registerStore(ctx);
+    await uploadLicense(pending.api, PDF_BYTES);
+    expect(licenseFilesOf(pending.id).length).toBe(1);
+    const removed = await pending.api.del("/api/store/license");
+    expect(removed.status).toBe(200);
+    expect(licenseFilesOf(pending.id)).toEqual([]);
+    expect((await pending.api.get("/api/store/home")).json.checklist.license).toBe(false);
+    expect((await pending.api.get("/api/store/license")).status).toBe(404);
+    // 消すものが無ければ 404
+    expect((await pending.api.del("/api/store/license")).status).toBe(404);
+
+    const approved = await approvedStore(ctx);
+    const before = licenseFilesOf(approved.id);
+    const refused = await approved.api.del("/api/store/license");
+    expect(refused.status).toBe(409);
+    expect(refused.json.current.state).toBe("approved");
+    expect(licenseFilesOf(approved.id)).toEqual(before);
+    expect((await approved.api.get("/api/store/license")).status).toBe(200);
+  });
+
+  // 画面と同じ道（開始 → Stripe で入力を終える → 戻り先へ戻る → 画面が確かめを送る）で登録済みになること（不具合-01）。
+  // 戻り先は書類の画面で、戻ったことだけを印（`card=returned`）で伝える。番号は載せない（画面は番号を持たない）。
+  it("不具合-01 画面と同じ道（開始 → Stripe で入力 → 戻り先へ戻る → 確かめ）で、カードが登録済みになる", async () => {
     const s = await registerStore(ctx);
-    const { confirm } = await registerCardAsPage(s.api);
+    const { back, confirm } = await registerCardAsPage(s.api);
+    const backUrl = new URL(back, "https://example.test");
+    expect(backUrl.pathname).toBe("/store/documents");
+    expect(backUrl.searchParams.get("card")).toBe("returned");
+    expect(back).not.toMatch(/cs_test_/);
     expect(confirm.status).toBe(200);
-    expect((await s.api.get("/api/store/home")).json.checklist.card).toBe(true);
+    const home = (await s.api.get("/api/store/home")).json;
+    expect(home.checklist.card).toBe(true);
+    // 登録済みになったら、確かめ待ちの印は下りる（画面が開くたびに確かめ直さない）
+    expect(home.cardSetupPending).toBe(false);
+  });
+
+  // 戻る前にタブを閉じた店を救うため、ホームは「決済会社の画面を開いたが、まだ確かめていない」を印で返す（不具合-01）。
+  // 画面はこの印を見て、開いたときに確かめを1回送る。
+  it("不具合-01 登録を始めて確かめていない店のホームは cardSetupPending が立ち、確かめて登録済みになると下りる。始めていない店は立たない", async () => {
+    const s = await registerStore(ctx);
+    expect((await s.api.get("/api/store/home")).json.cardSetupPending).toBe(false);
+    const setup = await s.api.post("/api/store/card/setup", {});
+    expect((await s.api.get("/api/store/home")).json.cardSetupPending).toBe(true);
+    // 入力を終えずに確かめても、印は立ったまま（まだ戻ってくるかもしれない）
+    expect((await s.api.post("/api/store/card/confirm", {})).status).toBe(409);
+    expect((await s.api.get("/api/store/home")).json.cardSetupPending).toBe(true);
+    ctx.card.complete(setup.json.url);
+    expect((await s.api.post("/api/store/card/confirm", {})).status).toBe(200);
+    const home = (await s.api.get("/api/store/home")).json;
+    expect(home).toMatchObject({ cardSetupPending: false, checklist: { card: true } });
   });
 });

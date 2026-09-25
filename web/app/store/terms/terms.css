@@ -1,0 +1,26 @@
+/* 店向けの利用規約（/store/terms・店-21）の見た目。色は `app/globals.css` の変数だけを使う（要件32の基準 32.3）。 */
+.store-terms {
+  display: grid;
+  gap: 1rem;
+  margin: 0 auto;
+  max-width: 44rem;
+  padding: 1rem;
+}
+
+.store-terms__lead {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.store-terms h2 {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.store-terms ul {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}

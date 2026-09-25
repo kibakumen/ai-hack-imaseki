@@ -13,7 +13,7 @@
 // 入れ直さなかった URL やおすすめメニューが空で上書きされる。書類やクーポンの画面と同じく読み込みを
 // useLoad と LoadView に載せ、失敗したら断りの文と「もう一度読み込む」だけを出す。
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { TEXTS } from "../../lib/domain/texts";
@@ -41,6 +41,8 @@ const FIELD_NAMES = ["name", "address", "url", "genres", "menus", "budgetMin", "
 /** 住所の欄は、形の誤りだけでなく「位置に直せなかった」も直下に出す（基準 15.10）。 */
 const ADDRESS_KINDS = ["address_unresolved"];
 const URL_HINT = "http:// か https:// で始まる形";
+/** 日本語の変換の途中のキー操作が名乗るキーの番号（古い Safari は isComposing を立てずにこれだけを送る） */
+const IME_KEY_CODE = 229;
 /** 予算の2つの欄は同じ呼び名にする（「〜の最低は最高以下に」の文がそのまま読めるように） */
 const BUDGET_LABEL = "1人あたりの予算";
 
@@ -93,6 +95,17 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
     // 件数の上限はここで止めず、入口に断ってもらう（規則の正本を画面に写さない）。
     setMenus((prev) => [...prev, value]);
     setMenu("");
+  };
+
+  /**
+   * メニューの欄の Enter は「1件足す」（2026-09-25 監査の指摘 店-17）。フォームの送信（店の情報全体の保存）へ
+   * 流さない。日本語の変換を確定する Enter（isComposing・keyCode 229）では何もしない。
+   */
+  const onMenuKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    if (event.nativeEvent.isComposing || event.keyCode === IME_KEY_CODE) return;
+    event.preventDefault();
+    addMenu();
   };
 
   const removeMenu = (index: number) => {
@@ -229,7 +242,9 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
           value={menu}
           minLength={MENU_NAME_MIN}
           maxLength={MENU_NAME_MAX}
+          enterKeyHint="enter"
           onChange={(event) => setMenu(event.target.value)}
+          onKeyDown={onMenuKeyDown}
         />
         <button type="button" className="store-btn store-btn--quiet" data-testid="btn-add-menu" onClick={addMenu}>
           ＋ 足す

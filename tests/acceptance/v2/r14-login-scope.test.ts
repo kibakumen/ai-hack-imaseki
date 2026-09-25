@@ -1,7 +1,7 @@
 // 要件14 店と運営のログインと見える範囲。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { approvedStore, cookieOf, loadWeb, makeCtx, one, ORIGIN, receivedScene, registerStore, rows, seedAdmin, snapshot, type Ctx } from "./_fakes";
+import { approvedStore, cookieOf, loadWeb, makeCtx, one, ORIGIN, receivedScene, registerStore, rows, seedAdmin, snapshot, STORE_TERMS_AGREEMENT, type Ctx } from "./_fakes";
 
 describeTask("4", "ログインとセッション", () => {
   let ctx: Ctx;
@@ -66,7 +66,7 @@ describeTask("4", "ログインとセッション", () => {
   });
 
   it("14.8 登録の入口に運営の役割を送っても店として作られ、運営のアカウントを作る入口が無い", async () => {
-    const r = await ctx.api().post("/api/register/store", { name: "なりすまし", email: "role@example.com", password: "store-pass-1234", role: "admin", humanToken: "tok-ok" });
+    const r = await ctx.api().post("/api/register/store", { name: "なりすまし", email: "role@example.com", password: "store-pass-1234", role: "admin", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
     expect([200, 201, 400]).toContain(r.status);
     const account = await one(ctx.db, "SELECT role FROM accounts WHERE email = ?", "role@example.com");
     if (account) expect(account.role).toBe("store");
