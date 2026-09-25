@@ -11,7 +11,8 @@
 //   3. 確保を持ったまま「ほかの店を探す」を押したか（基準 8.10。サーバーは確保中のままを返す）
 //   4. 取り直しが通信の失敗に終わったか（端末に残した内容へ倒す・基準 9.10・9.11。何も残っていなければ
 //      読めなかったことを出し、登録の入力は出さない——登録の入力は 401 のときだけ）
-//   5. 開いている脇の画面（最近行った店・登録の確認と消去。同時には1つだけ・基準 26.14・28.4）
+//   5. 開いている脇の画面（最近行った店・基準 26.14）と、登録を消したばかりか（基準 28.11 の知らせ）。
+//      「この端末の登録を消す」は画面の下端に常に置く（基準 28.4・2026-09-25 監査の指摘 安全-15 で戻した）
 //   6. 通報が指している店（基準 26.1・26.17。断られても元の表示のままにするため外に置く）
 //
 // 受け取り・受け取り直しの応答は、通っても断られても**新しいホームを連れてくる**ので、それで
@@ -26,6 +27,7 @@ import { usePolling } from "../../lib/client/usePolling";
 import { AdminCancelledView } from "./AdminCancelledView";
 import { recallOrigin } from "../../lib/client/lastOrigin";
 import { ClaimedCelebration } from "./ClaimedCelebration";
+import { EraseRegistration } from "./EraseRegistration";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
 import { FetchForm, type FetchResult } from "./FetchForm";
@@ -52,13 +54,13 @@ const KEEPS_REFUSAL: ReadonlyArray<HomeDto["kind"]> = ["fetch", "expired"];
 /** 通報ボタンを置く表示（基準 26.1）。期限切れと取り消しの表示には置かない。 */
 const REPORT_VIEW_KINDS: ReadonlyArray<HomeDto["kind"]> = ["active", "completed"];
 /**
- * 「最近行った店」と「登録の確認と消去」の入口を置く表示（基準 26.14・28.4）。客が画面を開いた
+ * 「最近行った店」の入口を置く表示（基準 26.14）。客が画面を開いた
  * ときにまず出る3つで、期限切れと取り消しの表示には置かない（店へ向かう途中で出る表示・要件26の補足）。
  */
 const RECENT_ENTRY_KINDS: ReadonlyArray<HomeDto["kind"]> = ["fetch", "active", "completed"];
 
 /** 開いている脇の画面（同時には1つだけ）。 */
-type Panel = "none" | "recent" | "settings";
+type Panel = "none" | "recent";
 
 const CustomerScreens = () => {
   const [home, setHome] = useState<HomeDto | null>(null);
@@ -80,7 +82,7 @@ const CustomerScreens = () => {
   const shownFetchIdRef = useRef<string | null>(null);
   const [refused, setRefused] = useState<RefusedReceive | null>(null);
   const [searching, setSearching] = useState(false);
-  // 脇の画面（最近行った店・登録の確認と消去）と、通報が指している店。どちらも表示の種類とは別に持つ
+  // 脇の画面（最近行った店）と、通報が指している店。どちらも表示の種類とは別に持つ
   // ——断られたときに元の表示のまま文を出す必要があるため（基準 26.19・28.5）。
   const [panel, setPanel] = useState<Panel>("none");
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
@@ -96,6 +98,8 @@ const CustomerScreens = () => {
    * 出すと客が入れ直して登録し、新しい識別子の Cookie が今の Cookie（確保を持つかもしれない）を上書きする。
    */
   const [unreachable, setUnreachable] = useState<ApiFailure | null>(null);
+  /** この端末の登録を消したばかりか（登録の入力の上に「消しました」を出す・基準 28.11） */
+  const [erased, setErased] = useState(false);
 
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
@@ -244,6 +248,11 @@ const CustomerScreens = () => {
   if (home === null) {
     return (
       <main>
+        {erased ? (
+          <p className="msg" role="status" data-testid="erased-notice">
+            この端末の登録を消しました。
+          </p>
+        ) : null}
         <RegisterForm onRegistered={() => void refresh()} />
       </main>
     );
@@ -375,6 +384,14 @@ const CustomerScreens = () => {
 
       {panel === "recent" ? <RecentStores onReport={setReportTarget} /> : null}
       {reportTarget !== null ? <ReportForm storeId={reportTarget.storeId} storeName={reportTarget.storeName} onClose={() => setReportTarget(null)} /> : null}
+
+      {/* 下端に1つだけ（基準 28.4）。どの表示でも置く——確保中なら入口が断り、先に取り消すよう出す（基準 28.5） */}
+      <EraseRegistration
+        onDeleted={() => {
+          setErased(true);
+          void refresh();
+        }}
+      />
     </main>
   );
 };

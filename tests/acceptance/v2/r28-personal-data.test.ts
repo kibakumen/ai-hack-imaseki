@@ -111,4 +111,19 @@ describeTask("32", "【最終日】登録の消去（28.4〜28.11）", () => {
     expect(await rows(ctx.db, "SELECT * FROM fetch_logs ORDER BY rowid")).toEqual(logsBefore);
     expect(logsBefore.some((l: any) => l.customer_id === customerId)).toBe(true);
   });
+
+  // 安全-15: 消しても端末の配信先（push_subscriptions）が残り、消した客の端末へ知らせが届きうる状態だった
+  it("28.4・28.6 消すと、その客の通知の宛先（端末の配信先）も消える。ほかの客の宛先は残る", async () => {
+    const subscription = (n: number) => ({ endpoint: `https://push.example.test/sub/erase-${n}`, keys: { p256dh: "BPUB", auth: "AUTH" } });
+    const a = await registerCustomer(ctx, { phone: "08044440001" });
+    const b = await registerCustomer(ctx, { phone: "08044440002" });
+    expect((await a.api.post("/api/customer/push-subscription", { subscription: subscription(1) })).status).toBe(200);
+    expect((await b.api.post("/api/customer/push-subscription", { subscription: subscription(2) })).status).toBe(200);
+    const before = await rows(ctx.db, "SELECT customer_id FROM push_subscriptions");
+    expect((await a.api.del("/api/customer")).status).toBe(200);
+    const after = await rows(ctx.db, "SELECT subscription_json FROM push_subscriptions");
+    expect(after).toHaveLength(before.length - 1);
+    expect(after.some((r: any) => String(r.subscription_json).includes("erase-1"))).toBe(false);
+    expect(after.some((r: any) => String(r.subscription_json).includes("erase-2"))).toBe(true);
+  });
 });

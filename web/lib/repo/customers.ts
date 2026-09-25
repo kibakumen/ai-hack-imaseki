@@ -51,13 +51,19 @@ export const updateCustomerProfile = async (db: Db, customerId: string, profile:
  * （消しても記録は残す・基準 28.10・本人選択）。消すのは4項目（呼び名・電話番号・好みのジャンル・
  * 予算の上限）と、見分けに使う `token_hash`——空にするのでその Cookie はもう誰にも当たらない（基準 28.8）。
  *
+ * **端末の配信先（`push_subscriptions`）も同じまとまりで消す**（2026-09-25 監査の指摘 安全-15）。残すと、
+ * 消した客の端末へ知らせが届きうるうえ、客の画面の説明（通知の宛先も消える）と食い違う。記録の表ではないので
+ * 基準 28.10 とぶつからない。
+ *
  * 既に消えている客には当たらない（何も起きない）＝2度押しても記録は動かない。
  */
 export const eraseCustomer = async (db: Db, customerId: string, atIso: string): Promise<void> => {
-  await db
-    .prepare(`UPDATE customers SET nickname = '', phone = '', genres = '[]', budget_max = NULL, token_hash = NULL, deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL`)
-    .bind(customerId, atIso)
-    .run();
+  await db.batch([
+    db
+      .prepare(`UPDATE customers SET nickname = '', phone = '', genres = '[]', budget_max = NULL, token_hash = NULL, deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL`)
+      .bind(customerId, atIso),
+    db.prepare(`DELETE FROM push_subscriptions WHERE customer_id = ?1`).bind(customerId),
+  ]);
 };
 
 export const findCustomerProfile = async (db: Db, customerId: string): Promise<CustomerProfile | null> => {
