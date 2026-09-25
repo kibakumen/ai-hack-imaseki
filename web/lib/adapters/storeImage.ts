@@ -1,6 +1,8 @@
-// 店のホームページから雰囲気画像の URL を取る実物（差し替え口 StoreImageFetcher・lib/ports.ts）。
-// og:image / twitter:image の meta を読むだけで、鍵は要らない
+// 店のホームページから雰囲気画像を1枚取る実物（差し替え口 StoreImageFetcher・lib/ports.ts）。
+// og:image / twitter:image の meta を読んで、その画像のバイトまで取る。鍵は要らない
 // （速成版 `sprint/lib/ogImage.ts` の移植・2026-09-22 本人の指摘「お店の画像もほしい」）。
+// 2026-09-25 監査の指摘 安全-19 で、URL を客の端末へ渡す形をやめて画像そのものを取る形にした
+// （呼ぶのは店の情報の保存のときの1回だけ・置き場に置いて自分のオリジンから配る）。
 //
 // 打ち切りは自分で持たない——呼ぶ側（usecases/storeImage）が deps.clock + AbortSignal で数える
 // （geocoding.ts と同じ置き方。raceDeadline の注）。
@@ -17,9 +19,13 @@
 //      （速成版は自動追従で、ここの備えを1つも持たなかった）
 //   ④ 応答の本文は最大 MAX_HTML_BYTES まで（打ち切って読む。速成版と同じ値）。読み取りは先頭から1度だけ読み進める
 //      線形の処理で、正規表現は使わない（2026-09-25 監査の指摘 安全-04・ReDoS）
-//   ⑤ 抜き出した画像の URL も http/https 以外・内部アドレスなら断る（<img src> に内部の値を渡さない）
+//   ⑤ 抜き出した画像の URL も①〜③と同じ検査をしながら取りに行く
+//   ⑥ 画像は最大 STORE_IMAGE_MAX_BYTES まで（超えたら取らない）。種類は相手の名乗りでなく先頭のバイトで決め、
+//      JPEG・PNG・GIF・WebP 以外（SVG・HTML など）は断る——自分のオリジンから配るので、中の script を動かさない
 
+import { detectImageType } from "../domain/imageType";
 import type { StoreImageFetcher } from "../ports";
+import { STORE_IMAGE_MAX_BYTES } from "../schemas/limits";
 
 const MAX_HTML_BYTES = 200_000;
 const MAX_REDIRECTS = 3;
@@ -81,20 +87,31 @@ const isSafeUrl = (url: URL): boolean => {
   return true;
 };
 
-/** ストリームを最大 maxBytes まで読み、途中で打ち切って文字列化する（速成版と同じ考え）。 */
-const readLimitedText = async (response: Response, maxBytes: number): Promise<string> => {
+/**
+ * ストリームを最大 maxBytes まで読み、途中で打ち切る。上限を超えたかどうかも返す
+ * （HTML は超えた分を捨てて頭だけ読む・画像は超えたら取らない）。
+ */
+const readLimitedBytes = async (response: Response, maxBytes: number): Promise<{ bytes: Uint8Array; overflowed: boolean }> => {
   const body = response.body;
-  if (!body) return "";
+  if (!body) return { bytes: new Uint8Array(), overflowed: false };
 
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let overflowed = false;
 
   try {
-    while (total < maxBytes) {
+    for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (!value) continue;
+      const room = maxBytes - total;
+      if (value.byteLength > room) {
+        chunks.push(value.subarray(0, room));
+        total += room;
+        overflowed = true;
+        break;
+      }
       chunks.push(value);
       total += value.byteLength;
     }
@@ -103,13 +120,15 @@ const readLimitedText = async (response: Response, maxBytes: number): Promise<st
   }
 
   const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
+  chunks.reduce((offset, chunk) => {
     merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(merged);
+    return offset + chunk.byteLength;
+  }, 0);
+  return { bytes: merged, overflowed };
 };
+
+/** HTML を最大 maxBytes まで読んで文字列にする（超えた分は捨てる。速成版と同じ考え）。 */
+const readLimitedText = async (response: Response, maxBytes: number): Promise<string> => new TextDecoder().decode((await readLimitedBytes(response, maxBytes)).bytes);
 
 const isSpace = (ch: string): boolean => ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\f" || ch === "/";
 
@@ -190,13 +209,14 @@ const fetchSafely = async (
   start: URL,
   fetchImpl: typeof globalThis.fetch,
   signal: AbortSignal | undefined,
+  accept: string,
 ): Promise<{ response: Response; finalUrl: URL } | null> => {
   let current = start;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (!isSafeUrl(current)) return null;
     let response: Response;
     try {
-      response = await fetchImpl(current.toString(), { redirect: "manual", signal, headers: { accept: "text/html" } });
+      response = await fetchImpl(current.toString(), { redirect: "manual", signal, headers: { accept } });
     } catch {
       return null;
     }
@@ -229,17 +249,25 @@ export const createStoreImageFetcher = ({ fetch: fetchImpl = globalThis.fetch }:
     if (!isSafeUrl(base)) return { ok: false };
 
     try {
-      const followed = await fetchSafely(base, fetchImpl, opts.signal);
+      const followed = await fetchSafely(base, fetchImpl, opts.signal, "text/html");
       if (!followed || !followed.response.ok) return { ok: false };
 
       const html = await readLimitedText(followed.response, MAX_HTML_BYTES);
       const rawImageUrl = extractImageUrl(html);
       if (!rawImageUrl) return { ok: false };
 
-      const image = resolveAbsoluteUrl(rawImageUrl, followed.finalUrl.toString());
-      if (!image || !isSafeUrl(image)) return { ok: false };
+      const imageUrl = resolveAbsoluteUrl(rawImageUrl, followed.finalUrl.toString());
+      if (!imageUrl || !isSafeUrl(imageUrl)) return { ok: false };
 
-      return { ok: true, imageUrl: image.toString() };
+      // 画像も同じ検査をしながら取りに行く（リダイレクトの行き先ごとに内部アドレスを断る）。
+      const fetched = await fetchSafely(imageUrl, fetchImpl, opts.signal, "image/*");
+      if (!fetched || !fetched.response.ok) return { ok: false };
+      const { bytes, overflowed } = await readLimitedBytes(fetched.response, STORE_IMAGE_MAX_BYTES);
+      if (overflowed) return { ok: false };
+      const contentType = detectImageType(bytes);
+      if (!contentType) return { ok: false };
+
+      return { ok: true, image: { body: bytes, contentType } };
     } catch {
       // 打ち切り（AbortError）・通信の失敗のどれも「取れなかった」。
       return { ok: false };

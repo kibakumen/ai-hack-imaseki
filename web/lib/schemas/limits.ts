@@ -120,6 +120,11 @@ export const PLACE_SUGGEST_RATE_WINDOW_MS = 60 * 1000;
  * 差し替えた時計と AbortSignal の両方で使う（usecases/storeImage）。
  */
 export const STORE_IMAGE_TIMEOUT_MS = 3000;
+/**
+ * 店の画像1枚の大きさの上限（2MB・AI判断・安全-19）。保存のときに1回だけ取って置き場に置くので、
+ * 超える画像は取らない（途中で読むのをやめる）。ホームページの og:image はふつう数百KB。
+ */
+export const STORE_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 // 要件13（営業許可書とカード）の基準 13.3
 /** 営業許可書の大きさの上限（10MB・値は AI判断）。ちょうど10MB は通り、1バイト超えると断る */
 export const LICENSE_MAX_BYTES = 10 * 1024 * 1024;

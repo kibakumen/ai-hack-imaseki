@@ -82,16 +82,21 @@ export type Geocoder = {
    */
   suggest?(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; suggestions: string[]; source: "places" | "geocoding" } | { ok: false }>;
 };
+/** 取った店の画像（種類は先頭のバイトで決めた値・domain/imageType）。 */
+export type StoreImageFile = { body: Uint8Array; contentType: string };
+
 /**
- * 店のホームページから雰囲気画像の URL を取る口（読むだけ・実物は adapters/storeImage）。
+ * 店のホームページの og:image / twitter:image を1枚、**画像のバイトまで**取る口（実物は adapters/storeImage）。
  * 2026-09-22 本人の指摘「お店の画像もほしい」に応えた、速成版 `sprint/lib/ogImage.ts` の移植。
  *
+ * 2026-09-25 監査の指摘 安全-12・安全-19 で、URL を返して客の端末に店のサーバーから直接読ませる形をやめ、
+ * **店が情報を保存したときに1回だけ取り、置き場に置いて自分のオリジンから配る**形にした（usecases/storeImage）。
+ *
  * ⚠️ **任意**にしてある（`Deps.pitch`・`Geocoder.reverse` と同じ置き方）。画像は見せ方の飾りで、
- * 受け取りの筋には要らない——この口を持たない場面（受け入れ検査の偽物）でも、usecases/storeImage が
- * 外へ聞かずに `imageUrl: null` へ倒す。
+ * 受け取りの筋には要らない——この口を持たない場面では、外へ聞かずに画像なしのまま進む。
  */
 export type StoreImageFetcher = {
-  fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; imageUrl: string } | { ok: false }>;
+  fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; image: StoreImageFile } | { ok: false }>;
 };
 
 export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
