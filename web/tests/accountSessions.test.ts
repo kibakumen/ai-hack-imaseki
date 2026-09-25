@@ -76,7 +76,7 @@ describe("店のパスワードの変更は、仮のパスワードの直後で�
 describe("仮のパスワードのまま入った店が使える入口（安全-21）", () => {
   it("ホーム・パスワードの変更・ログアウトは使え、ほかは 403。決め直すと、ほかの入口も使える", async () => {
     const s = await registerStore(ctx, { email: "sess-temp@example.com", password: "old-password-1" });
-    const issued = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, {});
+    const issued = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, { currentPassword: ctx.admin!.password });
     const temp = await login("sess-temp@example.com", issued.json.tempPassword);
     const api = ctx.api(cookieOf(temp)!);
     expect((await api.get("/api/store/home")).status).toBe(200);

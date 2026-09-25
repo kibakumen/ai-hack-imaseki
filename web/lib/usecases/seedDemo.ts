@@ -13,12 +13,13 @@ import type { Deps } from "../ports";
 import { tokenFromBytes } from "../domain/token";
 import { JST_OFFSET_MINUTES } from "../domain/until";
 import { findAccountByEmail, updateAccountPassword } from "../repo/accounts";
-import { approvePendingStore, restoreBannedStore } from "../repo/adminStores";
+import { approvePendingStore, findStoreReview, restoreBannedStore } from "../repo/adminStores";
 import { insertCouponWithinLimit, listCoupons } from "../repo/coupons";
 import { insertOfferIfNone } from "../repo/offers";
 import { deleteSessionsByAccount } from "../repo/sessions";
 import { insertStoreWithAccount, updateStoreProfile } from "../repo/stores";
 import { COUPON_MAX, ID_BYTES } from "../schemas/limits";
+import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { hashPassword } from "./credentials";
 import { seedAdmin, type SeedAdminInput, type SeedAdminResult } from "./seedAdmin";
 
@@ -79,10 +80,19 @@ const ensureStoreAccount = async (deps: Deps, spec: DemoStoreSpec, passwordHash:
   return { storeId: existing.storeId, created: false };
 };
 
-/** 承認済みにする。止められていれば承認済みへ戻す（既に承認済みなら何もしない）。 */
-const approveDemoStore = async (deps: Deps, storeId: string): Promise<void> => {
-  if (await approvePendingStore(deps.db, storeId)) return;
-  await restoreBannedStore(deps.db, storeId);
+/** 種データが残す運営の操作の記録の理由（運営-01。誰が＝種を入れた運営・なぜ＝この文）。 */
+const SEED_REASON = "デモの種データ";
+
+/**
+ * 承認済みにする。止められていれば承認済みへ戻す（既に承認済みなら何もしない）。
+ * 承認は運営の画面と同じ repo の文で、承認した時点の写しと運営の操作の記録を同じまとまりで残す（運営-01・運営-02）。
+ * 写しの条件（読んだ内容のまま）に使う店名・住所は、直前に当て直した `spec` の値。--print の集める役の db は
+ * 読み取りを「無い」で返すので、読めなければ許可書は無し（新しく作った店）として組む。
+ */
+const approveDemoStore = async (deps: Deps, storeId: string, spec: DemoStoreSpec, actor: AdminActor): Promise<void> => {
+  const read = (await findStoreReview(deps.db, storeId)) ?? { name: spec.name, address: spec.address, licenseKey: null };
+  if (await approvePendingStore(deps.db, storeId, read, newAdminAction(deps, actor, "approve", storeId, { reason: SEED_REASON }))) return;
+  await restoreBannedStore(deps.db, storeId, newAdminAction(deps, actor, "restore", storeId, { reason: SEED_REASON }));
 };
 
 /**
@@ -102,11 +112,11 @@ const ensureCoupons = async (deps: Deps, storeId: string, spec: DemoStoreSpec): 
 };
 
 /** 店1軒ぶん（店・アカウント・情報・承認・クーポン・オファー）を入れる。情報と承認は毎回当て直す。 */
-const seedDemoStore = async (deps: Deps, spec: DemoStoreSpec, passwordHash: string): Promise<DemoStoreResult> => {
+const seedDemoStore = async (deps: Deps, spec: DemoStoreSpec, passwordHash: string, actor: AdminActor): Promise<DemoStoreResult> => {
   const { storeId, created } = await ensureStoreAccount(deps, spec, passwordHash);
   const { name, address, genres, menus, budgetMin, budgetMax, lat, lng } = spec;
   await updateStoreProfile(deps.db, storeId, { name, address, url: null, genres, menus, budgetMin, budgetMax, lat, lng });
-  await approveDemoStore(deps, storeId);
+  await approveDemoStore(deps, storeId, spec, actor);
   const coupons = await ensureCoupons(deps, storeId, spec);
   const now = deps.clock.now();
   // 入らなかった（公開中が既に在る）なら null（不具合-13 で真偽から「付けたクーポン」へ変わった）
@@ -130,6 +140,6 @@ export const seedDemo = async (deps: Deps, input: SeedDemoInput): Promise<SeedDe
   const admin = await seedAdmin(deps, { ...input.admin, allowAnotherAdmin: input.admin.allowAnotherAdmin ?? false });
   const passwordHash = await hashPassword(deps, input.storePassword);
   const stores: DemoStoreResult[] = [];
-  for (const spec of input.stores) stores.push(await seedDemoStore(deps, spec, passwordHash));
+  for (const spec of input.stores) stores.push(await seedDemoStore(deps, spec, passwordHash, { accountId: admin.accountId }));
   return { admin, stores };
 };

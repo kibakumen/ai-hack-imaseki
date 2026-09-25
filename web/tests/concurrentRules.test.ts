@@ -81,9 +81,16 @@ describe("同時の操作で規則が破れない（不具合-13）", () => {
       },
     ]);
     const before = ctx.push.calls.length;
-    expect((await w.api(ctx.admin!.api.cookie).post(`/api/admin/stores/${s.store.id}/ban`, {})).status).toBe(200);
+    const banned = await w.api(ctx.admin!.api.cookie).post(`/api/admin/stores/${s.store.id}/ban`, { reason: "直前の受け取りの検査" });
+    expect(banned.status).toBe(200);
     const lateId = (await one(ctx.db, "SELECT id FROM customers WHERE nickname = ?", "直前の客")).id;
     expect((await one(ctx.db, "SELECT status FROM reservations WHERE customer_id = ?", lateId)).status).toBe("admin_cancelled");
     expect(ctx.push.calls.slice(before).map((c) => (c.subscription as { endpoint: string }).endpoint)).toContain(SUBSCRIPTION.endpoint);
+    // 運営の操作の記録（運営-01）と画面に返す数（運営-03）も、直前に受け取った客を数に入れる（先に読んだ数ではない）
+    const cancelledRows = (await one(ctx.db, "SELECT COUNT(*) AS n FROM reservations WHERE store_id = ? AND status = 'admin_cancelled'", s.store.id)).n;
+    expect(banned.json.cancelled).toBe(cancelledRows);
+    expect(banned.json.notified).toBeGreaterThanOrEqual(1);
+    const recorded = await one(ctx.db, "SELECT detail FROM admin_actions WHERE store_id = ? AND action = 'ban'", s.store.id);
+    expect(JSON.parse(recorded.detail as string)).toEqual({ cancelled: banned.json.cancelled, notified: banned.json.notified });
   });
 });

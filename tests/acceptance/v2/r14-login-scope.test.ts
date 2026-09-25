@@ -212,9 +212,11 @@ describeTask("31", "【最終日】パスワードの変更とセッション・
 
   // 案1（勧める案が無いので最初の案）: 印が立っている店の要求は、ホーム・パスワードの変更・ログアウト以外を 403 で断る。
   it("安全-21 仮のパスワードのまま入った店は、パスワードを変えるまでホーム・パスワードの変更・ログアウト以外を使えない", async () => {
-    if (!ctx.admin) await seedAdmin(ctx);
+    // 仮のパスワードの発行は運営の今のパスワードを求める（運営-01）。上の安全-08 が ctx.admin のパスワードを
+    // 変えたまま残すので、この検査は自分の運営を作って使う（前の検査の順に左右されない）。
+    const admin = await seedAdmin(ctx, { email: "temp-guard-admin@example.com" });
     const s = await registerStore(ctx, { email: "temp-guard@example.com", password: "old-password-1" });
-    const issued = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, { currentPassword: ctx.admin!.password });
+    const issued = await admin.api.post(`/api/admin/stores/${s.id}/temp-password`, { currentPassword: admin.password });
     const temp = await login("temp-guard@example.com", issued.json.tempPassword);
     expect(temp.json.mustChangePassword).toBe(true);
     const api = ctx.api(cookieOf(temp)!);
