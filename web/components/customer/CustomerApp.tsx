@@ -23,7 +23,7 @@
 import { useRef, useState } from "react";
 import { callApi, isFailure, isTransientFailure, type ApiFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
-import { usePolling } from "../../lib/client/usePolling";
+import { usePolling, type PollTicket } from "../../lib/client/usePolling";
 import { AdminCancelledView } from "./AdminCancelledView";
 import { recallOrigin } from "../../lib/client/lastOrigin";
 import { ClaimedCelebration } from "./ClaimedCelebration";
@@ -120,9 +120,14 @@ const CustomerScreens = () => {
     else saveCachedHome(next);
   };
 
-  /** ホームを取り直して表示を決める（開いた時と10秒ごと・基準 9.8・9.9）。 */
-  const refresh = async (): Promise<void> => {
+  /**
+   * ホームを取り直して表示を決める（開いた時と10秒ごと・基準 9.8・9.9）。呼ぶのは `usePolling` だけ——
+   * 読み直しのボタンや操作のあとは `polling.refreshNow()` を通す。そうすると、それより前に送った取り直しの
+   * 応答（古い状態）は `ticket.isCurrent()` が false になって捨てられる（2026-09-25 監査の指摘 不具合-17）。
+   */
+  const refresh = async (ticket: PollTicket): Promise<void> => {
     const result = await callApi("GET /api/customer/home");
+    if (!ticket.isCurrent()) return;
     setLoaded(true);
     if (!isFailure(result)) {
       setHome(result);
@@ -147,7 +152,7 @@ const CustomerScreens = () => {
     setUnreachable(null);
   };
 
-  usePolling(refresh);
+  const polling = usePolling(refresh);
 
   /**
    * 出している結果を片づけ、その取得から後で届く結果も受け取らない（`dismissedFetchIdRef`）。
@@ -168,6 +173,8 @@ const CustomerScreens = () => {
     // 応答に `home` が無い形でも表示を消さない（今の表示のまま、断りだけを出す）
     const responded = (failure === null ? (result as { home?: HomeDto }).home : (failure.home as HomeDto | undefined)) ?? home;
     if (responded !== null) {
+      // この応答より前に送った取り直し（押す前の状態）が後から届いても映さない（不具合-17）
+      polling.invalidate();
       setHome(responded);
       setLoaded(true);
       setStale(false);
@@ -189,10 +196,12 @@ const CustomerScreens = () => {
    */
   const applyHome = (next?: unknown) => {
     if (next === undefined || next === null) {
-      void refresh();
+      polling.refreshNow();
       return;
     }
     const responded = next as HomeDto;
+    // この応答より前に送った取り直し（操作の前の状態）が後から届いても映さない（不具合-17）
+    polling.invalidate();
     setHome(responded);
     setLoaded(true);
     setStale(false);
@@ -266,7 +275,7 @@ const CustomerScreens = () => {
   if (home === null && unreachable !== null) {
     return (
       <main>
-        <LoadView state={{ status: "failed", failure: unreachable }} onRetry={() => void refresh()}>
+        <LoadView state={{ status: "failed", failure: unreachable }} onRetry={polling.refreshNow}>
           {() => null}
         </LoadView>
       </main>
@@ -281,7 +290,7 @@ const CustomerScreens = () => {
             この端末の登録を消しました。
           </p>
         ) : null}
-        <RegisterForm onRegistered={() => void refresh()} />
+        <RegisterForm onRegistered={polling.refreshNow} />
       </main>
     );
   }
@@ -435,7 +444,7 @@ const CustomerScreens = () => {
       <EraseRegistration
         onDeleted={() => {
           setErased(true);
-          void refresh();
+          polling.refreshNow();
         }}
       />
     </main>

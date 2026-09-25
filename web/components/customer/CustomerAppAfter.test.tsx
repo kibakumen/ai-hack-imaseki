@@ -50,3 +50,48 @@ describe("前回の完了済み（不具合-18）", () => {
     expect(screen.queryByTestId("btn-open-previous")).toBeNull();
   });
 });
+
+describe("取り直しの古い応答（不具合-17）", () => {
+  it("取り直しの通信中に受け取ると、押す前に送った取り直しの応答（確保なし）が後から届いても確保中の表示のまま", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let held = false;
+    let release: (() => void) | null = null;
+    const reservation = reservationDto({ code: "24681357" });
+    api = installFakeApi({
+      "GET /api/config/public": CONFIG,
+      "GET /api/customer/home": () => {
+        // 押す前の取り直し: 確保が無い時点の中身を、受け取りが通るまで返さずに持つ
+        if (!held && release === null && api!.calls.filter((c) => c.path === "/api/customer/home").length > 1) {
+          return new Promise((resolve) => {
+            release = () => resolve({ json: homeFetch() });
+          });
+        }
+        return { json: held ? homeFetch({ kind: "active", reservation }) : homeFetch() };
+      },
+      "POST /api/customer/fetch": () => ({ json: { ok: true, fetchId: "f1", items: [ITEM] } }),
+      "POST /api/customer/reservations": () => {
+        held = true;
+        return { json: { ok: true, reservation, home: homeFetch({ kind: "active", reservation }) } };
+      },
+    });
+    render(<CustomerApp />);
+    fireEvent.click(await screen.findByTestId("btn-fetch"));
+    const card = await screen.findByTestId("result-o1");
+    // 10秒ごとの取り直しを1回走らせ、その応答を持ったまま受け取る
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(release).not.toBeNull();
+    fireEvent.click(within(card).getByTestId("btn-receive"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(screen.getByTestId("view-active")).toBeTruthy();
+    await act(async () => {
+      release!();
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    expect(screen.getByTestId("view-active").textContent).toContain("24681357");
+    expect(screen.queryByTestId("btn-fetch")).toBeNull();
+  });
+});

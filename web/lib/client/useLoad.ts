@@ -66,13 +66,21 @@ export const useLoad = <T>(load: () => Promise<T | ApiFailure>, options: UseLoad
   });
   /** 何回目の読み込みの系列か。`load` が変わるたびに進め、前の系列の答えを捨てる */
   const generation = useRef(0);
+  /**
+   * 何回目に送った読み込みか。これより前に送った回の答えは、後から届いても捨てる（2026-09-25 監査の指摘 不具合-17）。
+   * 店のホームでは、「完了」のあとの読み直しより先に送った定期の取り直し（押す前の一覧）が後から届き、
+   * 完了にした行が確保中に戻って「新しい客」の音まで鳴っていた。
+   */
+  const requestSeq = useRef(0);
   const mounted = useRef(false);
 
   const reload = useCallback(async () => {
     const mine = generation.current;
+    requestSeq.current += 1;
+    const seq = requestSeq.current;
     const result = await latest.current.load();
-    // 画面を離れたあと・別のものを読み始めたあとに返ってきた答えは捨てる。
-    if (!mounted.current || mine !== generation.current) return;
+    // 画面を離れたあと・別のものを読み始めたあと・あとから送った回があるときに返ってきた答えは捨てる。
+    if (!mounted.current || mine !== generation.current || seq !== requestSeq.current) return;
     if (!isFailure(result)) latest.current.options.onLoaded?.(result);
     setState((prev) => nextLoadState(prev, result, Date.now(), latest.current.options.isEmpty));
   }, []);
