@@ -16,6 +16,7 @@ import type { FetchInput } from "../schemas/fetch";
 import { ID_BYTES } from "../schemas/limits";
 import { aiBudgetLeft } from "./aiBudget";
 import { scheduleGoogleUpkeep } from "./googleUpkeep";
+import { scheduleLicenseSweep } from "./licenseSweep";
 import { raceDeadline } from "./deadline";
 import type { PitchTarget } from "./writePitch";
 import { meteredGeocoder } from "./mapsBudget";
@@ -199,6 +200,9 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   const fetchId = await record(deps, { customerId, input, origin, originKind: resolved.kind, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
   // Google から来た店の座標の30日の手入れ（1時間に1回まで・応答のあとに走る・設計-20）
   scheduleGoogleUpkeep(deps);
+  // 営業許可書の掃除と、承認されないまま30日たった許可書の片付け（1日に1回まで・応答のあとに走る・安全-20）。
+  // 定期の仕組みを持たないので、いちばんよく来る要求のついでに走らせる（許可書の操作が無い日も期限が過ぎるため）
+  scheduleLicenseSweep(deps);
   return { ok: true, fetchId, items, pitchTargets: buildPitchTargets(items, ranked) };
 };
 

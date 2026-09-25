@@ -354,7 +354,7 @@ export const seedAdmin = async (ctx: AdminScene, input: { email?: string; passwo
  * 登録を断り、通った登録は版と同意の時刻を残す。版は入口と画面の正本（web/lib/schemas/limits の STORE_TERMS_VERSION）と同じ値
  * ——ずれたら web/lib/schemas/storeTermsVersion.test.ts が落ちる（規約の版を上げたら、ここも上げる）。
  */
-export const STORE_TERMS_AGREEMENT = { agreedTermsVersion: "2026-09-25" } as const;
+export const STORE_TERMS_AGREEMENT = { agreedTermsVersion: "2026-09-26" } as const;
 
 let storeSeq = 0;
 export const registerStore = async (ctx: ApiScene, over: { name?: string; email?: string; password?: string; humanToken?: string } = {}) => {

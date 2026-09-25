@@ -201,7 +201,7 @@ v2 の Worker `ai-hack-v2` は 2026-09-25 から止めてある（「1. 触れ�
 pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 ```
 
-2026-09-25 の監査の直しで足した migration は次の8本で、どれも本番には未適用（コードはこれが当たっている前提で動く。当てずにコードだけを出すと、列や制約が無いまま動いて500になる）:
+2026-09-25 の監査の直しで足した migration は次の9本（2026-09-26 の最終の手直しの `0012` を含む）で、どれも本番には未適用（コードはこれが当たっている前提で動く。当てずにコードだけを出すと、列や制約が無いまま動いて500になる）:
 
 | migration | 中身 |
 | --- | --- |
@@ -213,6 +213,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 | `0009_google_terms.sql` | 店の位置を Google で直した時刻 `stores.geocoded_at`。今ある店は登録の時刻で埋める（デモの店＝メールアドレスが `@example.com` の店は外す） |
 | `0010_store_terms.sql` | 店向けの利用規約への同意の版と時刻 `stores.terms_version`・`stores.terms_agreed_at` |
 | `0011_admin_actions.sql` | 運営の操作の記録 `admin_actions`（追加だけ・トリガーで守る）と、承認した時点の写し・運営のメモ・連絡済みの印の列。当てると、承認済みと止められている店の今の値が承認の写しとして埋まる |
+| `0012_pending_license_retention.sql` | 承認されていない店の営業許可書のうち、上げた時刻 `stores.license_uploaded_at` の無いものを、当てた時刻で埋める（上げてから30日たっても承認されない許可書を消す数えの起点・安全-20）。承認済みの店には触れない |
 
 手順:
 

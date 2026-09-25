@@ -254,6 +254,29 @@ export const findReferencedLicenseKeys = async (db: Db): Promise<Set<string>> =>
   return new Set((results ?? []).map((row) => String((row as { key: unknown }).key)));
 };
 
+/** 承認されないまま期限を過ぎた許可書1件（usecases/licenseSweep が消す）。 */
+export type StalePendingLicense = { id: string; licenseKey: string; approvedLicenseKey: string | null };
+
+/**
+ * 承認されていない店（未承認・止められている）のうち、許可書を `beforeIso` より前に上げたままのものを `limit` 件まで
+ * （2026-09-26 のレビュー・安全-20 の案1 の残り）。上げた時刻の無い行は選ばない（migration 0012 が埋める）。
+ */
+export const findStalePendingLicenses = async (db: Db, beforeIso: string, limit: number): Promise<StalePendingLicense[]> => {
+  const { results } = await db
+    .prepare(
+      `SELECT id, license_key, approved_license_key FROM stores
+        WHERE status <> 'approved' AND license_key IS NOT NULL AND license_uploaded_at IS NOT NULL AND license_uploaded_at < ?1
+        ORDER BY license_uploaded_at ASC LIMIT ?2`,
+    )
+    .bind(beforeIso, limit)
+    .all();
+  return (results ?? []).map((row) => ({
+    id: String(row.id),
+    licenseKey: String(row.license_key),
+    approvedLicenseKey: (row.approved_license_key as string | null) ?? null,
+  }));
+};
+
 /**
  * 承認の前の店が自分の許可書を取り下げる。**未承認のままで、読んだ鍵のままのときだけ**当たる——読んでから書くまでに
  * 承認されたら（承認の写しがその鍵を指す）外さない。当たれば true。

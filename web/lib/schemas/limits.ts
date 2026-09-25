@@ -382,6 +382,13 @@ export const ARRIVALS_REFRESH_MS = 10_000;
  */
 export const ARRIVAL_COMPLETE_GRACE_MS = 20 * 60 * 1000;
 
+/**
+ * 承認されないまま置かれた営業許可書を置いておく長さ（上げてから30日・2026-09-26 のレビュー・安全-20 の案1 の残り・AI判断）。
+ * 承認を断る操作は置かない（要件25の基準 25.3）ので、承認されないまま30日たったら審査は終わったものとして許可書を消す
+ * （usecases/licenseSweep）。店は上げ直せばまた審査に入る。書類の画面と店向けの利用規約も同じ日数を書く。
+ */
+export const PENDING_LICENSE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 // 人かどうかの確かめ（Turnstile）の用途（2026-09-25 監査の指摘 安全-23）
 /**
  * 部品（components/ui/HumanCheck）が Turnstile に名乗る用途と、入口（http/defineRoute）が答えに求める用途。
@@ -409,4 +416,4 @@ export type HumanCheckAction = (typeof HUMAN_CHECK_ACTIONS)[keyof typeof HUMAN_C
  *    STORE_TERMS_AGREEMENT）も同じ値に上げる（schemas/storeTermsVersion.test.ts が見張る）。
  * ⚠️ すでに登録した店に新しい版へ同意し直してもらう仕組みは無い（AI判断・今は請求しないので、版を上げる予定が無い）。
  */
-export const STORE_TERMS_VERSION = "2026-09-25";
+export const STORE_TERMS_VERSION = "2026-09-26";
