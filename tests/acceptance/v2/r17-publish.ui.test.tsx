@@ -4,7 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { componentOf, installFakeApi, invalidInput, offerDto, refusal, storeHomeDto, type FakeApi } from "./_fakes";
+import { componentOf, installFakeApi, invalidInput, offerDto, refusal, storeHomeDto, unauthorized, type FakeApi } from "./_fakes";
 import { TID } from "./_types";
 
 const COUPONS = [
@@ -96,4 +96,14 @@ describeTask("9", "公開のフォームと公開中のカード", () => {
       api.restore();
     }
   });
+
+  // ログインが切れると、店の画面が真っ白・「まだありません」・「入れた内容を確かめてください」のどれかになり、
+  // ログインへ戻る道が無い（以前は店と運営の画面にログイン切れの検査が1本も無かった・設計-04）。
+  it.fails("既知の不具合（横断-01）: 店のホームを開いてログインが切れていたら（401）、ログインへ戻る道が出る", async () => {
+    api = installFakeApi({ "GET /api/store/home": unauthorized, "GET /api/config/public": () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } }) });
+    const StoreHome = await componentOf("components/store/StoreHome", "StoreHome");
+    const { container } = render(<StoreHome />);
+    await waitFor(() => expect(container.querySelector('a[href^="/login"]')).toBeTruthy(), { timeout: 2_000 });
+  });
 });
+

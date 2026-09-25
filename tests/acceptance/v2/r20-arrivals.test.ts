@@ -1,7 +1,7 @@
 // 要件20 向かっている客と完了済み（手続き・ホームの一覧の行）。20.23〜20.25 はタスク21。画面は r20-arrivals.ui.test.tsx。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { fetchOffers, makeCtx, MIN, one, receive, receivedScene, registerCustomer, rows, snapshot, type Ctx } from "./_fakes";
+import { fetchOffers, loadWeb, makeCtx, MIN, one, receive, receivedScene, registerCustomer, rows, snapshot, type Ctx } from "./_fakes";
 
 const T0 = new Date("2026-09-22T06:00:00.000Z").getTime();
 const at = (ctx: Ctx, minutes: number) => ctx.clock.set(new Date(T0 + minutes * MIN).toISOString());
@@ -17,6 +17,21 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
   });
   const arrivals = async (api: any) => (await api.get("/api/store/home")).json.arrivals as any[];
   const anotherCustomer = async (over: Record<string, unknown> = {}) => registerCustomer(ctx, { nickname: `客${++seq}`, phone: `0803000${String(seq).padStart(4, "0")}`, ...over });
+
+  // 電話番号を入れていない客（本番の入口が裏で登録する客）は、形を満たすだけの仮の番号で登録される。
+  // 店の一覧にその仮の番号を電話番号として渡さない（案A: 店へ渡す手前で仮の番号を外す）。
+  it.fails("既知の不具合（横断-02）: 電話番号を入れていない客の行に、仮の番号を電話番号として渡さない", async () => {
+    at(ctx, 0);
+    const { GUEST_PHONE_PLACEHOLDER } = await loadWeb("lib/schemas/limits");
+    const s = await receivedScene(ctx);
+    const guest = await registerCustomer(ctx, { nickname: "guest-abc123", phone: GUEST_PHONE_PLACEHOLDER });
+    const f = await fetchOffers(guest.api, { party: 2, ...s.at });
+    const received = await receive(guest.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId });
+    expect(received.status).toBe(200);
+    const row = (await arrivals(s.store.api)).find((r) => r.code === received.json.reservation.code);
+    expect(row).toBeTruthy();
+    expect(row!.phone).not.toBe(GUEST_PHONE_PLACEHOLDER);
+  });
 
   it("20.1・20.2・20.3・20.18 確保中の行に呼び名・電話番号・人数・コード・期限が出て、期限の近い順。人数の変更が映る。0件なら空", async () => {
     at(ctx, 0);
@@ -188,13 +203,27 @@ describeTask("21", "止められている店の完了済み（20.23・20.24）�
     expect((await s.store.api.get("/api/store/home")).json.arrivals[0].canComplete).toBe(true);
     await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
     const list = (await s.store.api.get("/api/store/home")).json.arrivals;
+    // 一覧が空でも通ってしまわないように、その期限切れの行が一覧に残っていることから確かめる（基準 20.5・設計-04）
+    expect(list.map((r: any) => r.reservationId)).toContain(s.reservation.id);
     for (const r of list) expect(r.canComplete).toBe(false);
     const before = await snapshot(ctx.db);
     const res = await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {});
     expect(res.status).toBe(409);
-    expect(res.json.error?.kind ?? res.json.current?.state).toMatch(/store_banned|expired|admin_cancelled/);
     expect(await snapshot(ctx.db)).toBe(before);
     at(ctx, 0);
+  });
+
+  // 画面が「運営に止められているため」と出せる理由が返る（基準 20.25）。以前は3つの語のどれでも通す正規表現で、
+  // 実際に返っている expired（期限切れ）との取り違えを見逃していた（設計-04）。
+  it.fails("既知の不具合（店-10）: 止められている店が期限切れの行を完了済みにしようとすると、理由として store_banned が返る", async () => {
+    at(ctx, 0);
+    const s = await receivedScene(ctx);
+    at(ctx, 25);
+    await ctx.admin!.api.post(`/api/admin/stores/${s.store.id}/ban`, {});
+    const res = await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {});
+    at(ctx, 0);
+    expect(res.status).toBe(409);
+    expect(res.json.error?.kind ?? res.json.current?.state).toBe("store_banned");
   });
 
   it("20.15・20.19 運営に取り消された行は一覧から消え、その確保は完了済みにできない", async () => {

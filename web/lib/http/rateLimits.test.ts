@@ -5,13 +5,16 @@
 //   30.3 同じ客の通報は1時間に5回／30.4 ログインの失敗10回で15分／30.5 断った要求で手続きが動かない
 // 偽の D1 は rate_counters と customers の2つの問い合わせだけを受ける（このファイルの中だけの道具）。
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Deps } from "../ports";
 import type { RateCounterRow } from "../repo/rateCounters";
 import { FETCH_RATE_LIMIT, LOGIN_FAILURE_LIMIT, LOGIN_LOCK_WINDOW_MS, REGISTER_RATE_LIMIT, STORE_IMAGE_RATE_LIMIT } from "../schemas/limits";
 import { CUSTOMER_COOKIE_NAME } from "./cookies";
 import { defineRoute } from "./defineRoute";
-import { decideRate, rateKeyFor, rateRuleFor, type RateRule } from "./rateLimits";
+import { decideRate, rateKeyFor, rateLimitedRoutes, rateRuleFor, type RateRule } from "./rateLimits";
 import { ROUTE_DEFINITIONS } from "./routes";
 
 const ORIGIN = "https://app.test";
@@ -86,6 +89,81 @@ const post = (path: string, body: unknown, headers: Record<string, string> = {})
 
 const jsonOf = async (res: Response) => (await res.json()) as { ok: boolean; error?: { kind?: string } };
 
+// ---------- 外のサービスを呼ぶ入口の見つけ方（静的な走査） ----------
+
+const LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/** 請求や予算に響く外の口（地図・AI・紹介文・外への取得） */
+const BILLED_PORT = /\bdeps\.(geocoder|ai|pitch|storeImage)\b/;
+
+/** ファイルの最上位の宣言（const・function）を、名前 → 本文に分ける */
+const topLevelDeclarations = (text: string): Map<string, string> => {
+  const starts = [...text.matchAll(/^(?:export\s+)?(?:const|(?:async\s+)?function)\s+([A-Za-z_$][\w$]*)/gm)];
+  return new Map(starts.map((m, i) => [m[1], text.slice(m.index, starts[i + 1]?.index ?? text.length)]));
+};
+/** `import { a, b as c } from "<prefix><名前>"` を、使う名前 → 読み込み元のファイル名にする */
+const namedImports = (text: string, prefix: string): Map<string, string> => {
+  const out = new Map<string, string>();
+  const re = new RegExp(`^import\\s+\\{([^}]*)\\}\\s+from\\s+"${prefix.replace(/[./]/g, "\\$&")}([\\w-]+)"`, "gm");
+  for (const m of text.matchAll(re)) {
+    for (const raw of m[1].split(",")) {
+      const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop();
+      if (name) out.set(name, m[2]);
+    }
+  }
+  return out;
+};
+const calls = (body: string, name: string): boolean => new RegExp(`\\b${name.replace(/\$/g, "\\$")}\\(`).test(body);
+
+/**
+ * usecases の関数のうち、外の口に触るもの（`<ファイル名>:<関数名>`）。同じファイルの手続きや、
+ * ほかの手続きの関数を経由して触るものも含める（関数の単位で数える——同じファイルの読むだけの関数を巻き込まない）。
+ */
+const billedUsecaseFunctions = (): Set<string> => {
+  const dir = path.join(LIB, "usecases");
+  const modules = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
+    .map((f) => {
+      const text = fs.readFileSync(path.join(dir, f), "utf8");
+      return { module: f.replace(/\.ts$/, ""), decls: topLevelDeclarations(text), imports: namedImports(text, "./") };
+    });
+  const billed = new Set<string>();
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const { module, decls, imports } of modules) {
+      for (const [name, body] of decls) {
+        const key = `${module}:${name}`;
+        if (billed.has(key)) continue;
+        const viaLocal = [...decls.keys()].some((other) => other !== name && billed.has(`${module}:${other}`) && calls(body, other));
+        const viaImport = [...imports].some(([imported, from]) => billed.has(`${from}:${imported}`) && calls(body, imported));
+        if (BILLED_PORT.test(body) || viaLocal || viaImport) {
+          billed.add(key);
+          changed = true;
+        }
+      }
+    }
+  }
+  return billed;
+};
+
+/** 入口の定義（http/endpoints）を1つずつ読み、外の口に触る手続きを呼ぶ入口を `<METHOD> <path>` で返す */
+const routesReachingBilledServices = (): string[] => {
+  const billed = billedUsecaseFunctions();
+  const dir = path.join(LIB, "http", "endpoints");
+  const out: string[] = [];
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
+    const text = fs.readFileSync(path.join(dir, file), "utf8");
+    const imports = namedImports(text, "../../usecases/");
+    for (const block of text.split(/defineRoute\(\{/).slice(1)) {
+      const method = /method:\s*"(\w+)"/.exec(block)?.[1];
+      const routePath = /path:\s*"([^"]+)"/.exec(block)?.[1];
+      if (!method || !routePath) continue;
+      if ([...imports].some(([name, from]) => billed.has(`${from}:${name}`) && calls(block, name))) out.push(`${method} ${routePath}`);
+    }
+  }
+  return out;
+};
+
 // ---------- 数え方（純粋な関数） ----------
 
 describe("decideRate: 固定の窓で数え、上限に届いた回で窓を貼り直す", () => {
@@ -157,13 +235,29 @@ describe("抑止を掛ける入口と鍵", () => {
     expect(rateKeyFor(store, source)).toBe(rateKeyFor(customer, source));
   });
 
-  it("表の経路は実在の入口と字面まで一致する（経路の名前が変わったら、黙って抑止が外れないようにここが落ちる）", () => {
+  it("表の経路は全部、実在の入口と字面まで一致する（経路の名前が変わったら、黙って抑止が外れないようにここが落ちる）", () => {
+    // 以前は表の8経路のうち3つしか見ていなかった（設計-04）。表そのものを歩く
     const known = new Set(ROUTE_DEFINITIONS.map((r) => `${r.method} ${r.path}`));
-    for (const route of ["POST /api/register/customer", "POST /api/register/store", "POST /api/auth/login"]) {
-      expect(known.has(route), route).toBe(true);
+    const table = rateLimitedRoutes();
+    expect(table.length).toBeGreaterThanOrEqual(8);
+    for (const route of table) expect(known.has(route), route).toBe(true);
+  });
+
+  it("外のサービス（地図・AI・外への取得）を呼ぶ入口を、入口の定義から見つけられる（下の検査の見つけ方の確かめ）", () => {
+    const found = routesReachingBilledServices();
+    for (const route of ["POST /api/customer/fetch", "POST /api/customer/fetch/stream", "GET /api/customer/store-image", "GET /api/customer/place-suggest"]) {
+      expect(found, route).toContain(route);
     }
-    // 取得（POST /api/customer/fetch）と通報（POST /api/customer/reports）は別のタスクが作る入口なので、
-    // まだ一覧に無い。経路が出来た時点で表から自動で抑止が掛かる（向こうの実装に足すものは無い）。
+  });
+
+  // 客1人が地図の請求と AI の予算を好きなだけ踏めないように、外のサービスを呼ぶ入口は全部、抑止の表に載せる。
+  // 今は現在地を地名に直す入口（GET /api/customer/place）と店の情報の保存（PUT /api/store/profile）が漏れている。
+  it.fails("既知の不具合（安全-03）: 外のサービス（地図・AI・外への取得）を呼ぶ入口は全部、連打の抑止の表に載っている", () => {
+    const missing = routesReachingBilledServices().filter((route) => {
+      const [method, routePath] = route.split(" ");
+      return rateRuleFor(method, routePath) === null;
+    });
+    expect(missing).toEqual([]);
   });
 
   it("鍵は規則ごとに材料が違い、材料が無ければ数えない（null）", () => {
@@ -300,6 +394,17 @@ describe("30.4 同じアカウントへのログインの失敗が10回続くと
     expect((await login(route, deps, "locked@example.com", RIGHT)).status).toBe(429);
     clock.set(at(216));
     expect((await login(route, deps, "locked@example.com", RIGHT)).status).toBe(200);
+  });
+
+  // 案1（勧める案が無いので最初の案）: 鍵を「メールアドレス×接続元」にする。他人が別の接続元から間違え続けても、
+  // 本人は締め出されない（以前の検査は「アカウント単位の締め出し」を正しい振る舞いとして固めていた・設計-04）。
+  it.fails("既知の不具合（安全-10）: 他人が別の接続元から10回間違えても、本人の接続元からの正しいパスワードは締め出されない", async () => {
+    const route = loginRoute(() => {});
+    const { deps, clock } = makeDeps();
+    clock.set(at(300));
+    const from = (ip: string, password: string) => route.handle(post("/api/auth/login", { email: "owner@example.com", password, humanToken: "tok-ok" }, { "cf-connecting-ip": ip }), deps);
+    for (let i = 0; i < LOGIN_FAILURE_LIMIT; i++) expect((await from("198.51.100.66", `wrong-${i}`)).status, String(i)).toBe(401);
+    expect((await from("203.0.113.10", RIGHT)).status).toBe(200);
   });
 
   it("通ったら数が消える＝失敗の続きが切れる（9回失敗して1回通ると、数え直しになる）", async () => {

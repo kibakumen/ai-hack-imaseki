@@ -17,7 +17,8 @@ describe("adapters/turnstile", () => {
     const calls: Array<{ url: string; body: string; signal: AbortSignal | null | undefined }> = [];
     const fetchImpl = (async (url: string, init: RequestInit) => {
       calls.push({ url: String(url), body: String(init.body), signal: init.signal });
-      return jsonResponse({ success: true });
+      // 本物の応答と同じく、どのホスト名・どの用途で解かれたかも返る
+      return jsonResponse({ success: true, hostname: "app.test", action: "login" });
     }) as unknown as typeof globalThis.fetch;
     const controller = new AbortController();
     const human = createHumanCheck({ secretKey: "secret-key", fetch: fetchImpl });
@@ -27,6 +28,13 @@ describe("adapters/turnstile", () => {
     expect(calls[0].body).toContain("secret=secret-key");
     expect(calls[0].body).toContain("response=tok-1");
     expect(calls[0].signal).toBe(controller.signal);
+  });
+
+  // ホスト名と用途を見ていないので、本番の鍵で解いた値が localhost でも通る。どのホスト名で解かれたか分からない答えは、人と認めない
+  // （以前の検査は hostname の無い応答を「人」として固めていた・設計-04）。
+  it.fails("既知の不具合（安全-23）: 応答に hostname が無い（どこで解かれたか分からない）ときは、人と認めない", async () => {
+    const fetchImpl = (async () => jsonResponse({ success: true })) as unknown as typeof globalThis.fetch;
+    expect(await createHumanCheck({ secretKey: "s", fetch: fetchImpl }).verify("tok", {})).not.toEqual({ ok: true, human: true });
   });
 
   it("success が false なら人でない（確かめ自体は済んでいる）", async () => {

@@ -39,6 +39,17 @@ describeTask("8", "承認", () => {
     expect((await s.api.get("/api/store/home")).json.status).toBe("approved");
   });
 
+  // どの直し方（承認を戻す・承認時の写しを残す・差し替えを断る）でも、承認に使った許可書は消さない（運営-02 の直し方）。
+  // 以前は、承認のあとの差し替えを確かめる検査が1本も無かった（設計-04）。
+  it.fails("既知の不具合（運営-02）: 承認したあとに店が許可書を上げ直しても、承認に使った許可書は消えない", async () => {
+    const s = await approvedStore(ctx);
+    const reviewed = (await one(ctx.db, "SELECT license_key FROM stores WHERE id = ?", s.id)).license_key as string;
+    expect(ctx.files.store.has(reviewed)).toBe(true);
+    const again = await uploadLicense(s.api, PDF_BYTES, "replaced.pdf");
+    expect([200, 201, 409]).toContain(again.status);
+    expect(ctx.files.store.has(reviewed)).toBe(true);
+  });
+
   it("25.3 承認を断る入口が無い", () => {
     const paths = ctx.app.routes.map((r: any) => r.path);
     expect(paths.filter((p: string) => /admin\/stores\/:id\/(reject|deny|decline|refuse)/.test(p))).toEqual([]);

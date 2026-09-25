@@ -6,7 +6,7 @@
 // ②複数のモデル・複数の用途が混ざったときに、件数・実費・所要が正しく分かれること——の2点。
 // どちらも凍結検査の外側の性質なので、`web/tests/`（`tests/acceptance/v2/` の外）に置く。
 //
-// `logPrivacy.test.ts` と同じ道具（`makeCtx`・`receivedScene`）を使う。`ai_calls` は
+// 受け入れ検査と同じ道具（`makeCtx`・`receivedScene`）を使う。`ai_calls` は
 // `fetch_id` に外部キー制約が在るので、まず1件受け取りまで済ませて実在する `fetchId` を作り、
 // それへ追加の行を挿し込む（`tests/acceptance/v2/r33-metrics.test.ts` タスク28と同じやり方）。
 

@@ -78,4 +78,24 @@ describeTask("33", "連打の抑止", () => {
     expect((await login("locked@example.com", "right-password-1")).status).toBe(200);
     expect(s.id).not.toBe(t.id);
   });
+
+  // 数えが「読んでから書く」の2手なので、同時に送ると上限をすり抜ける。上限まで通り、残りは断る
+  // （以前の検査は全部1本ずつ順に送っていて、これを見ていなかった・設計-04）。
+  it.fails("既知の不具合（安全-02）: 同じ客が取得を10本同時に送っても、通るのは1分の上限の5本だけ", async () => {
+    at(ctx, 300);
+    const c = await registerCustomer(ctx, { phone: "08020200010" });
+    const results = await Promise.all(Array.from({ length: 10 }, () => fetchOffers(c.api, { party: 2 })));
+    expect(results.filter((r) => r.status === 200)).toHaveLength(5);
+    expect(results.filter((r) => r.status === 429)).toHaveLength(5);
+  });
+
+  it.fails("既知の不具合（安全-02）: 同じ接続元から登録を15本同時に送っても、通るのは1時間の上限の10本だけ", async () => {
+    at(ctx, 400);
+    const ip = "203.0.113.77";
+    const results = await Promise.all(
+      Array.from({ length: 15 }, (_, i) => ctx.api(null, { ip }).post("/api/register/customer", { ...CUSTOMER, phone: `0802030${String(i).padStart(4, "0")}`, humanToken: "tok-ok" })),
+    );
+    expect(results.filter((r) => r.status < 300)).toHaveLength(10);
+    expect(results.filter((r) => r.status === 429)).toHaveLength(5);
+  });
 });
