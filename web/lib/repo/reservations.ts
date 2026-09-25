@@ -14,30 +14,18 @@
 
 import type { ReservationStateRow } from "../domain/reservation";
 import type { Deps } from "../ports";
+import { changedRows, parseJsonArray } from "./d1";
 import { activeReservationCondition, publishingOfferCondition, remainingExpression } from "./sqlFragments";
 
 type Db = Deps["db"];
 
-const changedRows = (result: unknown): number => {
-  const meta = (result as { meta?: { changes?: number } } | null)?.meta;
-  return Number(meta?.changes ?? 0);
-};
-
 /** 壊れた JSON は「1つも無い」として読む（画面が止まらないようにする）。 */
-const parseCoupons = (raw: unknown): Array<{ name: string; note: string }> => {
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((value) => {
-      if (typeof value !== "object" || value === null) return [];
-      const coupon = value as { name?: unknown; note?: unknown };
-      return [{ name: typeof coupon.name === "string" ? coupon.name : "", note: typeof coupon.note === "string" ? coupon.note : "" }];
-    });
-  } catch {
-    return [];
-  }
-};
+const parseCoupons = (raw: unknown): Array<{ name: string; note: string }> =>
+  parseJsonArray(raw).flatMap((value) => {
+    if (typeof value !== "object" || value === null) return [];
+    const coupon = value as { name?: unknown; note?: unknown };
+    return [{ name: typeof coupon.name === "string" ? coupon.name : "", note: typeof coupon.note === "string" ? coupon.note : "" }];
+  });
 
 // ---------- 読む（客のホーム・受け取り直し・断りの理由の読み直し） ----------
 

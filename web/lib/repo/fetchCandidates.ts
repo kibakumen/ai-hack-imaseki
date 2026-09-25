@@ -5,6 +5,7 @@
 // 時刻の比較は、呼ぶ側が束縛した「今」で行う（SQLite の datetime('now') は使わない・実行者への契約）。
 
 import type { Deps } from "../ports";
+import { parseStringList } from "./d1";
 import { receivableCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
@@ -30,17 +31,6 @@ export type CandidateRow = {
 
 export type CouponRow = { id: string; storeId: string; name: string; note: string };
 
-/** 壊れた JSON は「空」として読む（取得が止まらないようにする。repo/customers と同じ扱い）。 */
-const parseStrings = (raw: unknown): string[] => {
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
 const CANDIDATES_SQL = `
   SELECT o.id AS offer_id, o.party_max, o.coupon_ids,
          s.id AS store_id, s.name AS store_name, s.url AS store_url,
@@ -65,14 +55,14 @@ export const findFetchCandidates = async (db: Db, nowIso: string): Promise<Candi
   return rows.map((row) => ({
     offerId: row.offer_id as string,
     partyMax: Number(row.party_max ?? 0),
-    couponIds: parseStrings(row.coupon_ids),
+    couponIds: parseStringList(row.coupon_ids),
     storeId: row.store_id as string,
     storeName: (row.store_name as string | null) ?? "",
     storeUrl: (row.store_url as string | null) ?? null,
     lat: Number(row.lat),
     lng: Number(row.lng),
-    genres: parseStrings(row.genres),
-    menus: parseStrings(row.menus),
+    genres: parseStringList(row.genres),
+    menus: parseStringList(row.menus),
     budgetMin: Number(row.budget_min ?? 0),
     budgetMax: Number(row.budget_max ?? 0),
     createdAt: (row.created_at as string | null) ?? "",

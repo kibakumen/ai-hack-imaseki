@@ -3,6 +3,7 @@
 // （crypto を直接は呼ばない・依存の向き）。
 
 import type { Deps } from "../ports";
+import { findCustomerIdByTokenHash } from "../repo/customers";
 import { extendSession, findSessionByTokenHash } from "../repo/sessions";
 import { SESSION_RENEW_WITHIN_SECONDS, SESSION_MAX_AGE_SECONDS } from "../schemas/limits";
 import { CUSTOMER_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, parseCookies, serializeCookie } from "./cookies";
@@ -23,9 +24,7 @@ export type SessionIdentity = {
 export const identifyCustomer = async (req: Request, deps: Deps): Promise<string | null> => {
   const token = parseCookies(req.headers.get("cookie"))[CUSTOMER_COOKIE_NAME];
   if (!token) return null;
-  const tokenHash = await deps.hasher.sha256Hex(token);
-  const row = await deps.db.prepare(`SELECT id FROM customers WHERE token_hash = ?1 AND deleted_at IS NULL`).bind(tokenHash).first();
-  return row ? (row.id as string) : null;
+  return findCustomerIdByTokenHash(deps.db, await deps.hasher.sha256Hex(token));
 };
 
 /**

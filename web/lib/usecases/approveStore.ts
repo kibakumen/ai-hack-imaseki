@@ -2,7 +2,7 @@
 // 承認を断る手続きは無い（基準 25.3。断るときは運営が一覧のメールアドレスへ自分のメールで伝える）。
 
 import type { Deps } from "../ports";
-import { approveStoreStatement, findStoreForAdmin } from "../repo/adminStores";
+import { approvePendingStore, findStoreForAdmin } from "../repo/adminStores";
 import type { StoreStatus } from "../repo/stores";
 
 /** 足りないものの項目名（設計書「入力の誤りの出し方」の 25.2 の行）。 */
@@ -30,10 +30,8 @@ export const approveStore = async (deps: Deps, storeId: string): Promise<Approve
   if (!store.cardRegistered) missing.push("card");
   if (missing.length > 0) return { ok: false, kind: "approval_missing", missing };
 
-  const result = await approveStoreStatement(deps.db, storeId).run();
-  // 読んでから書くまでの間に状況が動いた（同時に来た操作）なら、変わった行は0になる。
-  // 変わった行の数を返さない D1 の版もありうるので、数が分かるときだけ断る（分からないときは通す）。
-  const changes: unknown = result?.meta?.changes;
-  if (typeof changes === "number" && changes === 0) return { ok: false, kind: "state", state: store.status };
+  // 読んでから書くまでの間に状況が動いた（同時に来た操作）なら、当たらない。変わった行の数が
+  // 分からないときも「当たらなかった」側へ倒す（repo/d1 の changedRows・監査の指摘 設計-13）。
+  if (!(await approvePendingStore(deps.db, storeId))) return { ok: false, kind: "state", state: store.status };
   return { ok: true };
 };

@@ -5,7 +5,7 @@
 // 載せ方（OpenNext）を知っているのもここだけ（設計書「撤退しやすさ」）。app/api/**/route.ts は
 // Cloudflare の API を直接は呼ばない。
 
-import type { AppConfig } from "../ports";
+import type { AppConfig, Deps } from "../ports";
 import type { PermitBucket } from "./files";
 
 /**
@@ -27,8 +27,8 @@ export type Env = { config: AppConfig; secrets: Secrets };
 
 /** Worker の束縛（D1 と R2）。名前は `web/wrangler.jsonc` の `DB`・`PERMITS`。 */
 export type Bindings = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- D1Database（束縛の型は repo と各アダプタが持つ。Deps.db と同じ扱い）
-  db: any;
+  /** D1。形は確かめずに受ける（束縛は Worker が渡す実物で、名前だけが約束）。無ければ null */
+  db: Deps["db"] | null;
   permits: PermitBucket | null;
 };
 
@@ -53,7 +53,7 @@ export const readEnv = (env: RawEnv): Env => ({
 
 /** D1 と R2 の束縛を取り出す（無ければ null。呼ぶ側が fail-loud に断る）。 */
 export const readBindings = (env: RawEnv): Bindings => ({
-  db: env.DB ?? null,
+  db: (env.DB as Deps["db"] | undefined) ?? null,
   permits: (env.PERMITS as PermitBucket | undefined) ?? null,
 });
 

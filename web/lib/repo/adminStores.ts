@@ -7,6 +7,9 @@
 
 import type { Deps } from "../ports";
 import type { AdminStoreFilter } from "../schemas/admin";
+import { changedRows, parseStringList } from "./d1";
+import { adminCancelledEventsStatement } from "./logs";
+import { adminCancelReservationsStatement } from "./reservations";
 import { publishingOfferCondition, remainingExpression } from "./sqlFragments";
 import type { StoreStatus } from "./stores";
 
@@ -35,8 +38,8 @@ export type AdminStoreListRow = {
 
 export type AdminStoreDetailRow = AdminStoreListRow & {
   url: string | null;
-  genresJson: string;
-  menusJson: string;
+  genres: string[];
+  menus: string[];
   budgetMin: number | null;
   budgetMax: number | null;
   license: boolean;
@@ -156,8 +159,8 @@ export const findStoreForAdmin = async (db: Db, storeId: string, nowIso: string)
   return {
     ...toListRow(row as Record<string, unknown>),
     url: (row.url as string | null) ?? null,
-    genresJson: (row.genres as string | null) ?? "[]",
-    menusJson: (row.menus as string | null) ?? "[]",
+    genres: parseStringList(row.genres),
+    menus: parseStringList(row.menus),
     budgetMin: (row.budget_min as number | null) ?? null,
     budgetMax: (row.budget_max as number | null) ?? null,
     license: row.license_key !== null && row.license_key !== undefined,
@@ -168,29 +171,43 @@ export const findStoreForAdmin = async (db: Db, storeId: string, nowIso: string)
 /**
  * 承認する（基準 25.1）。未承認の店だけが承認済みになる——前の状況を WHERE に入れた1つの UPDATE で、
  * 同時に来た操作が二重に効かないようにする（設計書「確保の状態と、残りの数え方」の書き方に合わせた）。
+ * 当たれば true。読んでから書くまでの間に状況が動いた（同時に来た操作）なら false。
  */
-export const approveStoreStatement = (db: Db, storeId: string) =>
-  db.prepare(`UPDATE stores SET status = 'approved' WHERE id = ?1 AND status = 'pending'`).bind(storeId);
-
-/** 止める（基準 25.6）。承認済みの店だけが「止められている」になる。 */
-export const banStoreStatement = (db: Db, storeId: string) =>
-  db.prepare(`UPDATE stores SET status = 'banned' WHERE id = ?1 AND status = 'approved'`).bind(storeId);
+export const approvePendingStore = async (db: Db, storeId: string): Promise<boolean> =>
+  changedRows(await db.prepare(`UPDATE stores SET status = 'approved' WHERE id = ?1 AND status = 'pending'`).bind(storeId).run()) > 0;
 
 /**
- * 承認済みへ戻す（基準 25.9）。止められている店だけが承認済みになる。
+ * 承認済みへ戻す（基準 25.9）。止められている店だけが承認済みになる。当たれば true。
  * 終わったオファーと取り消された確保は戻さない（基準 25.10）——この文は `stores` だけを触る。
  */
-export const restoreStoreStatement = (db: Db, storeId: string) =>
-  db.prepare(`UPDATE stores SET status = 'approved' WHERE id = ?1 AND status = 'banned'`).bind(storeId);
+export const restoreBannedStore = async (db: Db, storeId: string): Promise<boolean> =>
+  changedRows(await db.prepare(`UPDATE stores SET status = 'approved' WHERE id = ?1 AND status = 'banned'`).bind(storeId).run()) > 0;
 
-/** 止めた店の公開中のオファーを終わりにする（基準 25.7）。終わった理由は banned。 */
-export const endPublishedOffersStatement = (db: Db, storeId: string, nowIso: string) =>
-  db
-    .prepare(
-      `UPDATE offers SET ended_at = ?2, end_reason = 'banned'
-        WHERE store_id = ?1 AND ${publishingOfferCondition("offers", "?2")}`,
-    )
-    .bind(storeId, nowIso);
+/**
+ * 止める（基準 25.6・25.7・25.8・25.11・27.4）。4つの文を1つのまとまり（`db.batch`）で流す——
+ * 止められた店に公開中のオファーが残る／オファーは終わったのに確保だけ確保中で残る、という形を作らない。
+ * 店の状況が当たれば true（承認済みでなかった・同時に来た操作に負けたなら false）。
+ *
+ * **文の順に意味が在る**（記録の文がまだ `status='active'` の行を選ぶので、状態を変える文より前）:
+ *   1. 店の状況を banned にする（前の状況 approved を WHERE に入れた1つの UPDATE）
+ *   2. 公開中のオファーを終わりにする（終わった理由は banned・基準 25.7）
+ *   3. これから取り消す確保の、状態の変化の記録を足す（基準 27.4）
+ *   4. 確保中の確保を全部「運営に取り消された」にする（基準 25.8・25.11）
+ */
+export const banApprovedStore = async (db: Db, storeId: string, nowIso: string): Promise<boolean> => {
+  const [banned] = await db.batch([
+    db.prepare(`UPDATE stores SET status = 'banned' WHERE id = ?1 AND status = 'approved'`).bind(storeId),
+    db
+      .prepare(
+        `UPDATE offers SET ended_at = ?2, end_reason = 'banned'
+          WHERE store_id = ?1 AND ${publishingOfferCondition("offers", "?2")}`,
+      )
+      .bind(storeId, nowIso),
+    adminCancelledEventsStatement(db, storeId, nowIso),
+    adminCancelReservationsStatement(db, storeId, nowIso),
+  ]);
+  return changedRows(banned) > 0;
+};
 
 /** 状況だけを読む（承認・停止の前の見立て）。無ければ null。 */
 export const findStoreStatus = async (db: Db, storeId: string): Promise<StoreStatus | null> => {

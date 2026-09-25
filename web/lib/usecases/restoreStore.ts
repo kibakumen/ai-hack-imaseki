@@ -7,7 +7,7 @@
 // 断りの形は `banStore`・`approveStore` と同じ（`{ ok:false, current:{ state } }` の409）。
 
 import type { Deps } from "../ports";
-import { findStoreStatus, restoreStoreStatement } from "../repo/adminStores";
+import { findStoreStatus, restoreBannedStore } from "../repo/adminStores";
 import type { StoreStatus } from "../repo/stores";
 
 export type RestoreStoreResult =
@@ -21,11 +21,9 @@ export const restoreStore = async (deps: Deps, storeId: string): Promise<Restore
   if (!status) return { ok: false, kind: "not_found" };
   if (status !== "banned") return { ok: false, kind: "state", state: status };
 
-  const result = await restoreStoreStatement(deps.db, storeId).run();
-  // 読んでから書くまでの間に状況が動いた（同時に来た操作）なら、変わった行は0になる。
-  // 変わった行の数を返さない D1 の版もありうるので、数が分かるときだけ断る（`approveStore` と同じ形）。
-  const changes: unknown = result?.meta?.changes;
-  if (typeof changes === "number" && changes === 0) return { ok: false, kind: "state", state: status };
+  // 読んでから書くまでの間に状況が動いた（同時に来た操作）なら、当たらない。変わった行の数が
+  // 分からないときも「当たらなかった」側へ倒す（repo/d1 の changedRows・`approveStore` と同じ形）。
+  if (!(await restoreBannedStore(deps.db, storeId))) return { ok: false, kind: "state", state: status };
 
   deps.logger.log({ event: "restore_store", id: storeId });
   return { ok: true };

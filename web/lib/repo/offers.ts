@@ -3,25 +3,10 @@
 // 時刻の比較は、手続きが束縛した「今」を引数で受ける（SQLite の datetime('now') は使わない）。
 
 import type { Deps } from "../ports";
+import { changedRows, parseStringList } from "./d1";
 import { publishingOfferCondition, remainingExpression } from "./sqlFragments";
 
 type Db = Deps["db"];
-
-/** 壊れた JSON は「1つも無い」として読む（表示が止まらないようにする）。 */
-const parseIdList = (raw: unknown): string[] => {
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
-const changedRows = (result: unknown): number => {
-  const meta = (result as { meta?: { changes?: number } } | null)?.meta;
-  return Number(meta?.changes ?? 0);
-};
 
 // ---------- 公開の前に読む店の状態（要件17の基準 17.10・17.11） ----------
 
@@ -50,7 +35,7 @@ export const findStorePublishState = async (db: Db, storeId: string): Promise<St
     status: row.status as StorePublishState["status"],
     name: (row.name as string | null) ?? null,
     address: (row.address as string | null) ?? null,
-    genres: parseIdList(row.genres),
+    genres: parseStringList(row.genres),
     budgetMin: (row.budget_min as number | null) ?? null,
     budgetMax: (row.budget_max as number | null) ?? null,
   };
@@ -112,7 +97,7 @@ const toOfferRow = (row: Record<string, unknown>): OfferRow => ({
   partyMax: row.party_max as number,
   publishedAt: row.published_at as string,
   untilAt: row.until_at as string,
-  couponIds: parseIdList(row.coupon_ids),
+  couponIds: parseStringList(row.coupon_ids),
 });
 
 const OFFER_COLUMNS = `o.id, o.capacity, o.initial_capacity, o.party_max, o.published_at, o.until_at, o.coupon_ids`;
