@@ -1,21 +1,18 @@
 // 店が確保を完了済みにする手続き（要件20の基準 20.6・20.7・20.9・20.11〜20.13・20.19・20.24、
 // 要件18の基準 18.7〜18.9、要件27の基準 27.4）。
 //
-// 順は3つだけ:
-//   1. **できる条件を全部入れた1文の UPDATE**（`repo/reservations` の `completeReservationIfAllowed`）
-//   2. 変わったら、状態の変化を記録する（基準 27.4。記録しないと要件33の割合が数えられない）
-//   3. 変わらなかったら、読み直して**今の状態**を返す（基準 20.20 の「断った理由」は画面がこれを出す）
+// 順は2つだけ:
+//   1. **できる条件を全部入れた1文の UPDATE** と、状態の変化の記録（基準 27.4）を1つのまとまりで書く
+//      （`repo/reservations` の `completeReservationIfAllowed`。別々に書くと、途中で落ちたとき記録だけが欠ける・不具合-16）
+//   2. 変わらなかったら、読み直して**今の状態**を返す（基準 20.20 の「断った理由」は画面がこれを出す）
 //
 // 断るときは**何も書かない**（基準 20.19・20.24 の「状態も残りも変えずに断る」）。期限切れの記録も
 // ここでは足さない——それは読む側の手続き（店のホーム・客のホーム）の役目（設計書「期限切れの記録」）。
 // コードの入力は求めない（基準 20.11）ので、この手続きは入力を取らない。
 
 import { effectiveState, EXPIRED_GRACE_MS, type EffectiveState } from "../domain/reservation";
-import { tokenFromBytes } from "../domain/token";
 import type { Deps } from "../ports";
-import { insertReservationEvent } from "../repo/logs";
 import { completeReservationIfAllowed, findStoreReservation } from "../repo/reservations";
-import { ID_BYTES } from "../schemas/limits";
 
 export type CompleteReservationResult =
   | { ok: true }
@@ -38,7 +35,6 @@ export const completeReservation = async (deps: Deps, storeId: string, reservati
   });
 
   if (completed) {
-    await insertReservationEvent(deps.db, { id: tokenFromBytes(deps.rng.bytes(ID_BYTES)), reservationId, status: "completed", at: nowIso });
     deps.logger.log({ event: "complete", id: reservationId });
     return { ok: true };
   }

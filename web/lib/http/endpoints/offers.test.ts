@@ -221,6 +221,9 @@ describe("POST /api/store/offers（公開）", () => {
     expect(missing).toContain("address");
     expect(missing).toContain("genres");
     expect((await home(store)).missingProfile).toEqual(expect.arrayContaining(["address", "genres"]));
+    // 断りの項目とホームの案内は同じ判定の1本を通る（設計-10: 予算を budgetMin・budgetMax と budget の2通りで返していた）
+    expect(missing).toEqual((await home(store)).missingProfile);
+    expect(missing).toContain("budget");
   });
 });
 
@@ -250,18 +253,22 @@ describe("POST /api/store/offers/current/stop（停止）", () => {
   });
 });
 
-describe("公開中のクーポンの読み口（要件16の基準 16.5 の材料・断るのはタスク6）", () => {
-  it("公開中のオファーが見せているクーポンだけが「使われている」。止めたあとは使われていない", async () => {
+// 2026-09-25 監査の指摘 設計-10: ここは本番で使われていない判定（repo/offers の isCouponInUse）を見ていた。
+// 判定は1本（repo/coupons の編集・削除の文の中）に寄せたので、本番の入口の断りで見る。
+describe("公開中のクーポンは変えられない（要件16の基準 16.5）", () => {
+  it("公開中のオファーが見せているクーポンだけが coupon_in_use で断られる。止めたあとは変えられる", async () => {
     clock.set(jst("15:00"));
-    const { isCouponInUse } = await import("../../repo/offers");
     const store = await seedStore({ coupons: ["見せる", "見せない"] });
     const [shown, hidden] = store.couponIds;
     await publish(store, { couponIds: [shown] });
-    const nowIso = clock.now().toISOString();
-    expect(await isCouponInUse(db, store.id, shown, nowIso)).toBe(true);
-    expect(await isCouponInUse(db, store.id, hidden, nowIso)).toBe(false);
+    const refused = await call("PUT", `/api/store/coupons/${shown}`, store.cookie, { name: "書き換え" });
+    expect(refused.status).toBe(409);
+    expect(refused.json.error.kind).toBe("coupon_in_use");
+    expect((await call("DELETE", `/api/store/coupons/${shown}`, store.cookie)).json.error.kind).toBe("coupon_in_use");
+    expect((await call("PUT", `/api/store/coupons/${hidden}`, store.cookie, { name: "見せないまま" })).status).toBe(200);
     await stop(store);
-    expect(await isCouponInUse(db, store.id, shown, clock.now().toISOString())).toBe(false);
+    expect((await call("PUT", `/api/store/coupons/${shown}`, store.cookie, { name: "書き換え" })).status).toBe(200);
+    expect((await one("SELECT name FROM coupons WHERE id = ?1", shown)).name).toBe("書き換え");
   });
 });
 

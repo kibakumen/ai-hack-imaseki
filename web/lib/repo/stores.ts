@@ -29,13 +29,6 @@ export const insertStoreWithAccountAndSession = async (db: Db, input: { store: N
   ]);
 };
 
-/** 店の番号で1件。無ければ null（アカウントは在るのに店が消えている、は起きない想定）。 */
-export const findStoreSummary = async (db: Db, storeId: string): Promise<StoreSummary | null> => {
-  const row = await db.prepare(`SELECT id, name, status FROM stores WHERE id = ?1`).bind(storeId).first();
-  if (!row) return null;
-  return { id: row.id as string, name: row.name as string, status: row.status as StoreStatus };
-};
-
 // ---------- 店の情報（タスク5・要件15） ----------
 
 /** 保存する店の情報（位置は住所から直したもの・基準 15.9）。 */

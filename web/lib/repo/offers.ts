@@ -41,41 +41,6 @@ export const findStorePublishState = async (db: Db, storeId: string): Promise<St
   };
 };
 
-// ---------- クーポン（読むだけ） ----------
-
-export type CouponRow = { id: string; name: string; note: string };
-
-/**
- * その店のクーポンを作った順に読む（要件4の基準 4.8）。
- * ⚠️ クーポンの書き込みはタスク6（repo/coupons.ts）が持つ。公開のフォームと公開中のカードが
- * 名前を出すために読むだけなので、ここに読み口を置いた（AI判断・タスク6と重なったら片方へ寄せる）。
- */
-export const listStoreCoupons = async (db: Db, storeId: string): Promise<CouponRow[]> => {
-  const result = await db.prepare(`SELECT id, name, note FROM coupons WHERE store_id = ?1 ORDER BY created_at, rowid`).bind(storeId).all();
-  return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({
-    id: row.id as string,
-    name: (row.name as string | null) ?? "",
-    note: (row.note as string | null) ?? "",
-  }));
-};
-
-/**
- * そのクーポンが、今公開中のオファーで見せられているか（要件16の基準 16.5）。
- * ⚠️ クーポンの編集・削除を断るのはタスク6。判断に要る「公開中」の条件と `coupon_ids` の読み方が
- * オファーの側にあるので、読み口だけをここに置いた（タスク6 は `coupon_in_use` を返すのに呼ぶ）。
- */
-export const isCouponInUse = async (db: Db, storeId: string, couponId: string, nowIso: string): Promise<boolean> => {
-  const row = await db
-    .prepare(
-      `SELECT 1 AS found FROM offers o` +
-        ` WHERE o.store_id = ?1 AND ${publishingOfferCondition("o", "?3")}` +
-        ` AND EXISTS (SELECT 1 FROM json_each(o.coupon_ids) WHERE json_each.value = ?2)`,
-    )
-    .bind(storeId, couponId, nowIso)
-    .first();
-  return row !== null;
-};
-
 // ---------- オファーの行 ----------
 
 export type OfferRow = {
@@ -137,22 +102,30 @@ export type NewOffer = {
 };
 
 /**
- * 公開中のオファーが無いときだけ1件入れる（要件17の基準 17.9）。入ったら true。
+ * 公開中のオファーが無いときだけ1件入れる（要件17の基準 17.9）。入ったら、実際に付けたクーポンの番号を返す。
+ * 入らなかった（その店に公開中が在る・承認済みでない）なら null。
  * 「その店に公開中が無い」と「店が承認済み」を **1つの文の WHERE** に入れるので、
  * 読んでから書くまでの隙に別の要求が入っても、公開中が2つになることはない（設計書「オファーの状態」）。
  * 公開した時の残りは募集する組数と同じ（要件18の基準 18.10。確保がまだ無いので式がそのまま同じ数を出す）。
+ *
+ * 付けるクーポンは、渡された番号のうち**この文が走る時点でその店に在るもの**だけ（作った順）。手続きが
+ * クーポンを読んでから入れるまでに店がそのクーポンを消しても、公開中のオファーが消えたクーポンを指さない
+ * （不具合-13。逆の順——公開のあとの削除——は、削除の文が公開中の見せているものを消さないことで守る）。
  */
-export const insertOfferIfNone = async (db: Db, offer: NewOffer): Promise<boolean> => {
-  const result = await db
+export const insertOfferIfNone = async (db: Db, offer: NewOffer): Promise<{ couponIds: string[] } | null> => {
+  const row = await db
     .prepare(
       `INSERT INTO offers (id, store_id, capacity, initial_capacity, party_max, published_at, until_at, coupon_ids)` +
-        ` SELECT ?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7` +
+        ` SELECT ?1, ?2, ?3, ?3, ?4, ?5, ?6,` +
+        ` (SELECT json_group_array(kept.id) FROM (SELECT c.id FROM coupons c WHERE c.store_id = ?2` +
+        ` AND EXISTS (SELECT 1 FROM json_each(?7) WHERE json_each.value = c.id) ORDER BY c.created_at, c.rowid) kept)` +
         ` WHERE EXISTS (SELECT 1 FROM stores s WHERE s.id = ?2 AND s.status = 'approved')` +
-        ` AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.store_id = ?2 AND ${publishingOfferCondition("o", "?5")})`,
+        ` AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.store_id = ?2 AND ${publishingOfferCondition("o", "?5")})` +
+        ` RETURNING coupon_ids`,
     )
     .bind(offer.id, offer.storeId, offer.capacity, offer.partyMax, offer.publishedAtIso, offer.untilAtIso, JSON.stringify(offer.couponIds))
-    .run();
-  return changedRows(result) > 0;
+    .first();
+  return row ? { couponIds: parseStringList((row as { coupon_ids?: unknown }).coupon_ids) } : null;
 };
 
 /**

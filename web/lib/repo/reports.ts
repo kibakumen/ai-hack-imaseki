@@ -9,6 +9,7 @@
 // ⚠️ 応答に載せるのは店の名前までで、通報した客の呼び名と電話番号は1つも読まない（基準 26.8・28.2）。
 
 import type { Deps } from "../ports";
+import { activeReservationCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -51,7 +52,7 @@ export const canReportStore = async (db: Db, query: ReportPermissionQuery): Prom
     .prepare(
       `SELECT 1 AS found FROM reservations res` +
         ` WHERE res.customer_id = ?1 AND res.store_id = ?2` +
-        ` AND ((res.status = 'active' AND res.expires_at > ?3) OR (res.status = 'completed' AND res.status_at > ?4))` +
+        ` AND ((${activeReservationCondition("res", "?3")}) OR (res.status = 'completed' AND res.status_at > ?4))` +
         ` LIMIT 1`,
     )
     .bind(query.customerId, query.storeId, query.nowIso, query.recentFromIso)

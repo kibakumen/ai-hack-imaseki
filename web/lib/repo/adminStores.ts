@@ -183,19 +183,25 @@ export const approvePendingStore = async (db: Db, storeId: string): Promise<bool
 export const restoreBannedStore = async (db: Db, storeId: string): Promise<boolean> =>
   changedRows(await db.prepare(`UPDATE stores SET status = 'approved' WHERE id = ?1 AND status = 'banned'`).bind(storeId).run()) > 0;
 
+/** 止めた結果。止められなかった（承認済みでなかった・同時に来た操作に負けた）なら null。 */
+export type BanResult = { cancelled: Array<{ reservationId: string; customerId: string }> } | null;
+
 /**
  * 止める（基準 25.6・25.7・25.8・25.11・27.4）。4つの文を1つのまとまり（`db.batch`）で流す——
  * 止められた店に公開中のオファーが残る／オファーは終わったのに確保だけ確保中で残る、という形を作らない。
- * 店の状況が当たれば true（承認済みでなかった・同時に来た操作に負けたなら false）。
+ * 店の状況が当たれば、取り消した確保（番号と客の番号）を返す。承認済みでなかった・同時に来た操作に負けたなら null。
  *
  * **文の順に意味が在る**（記録の文がまだ `status='active'` の行を選ぶので、状態を変える文より前）:
  *   1. 店の状況を banned にする（前の状況 approved を WHERE に入れた1つの UPDATE）
  *   2. 公開中のオファーを終わりにする（終わった理由は banned・基準 25.7）
  *   3. これから取り消す確保の、状態の変化の記録を足す（基準 27.4）
- *   4. 確保中の確保を全部「運営に取り消された」にする（基準 25.8・25.11）
+ *   4. 確保中の確保を全部「運営に取り消された」にし、取り消した行を返す（基準 25.8・25.11・22.2）
+ *
+ * 知らせの相手は4の文が実際に取り消した行から決める（不具合-13）。先に読んでおく形では、読んでから
+ * 止めるまでの間に受け取った客が、取り消されたのに知らせを受け取れなかった。
  */
-export const banApprovedStore = async (db: Db, storeId: string, nowIso: string): Promise<boolean> => {
-  const [banned] = await db.batch([
+export const banApprovedStore = async (db: Db, storeId: string, nowIso: string): Promise<BanResult> => {
+  const [banned, , , cancelled] = await db.batch([
     db.prepare(`UPDATE stores SET status = 'banned' WHERE id = ?1 AND status = 'approved'`).bind(storeId),
     db
       .prepare(
@@ -206,7 +212,10 @@ export const banApprovedStore = async (db: Db, storeId: string, nowIso: string):
     adminCancelledEventsStatement(db, storeId, nowIso),
     adminCancelReservationsStatement(db, storeId, nowIso),
   ]);
-  return changedRows(banned) > 0;
+  if (changedRows(banned) === 0) return null;
+  return {
+    cancelled: ((cancelled?.results ?? []) as Array<Record<string, unknown>>).map((row) => ({ reservationId: row.id as string, customerId: row.customer_id as string })),
+  };
 };
 
 /** 状況だけを読む（承認・停止の前の見立て）。無ければ null。 */

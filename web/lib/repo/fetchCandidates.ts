@@ -4,6 +4,7 @@
 //
 // 時刻の比較は、呼ぶ側が束縛した「今」で行う（SQLite の datetime('now') は使わない・実行者への契約）。
 
+import type { GeoBounds } from "../domain/geo";
 import type { Deps } from "../ports";
 import { parseStringList } from "./d1";
 import { receivableCondition } from "./sqlFragments";
@@ -38,19 +39,22 @@ const CANDIDATES_SQL = `
   FROM offers o
   JOIN stores s ON s.id = o.store_id
   WHERE s.status = 'approved'
-    AND s.lat IS NOT NULL AND s.lng IS NOT NULL
+    AND s.lat BETWEEN ?2 AND ?3 AND s.lng BETWEEN ?4 AND ?5
     AND ${receivableCondition("o", "?1")}
   ORDER BY s.id
 `;
 
 /**
- * 受け取れる状態のオファーを持つ、承認済みの店（基準 5.2）。
+ * 受け取れる状態のオファーを持つ、承認済みの店（基準 5.2）のうち、起点の周りの四角形（`domain/geo.searchBounds`）
+ * に入る店。四角形は探す範囲の円を必ず含むので、範囲の内かは `domain/filter` がこれまでどおり決める
+ * （2026-09-25 監査の指摘 設計-08: 全国の受け取れるオファーを読んでから 800m 以内に絞っていた）。
+ * 位置の入っていない店は四角形に入らない（BETWEEN は NULL に当たらない）。
  *
  * 店の状態も見る（止められている店の行を客へ出さない）。運営が店を止めるとオファーも終わる
  * （設計書「オファーの状態」）ので、この条件は受け取れる状態の判断を二重に持つものではない。
  */
-export const findFetchCandidates = async (db: Db, nowIso: string): Promise<CandidateRow[]> => {
-  const result = await db.prepare(CANDIDATES_SQL).bind(nowIso).all();
+export const findFetchCandidates = async (db: Db, nowIso: string, bounds: GeoBounds): Promise<CandidateRow[]> => {
+  const result = await db.prepare(CANDIDATES_SQL).bind(nowIso, bounds.latMin, bounds.latMax, bounds.lngMin, bounds.lngMax).all();
   const rows = (result.results ?? []) as Record<string, unknown>[];
   return rows.map((row) => ({
     offerId: row.offer_id as string,

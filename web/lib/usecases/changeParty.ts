@@ -3,7 +3,8 @@
 // 順は4つ:
 //   1. その客の確保を読む（在らない番号・別の客の確保は入力の断りへ倒す＝存在を教えない）
 //   2. 確保中か・「何名まで」に照らして受け入れられるかを判断する（`domain/reservation`）
-//   3. **前の状態を WHERE に入れた1つの UPDATE**（人数の列だけを変える）
+//   3. **前の状態と「何名まで」を WHERE に入れた1つの UPDATE**（人数の列だけを変える。読んだあとに店が
+//      「何名まで」を下げても、上限を超えた人数を書かない・不具合-13）。当たらなければ読み直して2の判断をやり直す
 //   4. 新しいホームを返す（確保中の表示のまま・人数だけが変わっている）
 //
 // 形と範囲（1人以上10人以下・整数・空でない）は入口の入力の検査が見る（基準 10.5）。
@@ -11,7 +12,7 @@
 
 import { canChangeParty, effectiveState, type EffectiveState } from "../domain/reservation";
 import type { Deps } from "../ports";
-import { findReservationOfCustomer, updateReservationParty } from "../repo/reservations";
+import { findReservationOfCustomer, updateReservationParty, type ReservationContext } from "../repo/reservations";
 import type { PartyChangeInput } from "../schemas/reservation";
 import { customerHome, type CustomerHome } from "./customerHome";
 
@@ -35,26 +36,32 @@ const notFound: ChangePartyResult = { ok: false, kind: "not_found" };
 
 const stateRefusal = (state: EffectiveState): ChangePartyResult => ({ ok: false, kind: "state", state });
 
+/** その確保へのその人数の変更を断るなら理由、受け入れられるなら null（読み直したあとも同じ判断を通す）。 */
+const refusalOf = (context: ReservationContext | null, party: number, now: Date): ChangePartyResult | null => {
+  if (!context) return notFound;
+  const state = effectiveState(context.reservation, now);
+  if (state !== "active") return stateRefusal(state);
+  // オファーが終わっていれば、`party_max` は終わった時点の値のまま（基準 10.6）。
+  const partyMax = context.offer.partyMax;
+  if (!canChangeParty({ current: context.reservation.party, next: party, partyMax })) return { ok: false, kind: "party_over_max", partyMax };
+  return null;
+};
+
 export const changeParty = async (deps: Deps, customerId: string, reservationId: string, input: PartyChangeInput): Promise<ChangePartyResult | ChangePartyMissing> => {
   const now = deps.clock.now();
   const nowIso = now.toISOString();
 
-  const context = await findReservationOfCustomer(deps.db, reservationId, customerId, nowIso);
-  if (!context) return notFound;
-  const state = effectiveState(context.reservation, now);
-  if (state !== "active") return stateRefusal(state);
-
-  // オファーが終わっていれば、`party_max` は終わった時点の値のまま（基準 10.6）。
-  const partyMax = context.offer.partyMax;
-  if (!canChangeParty({ current: context.reservation.party, next: input.party, partyMax })) {
-    return { ok: false, kind: "party_over_max", partyMax };
-  }
+  const refused = refusalOf(await findReservationOfCustomer(deps.db, reservationId, customerId, nowIso), input.party, now);
+  if (refused) return refused;
 
   const changed = await updateReservationParty(deps.db, { reservationId, customerId, nowIso, party: input.party });
   if (!changed) {
-    // 読んだあとに状態が動いた（店が取り消した・運営が店を止めた）。今の状態をそのまま返す。
+    // 読んだあとに状態か「何名まで」が動いた（店が取り消した・運営が店を止めた・店が「何名まで」を下げた）。
+    // 読み直して同じ判断を通す。読み直した時点で受け入れられる形に戻っていても、書かなかった事実は変わらないので
+    // 今の状態で断る（確保中のまま）。
     const latest = await findReservationOfCustomer(deps.db, reservationId, customerId, nowIso);
-    return latest ? stateRefusal(effectiveState(latest.reservation, now)) : notFound;
+    if (!latest) return notFound;
+    return refusalOf(latest, input.party, now) ?? stateRefusal(effectiveState(latest.reservation, now));
   }
 
   const home = await customerHome(deps, customerId);

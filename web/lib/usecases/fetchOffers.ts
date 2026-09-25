@@ -5,7 +5,7 @@
 // 出力の検査・倒し方）は lib/domain に置いてあり、ここは順番と入出力と記録だけを持つ。
 
 import { filterCandidates } from "../domain/filter";
-import { distanceMeters, inJapan, walkMinutes, type Point } from "../domain/geo";
+import { distanceMeters, inJapan, searchBounds, walkMinutes, type Point } from "../domain/geo";
 import { rankStores, type Ranked } from "../domain/score";
 import { fallbackResult, validateSelection, type Selection } from "../domain/selection";
 import { tokenFromBytes } from "../domain/token";
@@ -170,7 +170,8 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   const genres = [...(input.genres ?? [])];
   const budgetMax = input.budgetMax ?? null;
 
-  const rows = await findFetchCandidates(deps.db, nowIso);
+  // 起点の周りの四角形で先に絞ってから読む（範囲の内かは filterCandidates が決める・設計-08）
+  const rows = await findFetchCandidates(deps.db, nowIso, searchBounds(origin));
   const candidates = filterCandidates({ origin, party: input.party, budgetMax }, rows.map((row) => toCandidate(origin, row)));
   const ranked = rankStores(candidates, genres);
   const rankedIds = ranked.map((row) => row.id);

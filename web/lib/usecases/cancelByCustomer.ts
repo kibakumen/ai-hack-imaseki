@@ -3,19 +3,17 @@
 // 順は4つ:
 //   1. その客の確保を読む（在らない番号・別の客の確保は入力の断りへ倒す＝存在を教えない）
 //   2. 取り消せる状態か判断する（`domain/reservation.canCancelByCustomer`）
-//   3. **前の状態を WHERE に入れた1つの UPDATE**（読んだあとに状態が動いても上書きしない）
-//   4. 状態の変化を記録し（基準 27.4）、新しいホームを返す（取り消したあとは取得の画面・基準 9.5）
+//   3. **前の状態を WHERE に入れた1つの UPDATE**（読んだあとに状態が動いても上書きしない）と、状態の変化の
+//      記録（基準 27.4）を1つのまとまりで書く（不具合-16）
+//   4. 新しいホームを返す（取り消したあとは取得の画面・基準 9.5）
 //
 // 残りはどこにも保存していない（募集する組数と確保の行から導く）ので、基準 18.2 の「1戻る」は
 // 状態が `customer_cancelled` になった時点でそのまま満たされる（`repo/sqlFragments` の
 // `holdsSlotCondition` が客の取り消しを数えない）。
 
 import { canCancelByCustomer, effectiveState, type EffectiveState } from "../domain/reservation";
-import { tokenFromBytes } from "../domain/token";
 import type { Deps } from "../ports";
-import { insertReservationEvent } from "../repo/logs";
 import { cancelReservationByCustomer, findReservationOfCustomer } from "../repo/reservations";
-import { ID_BYTES } from "../schemas/limits";
 import { customerHome, type CustomerHome } from "./customerHome";
 
 export type CancelByCustomerResult =
@@ -51,7 +49,6 @@ export const cancelByCustomer = async (deps: Deps, customerId: string, reservati
     return latest ? stateRefusal(effectiveState(latest.reservation, now)) : notFound;
   }
 
-  await insertReservationEvent(deps.db, { id: tokenFromBytes(deps.rng.bytes(ID_BYTES)), reservationId, status: "customer_cancelled", at: nowIso });
   deps.logger.log({ event: "customer_cancel", id: reservationId });
 
   const home = await customerHome(deps, customerId);
