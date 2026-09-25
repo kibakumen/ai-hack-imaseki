@@ -5,6 +5,8 @@
 // 以前は「記録のフォルダが在れば絞る」だったため、並列の作業ツリーで実装したタスクの着手記録が
 // main の `.dev` に無く、手元の `vitest run` で約70件（横断の安全の検査を含む）が**黙って飛んでいた**。
 // 立てなければ全部走る——飛ばすかどうかを、置き忘れたファイルではなく実行する側の意思で決める。
+// 立てるのは /dev のゲート（`dev.config.json` の `gate.test` が `env ACCEPTANCE_TASK_GATE=1 pnpm exec vitest run`）。
+// 手元の `pnpm exec vitest run`・README の手順・提出の前の確かめは立てないので、全部走る。
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,7 +16,7 @@ export const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 export const RUNS_DIR = path.join(REPO, ".dev", "runs", "v2");
 export const TASKS_MD = path.join(REPO, "docs", "specs", "v2", "tasks.md");
 
-/** タスクごとの絞りを効かせる実行か（/dev の実装の段が `ACCEPTANCE_TASK_GATE=1` を立てる） */
+/** タスクごとの絞りを効かせる実行か（/dev のゲート＝`dev.config.json` の `gate.test` が `ACCEPTANCE_TASK_GATE=1` を立てる） */
 export const taskGateEnabled = (): boolean => process.env.ACCEPTANCE_TASK_GATE === "1" && fs.existsSync(RUNS_DIR);
 
 /** 絞りが効いていなければ「全部走る」。効いていれば、着手の記録が在るタスクだけ走る */

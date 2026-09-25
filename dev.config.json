@@ -19,6 +19,8 @@
       "."
     ],
     "test": [
+      "env",
+      "ACCEPTANCE_TASK_GATE=1",
       "pnpm",
       "exec",
       "vitest",
