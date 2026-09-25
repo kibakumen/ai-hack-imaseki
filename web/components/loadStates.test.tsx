@@ -77,7 +77,7 @@ describe("ログインが切れたとき", () => {
 describe("読み込めなかったときは0件と区別する", () => {
   it("クーポンは「まだありません」を出さず、読み直す道を出す。読み直して取れれば一覧が出る", async () => {
     let down = true;
-    api = installFakeApi({ "GET /api/store/coupons": () => (down ? NETWORK_DOWN() : { json: { ok: true, items: [{ id: "c1", name: "生ビール1杯", note: "" }] } }) });
+    api = installFakeApi({ "GET /api/store/coupons": () => (down ? NETWORK_DOWN() : { json: { ok: true, items: [{ id: "c1", name: "生ビール1杯", note: "", createdAt: "2026-09-22T06:00:00.000Z" }] } }) });
     render(<CouponEditor />);
     await screen.findByTestId("load-failed");
     expect(screen.queryByText(/クーポンはまだありません/)).toBeNull();

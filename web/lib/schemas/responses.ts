@@ -10,8 +10,11 @@
 //    約40言語の文言を名前空間ごと抱えていて組み立てで削れず、客の画面の JS の約4割を占めていた。
 //    このファイルは画面の束にも入るので、`zod`（大きい版）を読んではいけない（構造の検査が見張る）。
 //
-// 形の決め方: **画面が頼っている項目は必須**、画面が無くても描ける項目は任意にする。サーバーが送る項目は
-// 任意でも全部書く（サーバーの本文の型検査で、送っている項目を黙って増やさないため）。
+// 形の決め方: **サーバーが必ず送る項目は必須**にする（2026-09-25 レビューの指摘）。任意にすると、手続きの側で
+// 項目の名前がずれても、型検査（`respond` に渡すのは手続きの結果で、書き下ろした値ではないので余分な項目の
+// 検査に掛からない）も実行時の形の確かめも通り、画面は undefined を読む——設計-07 が問題にした形が残る。
+// 任意にするのは、場面によって載らない項目（客のホームの `reservation` など）と、古い版のサーバーが返さない
+// 項目（`reservationView.origin`・`adminMetrics.byPurpose`・公開の設定）だけ。どれも理由を横に書く。
 // 手続き側の正本の型（usecases・domain）とずれたら、サーバーの `respond` の型検査が落ちる。
 
 import { array, boolean, enum as oneOf, literal, nullable, number, object, optional, string, union, type output, type ZodMiniType } from "zod/mini";
@@ -23,6 +26,8 @@ const ok = literal(true);
 const done = object({ ok });
 
 const coupon = object({ id: string(), name: string(), note: string() });
+/** 店が持つクーポン1枚（repo/coupons の CouponRow）。オファーのカードに載るクーポンと違い、作った時刻も必ず載る。 */
+const storeCoupon = object({ id: string(), name: string(), note: string(), createdAt: string() });
 const couponFace = object({ name: string(), note: string() });
 
 /** 公開中のオファーのカード（受け入れ検査の契約 `OfferDto`・domain/storeHome の OfferView）。 */
@@ -62,7 +67,10 @@ const reservationView = object({
 /** 客のホーム（受け入れ検査の契約 `HomeDto`・usecases/customerHome の CustomerHome）。 */
 const customerHome = object({
   kind: oneOf(["fetch", "active", "expired", "completed", "store_cancelled", "admin_cancelled"]),
-  profile: optional(customerProfile),
+  /** 登録の値（usecases/customerHome が必ず載せる。登録が無ければ 401 で、ホームそのものが返らない） */
+  profile: customerProfile,
+  /** 以下は場面によって載らない: 確保は確保を持つ表示だけ・期限切れの中身は期限切れの表示だけ（partyMax は
+   *  「何名まで」が下がっていたときだけ）・通知の説明は確保中の表示だけ（usecases/customerHome の注） */
   reservation: optional(reservationView),
   expired: optional(object({ showCode: boolean(), canRetry: boolean(), partyMax: optional(number()) })),
   pushPromptDue: optional(boolean()),
@@ -119,10 +127,10 @@ const storeHome = object({
   missingProfile: array(string()),
   offer: nullable(offerView),
   publishPrefill: object({ couponIds: array(string()), capacity: nullable(number()), partyMax: nullable(number()), until: nullable(string()) }),
-  coupons: array(object({ id: string(), name: string(), note: string(), createdAt: optional(string()) })),
+  coupons: array(storeCoupon),
   arrivals: array(arrival),
-  /** 仮のパスワードで入っている（基準 14.14） */
-  mustChangePassword: optional(boolean()),
+  /** 仮のパスワードで入っている（基準 14.14）。入口がセッションの印から必ず載せる */
+  mustChangePassword: boolean(),
 });
 
 const storeProfile = object({
@@ -152,11 +160,11 @@ const adminStoreRow = object({
   address: nullable(string()),
   email: nullable(string()),
   status: storeStatus,
-  publishing: optional(boolean()),
-  createdAt: optional(string()),
-  claims: optional(number()),
-  budgetMin: optional(nullable(number())),
-  offerRemaining: optional(nullable(number())),
+  publishing: boolean(),
+  createdAt: string(),
+  claims: number(),
+  budgetMin: nullable(number()),
+  offerRemaining: nullable(number()),
 });
 
 const adminStoreDetail = object({
@@ -225,11 +233,11 @@ export const RESPONSES = {
 
   // 店
   "GET /api/store/home": storeHome,
-  "GET /api/store/profile": object({ ok: optional(ok), profile: storeProfile }),
+  "GET /api/store/profile": object({ ok, profile: storeProfile }),
   "PUT /api/store/profile": object({ ok, profile: storeProfile }),
-  "GET /api/store/coupons": object({ ok: optional(ok), items: array(object({ id: string(), name: string(), note: string(), createdAt: optional(string()) })) }),
-  "POST /api/store/coupons": object({ ok, coupon: object({ id: string(), name: string(), note: string(), createdAt: optional(string()) }) }),
-  "PUT /api/store/coupons/:id": object({ ok, coupon: object({ id: string(), name: string(), note: string(), createdAt: optional(string()) }) }),
+  "GET /api/store/coupons": object({ ok, items: array(storeCoupon) }),
+  "POST /api/store/coupons": object({ ok, coupon: storeCoupon }),
+  "PUT /api/store/coupons/:id": object({ ok, coupon: storeCoupon }),
   "DELETE /api/store/coupons/:id": done,
   "POST /api/store/offers": object({ ok, offer: offerView }),
   "POST /api/store/offers/current/stop": done,

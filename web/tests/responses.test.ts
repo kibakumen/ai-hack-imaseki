@@ -42,6 +42,85 @@ describe("成功した応答の形の表", () => {
   });
 });
 
+/** 値の写しから、点で区切った道筋（`items.0.createdAt`）の項目を1つ消す。 */
+const without = (body: unknown, dotted: string): unknown => {
+  const copy = structuredClone(body) as Record<string, unknown>;
+  const keys = dotted.split(".");
+  const last = keys.pop() as string;
+  const parent = keys.reduce<Record<string, unknown>>((node, key) => node[key] as Record<string, unknown>, copy);
+  delete parent[last];
+  return copy;
+};
+
+const COUPON_ROW = { id: "c1", name: "生ビール", note: "", createdAt: "2026-09-22T06:00:00.000Z" };
+const ADMIN_ROW = {
+  id: "s1",
+  name: "店",
+  address: null,
+  email: null,
+  status: "approved",
+  publishing: false,
+  createdAt: "2026-09-22T06:00:00.000Z",
+  claims: 0,
+  budgetMin: null,
+  offerRemaining: null,
+};
+
+/**
+ * サーバーが必ず送る項目（2026-09-25 レビューの指摘）。任意にしておくと、手続きの側で名前がずれても
+ * 型検査（respond の本文は手続きの結果で、書き下ろした値ではないので余分な項目の検査に掛からない）も
+ * 実行時の形の確かめも通り、画面は undefined を読む——設計-07 が問題にした形が残る。
+ */
+const ALWAYS_SENT: ReadonlyArray<{ route: keyof typeof RESPONSES; body: unknown; fields: string[] }> = [
+  {
+    route: "GET /api/customer/home",
+    body: { kind: "fetch", profile: { nickname: "たなか", phone: "09012345678", genres: [], budgetMax: null } },
+    fields: ["profile"],
+  },
+  {
+    route: "GET /api/store/home",
+    body: {
+      id: "s1",
+      status: "approved",
+      checklist: { license: true, card: true },
+      missingProfile: [],
+      offer: null,
+      publishPrefill: { couponIds: [], capacity: null, partyMax: null, until: null },
+      coupons: [COUPON_ROW],
+      arrivals: [],
+      mustChangePassword: false,
+    },
+    fields: ["mustChangePassword", "coupons.0.createdAt"],
+  },
+  {
+    route: "GET /api/store/profile",
+    body: { ok: true, profile: { name: null, address: null, url: null, genres: [], menus: [], budgetMin: null, budgetMax: null } },
+    fields: ["ok"],
+  },
+  { route: "GET /api/store/coupons", body: { ok: true, items: [COUPON_ROW] }, fields: ["ok", "items.0.createdAt"] },
+  { route: "POST /api/store/coupons", body: { ok: true, coupon: COUPON_ROW }, fields: ["coupon.createdAt"] },
+  { route: "PUT /api/store/coupons/:id", body: { ok: true, coupon: COUPON_ROW }, fields: ["coupon.createdAt"] },
+  {
+    route: "GET /api/admin/stores",
+    body: { items: [ADMIN_ROW], summary: { publishing: 0, pending: 0 } },
+    fields: ["items.0.publishing", "items.0.createdAt", "items.0.claims", "items.0.budgetMin", "items.0.offerRemaining"],
+  },
+  {
+    route: "GET /api/admin/stores/:id",
+    body: { store: { ...ADMIN_ROW, url: null, genres: [], menus: [], budgetMax: null, license: false, cardRegistered: false } },
+    fields: ["store.publishing", "store.createdAt", "store.claims", "store.offerRemaining"],
+  },
+];
+
+describe("サーバーが必ず送る項目は、形の表でも必須", () => {
+  it.each(ALWAYS_SENT)("$route の本文は、揃っていれば通り、1つでも欠ければ通らない", ({ route, body, fields }) => {
+    const schema = RESPONSES[route];
+    expect(schema.safeParse(body).success).toBe(true);
+    const accepted = fields.filter((field) => schema.safeParse(without(body, field)).success);
+    expect(accepted).toEqual([]);
+  });
+});
+
 describe("画面の束に zod の大きい版を入れない（設計-09）", () => {
   it("components・app・lib/client・schemas/responses・domain/texts が zod を値として読まない（読むなら zod/mini から名前で）", () => {
     const files = [

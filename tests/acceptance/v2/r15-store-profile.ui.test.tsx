@@ -15,7 +15,7 @@ describeTask("5", "店の情報のフォーム", () => {
   });
 
   const setup = async (responder: () => any) => {
-    api = installFakeApi({ "GET /api/store/profile": () => ({ json: { profile: { ...PROFILE, menus: ["刺身盛り"] } } }), "PUT /api/store/profile": responder });
+    api = installFakeApi({ "GET /api/store/profile": () => ({ json: { ok: true, profile: { ...PROFILE, menus: ["刺身盛り"] } } }), "PUT /api/store/profile": responder });
     const ProfileForm = await componentOf("components/store/ProfileForm", "ProfileForm");
     const r = render(<ProfileForm />);
     await screen.findByTestId(TID.field("name"));

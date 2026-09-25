@@ -596,6 +596,7 @@ export const storeHomeDto = (over: Partial<import("./_types").StoreHomeDto> = {}
   publishPrefill: { couponIds: [], capacity: null, partyMax: null, until: null },
   coupons: [],
   arrivals: [],
+  mustChangePassword: false,
   ...over,
 });
 export const offerDto = (over: Partial<import("./_types").OfferDto> = {}): import("./_types").OfferDto => ({

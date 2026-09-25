@@ -87,8 +87,9 @@ describe("client/api が応答の形を確かめてから返す", () => {
   });
 
   it("method と path で呼んでも、path に当たる入口の形で確かめる。表に無い入口は確かめられないので kind network", async () => {
-    respondWith(200, { ok: true, home: { kind: "fetch" } });
-    expect(await apiCall("POST", "/api/customer/reservations/r1/cancel", {})).toEqual({ ok: true, home: { kind: "fetch" } });
+    const home = { kind: "fetch", profile: { nickname: "たなか", phone: "09012345678", genres: [], budgetMax: null } };
+    respondWith(200, { ok: true, home });
+    expect(await apiCall("POST", "/api/customer/reservations/r1/cancel", {})).toEqual({ ok: true, home });
     respondWith(200, { ok: true });
     expect(failureOf(await apiCall("GET", "/api/no-such-route")).error?.kind).toBe("network");
   });
