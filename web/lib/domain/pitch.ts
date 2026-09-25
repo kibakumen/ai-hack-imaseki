@@ -5,33 +5,24 @@
 // 三段構えの真ん中: ①書き手（AI）→ **②このガード（決定論）** → ③検査官（別ベンダーの AI）。
 // 決定論で落とせるものを AI に聞かない（速い・ただ・揺れない）。
 
+import { claimProblem, type ClaimProblem } from "./claims";
 import { stripCodeFence } from "./selection";
 
 /** 紹介文の字数の上限（値は AI判断。速成版と同じ 120 字） */
 export const PITCH_CHAR_LIMIT = 120;
 
 /**
- * 口コミ・レビューのデータはこのシステムに存在しない。**触れた時点で作り話**なので、
- * AI に聞くまでもなく落とす（ハルシネーション対策の核）。
+ * 語と連絡先の判定（口コミ・レビューなど存在しないデータ／食べたことがなければ言えない評価の断定／URL と電話番号）は
+ * **domain/claims の1つ**を呼ぶ。先に客へ出る選定の理由（domain/selection）も同じものを通る
+ * （2026-09-25 監査の指摘 不具合-07: 以前はここにだけ写しがあり、禁止語の一覧も書き手への指示と食い違っていた）。
+ * 決定論で落とせるものを AI に聞かない（速い・ただ・揺れない）のがこの層の役目。
  */
-const FORBIDDEN_WORDS = /(口コミ|クチコミ|レビュー|評価|星)/;
-const URL_OR_PHONE = /https?:|\d{2,4}-\d{2,4}-\d{3,4}/;
-
-/**
- * 食べたことがなければ言えない評価の断定（2026-09-22 本人の指摘で追加）。
- *
- *   「AIの紹介文が**絶品だよなど根拠のない感想**を述べていて、**ステマ臭い**です」
- *
- * 書き手はその店で食べていないので、味や品質を断定した時点で**根拠が無い**。
- * 検査官（AI）にも同じ規則を入れたが、**決定論で落とせるものを AI に聞かない**のがこの層の役目
- * （速い・ただ・揺れない）。
- *
- * ⚠️ 入れるのは**誤って落とす余地がまず無い語だけ**。「近い」「好みに合いそう」「クーポンが使える」
- * のような**状況の言い換えは1語も入れない**——そこを混ぜると、通すべき文まで落ちる。
- * ⚠️ 広げすぎると書き直しが増え、2回で決定論の文へ倒れる（`writePitch` の `MAX_ATTEMPTS`）。
- * 語を足すときは実際に回して、倒れる率が上がらないことを確かめること。
- */
-const UNFOUNDED_PRAISE = /(絶品|極上|最高級|名物|自慢|折り紙付き|間違いな|外れな|美味し|おいし|うまい|絶妙|本格的|こだわりの|評判|大人気|逸品)/;
+const CRITIQUE_OF: Record<ClaimProblem, string> = {
+  contact: "URLか電話番号らしき文字列が入っていた",
+  nonexistent_data: "口コミ・レビュー・評価など存在しないデータに触れていた",
+  // 落ちた訳は**書き直しの指示として AI へ返る**ので、何を書き直せばよいかまで言う。
+  unfounded_praise: "食べたことがないと言えない評価を断定していた。近さ・すすめているメニュー・好みとの重なり・使えるクーポンだけで書き直す",
+};
 
 /** 文全体を囲っている引用符だけを外す（対になっていないものは触らない）。 */
 const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
@@ -62,15 +53,16 @@ export type PitchCheck = { ok: true; text: string } | { ok: false; critique: str
 /**
  * 紹介文1本の検査。落ちた訳（critique）は**書き直しの指示として AI へ返す**ので、
  * 機械の語ではなく短い日本語で書く。
+ *
+ * @param storeWords その店が自分で書いた語（店名・メニュー名・クーポン名）。書き手に渡しているので、紹介文が
+ *   そのまま引くのは店の事実の写し。語の検査の前に文から外す（不具合-07 のレビュー・domain/claims）。
  */
-export const checkPitch = (raw: string): PitchCheck => {
+export const checkPitch = (raw: string, storeWords: readonly string[] = []): PitchCheck => {
   const text = unwrapQuotes(raw.trim());
   if (text.length === 0) return { ok: false, critique: "空文だった" };
   if ([...text].length > PITCH_CHAR_LIMIT) return { ok: false, critique: `${PITCH_CHAR_LIMIT}字を超えていた` };
-  if (URL_OR_PHONE.test(text)) return { ok: false, critique: "URLか電話番号らしき文字列が入っていた" };
-  if (FORBIDDEN_WORDS.test(text)) return { ok: false, critique: "口コミ・レビュー・評価など存在しないデータに触れていた" };
-  // 落ちた訳は**書き直しの指示として AI へ返る**ので、何を書き直せばよいかまで言う。
-  if (UNFOUNDED_PRAISE.test(text)) return { ok: false, critique: "食べたことがないと言えない評価を断定していた。近さ・すすめているメニュー・好みとの重なり・使えるクーポンだけで書き直す" };
+  const problem = claimProblem(text, storeWords);
+  if (problem) return { ok: false, critique: CRITIQUE_OF[problem] };
   return { ok: true, text };
 };
 
@@ -98,6 +90,10 @@ export const readJudgement = (text: string): Judgement | null => {
 
 /** 紹介文の元になる店の姿（lib/ports の PitchStore と同じ形。domain は外の型を読まないので写す）。 */
 export type PitchStoreFacts = { name: string; genres: string[]; menus: string[]; couponName: string | null; couponNote: string | null };
+
+/** 書き手に渡している、店が自分で書いた語（checkPitch の `storeWords` に渡す） */
+export const storeWordsOf = (store: PitchStoreFacts): string[] =>
+  [store.name, ...store.menus, store.couponName ?? "", store.couponNote ?? ""].filter((word) => word.trim().length > 0);
 
 /** どの店にも当てはまる最後の1文（クーポンもメニューも無い店のため） */
 const LAST_RESORT = "近くの気になる一軒です";

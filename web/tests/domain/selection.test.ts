@@ -23,6 +23,11 @@ describe("AI の出力の検査", () => {
     expect(rejectionOf(body([{ storeId: "s1", reason: "あ".repeat(61) }]))).toBe("reason_too_long");
     expect(rejectionOf(body([{ storeId: "s1", reason: "近いです。安いです。" }]))).toBe("reason_multi_sentence");
     expect(rejectionOf(body([{ storeId: "s1", reason: "近い\n安い" }]))).toBe("reason_has_newline");
+    // 紹介文と同じ語と連絡先の検査（不具合-07: 以前は紹介文の層にだけあり、先に客へ出る選定の理由を素通しした）
+    expect(rejectionOf(body([{ storeId: "s1", reason: "刺身が名物です" }]))).toBe("reason_unfounded_claim");
+    expect(rejectionOf(body([{ storeId: "s1", reason: "口コミで評判の和食です" }]))).toBe("reason_unfounded_claim");
+    expect(rejectionOf(body([{ storeId: "s1", reason: "予約は０３－１２３４－５６７８へ" }]))).toBe("reason_has_contact");
+    expect(rejectionOf(body([{ storeId: "s1", reason: "www.example.jp で予約できます" }]))).toBe("reason_has_contact");
   });
 
   it("店の番号が文字列でない・選定の1件が値でない出力は、形が違うものとして落ちる", () => {
@@ -43,8 +48,42 @@ describe("AI の出力の検査", () => {
   it("理由は前後の空白を落として返る。終わりの印が末尾に1つだけなら1文として通る", () => {
     const result = validateSelection(body([{ storeId: "s1", reason: "  近くて安いです。  " }]), IDS);
     expect(result).toEqual({ ok: true, items: [{ storeId: "s1", reason: "近くて安いです。" }] });
-    expect(validateSelection(body([{ storeId: "s2", reason: "刺身が名物です！" }]), IDS).ok).toBe(true);
+    expect(validateSelection(body([{ storeId: "s2", reason: "刺身盛りを出している和食です！" }]), IDS).ok).toBe(true);
+    // 「名物」は食べたことがないと言えない断定なので、1文でも落ちる（不具合-07・以前はここで通る側に固めていた）
+    expect(validateSelection(body([{ storeId: "s2", reason: "刺身が名物です！" }]), IDS).ok).toBe(false);
     expect(validateSelection(body([{ storeId: "s2", reason: "予算3.000円で入れます" }]), IDS).ok).toBe(true);
+  });
+});
+
+describe("店が自分で書いたメニュー名を引いた理由（不具合-07 のレビュー）", () => {
+  // 選定の指示は「その店のジャンルかおすすめメニューに触れる」と求めているので、AI はメニュー名をそのまま引く
+  const MENUS = new Map<string, readonly string[]>([
+    ["s1", ["名物もつ煮", "焼き鳥"]],
+    ["s2", ["刺身盛り"]],
+  ]);
+  const check = (items: Array<{ storeId: string; reason: string }>) => validateSelection(body(items), IDS, MENUS);
+
+  it("その店のメニュー名に禁止語が入っていても、引いただけの理由は通り、選定ごと点数順に倒れない", () => {
+    const result = check([
+      { storeId: "s1", reason: "名物もつ煮を出している居酒屋です" },
+      { storeId: "s2", reason: "刺身盛りのある和食です" },
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      items: [
+        { storeId: "s1", reason: "名物もつ煮を出している居酒屋です" },
+        { storeId: "s2", reason: "刺身盛りのある和食です" },
+      ],
+    });
+  });
+
+  it("ほかの店のメニュー名は言い訳にならない（s2 の理由に s1 のメニュー名を書けば落ちる）", () => {
+    const result = check([{ storeId: "s2", reason: "名物もつ煮もある和食です" }]);
+    expect(result).toEqual({ ok: false, rejection: "reason_unfounded_claim" });
+  });
+
+  it("メニュー名の外で断定した理由は落ちる", () => {
+    expect(check([{ storeId: "s1", reason: "名物もつ煮が絶品です" }])).toEqual({ ok: false, rejection: "reason_unfounded_claim" });
   });
 });
 

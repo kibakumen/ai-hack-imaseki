@@ -7,7 +7,7 @@
 // 橋をここに1本だけ置き、route.ts の中身は「この関数を GET／POST として名乗る」だけにする。
 
 import { createDeps } from "./adapters/deps";
-import { loadWorkerEnv } from "./adapters/env";
+import { loadWorkerContext } from "./adapters/env";
 import { createLogger } from "./adapters/logger";
 import { createApp, serveSafely } from "./http/app";
 
@@ -16,4 +16,13 @@ import { createApp, serveSafely } from "./http/app";
  * route.ts の置き場所と Next.js が渡す `params` は見ない（入口の一覧の正本は1つ）。
  * 束縛が無い（Deps を組めない）ときも、Next の既定の 500 ではなく JSON の 500 で返す（設計-15）。
  */
-export const app = async (req: Request): Promise<Response> => serveSafely(req, async () => createApp(createDeps(await loadWorkerEnv())), createLogger());
+export const app = async (req: Request): Promise<Response> =>
+  serveSafely(
+    req,
+    async () => {
+      // 束縛と、応答のあとも仕事を生かしておく口（ctx.waitUntil・設計-17）を一緒に受け取る
+      const { env, defer } = await loadWorkerContext();
+      return createApp(createDeps(env, defer));
+    },
+    createLogger(),
+  );

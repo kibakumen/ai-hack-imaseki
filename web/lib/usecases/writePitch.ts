@@ -13,7 +13,8 @@
 //  ②検査官に生のモデル名を名指しすると本番の鍵の scope で 403 → Named Router 経由（adapters/orcarouter）
 //  ③指示に「評価」と書いたら検査官が褒め言葉を落とした → 落とす条件を3つに限定（adapters/orcarouter）
 
-import { checkPitch, fallbackPitch, PITCH_CHAR_LIMIT, readJudgement } from "../domain/pitch";
+import { checkPitch, fallbackPitch, PITCH_CHAR_LIMIT, readJudgement, storeWordsOf } from "../domain/pitch";
+import { SELECTION_MAX } from "../domain/selection";
 import { tokenFromBytes } from "../domain/token";
 import type { Deps, PitchResult, PitchStore } from "../ports";
 import { insertAiCall, type AiCallPurpose } from "../repo/logs";
@@ -28,6 +29,17 @@ const PITCH_BUDGET_MS = 15000;
 /** 書き直しは1回まで（2回目で駄目なら決定論の文へ倒す） */
 const MAX_ATTEMPTS = 2;
 
+/**
+ * 1店あたりの紹介文の AI の呼び出しの上限（書き手と検査官を合わせた数・口 PitchWriter の write と judge の回数）。
+ * 取得1回あたりの上限は、選定1回＋選定の上限の店の数ぶん（2026-09-25 監査の指摘 設計-05 の案A・AI判断——
+ * 要件7.2 の「取得1回につき1回」は、紹介文の層を足したときに追いついていなかった。今の機能を残し、上限を書く）。
+ * ⚠️ 口の中のやり直し（思考を止める指定を断られたときの1回・検査官が鍵の scope で断られたときの生成側での検査し直し）は
+ * この数に入らない——実物の HTTP の往復は、最も多いときこの倍近くになる（adapters/orcarouter）。
+ */
+export const PITCH_CALLS_PER_STORE_MAX = MAX_ATTEMPTS * 2;
+/** 取得1回あたりの AI の呼び出しの上限（選定1回＋紹介文）。構造の検査と受け入れ検査 r07 がこの数を見る */
+export const AI_CALLS_PER_FETCH_MAX = 1 + SELECTION_MAX * PITCH_CALLS_PER_STORE_MAX;
+
 /** 紹介文を書く相手1件（選定が返した理由も持つ——倒すときはそれをそのまま使う）。 */
 export type PitchTarget = { storeId: string; store: PitchStore; selectionReason: string };
 
@@ -41,6 +53,14 @@ export type WritePitchInput = {
   genres: string[];
   budgetMax: number | null;
   target: PitchTarget;
+  /**
+   * 客が画面を閉じた合図（任意・usecases/streamOffers が渡す・設計-18）。鳴ったら書きかけの書き手と検査官を止め、
+   * 書き直しも検査も新たに頼まずに決まった文へ倒す——誰も読まない文に AI のクレジットを使わない。
+   * 止めた呼び出しも「失敗」として記録に1行残る（回数は数えられる）。**実費は分からないので空（NULL）で残る**
+   * ——上流（OrcaRouter とその先のモデル）は、こちらが打ち切ったあとも処理を終えて請求することがあるので、
+   * `cost_usd` の合計は実際より少なく出ることがある（時間切れの打ち切りも同じ・要件33 の補足）。
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -69,9 +89,9 @@ const record = async (deps: Deps, input: { fetchId: string; purpose: AiCallPurpo
 };
 
 /** 外の呼び出しを、実時計と差し替えられる時計の両方で打ち切る（fetchOffers と同じ形）。 */
-const callWithDeadline = async (deps: Deps, timeoutMs: number, run: (signal: AbortSignal) => Promise<PitchResult>): Promise<{ result: PitchResult; durationMs: number }> => {
+const callWithDeadline = async (deps: Deps, timeoutMs: number, run: (signal: AbortSignal) => Promise<PitchResult>, cancel?: AbortSignal): Promise<{ result: PitchResult; durationMs: number }> => {
   const startedAt = deps.clock.now().getTime();
-  const answer = await raceDeadline(timeoutMs, deps.clock.after(timeoutMs), run);
+  const answer = await raceDeadline(timeoutMs, deps.clock.after(timeoutMs), run, cancel);
   return {
     result: answer.ok ? answer.value : { ok: false, error: "timeout", costUsd: null },
     durationMs: deps.clock.now().getTime() - startedAt,
@@ -84,13 +104,14 @@ type Attempt = { text: string } | { critique: string };
 const writeOnce = async (deps: Deps, writer: NonNullable<Deps["pitch"]>, input: WritePitchInput, critique: string | null, timeoutMs: number): Promise<Attempt> => {
   const { result, durationMs } = await callWithDeadline(deps, timeoutMs, (signal) =>
     writer.write({ party: input.party, genres: input.genres, budgetMax: input.budgetMax, store: input.target.store, charLimit: PITCH_CHAR_LIMIT, critique }, { signal }),
+    input.signal,
   );
   if (!result.ok) {
     await record(deps, { fetchId: input.fetchId, purpose: "pitch", result, durationMs, validationFailed: false });
     return { critique: "生成が時間切れか失敗だった" };
   }
   // 上限で打ち切られた文は途中で切れている。字数の検査は通ってしまうのでここで落とす。
-  const checked = result.truncated ? ({ ok: false, critique: "文が最後まで書かれなかった" } as const) : checkPitch(result.text);
+  const checked = result.truncated ? ({ ok: false, critique: "文が最後まで書かれなかった" } as const) : checkPitch(result.text, storeWordsOf(input.target.store));
   await record(deps, { fetchId: input.fetchId, purpose: "pitch", result, durationMs, validationFailed: !checked.ok });
   return checked.ok ? { text: checked.text } : { critique: checked.critique };
 };
@@ -100,6 +121,7 @@ const judgeOnce = async (deps: Deps, writer: NonNullable<Deps["pitch"]>, input: 
   const { store } = input.target;
   const { result, durationMs } = await callWithDeadline(deps, timeoutMs, (signal) =>
     writer.judge({ text, store: { name: store.name, genres: store.genres, menus: store.menus, couponName: store.couponName } }, { signal }),
+    input.signal,
   );
   if (!result.ok) {
     await record(deps, { fetchId: input.fetchId, purpose: "pitch_eval", result, durationMs, validationFailed: false });
@@ -123,16 +145,18 @@ export const writePitch = async (deps: Deps, input: WritePitchInput): Promise<Wr
 
   const deadline = deps.clock.now().getTime() + PITCH_BUDGET_MS;
   const left = (): number => deadline - deps.clock.now().getTime();
+  /** もう頼まない（1店の割り振りを使い切った・客が閉じた） */
+  const stopped = (): boolean => left() <= 0 || input.signal?.aborted === true;
   let critique: string | null = null;
   try {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      if (left() <= 0) break;
+      if (stopped()) break;
       const written = await writeOnce(deps, writer, input, critique, Math.min(WRITE_TIMEOUT_MS, left()));
       if ("critique" in written) {
         critique = written.critique;
         continue;
       }
-      if (left() <= 0) break;
+      if (stopped()) break;
       const judged = await judgeOnce(deps, writer, input, written.text, Math.min(JUDGE_TIMEOUT_MS, left()));
       if (judged.ok) return { storeId: target.storeId, reason: written.text, source: "persona" };
       critique = judged.critique;

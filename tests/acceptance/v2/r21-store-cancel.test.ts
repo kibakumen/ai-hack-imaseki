@@ -54,7 +54,7 @@ describeTask("18", "店の取り消し", () => {
   // 通知の送信は外のサービス。ほかの外向きの呼び出しと同じく打ち切りがないと、応答しない配信先を登録した客が1人いるだけで
   // 店の「取り消す」が戻らず、押し直すと「もう取り消されています」と断られる。打ち切りは偽の時計（deps.clock）で進める
   // ——実時計の打ち切りだけだと、この検査は実時間の数秒で緑になり、打ち切りが手続きに効いているかを示さない（設計-19）。
-  it.fails("既知の不具合（不具合-08）: 通知の送信が返らなくても、店の取り消しは偽の時計の数秒で応答する", async () => {
+  it("22.1・22.6 通知の送信が返らなくても、店の取り消しは偽の時計の数秒で応答する（送信の打ち切り・不具合-08）", async () => {
     const s = await receivedScene(ctx);
     expect((await s.customer.api.post("/api/customer/push-subscription", { subscription: PUSH_SUBSCRIPTION })).status).toBe(200);
     ctx.push.result = "hang";

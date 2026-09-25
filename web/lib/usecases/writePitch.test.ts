@@ -1,7 +1,7 @@
 // 紹介文の層（生成 → 決定論のガード → 別ベンダーの検査官 → 2回で諦める）。
 // 外へは1バイトも出さず、差し替え口 PitchWriter を偽物にして筋だけを見る。
 import { describe, expect, it } from "vitest";
-import { writePitch, type PitchTarget } from "./writePitch";
+import { PITCH_CALLS_PER_STORE_MAX, writePitch, type PitchTarget } from "./writePitch";
 import type { Deps, PitchResult } from "../ports";
 
 const STORE = { name: "海鮮どんぶり亭", genres: ["和食"], menus: ["刺身盛り"], walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, couponName: "生ビール1杯", couponNote: "1組1回" };
@@ -77,6 +77,17 @@ describe("紹介文の層", () => {
     expect(written).toEqual({ storeId: "store-1", reason: "近くて好みに合います", source: "fallback" });
   });
 
+  it("店が自分で書いた語（店名・メニュー名・クーポン名）を引いた文は、決定論のガードで落とさずに検査官へ送る（不具合-07 のレビュー）", async () => {
+    const store = { ...STORE, name: "人気屋", menus: ["名物もつ煮"], couponName: "自慢の一品無料" };
+    const { deps, rows } = makeDeps({
+      write: async () => ok("人気屋の名物もつ煮と自慢の一品無料で一杯どう？"),
+      judge: async () => ok('{"ok":true,"reason":""}'),
+    });
+    const written = await writePitch(deps, { fetchId: "f1", party: 2, genres: [], budgetMax: null, target: { ...TARGET, store } });
+    expect(written).toEqual({ storeId: "store-1", reason: "人気屋の名物もつ煮と自慢の一品無料で一杯どう？", source: "persona" });
+    expect(purposesOf(rows)).toEqual(["pitch", "pitch_eval"]);
+  });
+
   it("上限で切れた文（truncated）は字数を満たしていても落とす", async () => {
     const { deps } = makeDeps({
       write: async () => ({ ok: true, text: "歩いて4分、今日は刺身盛りを出して", costUsd: 0.0001, truncated: true }),
@@ -100,5 +111,25 @@ describe("紹介文の層", () => {
     const written = await writePitch(deps, { fetchId: "f1", party: 2, genres: [], budgetMax: null, target: TARGET });
     expect(written).toEqual({ storeId: "store-1", reason: "近くて好みに合います", source: "fallback" });
     expect(rows).toEqual([]);
+  });
+
+  it("検査官が不合格にし続けても、1店あたりの呼び出しは上限（書き手と検査官を合わせて PITCH_CALLS_PER_STORE_MAX 回）で止まる（設計-05）", async () => {
+    const calls: string[] = [];
+    const { deps, rows } = makeDeps({
+      write: async () => {
+        calls.push("write");
+        return ok("歩いて4分、今日は刺身盛りを出してるよ");
+      },
+      judge: async () => {
+        calls.push("judge");
+        return ok('{"ok":false,"reason":"検査の不合格"}');
+      },
+    });
+    const written = await writePitch(deps, { fetchId: "f1", party: 2, genres: [], budgetMax: null, target: TARGET });
+    expect(written.source).toBe("fallback");
+    expect(calls).toEqual(["write", "judge", "write", "judge"]);
+    expect(calls).toHaveLength(PITCH_CALLS_PER_STORE_MAX);
+    // 呼び出しの数だけ記録が残る
+    expect(purposesOf(rows)).toEqual(["pitch", "pitch_eval", "pitch", "pitch_eval"]);
   });
 });

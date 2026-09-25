@@ -65,7 +65,12 @@ export type PitchWriter = {
 };
 
 export type Geocoder = {
-  geocode(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; lat: number; lng: number } | { ok: false }>;
+  /**
+   * 住所・場所の文字を位置へ直す。直せなかったときの `notFound: true` は「住所が位置に直らないと Google が答えた」
+   * （0件）で、打ち切り・通信の失敗・上限・鍵の拒否では付けない（2026-09-25 設計-20 のレビュー: 30日の手入れが、
+   * 外の一時的な障害と住所のせいを分けて扱うため）。付けない実物・偽物は、どちらか分からないものとして扱われる。
+   */
+  geocode(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; lat: number; lng: number } | { ok: false; notFound?: boolean }>;
   /**
    * 位置を地名へ直す（逆方向）。客の画面が**開いた瞬間に場所の欄へ地名を入れる**ために使う
    * （2026-09-22 の本人の指摘「開いた瞬間にここに現在地の文字に変換した場所が入っていて」）。
@@ -103,7 +108,11 @@ export type StoreImageFetcher = {
   fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; image: StoreImageFile } | { ok: false }>;
 };
 
-export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
+/**
+ * Web プッシュの送信。`signal` は打ち切りの合図（任意）——応答しない配信先で呼ぶ側の応答が止まらないよう、
+ * 呼ぶ側（usecases/pushMessage）が数秒で鳴らす（2026-09-25 監査の指摘 不具合-08）。
+ */
+export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number; signal?: AbortSignal }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
 export type CardRegistrar = {
   createSetupSession(input: { storeId: string; returnUrl: string }): Promise<{ ok: true; url: string; sessionId: string } | { ok: false }>;
   confirmSetup(sessionId: string): Promise<{ ok: true; clientReference: string } | { ok: false }>;
@@ -139,4 +148,11 @@ export type Deps = {
   rng: Rng;
   hasher: Hasher;
   config: AppConfig;
+  /**
+   * 応答を返したあとも走らせたい仕事を預ける口（任意・2026-09-25 監査の指摘 設計-17）。本物は Worker の
+   * `ctx.waitUntil`（adapters/env が渡す）。預けないと、応答を閉じた時点で Worker が残りの仕事を切る——
+   * 紹介文の AI の呼び出しとその記録（ai_calls）が、本番だけ跡を残さずに欠ける（手元の workerd で実測）。
+   * 無い場面（受け入れ検査・単体の検査）では預けずにそのまま走らせる（Node は応答のあとも仕事を切らない）。
+   */
+  defer?: (task: Promise<unknown>) => void;
 };

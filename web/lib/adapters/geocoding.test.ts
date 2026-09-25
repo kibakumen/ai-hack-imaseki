@@ -36,10 +36,15 @@ describe("adapters/geocoding", () => {
     expect(calls[0].signal).toBe(controller.signal);
   });
 
-  it("0件（status が OK でない）は直せなかったと答える", async () => {
-    for (const status of ["ZERO_RESULTS", "OVER_QUERY_LIMIT", "REQUEST_DENIED"]) {
+  it("0件（ZERO_RESULTS）は、住所が位置に直らないと分かったとして答える（外の障害と分ける・設計-20 のレビュー）", async () => {
+    const fetchImpl = (async () => jsonResponse({ status: "ZERO_RESULTS", results: [] })) as unknown as typeof globalThis.fetch;
+    expect(await createGeocoder({ apiKey: "k", fetch: fetchImpl }).geocode("どこにもない住所", {})).toEqual({ ok: false, notFound: true });
+  });
+
+  it("上限・鍵の拒否（status が OK でも ZERO_RESULTS でもない）は、直せなかったとだけ答える（住所のせいとは言わない）", async () => {
+    for (const status of ["OVER_QUERY_LIMIT", "REQUEST_DENIED", "UNKNOWN_ERROR"]) {
       const fetchImpl = (async () => jsonResponse({ status, results: [] })) as unknown as typeof globalThis.fetch;
-      expect(await createGeocoder({ apiKey: "k", fetch: fetchImpl }).geocode("どこにもない住所", {}), status).toEqual({ ok: false });
+      expect(await createGeocoder({ apiKey: "k", fetch: fetchImpl }).geocode("住所", {}), status).toEqual({ ok: false });
     }
   });
 

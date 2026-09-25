@@ -11,6 +11,8 @@
 //   - 安全-18: 押す前に、押すと何がどこへ送られるかを1行で添え、送信先の一覧（/privacy）へつなぐ
 //   - 客-09: 取れなかった・許可を断られた間は、欄の説明を「駅名や住所を入れてください」に替える
 //   - 客-10: 地名を問い合わせている間は失敗の文を出さない
+//   - 設計-20: 候補と現在地の地名は Google の地図サービスから来る。地図を出さずに見せるので、同じ入れ物の中に
+//     「Google Maps」の帰属の表示を置く（Geocoding API Policies の Attribution。場所が狭いときは文字でよい）
 
 import Link from "next/link";
 import { useState, type KeyboardEvent } from "react";
@@ -28,6 +30,9 @@ import type { LocateState } from "./useHereLocation";
  */
 const PLACE_KINDS = ["location_required", "place_unresolved"];
 const SUGGEST_LIST_ID = "fetch-place-suggestions";
+
+/** Google の地図サービスの帰属の表示（文字の形・設計-20）。訳させない（名前なので） */
+const GOOGLE_ATTRIBUTION = "Google Maps";
 
 /** 現在地の案内の文（欄の直下の断りとは別物——押す前の案内なので責めない）。 */
 const locateText = (locate: LocateState, hereLabel: string | null): string | null => {
@@ -114,6 +119,11 @@ export const PlaceField = ({ place, onPlaceChange, locate, hereLabel, away, onUs
       </button>
       <p className="locate-status" data-testid="locate-status">
         {locateText(locate, hereLabel)}
+        {locate === "located" && hereLabel !== null ? (
+          <span className="google-attribution" data-testid="google-attribution" translate="no">
+            {GOOGLE_ATTRIBUTION}
+          </span>
+        ) : null}
       </p>
       {locate === "idle" ? (
         <p className="locate-note" data-testid="locate-note">
@@ -171,6 +181,10 @@ export const PlaceField = ({ place, onPlaceChange, locate, hereLabel, away, onUs
                 {text}
               </li>
             ))}
+            {/* 候補は Google の地図サービスから来る。同じ入れ物の下端に帰属を出す（選べる行ではない・設計-20） */}
+            <li role="presentation" className="place-suggest__attribution google-attribution" data-testid="place-suggest-attribution" translate="no">
+              {GOOGLE_ATTRIBUTION}
+            </li>
           </ul>
         ) : null}
       </div>

@@ -57,13 +57,25 @@ export const readBindings = (env: RawEnv): Bindings => ({
   permits: (env.PERMITS as PermitBucket | undefined) ?? null,
 });
 
+/** 今の要求の束縛と、応答のあとも仕事を生かしておく口（Worker の ctx.waitUntil）。 */
+export type WorkerContext = { env: RawEnv; defer: ((task: Promise<unknown>) => void) | null };
+
 /**
  * 今の要求の束縛を OpenNext から受け取る。**載せ方を替えるときに触るのはこの関数だけ。**
  * 取り込みを呼ぶ時まで遅らせているのは、受け入れ検査がこのファイルの `readEnv` だけを読むため
  * （Cloudflare の部品を読み込ませない）。
+ *
+ * `ctx.waitUntil` も一緒に渡す（2026-09-25 監査の指摘 設計-17）。以前は ctx を捨てていたので、応答を閉じたあとの
+ * 仕事（紹介文の AI の呼び出しとその記録）を生かしておく口が無く、手元の workerd では応答を閉じた後の
+ * D1 の行が書かれなかった（waitUntil に入れたときだけ残った）。
  */
-export const loadWorkerEnv = async (): Promise<RawEnv> => {
+export const loadWorkerContext = async (): Promise<WorkerContext> => {
   const { getCloudflareContext } = await import("@opennextjs/cloudflare");
   const context = await getCloudflareContext({ async: true });
-  return context.env as unknown as RawEnv;
+  const waitUntil = (context.ctx as { waitUntil?: (task: Promise<unknown>) => void } | undefined)?.waitUntil;
+  return {
+    env: context.env as unknown as RawEnv,
+    // waitUntil は ctx の this を要る。取り出して渡すときに結び直す
+    defer: typeof waitUntil === "function" ? (task) => waitUntil.call(context.ctx, task) : null,
+  };
 };

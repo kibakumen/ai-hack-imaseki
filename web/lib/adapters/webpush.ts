@@ -98,12 +98,14 @@ export const createPushSender = ({ publicKey, privateKey, contactEmail = null, o
         const res = await fetchImpl(endpoint, {
           method: "POST",
           headers: { authorization: `vapid t=${jwt}, k=${publicKey}`, ttl: String(opts.ttlSeconds) },
+          // 打ち切り（呼ぶ側が数秒で鳴らす・不具合-08）。打ち切られたら下の catch で「届かなかった」になる
+          signal: opts.signal,
         });
         // 404・410 は「この購読はもう無い」（RFC 8030）。呼ぶ側が表から消す（基準 22.6）。
         if (res.status === 404 || res.status === 410) return { ok: false, gone: true };
         return res.ok ? { ok: true } : { ok: false, gone: false };
       } catch {
-        // 鍵の形・通信の失敗・配信元の不調。取り消しの処理は続ける（基準 22.6）。
+        // 鍵の形・通信の失敗・配信元の不調・打ち切り。取り消しの処理は続ける（基準 22.6）。
         return { ok: false, gone: false };
       }
     },

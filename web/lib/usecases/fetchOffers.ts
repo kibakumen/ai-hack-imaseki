@@ -11,10 +11,11 @@ import { fallbackResult, validateSelection, type Selection } from "../domain/sel
 import { tokenFromBytes } from "../domain/token";
 import type { AiSelectResult, Deps } from "../ports";
 import { findCouponsForStores, findFetchCandidates, type CandidateRow } from "../repo/fetchCandidates";
-import { insertAiCall, insertFetchItems, insertFetchLog, type AiCallRecord } from "../repo/logs";
+import { insertFetchRecord, type AiCallRecord } from "../repo/logs";
 import type { FetchInput } from "../schemas/fetch";
 import { ID_BYTES } from "../schemas/limits";
 import { aiBudgetLeft } from "./aiBudget";
+import { scheduleGoogleUpkeep } from "./googleUpkeep";
 import { raceDeadline } from "./deadline";
 import type { PitchTarget } from "./writePitch";
 
@@ -67,10 +68,11 @@ const toCandidate = (origin: Point, row: CandidateRow) => ({
 type Candidate = ReturnType<typeof toCandidate>;
 
 /** 起点を決める（基準 3.2・3.4・3.5・3.6）。文字があれば現在地は使わない。 */
-const resolveOrigin = async (deps: Deps, input: FetchInput, deadline: Promise<void>): Promise<{ ok: true; origin: Point } | { ok: false; refusal: FetchOffersResult }> => {
+const resolveOrigin = async (deps: Deps, input: FetchInput): Promise<{ ok: true; origin: Point } | { ok: false; refusal: FetchOffersResult }> => {
   const place = typeof input.place === "string" ? input.place.trim() : "";
   if (place !== "") {
-    const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deadline, (signal) => deps.geocoder.geocode(place, { signal }));
+    // 地図の打ち切りの合図は、地図を呼ぶ直前（この関数の最初の await より前）に作る（raceDeadline の注）
+    const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deps.clock.after(GEOCODE_TIMEOUT_MS), (signal) => deps.geocoder.geocode(place, { signal }));
     if (!answer.ok || !answer.value.ok) return { ok: false, refusal: PLACE_UNRESOLVED };
     const point = { lat: answer.value.lat, lng: answer.value.lng };
     // 日本の外は「位置に直せなかった」として扱う（基準 3.6）
@@ -84,10 +86,15 @@ const resolveOrigin = async (deps: Deps, input: FetchInput, deadline: Promise<vo
 /** 用途（purpose）はここでは持たない——この手続きが記録するのは「店の選定」だけなので、書く側が入れる。 */
 type AiOutcome = { selections: Selection[]; aiUsed: boolean; call: Omit<AiCallRecord, "id" | "fetchId" | "at" | "purpose"> | null };
 
-/** AI に1回だけ聞いて、検査を通った選定だけを採る（基準 7.1・7.2・7.3・7.4・7.6・7.7・33.1）。 */
-const askAi = async (deps: Deps, input: FetchInput, ranked: readonly Candidate[], deadline: Promise<void>): Promise<AiOutcome> => {
+/**
+ * AI に1回だけ聞いて、検査を通った選定だけを採る（基準 7.1・7.2・7.3・7.4・7.6・7.7・33.1）。
+ * 打ち切りの6秒は**ここで、AI を呼ぶ直前に**数え始める（2026-09-25 監査の指摘 不具合-20）——以前は手続きの先頭で
+ * 作っていたので、場所の文字を位置に直す時間と D1 を読む時間まで AI の6秒から引かれていた（設計書は「起点が決まる前の
+ * 時間は含めない」）。
+ */
+const askAi = async (deps: Deps, input: FetchInput, ranked: readonly Candidate[]): Promise<AiOutcome> => {
   const startedAt = deps.clock.now().getTime();
-  const answer = await raceDeadline(AI_TIMEOUT_MS, deadline, (signal) =>
+  const answer = await raceDeadline(AI_TIMEOUT_MS, deps.clock.after(AI_TIMEOUT_MS), (signal) =>
     deps.ai.select(
       {
         party: input.party,
@@ -108,7 +115,8 @@ const askAi = async (deps: Deps, input: FetchInput, ranked: readonly Candidate[]
       call: { costUsd: result?.costUsd ?? null, durationMs, succeeded: 0, validationFailed: 0, resolvedModel: null, requestId: null, fallbackLevel: null },
     };
   }
-  const checked = validateSelection(result.text, ranked.map((row) => row.id));
+  // AI に渡したメニュー名（店が自分で書いた語）は、理由の語の検査の前に外す（不具合-07 のレビュー・domain/selection）
+  const checked = validateSelection(result.text, ranked.map((row) => row.id), new Map(ranked.map((row) => [row.id, row.menus])));
   const call = {
     costUsd: result.costUsd,
     durationMs,
@@ -159,11 +167,8 @@ const buildItems = (selections: readonly Selection[], ranked: readonly Candidate
  * 持たないことで守る（基準 3.14・3.15）。
  */
 export const fetchOffers = async (deps: Deps, customerId: string, input: FetchInput): Promise<FetchOffersResult> => {
-  // 打ち切りの合図は、最初の await より前に作る（raceDeadline の注）。
-  const geocodeDeadline = deps.clock.after(GEOCODE_TIMEOUT_MS);
-  const aiDeadline = deps.clock.after(AI_TIMEOUT_MS);
-
-  const resolved = await resolveOrigin(deps, input, geocodeDeadline);
+  // 打ち切りの合図（地図の3秒・AI の6秒）は、それぞれ呼ぶ直前に作る（resolveOrigin・askAi）。
+  const resolved = await resolveOrigin(deps, input);
   if (!resolved.ok) return resolved.refusal;
   const origin = resolved.origin;
 
@@ -182,12 +187,14 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   // 候補が0件なら AI を呼ばない（基準 7.11・6.6）。アプリ全体のその日の AI の予算が尽きていても呼ばない（安全-03）
   // ——どちらも AI が落ちたときと同じく点数順に倒す。
   const askable = ranked.length > 0 && (await aiBudgetLeft(deps));
-  const outcome: AiOutcome = askable ? await askAi(deps, input, ranked, aiDeadline) : { selections: [], aiUsed: false, call: null };
+  const outcome: AiOutcome = askable ? await askAi(deps, input, ranked) : { selections: [], aiUsed: false, call: null };
   const selections = outcome.aiUsed ? inScoreOrder(outcome.selections, rankedIds) : fallbackResult(rankedIds);
   const coupons = await findCouponsForStores(deps.db, selections.map((selection) => selection.storeId));
   const items = buildItems(selections, ranked, coupons);
 
   const fetchId = await record(deps, { customerId, input, origin, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
+  // Google から来た店の座標の30日の手入れ（1時間に1回まで・応答のあとに走る・設計-20）
+  scheduleGoogleUpkeep(deps);
   return { ok: true, fetchId, items, pitchTargets: buildPitchTargets(items, ranked) };
 };
 
@@ -236,32 +243,32 @@ type RecordInput = {
 
 /**
  * 取得1回ぶんの記録（要件27・33）。**追加だけ**。
- * 書く順は fetch_logs → ai_calls → fetch_items（後の2つが取得の記録を指しているため）。
+ * 3つの表（fetch_logs → ai_calls → fetch_items）を**1つのまとまり**で書く（repo/logs の insertFetchRecord・
+ * 2026-09-25 監査の指摘 不具合-08: 以前は3回の往復を順に待ってから最初のカードを送っていた）。
  */
 const record = async (deps: Deps, input: RecordInput): Promise<string> => {
   const newId = (): string => tokenFromBytes(deps.rng.bytes(ID_BYTES));
   const fetchId = newId();
   const durationMs = deps.clock.now().getTime() - input.startedAt.getTime();
-  await insertFetchLog(deps.db, {
-    id: fetchId,
-    customerId: input.customerId,
-    originLat: input.origin.lat,
-    originLng: input.origin.lng,
-    party: input.input.party,
-    genres: JSON.stringify(input.genres),
-    budgetMax: input.budgetMax,
-    candidateCount: input.candidateCount,
-    returnedCount: input.items.length,
-    aiUsed: input.outcome.aiUsed ? 1 : 0,
-    durationMs,
-    at: input.nowIso,
-  });
-  // 用途は「店の選定」。紹介文の層（usecases/writePitch）は同じ表へ別の用途で足す（migrations/0002）。
-  if (input.outcome.call) await insertAiCall(deps.db, { id: newId(), fetchId, purpose: "select", ...input.outcome.call, at: deps.clock.now().toISOString() });
   const scoreByStore = new Map(input.ranked.map((row) => [row.id, row.score]));
-  await insertFetchItems(
-    deps.db,
-    input.items.map((item, index) => ({
+  await insertFetchRecord(deps.db, {
+    log: {
+      id: fetchId,
+      customerId: input.customerId,
+      originLat: input.origin.lat,
+      originLng: input.origin.lng,
+      party: input.input.party,
+      genres: JSON.stringify(input.genres),
+      budgetMax: input.budgetMax,
+      candidateCount: input.candidateCount,
+      returnedCount: input.items.length,
+      aiUsed: input.outcome.aiUsed ? 1 : 0,
+      durationMs,
+      at: input.nowIso,
+    },
+    // 用途は「店の選定」。紹介文の層（usecases/writePitch）は同じ表へ別の用途で足す（migrations/0002）。
+    aiCall: input.outcome.call ? { id: newId(), fetchId, purpose: "select", ...input.outcome.call, at: deps.clock.now().toISOString() } : null,
+    items: input.items.map((item, index) => ({
       id: newId(),
       fetchId,
       storeId: item.storeId,
@@ -271,7 +278,7 @@ const record = async (deps: Deps, input: RecordInput): Promise<string> => {
       // 「AI が書いた理由」と見分けられなくなる）
       reason: input.outcome.aiUsed ? item.reason : "",
     })),
-  );
+  });
   deps.logger.log({ event: "fetch", id: fetchId, durationMs });
   return fetchId;
 };

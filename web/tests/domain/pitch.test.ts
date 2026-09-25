@@ -26,6 +26,27 @@ describe("紹介文のガード（決定論）", () => {
     expect(checkPitch("あ".repeat(PITCH_CHAR_LIMIT + 1)).ok).toBe(false);
     expect(checkPitch("詳しくは https://example.com へ").ok).toBe(false);
     expect(checkPitch("予約は 03-1234-5678 まで").ok).toBe(false);
+    // 全角・区切りなし・www. もすり抜けない（不具合-07）
+    expect(checkPitch("予約は ０３－１２３４－５６７８ まで").ok).toBe(false);
+    expect(checkPitch("予約は0312345678まで").ok).toBe(false);
+    expect(checkPitch("www.example.jp を見てね").ok).toBe(false);
+  });
+
+  it("店が自分で書いた語（店名・メニュー名・クーポン名）を引いただけの文は落とさない（不具合-07 のレビュー）", () => {
+    expect(checkPitch("歩いて3分、名物もつ煮で一杯どう？", ["名物もつ煮"])).toEqual({ ok: true, text: "歩いて3分、名物もつ煮で一杯どう？" });
+    expect(checkPitch("人気屋なら自慢の一品無料が使えるよ", ["人気屋", "自慢の一品無料"]).ok).toBe(true);
+    // 引いた語の外で断定すれば落ちる
+    expect(checkPitch("名物もつ煮は絶品だよ", ["名物もつ煮"]).ok).toBe(false);
+    // 店の語を渡さなければ、今までどおり落ちる
+    expect(checkPitch("歩いて3分、名物もつ煮で一杯どう？").ok).toBe(false);
+  });
+
+  it("書き手への指示にあるのに検査をすり抜けていた断定（最高の一杯・人気店・美味い）も落ち、書き直しの訳が付く", () => {
+    for (const text of ["最高の一杯が待ってるよ", "近くの人気店だよ", "美味いラーメンが近いよ"]) {
+      const checked = checkPitch(text);
+      expect(checked.ok, text).toBe(false);
+      expect(checked.ok === false && checked.critique, text).toMatch(/近さ/);
+    }
   });
 
   it("検査官の答えを読む（コードフェンスつきも読む・壊れていれば null）", () => {

@@ -96,4 +96,20 @@ describe("adapters/webpush", () => {
     expect(await sender.send(SUBSCRIPTION, { ttlSeconds: 1200 })).toEqual({ ok: false, gone: false });
     expect(calls).toHaveLength(0);
   });
+
+  it("打ち切りの合図をそのまま配信元への呼び出しへ渡し、打ち切られたら「届かなかった（もう無いではない）」と答える（不具合-08）", async () => {
+    const keys = await generateKeys();
+    const controller = new AbortController();
+    let passed: AbortSignal | null | undefined = null;
+    const impl = (async (_url: string, init: RequestInit) => {
+      passed = init.signal;
+      return new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+    }) as unknown as typeof globalThis.fetch;
+    const sender = createPushSender({ publicKey: keys.publicKey, privateKey: keys.privateKey, contactEmail: null, fetch: impl });
+    const pending = sender.send(SUBSCRIPTION, { ttlSeconds: 1200, signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    controller.abort();
+    expect(await pending).toEqual({ ok: false, gone: false });
+    expect(passed).toBe(controller.signal);
+  });
 });
