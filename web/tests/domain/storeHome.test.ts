@@ -49,7 +49,7 @@ describe("arrivalRows", () => {
   // 2026-09-25 監査の指摘 横断-02: 自動の登録の仮の値（guest-… の呼び名・0000000000）が店の一覧へそのまま出て、
   // 存在しない番号の発信のリンクになっていた。店へ渡す手前で null にする（案A）。
   it("横断-02 自動の登録の仮の呼び名と仮の番号・消した客の空の値は null で渡す。自分で入れた値はそのまま", async () => {
-    const { GUEST_PHONE_PLACEHOLDER } = await import("../../lib/schemas/limits");
+    const { GUEST_PHONE_PLACEHOLDER } = await import("../../lib/domain/guest");
     const rows = arrivalRows(
       [
         row({ reservationId: "guest", nickname: "guest-k3j9x2", phone: GUEST_PHONE_PLACEHOLDER, expiresAt: at(10) }),

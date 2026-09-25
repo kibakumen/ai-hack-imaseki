@@ -9,25 +9,15 @@ export const PHONE_PATTERN = /^0\d{9,10}$/;
 /** 入力欄の補助の属性に使う桁数（正本は上の形。基準 1.3） */
 export const PHONE_MAX_LENGTH = 11;
 /**
- * 自動の登録（`components/customer/GuestEntry`）が入れる**仮の電話番号**（2026-09-22）。
- * 客に聞かずに登録を済ませるための、形だけを満たす実在しない番号。取得の画面の電話番号の欄は、
- * 登録がこの値のままなら**空で見せ**、入れられたら本物に差し替える。1か所に置くのは、
- * 「仮かどうか」の見分けを2つの部品が同じ値で行うため。
+ * 自動の登録（`components/customer/GuestEntry`）の仮の値の**写し**（2026-09-25 のレビューで正本を移した）。
+ * 正本と「仮かどうか」の見分けは `domain/guest.ts` に在り、店の一覧（`domain/storeHome`）はそちらを読む。
+ * 部品は lib/domain のうち texts.ts しか値として読めない（依存の向き）ので、部品が要る2つの定数だけを
+ * ここに写す——自動の登録が作る値（`GuestEntry`）と、取得の画面の電話番号の欄（`FetchForm` の
+ * `phoneToShow`・`phoneToStore`）が読む。写しと部品の見分けが正本とずれないことは
+ * `tests/domain/guest.test.ts` が固定する。ここには判断の関数を置かない（定数だけ・何も import しない）。
  */
 export const GUEST_PHONE_PLACEHOLDER = "0000000000";
-/**
- * 自動の登録が作る呼び名の頭（`guest-` ＋ 6字）。客は自分のこの呼び名を知らないので、店の一覧は
- * 客の名前として出さない（2026-09-25 監査の指摘 横断-02）。
- */
 export const GUEST_NICKNAME_PREFIX = "guest-";
-/**
- * 電話番号が「無い」か（空・自動の登録の仮の番号）。**仮かどうかの見分けはこの1か所**——店の一覧
- * （`domain/storeHome`）と客の画面（取得の画面の電話番号の欄）が同じここを読む（横断-02）。
- * 部品が値として読める `lib/domain` は texts だけなので、定数の隣のここに置く（何も import しない性質は保つ）。
- */
-export const isPlaceholderPhone = (phone: string | null | undefined): boolean => !phone || phone === GUEST_PHONE_PLACEHOLDER;
-/** 呼び名が「客が決めたものでない」か（空・自動の登録の `guest-…`）。店の一覧は「お客さま」と出す（横断-02）。 */
-export const isGuestNickname = (nickname: string | null | undefined): boolean => !nickname || nickname.startsWith(GUEST_NICKNAME_PREFIX);
 export const CUSTOMER_GENRES_MAX = 12;
 export const BUDGET_MAX_MIN = 0;
 export const BUDGET_MAX_MAX = 100_000;

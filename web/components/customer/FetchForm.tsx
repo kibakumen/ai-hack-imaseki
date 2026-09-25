@@ -77,6 +77,9 @@ export const budgetToSend = (raw: string): number | string | null => (raw.trim()
 /**
  * 登録されている電話番号を、欄に見せる形へ直す。仮の番号（自動の登録が入れたもの）は**空**で見せる
  * ——客に「0000000000」を見せると自分の番号だと誤読するため。
+ * 「仮かどうか」の正本は `domain/guest` の `isPlaceholderPhone`（店の一覧が使う）。部品はそれを値として
+ * 読めない（依存の向き）ので `schemas/limits` の写しの定数で比べ、答えが正本と同じことは
+ * `tests/domain/guest.test.ts` が場合を並べて固定する。
  */
 export const phoneToShow = (stored: string | undefined | null): string => (typeof stored !== "string" || stored === GUEST_PHONE_PLACEHOLDER ? "" : stored);
 

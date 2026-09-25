@@ -1,4 +1,4 @@
-import { isGuestNickname, isPlaceholderPhone } from "../schemas/limits";
+import { isGuestNickname, isPlaceholderPhone } from "./guest";
 import { canCancelByStore, canComplete, effectiveState, isWithinExpiredGrace } from "./reservation";
 import { formatTimeOfDay, resolveUntil } from "./until";
 // 店のホームに何を出すかの判断（設計書「どの判断をどこに置くか」）。副作用なし・時計も引数で受け取る。
@@ -198,7 +198,7 @@ export const arrivalRows = (rows: readonly ArrivalRowInput[], now: Date, options
     .map(({ row, kind }) => ({
       reservationId: row.reservationId,
       kind,
-      // 自動の登録の仮の値は、店へ渡す手前で外す（横断-02 の案A。見分けは `schemas/limits` の1か所）
+      // 自動の登録の仮の値は、店へ渡す手前で外す（横断-02 の案A。見分けは `domain/guest` の1か所）
       nickname: isGuestNickname(row.nickname) ? null : row.nickname,
       phone: isPlaceholderPhone(row.phone) ? null : row.phone,
       party: row.party,
