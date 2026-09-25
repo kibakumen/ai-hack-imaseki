@@ -103,7 +103,11 @@ export type StoreImageFetcher = {
   fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; image: StoreImageFile } | { ok: false }>;
 };
 
-export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
+/**
+ * Web プッシュの送信。`signal` は打ち切りの合図（任意）——応答しない配信先で呼ぶ側の応答が止まらないよう、
+ * 呼ぶ側（usecases/pushMessage）が数秒で鳴らす（2026-09-25 監査の指摘 不具合-08）。
+ */
+export type PushSender = { send(subscription: unknown, opts: { ttlSeconds: number; signal?: AbortSignal }): Promise<{ ok: true } | { ok: false; gone: boolean }> };
 export type CardRegistrar = {
   createSetupSession(input: { storeId: string; returnUrl: string }): Promise<{ ok: true; url: string; sessionId: string } | { ok: false }>;
   confirmSetup(sessionId: string): Promise<{ ok: true; clientReference: string } | { ok: false }>;

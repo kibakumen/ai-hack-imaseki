@@ -160,7 +160,7 @@ describeTask("21", "運営の停止で客へ送る（22.2）", () => {
   // 運営の停止は客の数だけ送る。1人ずつ順に待つと、応答しない配信先の客が並ぶほど運営の画面が戻らない。
   // 偽の時計を1回（5.1秒）進めるだけで応答することを見る——順に待つ形では、2人目の打ち切りの合図が
   // 1人目の打ち切りのあとに作られるので、1回では足りない。
-  it.fails("既知の不具合（不具合-08）: 購読のある客2人の送信が返らなくても、運営の停止は偽の時計の数秒で応答する（1人ずつ順に待たない）", async () => {
+  it("22.2・22.6 購読のある客2人の送信が返らなくても、運営の停止は偽の時計の数秒で応答する（1人ずつ順に待たない・不具合-08）", async () => {
     const s = await receivedScene(ctx, { capacity: 3 });
     expect((await s.customer.api.post("/api/customer/push-subscription", { subscription: SUBSCRIPTION })).status).toBe(200);
     const second = await registerCustomer(ctx, { nickname: "ふたりめ", phone: "08031310002" });

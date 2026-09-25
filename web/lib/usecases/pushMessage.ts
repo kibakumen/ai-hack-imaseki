@@ -15,6 +15,14 @@ import { deletePushSubscription, findLatestReservationStatus, findPushSubscripti
 import { TEXTS } from "../domain/texts";
 import { PUSH_TTL_SECONDS } from "../schemas/limits";
 import type { PushMessage } from "../schemas/push";
+import { raceDeadline } from "./deadline";
+
+/**
+ * 1回の送信の打ち切り（値は AI判断・監査の指摘 不具合-08 の「3〜5秒」の間）。ほかの外向きの呼び出し（地図・AI・
+ * 人かどうかの確かめ）には全部打ち切りがあるのに、送信にだけ無かった——応答しない配信先を登録した客が1人いるだけで、
+ * 店の「取り消す」も運営の停止も戻らず、押し直すと「もう取り消されています」と断られた。
+ */
+const PUSH_SEND_TIMEOUT_MS = 4000;
 
 /** 文面を出す確保の状態は2つだけ。ほかの状態（確保中・完了済み・期限切れ・客の取り消し）は場面なし。 */
 const SCENES: Record<string, string> = { store_cancelled: "store_cancelled", admin_cancelled: "admin_cancelled" };
@@ -41,18 +49,28 @@ export const sendCancellationPush = async (deps: Deps, customerId: string): Prom
   const subscription = await findPushSubscription(deps.db, customerId);
   if (!subscription) return;
   try {
-    const result = await deps.push.send(subscription, { ttlSeconds: PUSH_TTL_SECONDS });
+    // 打ち切りは実時計と差し替えられる時計の両方で数える（usecases/deadline）。打ち切り・例外は「届かなかった」
+    // として扱い、購読は消さない（配信元が遅いだけかもしれない）。合図は送る直前に作る（この await の後で）。
+    const answer = await raceDeadline(PUSH_SEND_TIMEOUT_MS, deps.clock.after(PUSH_SEND_TIMEOUT_MS), (signal) => deps.push.send(subscription, { ttlSeconds: PUSH_TTL_SECONDS, signal }));
+    if (!answer.ok) {
+      deps.logger.log({ event: "push.send_failed", errorKind: "timeout_or_exception" });
+      return;
+    }
     // 配信元が「もう無い」と答えた購読は消す（次の取り消しで無駄に呼ばない）。
-    if (!result.ok && result.gone) await deletePushSubscription(deps.db, customerId);
+    if (!answer.value.ok && answer.value.gone) await deletePushSubscription(deps.db, customerId);
   } catch {
-    // 配信元の不調・鍵の形の崩れ。取り消しは成立させる（基準 22.6）。
+    // 購読の片付けの失敗。取り消しは成立させる（基準 22.6）。
     deps.logger.log({ event: "push.send_failed", errorKind: "exception" });
   }
 };
 
-/** 何人かへ1回ずつ（運営が店を止めたとき・基準 22.2）。1人が失敗しても残りは送る。 */
+/**
+ * 何人かへ1回ずつ（運営が店を止めたとき・基準 22.2）。1人が失敗しても残りは送る。
+ * **並べて送る**（不具合-08）——1人ずつ順に待つと、応答しない配信先の客が並ぶほど運営の画面が戻らない。
+ * 1人ぶんは打ち切りつきで投げないので、全体も最長で打ち切り1回ぶんで返る。
+ */
 export const sendCancellationPushes = async (deps: Deps, customerIds: readonly string[]): Promise<void> => {
-  for (const customerId of customerIds) await sendCancellationPush(deps, customerId);
+  await Promise.allSettled(customerIds.map((customerId) => sendCancellationPush(deps, customerId)));
 };
 
 /**
