@@ -224,4 +224,26 @@ describeTask("31", "【最終日】パスワードの変更とセッション・
     expect((await api.get("/api/store/results")).status).toBe(403);
     expect((await api.get("/api/store/profile")).status).toBe(403);
   });
+
+  // 安全-21 のレビュー（2026-09-26）: ホームは仮のパスワードの間も通すので、向かっている客の呼び名と電話番号まで
+  // 返すと、運営からメールで平文のまま届いた値を知る人が、パスワードを決め直さずに客の電話番号を読めた。
+  it("安全-21 仮のパスワードで入った直後のホームには、向かっている客（呼び名・電話番号）が出ない。決め直せば出る", async () => {
+    const admin = await seedAdmin(ctx, { email: "temp-home-admin@example.com" });
+    const scene = await receivedScene(ctx);
+    const issued = await admin.api.post(`/api/admin/stores/${scene.store.id}/temp-password`, { currentPassword: admin.password });
+    expect(issued.status).toBe(200);
+    const temp = await login(scene.store.email, issued.json.tempPassword);
+    expect(temp.json.mustChangePassword).toBe(true);
+    const api = ctx.api(cookieOf(temp)!);
+    const home = await api.get("/api/store/home");
+    expect(home.status).toBe(200);
+    expect(home.json.mustChangePassword).toBe(true);
+    expect(home.json.arrivals).toEqual([]);
+    expect(home.text).not.toContain("09012345678");
+    expect(home.text).not.toContain(scene.reservation.code);
+    expect((await api.post("/api/store/password", { password: "brand-new-password-7" })).status).toBe(200);
+    const after = await api.get("/api/store/home");
+    expect(after.json.mustChangePassword).toBe(false);
+    expect((after.json.arrivals as any[]).find((r) => r.code === scene.reservation.code)).toMatchObject({ phone: "09012345678" });
+  });
 });

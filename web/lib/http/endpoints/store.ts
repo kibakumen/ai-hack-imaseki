@@ -35,7 +35,11 @@ const storeHomeRoute = defineRoute({
     // 見分けの直後に店が消えた場合だけ null。店のデータは返さない。
     if (!home) return unauthenticated();
     // 【最終日】仮のパスワードで入った店には、新しいパスワードを決めるよう画面が求める（基準 14.14）。
-    return respond("GET /api/store/home", { ...home, mustChangePassword: ctx.mustChangePassword });
+    // 仮のパスワードの間は、向かっている客（呼び名・電話番号）を返さない（安全-21 のレビュー・2026-09-26）。
+    // 仮のパスワードは運営からメールで平文のまま届くので、その値を知る人が決め直さずに客の電話番号を読めた。
+    // 決め直せば次の取り直しで出る。
+    const visible = ctx.mustChangePassword ? { ...home, arrivals: [] } : home;
+    return respond("GET /api/store/home", { ...visible, mustChangePassword: ctx.mustChangePassword });
   },
 });
 
