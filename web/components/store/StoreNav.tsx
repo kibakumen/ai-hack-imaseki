@@ -3,6 +3,11 @@
 //
 // 行き先は画面の話なのでここが持つ（入口は関わらない）。今どこに居るかは呼ぶ側が名前で渡す——
 // 部品が `usePathname` を読むと、検査が部品を単体で描けなくなる（ルータの文脈が要る）ため。
+//
+// 右端にログアウトを置く（2026-09-25 監査の指摘 安全-09）。店の共用タブレットで、次に触った人へ
+// 客の電話番号や確保の操作を残さないため。ボタン自体は店と運営で共用の部品（components/auth/LogoutButton）。
+
+import { LogoutButton } from "../auth/LogoutButton";
 
 export type StoreTabKey = "home" | "coupons" | "profile" | "documents" | "results" | "account";
 
@@ -23,6 +28,7 @@ export const StoreNav = ({ active }: { active: StoreTabKey }) => (
         {tab.label}
       </a>
     ))}
+    <LogoutButton className="store-tabs__logout" />
   </nav>
 );
 
