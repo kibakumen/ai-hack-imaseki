@@ -9,7 +9,7 @@
 //   「来た客を完了にする」操作だから。公開の設定はその下（1日に何度も触るものではない）。
 // 画面のあいだの行き来はタブに変えた（StoreNav）。新しい客が増えた時は音で知らせる。
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { callApi, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
@@ -18,7 +18,6 @@ import { ArrivalsList } from "./ArrivalsList";
 import { playNotifyBeep } from "./beep";
 import { PublishForm } from "./PublishForm";
 import { OfferPanel } from "./OfferPanel";
-import { appendTrend, type TrendPoint } from "./OfferTrend";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusBanner } from "./StatusBanner";
 import { StoreNav } from "./StoreNav";
@@ -32,10 +31,10 @@ export type StoreHomeView = StoreHomeDto;
 
 const loadHome = (): Promise<StoreHomeView | ApiFailure> => callApi("GET /api/store/home");
 
-type HomeBodyProps = { home: StoreHomeView; trend: TrendPoint[]; onChanged: () => void };
+type HomeBodyProps = { home: StoreHomeView; onChanged: () => void };
 
 /** 取れたホームの中身（案内・状況の帯・向かっている客・公開の設定）。 */
-const HomeBody = ({ home, trend, onChanged }: HomeBodyProps) => {
+const HomeBody = ({ home, onChanged }: HomeBodyProps) => {
   // 仮のパスワードで入った店への案内（基準 14.14）。`app/store/password` の注が「店のホームが
   // ここへ案内する」と言いながら、この道が無かった（2026-09-22 に足した）。
   // 決めるまでは、ホームとパスワードの変更のほかの入口が 403 で断る（2026-09-25 監査の指摘 安全-21）ので、
@@ -50,6 +49,8 @@ const HomeBody = ({ home, trend, onChanged }: HomeBodyProps) => {
   }
   // 公開の操作を出すのは承認済みのときだけ（未承認・止められている間は入口も断る・基準 17.10）。
   const canPublish = home.status === "approved" && home.offer === null;
+  // 「公開を止める」の確かめに出す、向かっている組数（店-03）
+  const arriving = (home.arrivals ?? []).filter((row) => row.kind === "active").length;
   return (
     <>
       <StatusBanner status={home.status} />
@@ -60,32 +61,27 @@ const HomeBody = ({ home, trend, onChanged }: HomeBodyProps) => {
 
       {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={onChanged} />}
 
-      {/* `key` はオファーの番号——クーポンを選び直して公開し直すと別のオファーになるので、
-          ダイヤルと選択を新しいオファーの値から作り直す（同じオファーの取り直しでは残す） */}
-      {home.offer ? <OfferPanel key={home.offer.id} offer={home.offer} coupons={home.coupons} trend={trend} onChanged={onChanged} /> : null}
+      {/* `key` はオファーの番号——止めて新しく公開すると別のオファーになるので、ダイヤルと選択を新しいオファーの
+          値から作り直す（同じオファーの取り直しとクーポンの選び直しでは残す・不具合-03） */}
+      {home.offer ? <OfferPanel key={home.offer.id} offer={home.offer} coupons={home.coupons} trend={home.trend} arriving={arriving} onChanged={onChanged} /> : null}
     </>
   );
 };
 
 export const StoreHome = () => {
-  /** 「今日の動き」の点。カードが作り直されても消えないように、ここで持つ */
-  const [trend, setTrend] = useState<TrendPoint[]>([]);
   /** 前に見た確保の番号。**初めの読み込みでは鳴らさない**（開いた瞬間に全員ぶん鳴るのを避ける） */
   const seenRef = useRef<Set<string> | null>(null);
 
   /**
-   * 取り直した中身を受け取ったときの1手ぶん——
-   *   1. 新しく向かい始めた客がいれば音で知らせる（気づけないと客を待たせるため）
-   *   2. 「今日の動き」に点を足す（値が変わった時だけ）
-   * 描く途中ではなく**受け取った時**に済ませる（描き直しの連鎖を作らない）。
+   * 取り直した中身を受け取ったときの1手ぶん——新しく向かい始めた客がいれば音で知らせる（気づけないと客を
+   * 待たせるため）。描く途中ではなく**受け取った時**に済ませる（描き直しの連鎖を作らない）。
+   * 「今日の動き」は入口が15分ごとの数を返すので、ここでは溜めない（店-15。溜めた点は開き直すと消えていた）。
    */
   const absorb = useCallback((next: StoreHomeView) => {
     const ids = new Set((next.arrivals ?? []).filter((row) => row.kind === "active").map((row) => row.reservationId));
     const seen = seenRef.current;
     seenRef.current = ids;
     if (seen !== null && [...ids].some((id) => !seen.has(id))) playNotifyBeep();
-    const at = Date.now();
-    setTrend((prev) => appendTrend(prev, next.offer, at));
   }, []);
 
   // 確保の追加と状態の変化を30秒以内に一覧へ映す（基準 20.4）。開いている間だけ動く。
@@ -100,17 +96,13 @@ export const StoreHome = () => {
   // 読めなかった・ログインが切れたときも、見出しとタブは出す（空の main で止めない・横断-01）。
   return (
     <main className="store-main" aria-busy={state.status === "loading"}>
-      <div className="store-head">
-        <div>
-          <p className="store-eyebrow">店の画面</p>
-          <h1>今日のオファー</h1>
-        </div>
-      </div>
-
+      {/* 上部は**タブだけ**にする（2026-09-25 監査の指摘 店-14・本人の第2回の指摘「上部の方に不要な情報が多い」）。
+          見出しは読み上げのために残し、目には出さない（タブの「オファー」と同じことを言うので） */}
       <StoreNav active="home" />
+      <h1 className="store-sr-only">今日のオファー</h1>
 
       <LoadView state={state} onRetry={refresh}>
-        {(home) => <HomeBody home={home} trend={trend} onChanged={refresh} />}
+        {(home) => <HomeBody home={home} onChanged={refresh} />}
       </LoadView>
     </main>
   );

@@ -1,93 +1,100 @@
 "use client";
 
-// 公開中のオファーの「今日の動き」（2026-09-21 の本人の指摘「配信カードの右側に折れ線グラフを置いて
-// 2カラムにしたい」）。速成版 `sprint/app/store/_components/OfferViz.tsx` の作り方を移した——
-// 外部の図の部品は足さず、素の SVG の折れ線1本で描く。
+// 公開中のオファーの「今日の動き」（本人の第2回の指摘「数字カードがでかすぎるので、配信数のうちどれくらいが
+// 受け取られたかをプログレスバーでコンパクトに。結果に出た数は、時刻ごとの推移がわかる折れ線グラフに」）。
+// 外部の図の部品は足さず、素の SVG の折れ線で描く。
 //
-// ⚠️ **描くのは画面が自分で見た値だけ**。入口は時間帯ごとの数を返さないので、無いものを補わない。
-//    店のホームは30秒ごとに取り直すので、その**残りの変わり目を並べたものが線になる**
-//    （画面を開いている間の記録・開き直すと空から始まる）。1点しか無い間は点だけを出す。
-//
-// ⚠️ 点を足すのは**ホームを取り直した時**（StoreHome の `recordTrend`）であって、描くときではない。
-//    描く途中や effect の中で状態を変えると、描き直しが連鎖する（lint の set-state-in-effect）。
+// 2026-09-25 監査の指摘 店-15 で作り直した: それまでの線は、画面が30秒ごとに取り直した「配信数−残り」を画面の中に
+// 溜めたもので、結果に出た回数を描いておらず、取り消しや期限切れで下がり、開き直すと空に戻り、横軸も時刻に
+// 比例していなかった。今は店のホームの応答の `trend`（15分ごとの結果に出た回数と受け取り）を**そのまま**描く——
+// 区切りは等間隔なので、横軸は時刻に比例する。数えるのは入口の側で、ここは並べるだけ。
 
-export type TrendPoint = { at: number; received: number };
+import type { ResponseOf } from "../../lib/client/api";
+import { timeInJst } from "../ui/jstTime";
+
+/** 15分ぶんの1区切り（応答の形の正本は schemas/responses の storeHome.trend）。 */
+export type TrendBucket = ResponseOf<"GET /api/store/home">["trend"][number];
 
 const WIDTH = 280;
 const HEIGHT = 96;
 const PAD_X = 6;
 const PAD_Y = 10;
-/** 溜めすぎないための上限（30秒ごと・変わり目だけなので十分に足りる） */
-const MAX_POINTS = 60;
 
-/** その時点で受け取られた組数（残りが分からない時は 0）。 */
-export const receivedOf = (capacity: number, remaining: number): number => Math.max(0, capacity - remaining);
+type Series = "shown" | "received";
 
-/**
- * 取り直した中身から点を足す。**値が変わった時だけ**足し、オファーが無くなったら畳む。
- * 純粋に前の並びから次の並びを作る（呼ぶ側が状態に入れる）。
- */
-export const appendTrend = (prev: TrendPoint[], offer: { capacity: number; remaining: number } | null, at: number): TrendPoint[] => {
-  if (offer === null) return prev.length === 0 ? prev : [];
-  const received = receivedOf(offer.capacity, offer.remaining);
-  const last = prev[prev.length - 1];
-  if (last !== undefined && last.received === received) return prev;
-  return [...prev, { at, received }].slice(-MAX_POINTS);
+const sumOf = (trend: readonly TrendBucket[], key: Series): number => trend.reduce((total, bucket) => total + bucket[key], 0);
+
+/** 値を縦の位置にする（上が大きい）。 */
+const yOf = (value: number, top: number): number => HEIGHT - PAD_Y - (value / top) * (HEIGHT - PAD_Y * 2);
+
+/** 区切りの並びを折れ線の点にする（等間隔＝時刻に比例）。 */
+const pointsOf = (trend: readonly TrendBucket[], key: Series, top: number): string => {
+  const stepX = trend.length > 1 ? (WIDTH - PAD_X * 2) / (trend.length - 1) : 0;
+  return trend.map((bucket, i) => `${PAD_X + i * stepX},${yOf(bucket[key], top)}`).join(" ");
 };
 
-const clockOf = (at: number): string => {
-  const d = new Date(at);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+/** 2本の線（区切りが1つだけなら点）。 */
+const TrendLines = ({ trend, top }: { trend: readonly TrendBucket[]; top: number }) => {
+  if (trend.length > 1) {
+    return (
+      <>
+        <polyline className="store-chart__line store-chart__line--shown" points={pointsOf(trend, "shown", top)} />
+        <polyline className="store-chart__line store-chart__line--received" points={pointsOf(trend, "received", top)} />
+      </>
+    );
+  }
+  const only = trend[0];
+  return (
+    <>
+      <circle className="store-chart__dot store-chart__dot--shown" cx={PAD_X} cy={yOf(only.shown, top)} r={3} />
+      <circle className="store-chart__dot store-chart__dot--received" cx={PAD_X + 8} cy={yOf(only.received, top)} r={3} />
+    </>
+  );
 };
 
-type Props = { capacity: number; remaining: number; points: TrendPoint[] };
+type Props = { capacity: number; remaining: number; trend: readonly TrendBucket[] };
 
-export const OfferTrend = ({ capacity, remaining, points }: Props) => {
-  const received = receivedOf(capacity, remaining);
-  const top = Math.max(1, capacity);
-  const toY = (v: number) => HEIGHT - PAD_Y - (v / top) * (HEIGHT - PAD_Y * 2);
-  const stepX = points.length > 1 ? (WIDTH - PAD_X * 2) / (points.length - 1) : 0;
-  const receivedLine = points.map((p, i) => `${PAD_X + i * stepX},${toY(p.received)}`).join(" ");
-  const capacityLine = `${PAD_X},${toY(capacity)} ${WIDTH - PAD_X},${toY(capacity)}`;
-  const ratio = capacity > 0 ? Math.min(1, received / capacity) : 0;
-  const first = points[0];
-  const last = points[points.length - 1];
+export const OfferTrend = ({ capacity, remaining, trend }: Props) => {
+  // 受け取られて枠を押さえている数（配信数 − 残り）。プログレスバーだけに使う
+  const held = Math.max(0, capacity - remaining);
+  const percent = capacity > 0 ? Math.round(Math.min(1, held / capacity) * 100) : 0;
+  const top = Math.max(1, ...trend.map((bucket) => Math.max(bucket.shown, bucket.received)));
+  const first = trend[0];
+  const last = trend[trend.length - 1];
 
   return (
-    <div className="store-chart">
-      <span className="store-note">今日の動き（この画面を開いてから）</span>
+    <div className="store-chart" data-testid="offer-trend">
+      <div className="store-progress">
+        <span className="store-progress__label">
+          受け取られた {held}/{capacity} 組
+        </span>
+        <div className="store-progress__track">
+          <div className="store-progress__bar" style={{ width: `${percent}%` }} />
+        </div>
+        <span>{percent}%</span>
+      </div>
 
       <dl className="store-chart__legend">
-        <div className="store-fact">
-          <dt className="store-fact__label">受け取られた</dt>
-          <dd className="store-fact__value">{received}</dd>
+        <div className="store-chart__key store-chart__key--shown">
+          <dt>結果に出た</dt>
+          <dd data-testid="trend-shown-total">{sumOf(trend, "shown")} 回</dd>
         </div>
-        <div className="store-fact">
-          <dt className="store-fact__label">配信数</dt>
-          <dd className="store-fact__value">{capacity}</dd>
+        <div className="store-chart__key store-chart__key--received">
+          <dt>受け取り</dt>
+          <dd data-testid="trend-received-total">{sumOf(trend, "received")} 組</dd>
         </div>
       </dl>
 
-      <div className="store-progress">
-        <div className="store-progress__track">
-          <div className="store-progress__bar" style={{ width: `${Math.round(ratio * 100)}%` }} />
-        </div>
-        <span>{Math.round(ratio * 100)}%</span>
-      </div>
-
-      <svg className="store-chart__svg" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" role="img" aria-label="受け取られた数の移り変わり">
-        <polyline className="store-chart__line store-chart__line--capacity" points={capacityLine} />
-        {points.length > 1 ? (
-          <polyline className="store-chart__line store-chart__line--received" points={receivedLine} />
-        ) : (
-          <circle className="store-chart__dot" cx={PAD_X} cy={toY(received)} r={3} />
-        )}
-      </svg>
+      {trend.length === 0 ? null : (
+        <svg className="store-chart__svg" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" role="img" aria-label="15分ごとの、結果に出た回数と受け取りの移り変わり">
+          <TrendLines trend={trend} top={top} />
+        </svg>
+      )}
 
       <div className="store-chart__axis">
-        <span>{first === undefined ? "" : clockOf(first.at)}</span>
-        <span>{last === undefined ? "" : clockOf(last.at)}</span>
+        <span>{first === undefined ? "" : timeInJst(first.at)}</span>
+        <span>15分ごと</span>
+        <span>{last === undefined ? "" : timeInJst(last.at)}</span>
       </div>
     </div>
   );

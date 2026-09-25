@@ -50,6 +50,8 @@ export type OfferRow = {
   partyMax: number;
   publishedAt: string;
   untilAt: string;
+  /** 店が「何時まで」（終了タイマー）を入れたか。入れずに公開したら false（公開から12時間で自動で終わる・店-05） */
+  untilSet: boolean;
   couponIds: string[];
 };
 
@@ -62,10 +64,12 @@ const toOfferRow = (row: Record<string, unknown>): OfferRow => ({
   partyMax: row.party_max as number,
   publishedAt: row.published_at as string,
   untilAt: row.until_at as string,
+  // 列を足す前の行（migrations/0007 より前）は全部、店が入れた時刻（それまでは必須だった）
+  untilSet: Number(row.until_set ?? 1) === 1,
   couponIds: parseStringList(row.coupon_ids),
 });
 
-const OFFER_COLUMNS = `o.id, o.capacity, o.initial_capacity, o.party_max, o.published_at, o.until_at, o.coupon_ids`;
+const OFFER_COLUMNS = `o.id, o.capacity, o.initial_capacity, o.party_max, o.published_at, o.until_at, o.until_set, o.coupon_ids`;
 
 /** 今そのお店が公開中のオファー（残りつき）。無ければ null（要件17の基準 17.13・17.14）。 */
 export const findLiveOffer = async (db: Db, storeId: string, nowIso: string): Promise<LiveOfferRow | null> => {
@@ -98,8 +102,21 @@ export type NewOffer = {
   partyMax: number;
   publishedAtIso: string;
   untilAtIso: string;
+  /** 店が「何時まで」を入れたか（false なら untilAtIso は公開から12時間の自動の終わり・店-05） */
+  untilSet: boolean;
   couponIds: string[];
 };
+
+/**
+ * 渡された番号のうち、**この文が走る時点でその店に在るクーポン**だけを、作った順の JSON の配列にする副問い合わせ
+ * （公開の INSERT と、公開中のクーポンの差し替えの UPDATE が同じ1本を通る）。
+ *
+ * @param storePlaceholder 束縛した店の番号の置き場所
+ * @param idsPlaceholder 束縛したクーポンの番号の JSON の配列の置き場所
+ */
+const keptCouponIdsJson = (storePlaceholder: string, idsPlaceholder: string): string =>
+  `(SELECT json_group_array(kept.id) FROM (SELECT c.id FROM coupons c WHERE c.store_id = ${storePlaceholder}` +
+  ` AND EXISTS (SELECT 1 FROM json_each(${idsPlaceholder}) WHERE json_each.value = c.id) ORDER BY c.created_at, c.rowid) kept)`;
 
 /**
  * 公開中のオファーが無いときだけ1件入れる（要件17の基準 17.9）。入ったら、実際に付けたクーポンの番号を返す。
@@ -115,15 +132,13 @@ export type NewOffer = {
 export const insertOfferIfNone = async (db: Db, offer: NewOffer): Promise<{ couponIds: string[] } | null> => {
   const row = await db
     .prepare(
-      `INSERT INTO offers (id, store_id, capacity, initial_capacity, party_max, published_at, until_at, coupon_ids)` +
-        ` SELECT ?1, ?2, ?3, ?3, ?4, ?5, ?6,` +
-        ` (SELECT json_group_array(kept.id) FROM (SELECT c.id FROM coupons c WHERE c.store_id = ?2` +
-        ` AND EXISTS (SELECT 1 FROM json_each(?7) WHERE json_each.value = c.id) ORDER BY c.created_at, c.rowid) kept)` +
+      `INSERT INTO offers (id, store_id, capacity, initial_capacity, party_max, published_at, until_at, coupon_ids, until_set)` +
+        ` SELECT ?1, ?2, ?3, ?3, ?4, ?5, ?6, ${keptCouponIdsJson("?2", "?7")}, ?8` +
         ` WHERE EXISTS (SELECT 1 FROM stores s WHERE s.id = ?2 AND s.status = 'approved')` +
         ` AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.store_id = ?2 AND ${publishingOfferCondition("o", "?5")})` +
         ` RETURNING coupon_ids`,
     )
-    .bind(offer.id, offer.storeId, offer.capacity, offer.partyMax, offer.publishedAtIso, offer.untilAtIso, JSON.stringify(offer.couponIds))
+    .bind(offer.id, offer.storeId, offer.capacity, offer.partyMax, offer.publishedAtIso, offer.untilAtIso, JSON.stringify(offer.couponIds), offer.untilSet ? 1 : 0)
     .first();
   return row ? { couponIds: parseStringList((row as { coupon_ids?: unknown }).coupon_ids) } : null;
 };
@@ -195,8 +210,25 @@ export const updateLiveOfferPartyMax = async (db: Db, input: OfferChange & { par
 /**
  * 「何時まで」を変える（要件19の基準 19.8）。変えられたら true。
  * 延ばすことも早めることもできる。時分を時点へ直す判断は `domain/until.ts` が済ませてある。
+ * 入れた時刻は店が決めた終了タイマーになる（`until_set = 1`・自動の終わりから切り替わる・店-05）。
  */
 export const updateLiveOfferUntil = async (db: Db, input: OfferChange & { untilAtIso: string }): Promise<boolean> => {
-  const result = await db.prepare(`UPDATE offers SET until_at = ?3 WHERE ${LIVE_OFFER_OF_STORE}`).bind(input.storeId, input.nowIso, input.untilAtIso).run();
+  const result = await db.prepare(`UPDATE offers SET until_at = ?3, until_set = 1 WHERE ${LIVE_OFFER_OF_STORE}`).bind(input.storeId, input.nowIso, input.untilAtIso).run();
+  return changedRows(result) > 0;
+};
+
+/**
+ * 見せるクーポンを選び直す（要件19の基準 19.11・2026-09-25 に改めた・監査の指摘 不具合-03 の案A）。変えられたら true。
+ *
+ * **公開中のオファーの `coupon_ids` だけを1つの文で差し替える**。それまで画面は「止める → 公開し直す」の2本で
+ * 選び直していて、残りが古いオファーに割れ、結果を見ていた客の受け取りが古い番号で断られた。同じオファーのまま
+ * なので、残り・受け取られた数・実績の行は1つのまま。付けるのは公開と同じく**この文が走る時点でその店に在る**
+ * クーポンだけ。確保には触れない——確保は受け取った時点のクーポンの写しを持っている（要件16の基準 16.6）。
+ */
+export const updateLiveOfferCoupons = async (db: Db, input: OfferChange & { couponIds: string[] }): Promise<boolean> => {
+  const result = await db
+    .prepare(`UPDATE offers SET coupon_ids = ${keptCouponIdsJson("?1", "?3")} WHERE ${LIVE_OFFER_OF_STORE}`)
+    .bind(input.storeId, input.nowIso, JSON.stringify(input.couponIds))
+    .run();
   return changedRows(result) > 0;
 };

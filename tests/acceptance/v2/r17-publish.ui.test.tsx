@@ -79,6 +79,21 @@ describeTask("9", "公開のフォームと公開中のカード", () => {
     expect((within(form).getByTestId("coupon-c1") as HTMLInputElement).checked).toBe(true);
   });
 
+  // 2026-09-25 監査の指摘 店-05 の案A（本人の指摘「公開終了時間は未入力でも公開可・終了タイマーとして入れる」）
+  it("17.24（2026-09-25 に足した） 終了タイマーは初め畳まれていて、入れずに「公開する」を押すと何時までを載せずに送る。公開から12時間で自動で終わることが出る", async () => {
+    await renderHome(storeHomeDto({ coupons: COUPONS, publishPrefill: { couponIds: [], capacity: 3, partyMax: 4, until: null } }), {
+      "POST /api/store/offers": () => ({ status: 201, json: { ok: true, offer: offerDto() } }),
+    });
+    const form = await screen.findByTestId(TID.form("publish"));
+    expect(within(form).getByRole("button", { name: /終了タイマー/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(form.textContent).toMatch(/12時間/);
+    fireEvent.click(within(form).getByTestId(TID.btn("publish")));
+    await waitFor(() => expect(api.calls.some((c) => c.method === "POST" && c.path === "/api/store/offers")).toBe(true));
+    const sent = api.calls.find((c) => c.method === "POST" && c.path === "/api/store/offers")!.body;
+    expect(sent).toMatchObject({ capacity: 3, partyMax: 4 });
+    expect(sent).not.toHaveProperty("until");
+  });
+
   it("17.22・18.15 公開中のカードに5項目が出て、残りやさばけた数を直接打つ欄が無い。値を変えると表示が変わる", async () => {
     for (const [capacity, remaining] of [[5, 2], [8, 0]] as const) {
       const { container } = await renderHome(storeHomeDto({ offer: offerDto({ capacity, remaining, partyMax: 6, untilAt: "2026-09-22T13:30:00.000Z", coupons: [COUPONS[0]] }) }));

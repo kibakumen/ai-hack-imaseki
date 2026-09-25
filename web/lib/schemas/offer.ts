@@ -10,7 +10,11 @@ export const offerPublishSchema = z.object({
   couponIds: z.array(z.string()).max(OFFER_COUPONS_MAX).default([]),
   capacity: z.int().min(OFFER_CAPACITY_MIN).max(OFFER_CAPACITY_MAX),
   partyMax: z.int().min(OFFER_PARTY_MAX_MIN).max(OFFER_PARTY_MAX_MAX),
-  until: z.string().regex(TIME_OF_DAY_PATTERN),
+  /**
+   * 終了タイマー（"HH:MM"）。入れなくてよい（2026-09-25 監査の指摘 店-05 の案A・本人の指摘「未入力でも公開可」）——
+   * 入れなければ公開から12時間で自動で終わる。形の違う値は、入れなかったのとは違うので断る。
+   */
+  until: z.string().regex(TIME_OF_DAY_PATTERN).nullish(),
 });
 
 export type OfferPublishInput = z.infer<typeof offerPublishSchema>;
@@ -26,6 +30,8 @@ export type OfferView = {
   coupons: Array<{ id: string; name: string; note: string }>;
   /** 公開から12時間の時刻。画面が「何時まで」の上限の案内に使う */
   latestUntil: string;
+  /** 店が「何時まで」（終了タイマー）を入れたか。false なら untilAt は公開から12時間の自動の終わり（店-05） */
+  untilSet: boolean;
 };
 
 // ---------- 公開中の変更の入力（要件19・タスク20が足した） ----------
@@ -59,3 +65,13 @@ export const offerUntilSchema = z.object({
 });
 
 export type OfferUntilInput = z.infer<typeof offerUntilSchema>;
+
+/**
+ * 見せるクーポンの選び直し（要件19の基準 19.11・2026-09-25 に改めた・監査の指摘 不具合-03）。
+ * 0個でよい（公開と同じ）。店のものでない番号は手続きの文が落とす。
+ */
+export const offerCouponsSchema = z.object({
+  couponIds: z.array(z.string()).max(OFFER_COUPONS_MAX),
+});
+
+export type OfferCouponsInput = z.infer<typeof offerCouponsSchema>;

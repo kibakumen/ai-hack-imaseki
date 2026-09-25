@@ -93,8 +93,37 @@ const ALWAYS_SENT: ReadonlyArray<{ route: keyof typeof RESPONSES; body: unknown;
       coupons: [COUPON_ROW],
       arrivals: [],
       mustChangePassword: false,
+      trend: [{ at: "2026-09-22T06:00:00.000Z", shown: 1, received: 0 }],
     },
-    fields: ["mustChangePassword", "coupons.0.createdAt"],
+    // trend は 2026-09-25 店-15 で足した（公開中が無ければ空の配列を必ず送る）
+    fields: ["mustChangePassword", "coupons.0.createdAt", "trend", "trend.0.shown"],
+  },
+  {
+    // 2026-09-25 店-13: 各行の条件と、今日・直近7日の合計
+    route: "GET /api/store/results",
+    body: {
+      items: [
+        {
+          offerId: "o1",
+          publishedAt: "2026-09-22T06:00:00.000Z",
+          shown: 1,
+          received: 1,
+          completed: 0,
+          cancelled: { total: 0, customer: 0, expired: 0, store: 0, admin: 0 },
+          capacity: 3,
+          initialCapacity: 3,
+          partyMax: 4,
+          untilAt: "2026-09-22T12:00:00.000Z",
+          untilSet: true,
+          endedAt: null,
+          endReason: "live",
+          coupons: [],
+          couponCount: 0,
+        },
+      ],
+      summary: { today: { offers: 1, shown: 1, received: 1, completed: 0, cancelled: 0 }, week: { offers: 1, shown: 1, received: 1, completed: 0, cancelled: 0 } },
+    },
+    fields: ["summary", "summary.week", "items.0.endReason", "items.0.untilSet", "items.0.couponCount"],
   },
   {
     route: "GET /api/store/profile",

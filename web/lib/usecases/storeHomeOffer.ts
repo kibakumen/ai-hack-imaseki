@@ -2,11 +2,13 @@
 // ⚠️ 別のファイルに切ってあるのは、`usecases/storeHome.ts` がタスク7（承認の状況・チェックリスト）と
 // タスク17（向かっている客）でも育つため。あちらへの差し込みは1行に留める。
 
+import { TREND_BUCKET_MS, trendOrigin, trendSeries, type TrendBucket } from "../domain/offerTrend";
 import { publishPrefill, type PublishPrefill } from "../domain/storeHome";
 import { latestUntilOf } from "../domain/until";
 import type { Deps } from "../ports";
 import { listCoupons, type CouponRow } from "../repo/coupons";
-import { findLastOffer, findLiveOffer } from "../repo/offers";
+import { findLastOffer, findLiveOffer, type LiveOfferRow } from "../repo/offers";
+import { listOfferTrendCounts } from "../repo/storeResults";
 import type { OfferView } from "../schemas/offer";
 
 export type StoreHomeOfferPart = {
@@ -14,10 +16,12 @@ export type StoreHomeOfferPart = {
   offer: OfferView | null;
   /** 公開のフォームの初めの値（基準 17.17〜17.21） */
   publishPrefill: PublishPrefill;
+  /** 公開中のオファーの「今日の動き」（15分ごとの結果に出た回数と受け取り・店-15）。公開中が無ければ空 */
+  trend: TrendBucket[];
 };
 
 const toOfferView = (
-  offer: { id: string; capacity: number; remaining: number; partyMax: number; publishedAt: string; untilAt: string; couponIds: string[] },
+  offer: { id: string; capacity: number; remaining: number; partyMax: number; publishedAt: string; untilAt: string; untilSet: boolean; couponIds: string[] },
   coupons: readonly CouponRow[],
 ): OfferView => ({
   id: offer.id,
@@ -30,6 +34,7 @@ const toOfferView = (
   // 見せているクーポンは、店のクーポンの並び（作った順）で出す。削除されたものは落ちる。
   coupons: coupons.filter((coupon) => offer.couponIds.includes(coupon.id)).map(({ id, name, note }) => ({ id, name, note })),
   latestUntil: latestUntilOf(new Date(offer.publishedAt)).toISOString(),
+  untilSet: offer.untilSet,
 });
 
 /**
@@ -43,6 +48,20 @@ export const liveOfferView = async (deps: Deps, storeId: string): Promise<OfferV
   return live ? toOfferView(live, coupons) : null;
 };
 
+/** 公開中のオファーの「今日の動き」（店-15）。区切りの起点は公開した時刻の15分の頭。 */
+const liveOfferTrend = async (deps: Deps, storeId: string, live: LiveOfferRow, now: Date): Promise<TrendBucket[]> => {
+  const origin = trendOrigin(new Date(live.publishedAt));
+  const counts = await listOfferTrendCounts(deps.db, {
+    storeId,
+    offerId: live.id,
+    publishedAtIso: live.publishedAt,
+    nowIso: now.toISOString(),
+    originIso: origin.toISOString(),
+    bucketMs: TREND_BUCKET_MS,
+  });
+  return trendSeries({ origin, now, ...counts });
+};
+
 /**
  * 店のホームのオファーの部分。店のクーポンは**呼ぶ側（usecases/storeHome）が1回読んだもの**を受け取る
  * （2026-09-25 監査の指摘 設計-10: 店のホームが店の行とクーポンを2回ずつ読み、1回ぶんを捨てていた）。
@@ -53,10 +72,11 @@ export const storeHomeOfferPart = async (deps: Deps, storeId: string, coupons: r
   const live = await findLiveOffer(deps.db, storeId, now.toISOString());
 
   // 公開中があるときは、その値がカードに出ている。初めの値が要るのは公開のフォームのときだけ。
-  const last = live ? null : await findLastOffer(deps.db, storeId);
+  const [last, trend] = live ? [null, await liveOfferTrend(deps, storeId, live, now)] : [await findLastOffer(deps.db, storeId), []];
 
   return {
     offer: live ? toOfferView(live, coupons) : null,
+    trend,
     publishPrefill: publishPrefill({
       lastOffer: last ? { ...last, untilAt: new Date(last.untilAt) } : null,
       coupons,

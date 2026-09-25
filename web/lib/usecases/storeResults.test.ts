@@ -9,6 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { makeCtx, registerStore, rows, T0, type Api, type Ctx } from "../../../tests/acceptance/v2/_fakes";
+import { summarizeResults, type StoreResultRow } from "./storeResults";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -212,6 +213,69 @@ describe("店の実績（要件23）", () => {
   it("2.5 店の番号を要求で送っても、他店の実績は返らない（見るのはセッションの店だけ）", async () => {
     const r = await otherStore.get(`/api/store/results?storeId=${storeId}`);
     expect(r.json.items).toEqual([]);
+  });
+
+  // 2026-09-25 監査の指摘 店-13: 1行に公開の時刻と4つの数だけで、次に何組・何名まで・どのクーポンで出すかを
+  // 決める材料にならなかった。各行にそのオファーの条件と終わった理由を載せる。
+  it("店-13 各行に、そのオファーの条件（配信数・公開のときの配信数・何名まで・終わりの時刻・終わった理由・見せたクーポン）が載る", async () => {
+    ctx.clock.set(at(70 * MINUTE));
+    await ctx.db.prepare(`INSERT INTO coupons (id, store_id, name, note, created_at) VALUES ('coupon-results', ?1, '生ビール', '', ?2)`).bind(storeId, T0).run();
+    await ctx.db.prepare(`UPDATE offers SET coupon_ids = '["coupon-results","coupon-gone"]', party_max = 6 WHERE id = ?1`).bind(OFFER_LIVE).run();
+    const items = (await store.get("/api/store/results")).json.items;
+    expect(items.find((i: { offerId: string }) => i.offerId === OFFER_STOPPED)).toMatchObject({
+      capacity: 10,
+      initialCapacity: 10,
+      partyMax: 4,
+      untilAt: at(8 * HOUR),
+      endedAt: at(25 * MINUTE),
+      endReason: "stopped",
+      coupons: [],
+      couponCount: 0,
+    });
+    // 消したクーポンは名前を出せないので数にだけ入る
+    expect(items.find((i: { offerId: string }) => i.offerId === OFFER_LIVE)).toMatchObject({ endReason: "live", endedAt: null, partyMax: 6, coupons: ["生ビール"], couponCount: 2 });
+    ctx.clock.set(at(9 * HOUR));
+    expect((await store.get("/api/store/results")).json.items.find((i: { offerId: string }) => i.offerId === OFFER_LIVE).endReason).toBe("time_up");
+    ctx.clock.set(at(70 * MINUTE));
+  });
+
+  it("店-13 応答に、今日（日本時間）と直近7日の合計が載る", async () => {
+    ctx.clock.set(at(70 * MINUTE));
+    const summary = (await store.get("/api/store/results")).json.summary;
+    expect(summary.today).toEqual({ offers: 3, shown: 8, received: 6, completed: 2, cancelled: 4 });
+    expect(summary.week).toEqual(summary.today);
+    expect((await otherStore.get("/api/store/results")).json.summary.week).toEqual({ offers: 0, shown: 0, received: 0, completed: 0, cancelled: 0 });
+  });
+
+  it("店-13 summarizeResults（純粋）: 今日は日本時間の0時から、直近7日は今から7日前まで", () => {
+    const row = (publishedAt: string, n: number): StoreResultRow => ({
+      offerId: publishedAt,
+      publishedAt,
+      shown: n,
+      received: n,
+      completed: n,
+      cancelled: { total: n, customer: n, expired: 0, store: 0, admin: 0 },
+      capacity: 3,
+      initialCapacity: 3,
+      partyMax: 4,
+      untilAt: publishedAt,
+      untilSet: true,
+      endedAt: null,
+      endReason: "time_up",
+      coupons: [],
+      couponCount: 0,
+    });
+    // 今は 2026-09-22 00:30 JST（= 09-21 15:30 UTC）
+    const now = new Date("2026-09-21T15:30:00.000Z");
+    const rowsIn = [
+      row("2026-09-21T15:10:00.000Z", 1), // 09-22 00:10 JST（今日）
+      row("2026-09-21T14:50:00.000Z", 10), // 09-21 23:50 JST（昨日・7日の内）
+      row("2026-09-14T15:20:00.000Z", 100), // 7日と10分前（7日の外）
+    ];
+    expect(summarizeResults(rowsIn, now)).toEqual({
+      today: { offers: 1, shown: 1, received: 1, completed: 1, cancelled: 1 },
+      week: { offers: 2, shown: 11, received: 11, completed: 11, cancelled: 11 },
+    });
   });
 
   it("27.7 実績を読んでも、記録の5つの表は1行も変わらない", async () => {

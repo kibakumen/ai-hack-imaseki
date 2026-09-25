@@ -127,6 +127,8 @@ const seedDemoStore = async (deps: Deps, spec: DemoStoreSpec, passwordHash: stri
     partyMax: spec.offer.partyMax,
     publishedAtIso: now.toISOString(),
     untilAtIso: demoClosingTime(now).toISOString(),
+    // デモの店は閉店の時刻を決めて出す（終了タイマーあり・店-05）
+    untilSet: true,
     couponIds: coupons.map((c) => c.id),
   });
   return { email: spec.email, storeId, created, couponCount: coupons.length, offerInserted: offer !== null };

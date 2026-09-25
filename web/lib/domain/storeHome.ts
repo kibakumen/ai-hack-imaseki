@@ -1,6 +1,6 @@
 import { isGuestNickname, isPlaceholderPhone } from "./guest";
 import { canCancelByStore, canComplete, effectiveState, isWithinExpiredGrace } from "./reservation";
-import { formatTimeOfDay, resolveUntil } from "./until";
+import { formatTimeOfDay, latestUntilOf } from "./until";
 // 店のホームに何を出すかの判断（設計書「どの判断をどこに置くか」）。副作用なし・時計も引数で受け取る。
 //
 // ⚠️ 2026-09-21 の並列の実装では、ここに在るのはタスク7の分（足りない店の情報）だけ。
@@ -21,6 +21,8 @@ export type OfferView = {
   coupons: Array<{ id: string; name: string; note: string }>;
   /** 公開から12時間の時刻（ISO）。「何時まで」の上限として画面が使う */
   latestUntil: string;
+  /** 店が「何時まで」（終了タイマー）を入れたか。false なら untilAt は公開から12時間の自動の終わり（店-05） */
+  untilSet: boolean;
 };
 
 /** 「向かっている客」の1行（受け入れ検査の契約 `ArrivalRow`）。中身を埋めるのはタスク17。 */
@@ -103,13 +105,29 @@ export type LastOffer = {
   /** 終わった時点の「何名まで」（基準 17.17） */
   partyMax: number;
   untilAt: Date;
+  /**
+   * 店が「何時まで」（終了タイマー）を入れたか。false（入れずに公開して、公開から12時間で自動で終わった）なら、
+   * 次の公開の初めの値に「何時まで」を入れない（店-05）。無ければ入れたものとみなす（それまでは必須だった）。
+   */
+  untilSet?: boolean;
   couponIds: string[];
 };
 
 /**
+ * 前回の「何時まで」を、**日付ごとそのまま**今と比べて、今を起点にした枠（今より後で、今から12時間以内）に
+ * 入るときだけ "HH:MM" にする（基準 17.18・17.19）。
+ *
+ * ⚠️ 2026-09-25 監査の指摘 不具合-09: それまでは日付を捨てて時分だけを今から解き直していたので、先週金曜の
+ *    「18:00まで」でも、今が 06:00〜18:00 の間なら今日の 18:00 として入り、畳まれた欄のまま公開されていた。
+ */
+const prefillUntil = (untilAt: Date, now: Date): string | null =>
+  untilAt.getTime() > now.getTime() && untilAt.getTime() <= latestUntilOf(now).getTime() ? formatTimeOfDay(untilAt) : null;
+
+/**
  * 前回のオファーから、公開のフォームの初めの値を決める。
  * 前回が無ければどの欄も空（基準 17.21）。削除されたクーポンはチェックから外れる（基準 17.20）。
- * 「何時まで」は、今を起点にした枠（今より後で12時間以内）に入るときだけ入れる（基準 17.18・17.19）。
+ * 「何時まで」は、前回の時刻が今を起点にした枠（今より後で12時間以内）に在るときだけ入れる（基準 17.18・17.19）。
+ * 前回が「何時まで」を入れずに公開した（自動の終わり）なら入れない（店-05）。
  */
 export const publishPrefill = ({
   lastOffer,
@@ -123,15 +141,12 @@ export const publishPrefill = ({
   if (!lastOffer) return { couponIds: [], capacity: null, partyMax: null, until: null };
 
   const alive = new Set(coupons.map((coupon) => coupon.id));
-  const time = formatTimeOfDay(lastOffer.untilAt);
-  // 公開のときの起点は今（設計書「「何時まで」の入力と解釈」の表）。
-  const resolved = resolveUntil({ input: time, publishedAt: now, now });
 
   return {
     couponIds: lastOffer.couponIds.filter((id) => alive.has(id)),
     capacity: lastOffer.initialCapacity,
     partyMax: lastOffer.partyMax,
-    until: resolved?.kind === "ok" ? time : null,
+    until: lastOffer.untilSet === false ? null : prefillUntil(lastOffer.untilAt, now),
   };
 };
 

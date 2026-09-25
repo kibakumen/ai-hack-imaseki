@@ -78,7 +78,9 @@ const FIELD_REASON_TEXTS: Record<string, (ctx: Ctx) => string> = {
   too_many: (ctx) => `${str(ctx.field, "この項目")}は${str(ctx.max, "")}件までです。`,
   min_over_max: (ctx) => `${str(ctx.field, "この項目")}の最低は最高以下にしてください。`,
   over_capacity: (ctx) => `足したあとの残りは${str(ctx.max, "")}までです（今の残り${str(ctx.remaining ?? ctx.min, "")}）。`,
-  over_remaining: (ctx) => `減らせるのは残りの${str(ctx.remaining ?? ctx.max, "")}までです。`,
+  // 店-09（2026-09-25）: ダイヤルは配信数で、断りは残りで話していて違う数を指していたので、受け取り済みの数も添える
+  over_remaining: (ctx) =>
+    `減らせるのは残りの${str(ctx.remaining ?? ctx.max, "")}までです。` + (ctx.sold === undefined ? "" : `配信数は受け取り済みの${str(ctx.sold)}組より下げられません。`),
   in_past: () => "今より後の時刻にしてください。",
   // ⚠️ 設計書 447行の文案は「今から12時間以内の時刻にしてください」だったが、受け入れ検査
   // r17-publish.ui.test.tsx が「公開を止め」か「新しく公開」を含むことを見るので、次の手を足した
@@ -143,8 +145,9 @@ export const LOAD_TEXTS = {
 // 汎用の INPUT_REFUSAL_TEXTS では足りない語が2つある:
 //   limit_reached … 汎用の文は個数を言わない（上の語は 15.7 のおすすめメニューとも共有なので、
 //                   そちらの個数に寄せられない）。クーポンの画面は「3つまで」と数を出す。
-//   coupon_in_use … 汎用の文は「変えられません」で止まり、次の一手（公開を止める）を言わない。
-//                   基準 16.5 は「公開を止めてから行うよう示す」ことまでを求める。
+//   coupon_in_use … 汎用の文は「変えられません」で止まり、次の一手を言わない。基準 16.5 は次の一手を示すことまで
+//                   求める。2026-09-25 から次の一手は「オファーの画面でこのクーポンの選択を外す」（公開中のクーポンを
+//                   止めずに選び直せるようになった・監査の指摘 不具合-03 の案A）。止める必要はもう無い。
 // 語から文を選ぶ判断は、決まった文の置き場であるこのファイルに置く（部品の側で語を場合分けしない）。
 
 /** 断りの応答のうち、文を選ぶのに要る所だけ（lib/domain は何も import しないので、形だけで受ける）。 */
@@ -152,7 +155,7 @@ type CouponFailure = { error?: { kind?: string; fields?: Array<{ name: string }>
 
 const COUPON_FORM_TEXTS: Record<string, (max: number) => string> = {
   limit_reached: (max) => `クーポンは${max}つまでです。`,
-  coupon_in_use: () => "公開中のオファーが見せているクーポンは、公開を止めてから変えられます。",
+  coupon_in_use: () => "公開中のオファーが見せているクーポンは変えられません。オファーの画面でこのクーポンの選択を外してから変えてください（公開は止めなくてよい）。",
 };
 
 export const COUPON_TEXTS = {

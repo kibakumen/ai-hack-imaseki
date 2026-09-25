@@ -710,6 +710,7 @@ export const storeHomeDto = (over: Partial<import("./_types").StoreHomeDto> = {}
   coupons: [],
   arrivals: [],
   mustChangePassword: false,
+  trend: [],
   ...over,
 });
 export const offerDto = (over: Partial<import("./_types").OfferDto> = {}): import("./_types").OfferDto => ({
@@ -721,5 +722,6 @@ export const offerDto = (over: Partial<import("./_types").OfferDto> = {}): impor
   publishedAt: "2026-09-22T06:00:00.000Z",
   coupons: [],
   latestUntil: "2026-09-22T18:00:00.000Z",
+  untilSet: true,
   ...over,
 });

@@ -9,8 +9,9 @@
 //   - 「募集する組数」は**配信数**と呼ぶ
 //   - 配信数と何名までは**ダイヤル**で選ぶ（打った文字は WheelPicker の裏の欄がそのまま持つ）
 //   - **終了時刻は初めは畳んでおく**（多くの店は「ずっと受け付ける」ので、毎回は要らない）。
-//     ⚠️ 畳むのは見た目だけ——欄は DOM に残したまま隠す。前回の値が入っているときと、
-//     入口が「何時まで」を断ったときは開いた状態にする（隠れた欄に文が付くのを避ける）
+//     2026-09-25 監査の指摘 店-05 の案A で「何時まで」を**入れなくても公開できる**ようにした（入れなければ公開から
+//     12時間で自動で終わる）ので、本人の指摘どおり**いつも畳んでおく**「終了タイマー」になった。
+//     ⚠️ 畳むのは見た目だけ——欄は DOM に残したまま隠す。入口が「何時まで」を断ったときは開く
 //   - クーポンは**チェックの付いたカードを横に並べる**
 
 import { useState, type FormEvent } from "react";
@@ -45,18 +46,13 @@ const untilRefused = (failure: ApiFailure | null): boolean =>
   (failure?.error?.fields ?? []).some((f) => f.name === "until") || UNTIL_KINDS.includes(failure?.error?.kind ?? "");
 
 /**
- * 「何時まで」の欄と、その開け閉め。
+ * 終了タイマー（「何時まで」）の欄と、その開け閉め（2026-09-25 監査の指摘 店-05 の案A）。
  *
- * ⚠️ **ここは本人の指摘の当て方を1つ変えてある**（2026-09-22・要報告）。
- * 指摘は「終了時刻は初めは畳んでおいて、ボタンで出す」だが、それは速成版の作り——速成版の
- * 終了時刻は**入れなくてよい**（未設定ならずっと受け付ける）。v2 の「何時まで」は**入れないと
- * 公開できない**（`schemas/offer.ts` の `until` は必須・要件17の基準 17.6）。そのまま畳むと、
- * 初めて公開する店は**必ず1回断られてから**畳まれた欄に気づくことになる。
- * そこで「畳むのは前回の値が入っている時だけ」にした——公開し直す店（基準 17.18）は触らずに
- * 済み、初めての店には初めから見えている。
+ * 本人の指摘は「公開終了時間は未入力でも公開可。忙しくて忘れそうなときのために、終了タイマーとして入れられる
+ * 温度感」。そこで**いつも畳んでおき**、入れていなければ「公開から12時間で自動で終わる」と書き、入れていれば
+ * その時刻を横に出す（隠れた値のまま送らせない）。
  *
- * ⚠️ 畳んでいる間も**欄は DOM に残す**（CSS で隠すだけ）。今の値は横に出す——隠れた値のまま
- * 送らせない。
+ * ⚠️ 畳んでいる間も**欄は DOM に残す**（CSS で隠すだけ・受け入れ検査が欄に打つ）。
  */
 const UntilField = ({
   value,
@@ -69,20 +65,27 @@ const UntilField = ({
   onToggle: () => void;
   onChange: (next: string) => void;
 }) => (
-  <>
+  <div className="store-timer">
     <div className="store-row">
-      <span className="store-note">{open ? "何時まで受け付けるか（公開から12時間以内）" : `何時まで ${value === "" ? "未入力" : value}`}</span>
-      <button type="button" className="store-btn store-btn--quiet" onClick={onToggle}>
-        {open ? "隠す" : "終了の時刻を変える"}
+      <span className="store-note">{value === "" ? "終了タイマーなし（公開から12時間で自動で終わります）" : `終了タイマー ${value} に終わります`}</span>
+      <button type="button" className="store-btn store-btn--quiet" aria-expanded={open} aria-controls="publish-until-box" onClick={onToggle}>
+        {open ? "終了タイマーを閉じる" : value === "" ? "終了タイマーを設定" : "終了タイマーを変える"}
       </button>
     </div>
-    <div className={open ? "store-collapse" : "store-collapse store-collapse--closed"}>
+    <div id="publish-until-box" className={open ? "store-collapse" : "store-collapse store-collapse--closed"}>
       <div className="store-field">
-        <label htmlFor="publish-until">何時まで</label>
-        <input id="publish-until" data-testid="field-until" type="time" value={value} onChange={(event) => onChange(event.target.value)} />
+        <label htmlFor="publish-until">何時に終わるか（公開から12時間以内）</label>
+        <div className="store-inline">
+          <input id="publish-until" data-testid="field-until" type="time" value={value} onChange={(event) => onChange(event.target.value)} />
+          {value === "" ? null : (
+            <button type="button" className="store-btn store-btn--quiet" onClick={() => onChange("")}>
+              タイマーを外す
+            </button>
+          )}
+        </div>
       </div>
     </div>
-  </>
+  </div>
 );
 
 /**
@@ -104,7 +107,7 @@ const CouponChoices = ({
   <fieldset className="store-field store-coupon-set" data-testid="coupon-list">
     <legend>見せるクーポン（押して選ぶ・0個でもよい）</legend>
     {coupons.length === 0 ? <p className="store-empty">クーポンはまだありません。</p> : null}
-    <div className="store-coupons">
+    <div className="store-coupons store-coupons--wrap">
       {coupons.map((coupon) => {
         const on = selected.includes(coupon.id);
         return (
@@ -138,8 +141,8 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
   const [capacity, setCapacity] = useState(numberText(prefill.capacity));
   const [partyMax, setPartyMax] = useState(numberText(prefill.partyMax));
   const [until, setUntil] = useState(prefill.until ?? "");
-  // ⚠️ **前回の値が入っている時だけ畳む**（本人の指摘への当て方を1つ変えた・下の注を参照）
-  const [untilOpen, setUntilOpen] = useState(prefill.until === null);
+  // 終了タイマーはいつも畳んでおく（入れなくても公開できる・店-05）。断られたら開く
+  const [untilOpen, setUntilOpen] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   const toggleCoupon = (id: string) => {
@@ -153,7 +156,8 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
         couponIds,
         capacity: toNumberOrNull(capacity),
         partyMax: toNumberOrNull(partyMax),
-        until,
+        // 空欄は載せない＝終了タイマーなし（公開から12時間で自動で終わる・店-05）
+        until: until === "" ? undefined : until,
       },
     });
     if (isFailure(result)) {

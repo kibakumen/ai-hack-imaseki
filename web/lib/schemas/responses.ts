@@ -40,6 +40,8 @@ const offerView = object({
   publishedAt: string(),
   coupons: array(coupon),
   latestUntil: string(),
+  /** 店が「何時まで」（終了タイマー）を入れたか。false なら公開から12時間の自動の終わり（2026-09-25 店-05） */
+  untilSet: boolean(),
 });
 
 const storeStatus = oneOf(["pending", "approved", "banned"]);
@@ -133,6 +135,8 @@ const storeHome = object({
   arrivals: array(arrival),
   /** 仮のパスワードで入っている（基準 14.14）。入口がセッションの印から必ず載せる */
   mustChangePassword: boolean(),
+  /** 公開中のオファーの「今日の動き」——15分ごとの結果に出た回数と受け取り（公開中が無ければ空・2026-09-25 店-15） */
+  trend: array(object({ at: string(), shown: number(), received: number() })),
 });
 
 const storeProfile = object({
@@ -152,7 +156,20 @@ const storeResult = object({
   received: number(),
   completed: number(),
   cancelled: object({ total: number(), customer: number(), expired: number(), store: number(), admin: number() }),
+  // そのオファーの条件と終わった理由（2026-09-25 監査の指摘 店-13・usecases/storeResults の StoreResultRow）
+  capacity: number(),
+  initialCapacity: number(),
+  partyMax: number(),
+  untilAt: string(),
+  untilSet: boolean(),
+  endedAt: nullable(string()),
+  endReason: oneOf(["live", "stopped", "time_up", "banned"]),
+  coupons: array(string()),
+  couponCount: number(),
 });
+
+/** 実績の合計（今日・直近7日・店-13） */
+const resultTotals = object({ offers: number(), shown: number(), received: number(), completed: number(), cancelled: number() });
 
 // ---------- 運営 ----------
 
@@ -280,9 +297,10 @@ export const RESPONSES = {
   "POST /api/store/offers/current/reduce": object({ ok, offer: offerView }),
   "POST /api/store/offers/current/party-max": object({ ok, offer: offerView }),
   "POST /api/store/offers/current/until": object({ ok, offer: offerView }),
+  "POST /api/store/offers/current/coupons": object({ ok, offer: offerView }),
   "POST /api/store/reservations/:id/complete": done,
   "POST /api/store/reservations/:id/cancel": done,
-  "GET /api/store/results": object({ items: array(storeResult) }),
+  "GET /api/store/results": object({ items: array(storeResult), summary: object({ today: resultTotals, week: resultTotals }) }),
   "POST /api/store/license": done,
   "POST /api/store/card/setup": object({ ok, url: string() }),
   "POST /api/store/card/confirm": object({ ok, cardRegistered: literal(true) }),

@@ -2,7 +2,7 @@
 
 // 公開中のオファーのカード（要件17の基準 17.22・17.12、要件18の基準 18.15、要件19の全部）。
 // 出すのは5項目——配信数（＝募集する組数）・残り・何名まで・何時まで・見せているクーポン——と、
-// 公開したままできる4つの操作、そして「公開を止める」。
+// 公開したままできる5つの操作、そして「公開を止める」。
 // **残りやさばけた数を店が直接打つ欄は置かない**（基準 18.15）。終わったオファーをもう一度動かす
 // 操作も無い（基準 17.15）。
 //
@@ -13,21 +13,16 @@
 //   - **`offer_ended` のときだけホームを取り直す**（基準 19.12）——オファーが終わっていれば、
 //     カードは消えて公開のフォームに変わる
 //
-// 見た目は 2026-09-22 の本人の指摘（3回目）を入れた:
-//   1. **表示だけの札4枚（残り・配信数・何名まで・何時まで）は撤去**——「数を変える」の中に今の値が
-//      出ているので二重だった。操作できない**「残り」だけは「数を変える」の見出しの右に1つ**置く
-//      （店がいちばん見る数。`offer-remaining` の名前はそのまま）
-//   2. **登録してある全部のクーポンを横並びの札にして、押して選べる**。選び直しも「更新する」で一括
-//   3. 「数を変える」が主役——左の広い列。右は「今日の動き」のまま。「公開を止める」は見出し行の右のまま
-//
-// ⚠️ **クーポンの選び直しの送り方（要報告・AI判断）**: 公開したままクーポンを変える入口は無い
-//    （要件19の基準 19.11——選び直すときは公開を止めて公開し直す）。新しい入口は作らず、
-//    「更新する」がその手順を代わりに踏む: `POST …/current/stop` → `POST /api/store/offers`
-//    （同じ組数・何名まで・何時までに、選び直したクーポンを載せて）。公開し直すと残りは配信数から
-//    数え直されるので、**配信数には今の残り（＋ダイヤルの差）を入れて残りを守る**。受け取られた数は
-//    0 から数え直しになる。確保している客はそのまま（止めても確保は取り消されない）。
-//    ⚠️ 受け入れ検査 19.11 は「カードの中に `input[type='checkbox']` が0個」を見る。クーポンの札は
-//    `<button role="checkbox" aria-checked>` で作る（押せて・選択状態が見える・読み上げにも答える）。
+// 2026-09-25 監査の指摘で直したこと（部品は OfferPanelParts・OfferUntilTimer・OfferTrend に分けた）:
+//   - 不具合-03 クーポンの選び直しは、差し替えの入口 `POST …/current/coupons` の1文（同じオファーのまま）。
+//     それまでは「止める → 公開し直す」の2本で、残りが古いオファーに割れていた
+//   - 店-03 「公開を止める」は確かめを1段挟み、向かっている組数がそのまま来ることを伝える
+//   - 店-06 スマホの幅でも縦に短く——ダイヤルは2列に並べ、何時までは「終了タイマー」の裏に畳み、クーポンは
+//     折り返しの横並びにし、「更新する」は変えたところがある間だけ画面の下に貼り付ける（本人の第2回の指摘）
+//   - 店-09 配信数のダイヤルは入口の範囲に合わせる——下は受け取り済みの数（最小1。ただし今の配信数が0なら0）、
+//     上は残りが20になるまで。「受付を締める」で残りを0にできる
+//   - 不具合-03 のレビュー 選んだクーポンは、札に触っていない間は取り直しのたびにサーバーの値へ合わせる
+//   - 店-16 残りが0なら「満席（いまは客に出ていません）」と出し、配信数を足せばまた出ることを添える
 //
 // ⚠️ **受け入れ検査が掴む4つの `<form>`（`form-add` `form-reduce` `form-party-max` `form-until`）と、
 //    その中の `<input>`・ボタンは DOM に残す**。見た目はダイヤルが担い、欄とボタンは目には出さない
@@ -35,14 +30,17 @@
 //    断りの文は**その操作の `<form>` の中**に出る（検査が `within(form)` で引く）。
 
 import { useState, type FormEvent } from "react";
-import { callApi, isFailure, type ApiFailure, type OfferViewDto } from "../../lib/client/api";
+import type { OfferViewDto } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, type RefusalContext } from "../ui/InputRefusal";
-import { OfferTrend, type TrendPoint } from "./OfferTrend";
 import { timeInJst } from "../ui/jstTime";
+import { useOfferChange, type OfferChange, type Outcome } from "./offerChange";
+import { CouponToggles, HiddenControl, NextValue, OfferStatusBadge, Remaining, StopConfirm, type OfferPanelCoupon } from "./OfferPanelParts";
+import { OfferTrend, type TrendBucket } from "./OfferTrend";
+import { OfferUntilTimer } from "./OfferUntilTimer";
 import { Wheel } from "./WheelPicker";
 
-export type OfferPanelCoupon = { id: string; name: string; note: string };
+export type { OfferPanelCoupon } from "./OfferPanelParts";
 
 /** 公開中のオファーのカード（受け入れ検査の契約 `OfferDto`）。型は schemas/responses の表から（設計-07）。 */
 export type OfferPanelOffer = OfferViewDto;
@@ -51,17 +49,13 @@ type Props = {
   offer: OfferPanelOffer;
   /** 店が登録してある全部のクーポン（見せる・見せないに関わらず）。札にして選べるようにする */
   coupons: OfferPanelCoupon[];
-  /** 右の「今日の動き」に描く点（溜めるのは店のホーム——カードが作り直されても消えないように） */
-  trend: TrendPoint[];
+  /** 「今日の動き」——店のホームの応答の15分ごとの数（店-15） */
+  trend: readonly TrendBucket[];
+  /** 向かっている客（確保中）の組数。「公開を止める」の確かめに出す（店-03） */
+  arriving: number;
   /** 変えられたら（止めたら）、店のホームを取り直して数字とフォームを作り直す */
   onChanged: () => void;
 };
-
-/** 公開したままできる操作（入口 `POST /api/store/offers/current/<action>`）。 */
-type OfferAction = "stop" | "add" | "reduce" | "party-max" | "until";
-
-/** 1回の送信の結果。`ended` は「オファーが終わっていた」（ホームを取り直す・基準 19.12）。 */
-type Outcome = "ok" | "refused" | "ended";
 
 /** 空欄は項目を載せない（入口が「入れてください」と答える）。数にならない文字はそのまま載せる。 */
 const numberToSend = (text: string): number | string | undefined => {
@@ -90,201 +84,61 @@ const couponsToShow = (registered: OfferPanelCoupon[], shown: OfferPanelCoupon[]
 };
 
 /**
- * 1つの操作ぶんの送信と、その操作の断り。**操作ごとに別に持つ**ので、ある操作の断りが
- * ほかの操作の欄に出ることはない（要件19の基準 19.2・19.5・19.9）。
- * ホームを取り直すかは呼ぶ側が決める（一括で送るときは、全部済んでから1回だけ取り直す）。
+ * 配信数のダイヤルの範囲（2026-09-25 監査の指摘 店-09）。入口の規則に合わせる——減らせるのは残りまで（基準 19.5）
+ * なので下は**受け取り済みの数**（配信数 − 残り・最小1）、足したあとの残りは20まで（基準 19.2）なので上は
+ * **配信数 ＋（20 − 残り）**。それまでは 1〜20 で回せて、配信数10・残り2 の店では選べる 1〜7 がどれも断られた。
+ *
+ * ⚠️ **範囲には今の配信数を必ず含める**（2026-09-25 のレビュー）。誰も受け取っていないオファーで「受付を締める」を
+ *    押すと配信数は0になる。下限を1のままにすると、ダイヤルは範囲の外の「0」ではなく「1」に印を付けて描き
+ *    （実際と違う値を指して見える・店-04 と同じ種類の症状）、▲も押せなかった。
  */
-const useOfferChange = (action: OfferAction) => {
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
-
-  const send = async (body: Record<string, unknown>): Promise<Outcome> => {
-    const result = await callApi(`POST /api/store/offers/current/${action}` as const, { body });
-    if (!isFailure(result)) {
-      setFailure(null);
-      return "ok";
-    }
-    // 画面は移らず、入れた内容もそのまま（設計書「入力の誤りの出し方」の規則3）。
-    setFailure(result);
-    return result.error?.kind === "offer_ended" ? "ended" : "refused";
+const capacityRange = (offer: { capacity: number; remaining: number }) => {
+  const sold = Math.max(0, offer.capacity - offer.remaining);
+  return {
+    sold,
+    min: Math.min(offer.capacity, Math.max(OFFER_CAPACITY_MIN, sold)),
+    max: Math.max(offer.capacity, offer.capacity + (OFFER_CAPACITY_MAX - offer.remaining)),
   };
-
-  return { failure, send };
 };
 
-type Change = ReturnType<typeof useOfferChange>;
-
-/** 公開し直し（入口 `POST /api/store/offers`）。クーポンを選び直したときだけ、止めたあとに呼ぶ。 */
-const useRepublish = () => {
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
-
-  const send = async (body: Record<string, unknown>): Promise<boolean> => {
-    const result = await callApi("POST /api/store/offers", { body });
-    setFailure(isFailure(result) ? result : null);
-    return !isFailure(result);
-  };
-
-  return { failure, send };
-};
-
-/** 目に出さない1操作ぶんの欄とボタン（キーボード・読み上げ・受け入れ検査の受け口）。 */
-const HiddenControl = ({
-  action,
-  inputId,
-  testId,
-  label,
-  button,
-  type,
-  min,
-  max,
-  value,
-  onChange,
-}: {
-  action: OfferAction;
-  inputId: string;
-  testId: string;
-  label: string;
-  button: string;
-  type: "number" | "time";
-  min?: number;
-  max?: number;
-  value: string;
-  onChange: (next: string) => void;
-}) => (
-  <div className="store-sr-only">
-    <label htmlFor={inputId}>{label}</label>
-    <input
-      id={inputId}
-      data-testid={testId}
-      type={type}
-      inputMode={type === "number" ? "numeric" : undefined}
-      min={min}
-      max={max}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
-    <button type="submit" data-testid={`btn-${action}`}>
-      {button}
-    </button>
-  </div>
-);
-
-/** 今の値と次の値（変えたときだけ矢印つき）。 */
-const NextValue = ({ now, next, unit }: { now: string; next: string | null; unit: string }) => (
-  <p className={next === null ? "store-tune__delta" : "store-tune__delta store-tune__delta--changed"}>
-    <span>
-      今 {now}
-      {unit}
-    </span>
-    {next === null ? null : (
-      <>
-        <span className="store-tune__arrow" aria-hidden="true">
-          →
-        </span>
-        <strong>
-          {next}
-          {unit}
-        </strong>
-      </>
-    )}
-  </p>
-);
-
 /**
- * 残り（店がいちばん見る数）。操作できない値なので、「数を変える」の見出しの右に**1つだけ**置く。
- * ⚠️ `offer-remaining` の名前で出す——店が打つ欄は置かない（基準 18.15）。
+ * 見せるクーポンの選択。`touched` は札に触って、まだ送っていない間だけ true。`seenKey` は最後に合わせた
+ * サーバーの値（番号を「,」でつないだもの）。
  */
-const Remaining = ({ remaining }: { remaining: number }) => (
-  <div className="store-remaining" data-testid="offer-remaining">
-    <span className="store-remaining__label">残り</span>
-    <span className="store-remaining__value">
-      {remaining}
-      <span className="store-remaining__unit">組</span>
-    </span>
-  </div>
-);
+type CouponPick = { ids: string[]; touched: boolean; seenKey: string };
 
-/**
- * 見せるクーポン——登録してある全部を横並びの札にして、押して選ぶ。
- * ⚠️ 受け入れ検査 19.11 が「カードの中に `input[type='checkbox']` が0個」を見るので、
- *    札は `<button role="checkbox" aria-checked>`。公開のフォームの札（PublishForm）と同じ見た目。
- */
-const CouponToggles = ({
-  coupons,
-  selected,
-  changed,
-  onToggle,
-}: {
-  coupons: OfferPanelCoupon[];
-  selected: string[];
-  changed: boolean;
-  onToggle: (id: string) => void;
-}) => (
-  <div className={changed ? "store-tune__coupons store-tune__dial--changed" : "store-tune__coupons"} role="group" aria-labelledby="offer-coupons-label">
-    <div className="store-tune__coupons-head">
-      <p className="store-label" id="offer-coupons-label">
-        見せるクーポン
-      </p>
-      <p className="store-note">{changed ? "選び直しは「更新する」で送ります" : "押して選ぶ・0個でもよい"}</p>
-    </div>
-    {coupons.length === 0 ? (
-      <p className="store-empty store-empty--coupons">
-        クーポンの登録はありません。
-        <a href="/store/coupons">クーポンを作る</a>
-      </p>
-    ) : (
-      <div className="store-coupons">
-        {coupons.map((coupon) => {
-          const on = selected.includes(coupon.id);
-          return (
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={on}
-              className={on ? "store-coupon store-coupon--toggle store-coupon--on" : "store-coupon store-coupon--toggle"}
-              data-testid={`offer-coupon-${coupon.id}`}
-              key={coupon.id}
-              onClick={() => onToggle(coupon.id)}
-            >
-              <span className="store-coupon__check" aria-hidden="true">
-                {on ? "✓" : ""}
-              </span>
-              <span className="store-coupon__body">
-                <span className="store-coupon__name">{coupon.name}</span>
-                {coupon.note === "" ? null : <span className="store-coupon__note">{coupon.note}</span>}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    )}
-    {coupons.length > 0 && selected.length === 0 ? <p className="store-note">クーポンを見せないオファーとして公開しています。</p> : null}
-  </div>
-);
-
-export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
+export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props) => {
   const stop = useOfferChange("stop");
   const add = useOfferChange("add");
   const reduce = useOfferChange("reduce");
   const partyMaxChange = useOfferChange("party-max");
   const untilChange = useOfferChange("until");
-  const republish = useRepublish();
+  const couponsChange = useOfferChange("coupons");
 
   // 打った（回した）値。空欄は「変えていない」。⚠️ 丸めない・範囲へ寄せない（断られた値をそのまま残す）
   const [addCount, setAddCount] = useState("");
   const [reduceCount, setReduceCount] = useState("");
   const [partyMax, setPartyMax] = useState("");
   const [until, setUntil] = useState("");
-  /** 選んだクーポン。初めは今見せているもの */
-  const [couponIds, setCouponIds] = useState<string[]>(() => offer.coupons.map((coupon) => coupon.id));
+  // 選んだクーポン。初めは今見せているもの。**札に触っていない間は、取り直しのたびにサーバーの今の値へ合わせる**
+  // （2026-09-25 のレビュー）。選び直しが同じオファーのままになった（不具合-03）ので、取り直しでカードは作り直されない。
+  // 描き始めの1回だけで作っていたときは、別の端末で選び直されても古い選択が残り、触っていないのに「1 項目を変えます」が
+  // 出て、そのまま「更新する」を押すと別の端末の選び直しを黙って戻していた。
+  const serverCouponIds = offer.coupons.map((coupon) => coupon.id);
+  const serverCouponKey = serverCouponIds.join(",");
+  const [couponPick, setCouponPick] = useState<CouponPick>(() => ({ ids: serverCouponIds, touched: false, seenKey: serverCouponKey }));
+  if (couponPick.seenKey !== serverCouponKey) {
+    // 描く途中で合わせる（props が変わったときに state を合わせる React の形。effect で後から直すと、古い選択で1回描く）
+    setCouponPick((current) => ({ ids: current.touched ? current.ids : serverCouponIds, touched: current.touched, seenKey: serverCouponKey }));
+  }
+  const couponIds = couponPick.ids;
   /** 「更新する」を押したが、変えたところが無かった */
   const [nothingToSend, setNothingToSend] = useState(false);
-  /** 残りが 0 組なので、クーポンを変えて公開し直せない（配信数の下限を割る） */
-  const [cannotRepublish, setCannotRepublish] = useState(false);
   const [sending, setSending] = useState(false);
+  /** 「公開を止める」の確かめを出している */
+  const [askingStop, setAskingStop] = useState(false);
 
-  const nowUntil = timeInJst(offer.untilAt);
-  const publishedAt = timeInJst(offer.publishedAt);
-  const latestUntil = timeInJst(offer.latestUntil);
+  const range = capacityRange(offer);
 
   // ダイヤルが指す値。配信数は「今の配信数 ＋ 追加 − 減らす」——1つのダイヤルを add と reduce の2つの
   // 入口へ振り分ける（増やせば add・減らせば reduce）。裏の欄に直接打った値もここへ合流する。
@@ -294,114 +148,82 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
 
   const capacityChanged = addCount !== "" || reduceCount !== "";
   const partyChanged = partyMax !== "" && partyMax !== String(offer.partyMax);
-  const untilChanged = until !== "" && until !== nowUntil;
-  const couponsChanged = !sameIds(
-    couponIds,
-    offer.coupons.map((coupon) => coupon.id),
-  );
+  const untilChanged = until !== "" && until !== timeInJst(offer.untilAt);
+  const couponsChanged = !sameIds(couponIds, serverCouponIds);
+  const pendingCount = [capacityChanged, partyChanged, untilChanged, couponsChanged].filter(Boolean).length;
 
-  const clearNotes = () => {
-    setNothingToSend(false);
-    setCannotRepublish(false);
-  };
   const dialCapacity = (next: string) => {
     const delta = Number(next) - offer.capacity;
     setAddCount(delta > 0 ? String(delta) : "");
     setReduceCount(delta < 0 ? String(-delta) : "");
-    clearNotes();
+    setNothingToSend(false);
   };
   const dialPartyMax = (next: string) => {
     setPartyMax(next);
-    clearNotes();
+    setNothingToSend(false);
   };
   const toggleCoupon = (id: string) => {
-    setCouponIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
-    clearNotes();
+    setCouponPick((current) => {
+      const ids = current.ids.includes(id) ? current.ids.filter((value) => value !== id) : [...current.ids, id];
+      // 触ってサーバーの値と同じに戻したら、また取り直しに合わせる側へ戻す
+      return { ...current, ids, touched: !sameIds(ids, serverCouponIds) };
+    });
+    setNothingToSend(false);
   };
 
-  const ctxCount = (field: string): RefusalContext => ({ field, min: OFFER_CAPACITY_MIN, max: OFFER_CAPACITY_MAX, remaining: offer.remaining });
+  const ctxCount = (field: string): RefusalContext => ({ field, min: OFFER_CAPACITY_MIN, max: OFFER_CAPACITY_MAX, remaining: offer.remaining, sold: range.sold });
   const ctxParty: RefusalContext = { field: "何名まで", min: OFFER_PARTY_MAX_MIN, max: OFFER_PARTY_MAX_MAX };
-  // `until_in_past` は入れた時刻を、`until_over_window` は最長の時刻を文に使う（domain/texts）。
-  const ctxUntil: RefusalContext = { field: "何時まで", input: until, latest: latestUntil };
 
-  /** 1操作ぶんを送る。通ったらその欄を空に戻し、ホームを取り直す。終わっていてもホームを取り直す（基準 19.12）。 */
-  const sendOne = async (change: Change, body: Record<string, unknown>, reset: () => void): Promise<Outcome> => {
+  /** 1操作ぶんを送る。通ったらその欄を空に戻す。 */
+  const sendOne = async (change: OfferChange, body: Record<string, unknown>, reset: () => void): Promise<Outcome> => {
     const outcome = await change.send(body);
     if (outcome === "ok") reset();
     return outcome;
   };
+  /** 通ったか、終わっていたらホームを取り直す（基準 19.12）。 */
   const afterOne = (outcome: Outcome) => {
     if (outcome !== "refused") onChanged();
   };
+  const submitWith = (run: () => Promise<Outcome>) => (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void run().then(afterOne);
+  };
 
   /** 目に出さない1操作ずつの送信（キーボード・読み上げ・受け入れ検査）。 */
-  const submitAdd = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void sendOne(add, { count: numberToSend(addCount) }, () => setAddCount("")).then(afterOne);
-  };
-  const submitReduce = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void sendOne(reduce, { count: numberToSend(reduceCount) }, () => setReduceCount("")).then(afterOne);
-  };
-  const submitPartyMax = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void sendOne(partyMaxChange, { partyMax: numberToSend(partyMax) }, () => setPartyMax("")).then(afterOne);
-  };
-  const submitUntil = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void sendOne(untilChange, { until }, () => setUntil("")).then(afterOne);
-  };
+  const submitAdd = submitWith(() => sendOne(add, { count: numberToSend(addCount) }, () => setAddCount("")));
+  const submitReduce = submitWith(() => sendOne(reduce, { count: numberToSend(reduceCount) }, () => setReduceCount("")));
+  const submitPartyMax = submitWith(() => sendOne(partyMaxChange, { partyMax: numberToSend(partyMax) }, () => setPartyMax("")));
+  const submitUntil = submitWith(() => sendOne(untilChange, { until }, () => setUntil("")));
 
-  /**
-   * クーポンを選び直したときの「更新する」——公開したまま変える入口は無いので（基準 19.11）、
-   * **止めてから、同じ内容にクーポンを載せて公開し直す**（どちらも既存の入口）。
-   * 配信数には**今の残り（＋ダイヤルの差）**を入れる——公開し直すと残りは配信数から数え直されるので、
-   * こうして残りを守る。何名まで・何時までもダイヤルと欄の値をそのまま載せる。
-   * 止めたあとに公開し直しが断られたら、ホームを取り直す（カードは消え、前回の値が入った公開の
-   * フォームに変わる）。
-   */
-  const republishWithCoupons = async () => {
-    const nextCapacity = offer.remaining + capacityDelta;
-    if (nextCapacity < OFFER_CAPACITY_MIN) {
-      // 止めてから断られると戻れないので、これだけは送る前に見る
-      setCannotRepublish(true);
-      return;
-    }
+  /** 「受付を締める」——残りの数だけ減らす（店-09）。 */
+  const closeIntake = () => {
     setSending(true);
-    const stopped = await stop.send({});
-    if (stopped === "refused") {
+    void sendOne(reduce, { count: offer.remaining }, () => setReduceCount("")).then((outcome) => {
       setSending(false);
-      return;
-    }
-    if (stopped === "ok") {
-      await republish.send({
-        couponIds,
-        capacity: nextCapacity,
-        partyMax: numberToSend(partyTarget),
-        until: untilChanged ? until : nowUntil,
-      });
-    }
-    setSending(false);
-    onChanged();
+      afterOne(outcome);
+    });
+  };
+
+  /** 「公開を止める」を確かめたあと（店-03）。 */
+  const confirmStop = () => {
+    setAskingStop(false);
+    void stop.send({}).then(afterOne);
   };
 
   /**
-   * 「更新する」——変えたものだけを、既存の4つの入口へ**順に**送る（新しい入口は作らない）。
+   * 「更新する」——変えたものだけを、公開中の5つの入口へ**順に**送る。
    * 断られた操作の文はその操作の欄の下に残り、通った操作の欄は空に戻る。
    * 全部済んでから1回だけホームを取り直す。途中でオファーが終わっていたら、そこで止めて取り直す。
-   * クーポンを選び直していれば、4つの入口は使わず、止めて公開し直す（上の `republishWithCoupons`）。
+   * クーポンは差し替えの入口の1文（同じオファーのまま・不具合-03）。
    */
   const applyAll = async () => {
-    if (couponsChanged) {
-      setNothingToSend(false);
-      await republishWithCoupons();
-      return;
-    }
     const steps: Array<() => Promise<Outcome>> = [];
     if (addCount !== "") steps.push(() => sendOne(add, { count: numberToSend(addCount) }, () => setAddCount("")));
     if (reduceCount !== "") steps.push(() => sendOne(reduce, { count: numberToSend(reduceCount) }, () => setReduceCount("")));
     if (partyChanged) steps.push(() => sendOne(partyMaxChange, { partyMax: numberToSend(partyMax) }, () => setPartyMax("")));
     if (untilChanged) steps.push(() => sendOne(untilChange, { until }, () => setUntil("")));
+    // 通ったら「送っていない選択」ではなくなる——次の取り直しからサーバーの値に合わせる（選択は送った値のまま待つ）
+    if (couponsChanged) steps.push(() => sendOne(couponsChange, { couponIds }, () => setCouponPick((current) => ({ ...current, touched: false }))));
     if (steps.length === 0) {
       setNothingToSend(true);
       return;
@@ -421,50 +243,36 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
     if (reload) onChanged();
   };
 
-  const pendingCount = [capacityChanged, partyChanged, untilChanged, couponsChanged].filter(Boolean).length;
-
   return (
     <section className="store-card store-card--accent store-offer" data-testid="offer-card">
       {/* いちばん上＝「向かっている客」の直下。止める操作を探させない */}
       <div className="store-card__head store-offer__head">
         <div className="store-offer__title">
           <h2>公開中のオファー</h2>
-          <span className="store-badge">
-            <span className="store-badge__dot" />
-            配信中
-          </span>
+          <OfferStatusBadge remaining={offer.remaining} />
         </div>
         <div className="store-offer__stop">
-          <button
-            type="button"
-            className="store-btn store-btn--danger"
-            data-testid="btn-stop"
-            onClick={() => {
-              void stop.send({}).then(afterOne);
-            }}
-          >
+          <button type="button" className="store-btn store-btn--danger" data-testid="btn-stop" aria-expanded={askingStop} onClick={() => setAskingStop(true)}>
             ■ 公開を止める
           </button>
         </div>
       </div>
+      {askingStop ? <StopConfirm arriving={arriving} onConfirm={confirmStop} onCancel={() => setAskingStop(false)} /> : null}
       <FormMessage failure={stop.failure} />
 
       <div className="store-offer__body">
-        {/* 数を変える札が主役——回して決めて、「更新する」で一括。残りは見出しの右に1つだけ */}
+        {/* 回して決めて、「更新する」で一括。残りと「受付を締める」はいちばん上に */}
         <div className="store-tune">
-          <div className="store-tune__head">
-            <div className="store-tune__title">
-              <h3>数を変える</h3>
-              <p className="store-note">回して決めて、最後に「更新する」で一度に送ります</p>
-            </div>
-            <Remaining remaining={offer.remaining} />
-          </div>
+          <Remaining remaining={offer.remaining} onCloseIntake={closeIntake} sending={sending} />
+          {offer.remaining === 0 ? <p className="store-note store-offer__full">配信数を増やすと、また客に出ます。</p> : null}
 
           <div className="store-tune__dials">
-            <div className={capacityChanged ? "store-tune__dial store-tune__dial--changed" : "store-tune__dial"}>
+            <div className={capacityChanged ? "store-tune__dial store-tune__dial--changed" : "store-tune__dial"} data-testid="dial-capacity">
               <p className="store-label">配信数</p>
-              <Wheel min={OFFER_CAPACITY_MIN} max={OFFER_CAPACITY_MAX} value={String(capacityTarget)} onChange={dialCapacity} unit="組" size="lg" />
-              <NextValue now={String(offer.capacity)} next={capacityChanged ? String(capacityTarget) : null} unit=" 組" />
+              <Wheel min={range.min} max={range.max} value={String(capacityTarget)} onChange={dialCapacity} unit="組" size="lg" />
+              {/* ダイヤルは今の値を指しているので、「今 → 次」は変えたときだけ出す（縦を詰める・店-06） */}
+              {capacityChanged ? <NextValue now={String(offer.capacity)} next={String(capacityTarget)} unit=" 組" /> : null}
+              {range.sold > 0 ? <p className="store-note store-tune__floor">受け取り済みの {range.sold} 組より下げられません</p> : null}
               <form className="store-tune__form" data-testid="form-add" noValidate onSubmit={submitAdd}>
                 <HiddenControl
                   action="add"
@@ -478,7 +286,7 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
                   value={addCount}
                   onChange={(next) => {
                     setAddCount(next);
-                    clearNotes();
+                    setNothingToSend(false);
                   }}
                 />
                 <FieldMessage name="count" failure={add.failure} ctx={ctxCount("追加で出す組数")} />
@@ -497,7 +305,7 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
                   value={reduceCount}
                   onChange={(next) => {
                     setReduceCount(next);
-                    clearNotes();
+                    setNothingToSend(false);
                   }}
                 />
                 <FieldMessage name="count" failure={reduce.failure} ctx={ctxCount("減らす組数")} />
@@ -508,7 +316,7 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
             <div className={partyChanged ? "store-tune__dial store-tune__dial--changed" : "store-tune__dial"}>
               <p className="store-label">何名まで</p>
               <Wheel min={OFFER_PARTY_MAX_MIN} max={OFFER_PARTY_MAX_MAX} value={partyTarget} onChange={dialPartyMax} unit="名" size="lg" />
-              <NextValue now={String(offer.partyMax)} next={partyChanged ? partyMax : null} unit=" 名" />
+              {partyChanged ? <NextValue now={String(offer.partyMax)} next={partyMax} unit=" 名" /> : null}
               <form className="store-tune__form" data-testid="form-party-max" noValidate onSubmit={submitPartyMax}>
                 <HiddenControl
                   action="party-max"
@@ -526,48 +334,29 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
                 <FormMessage failure={partyMaxChange.failure} fieldNames={["partyMax"]} ctx={ctxParty} />
               </form>
             </div>
-
-            {/* 「何時まで」——時刻は回すより打つ方が早いので欄のまま。欄の横に**公開した時刻と最長の時刻**を
-                出す（基準 19.11 の後半）——時分だけの入力では、公開した時刻より前の時分が翌日と読まれる
-                ことを見分けられないので、範囲を目で確かめられるようにする。 */}
-            <form
-              className={untilChanged ? "store-tune__form store-tune__until store-tune__dial--changed" : "store-tune__form store-tune__until"}
-              data-testid="form-until"
-              noValidate
-              onSubmit={submitUntil}
-            >
-              <label className="store-label" htmlFor="offer-until">
-                何時まで
-              </label>
-              <input
-                id="offer-until"
-                data-testid="field-until"
-                className="store-tune__time"
-                type="time"
-                value={until}
-                onChange={(event) => {
-                  setUntil(event.target.value);
-                  clearNotes();
-                }}
-              />
-              <NextValue now={nowUntil} next={untilChanged ? until : null} unit="" />
-              <p className="store-note">
-                {publishedAt} 公開・最長 {latestUntil} まで
-              </p>
-              <button type="submit" className="store-sr-only" data-testid="btn-until">
-                何時までを変える
-              </button>
-              <FieldMessage name="until" failure={untilChange.failure} ctx={ctxUntil} />
-              <FormMessage failure={untilChange.failure} fieldNames={["until"]} ctx={ctxUntil} />
-            </form>
           </div>
+
+          <OfferUntilTimer
+            offer={offer}
+            value={until}
+            changed={untilChanged}
+            failure={untilChange.failure}
+            onChange={(next) => {
+              setUntil(next);
+              setNothingToSend(false);
+            }}
+            onSubmit={submitUntil}
+          />
 
           <CouponToggles coupons={couponsToShow(coupons, offer.coupons)} selected={couponIds} changed={couponsChanged} onToggle={toggleCoupon} />
 
-          <div className="store-tune__foot">
-            <p className={pendingCount === 0 ? "store-note" : "store-tune__pending"}>
-              {pendingCount === 0 ? "変えたところはありません" : `${pendingCount} 項目を変えます`}
-            </p>
+          {/* 変えたところがある間だけ、画面の下に貼り付く（スマホでも押せる・店-06） */}
+          <div
+            className={pendingCount === 0 ? "store-tune__foot" : "store-tune__foot store-tune__foot--sticky"}
+            data-testid="offer-update-bar"
+            data-sticky={String(pendingCount > 0)}
+          >
+            <p className={pendingCount === 0 ? "store-note" : "store-tune__pending"}>{pendingCount === 0 ? "変えたところはありません" : `${pendingCount} 項目を変えます`}</p>
             <button
               type="button"
               className="store-btn store-btn--primary store-tune__apply"
@@ -580,22 +369,12 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
               {sending ? "送っています…" : "更新する"}
             </button>
           </div>
-          {couponsChanged ? (
-            <p className="store-note">
-              クーポンを変えるので、いったん止めて同じ内容で公開し直します（残り {Math.max(0, offer.remaining + capacityDelta)} 組はそのまま・受け取られた数は 0 から数え直し・向かっている客はそのまま）。
-            </p>
-          ) : null}
           {nothingToSend ? <p className="store-note">ダイヤルを回すか、時刻を入れるか、クーポンを選び直してから押してください。</p> : null}
-          {cannotRepublish ? (
-            <p className="msg" role="alert">
-              残りが 0 組なので、クーポンを変えて公開し直せません。配信数を足すか、公開を止めてから新しく公開してください。
-            </p>
-          ) : null}
-          <FormMessage failure={republish.failure} />
+          <FormMessage failure={couponsChange.failure} />
         </div>
 
         <div className="store-offer__aside">
-          <OfferTrend capacity={offer.capacity} remaining={offer.remaining} points={trend} />
+          <OfferTrend capacity={offer.capacity} remaining={offer.remaining} trend={trend} />
         </div>
       </div>
     </section>

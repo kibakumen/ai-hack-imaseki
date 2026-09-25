@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { canComplete } from "../../lib/domain/reservation";
-import { arrivalRows, COMPLETED_ROW_VIEW_MS, STORE_CANCELLED_ROW_VIEW_MS, type ArrivalRowInput } from "../../lib/domain/storeHome";
+import { arrivalRows, COMPLETED_ROW_VIEW_MS, publishPrefill, STORE_CANCELLED_ROW_VIEW_MS, type ArrivalRowInput, type LastOffer } from "../../lib/domain/storeHome";
 
 const MIN = 60_000;
 const T0 = new Date("2026-09-22T06:00:00.000Z");
@@ -157,5 +157,37 @@ describe("canComplete", () => {
   it("20.24 止められている店では、確保中でも期限切れでもできない", () => {
     expect(canComplete(target({ storeBanned: true }), at(5))).toBe(false);
     expect(canComplete(target({ storeBanned: true }), at(25))).toBe(false);
+  });
+});
+
+// 2026-09-25 監査の指摘 不具合-09: 前回の「何時まで」から日付を捨てて時分だけを今から解き直していたので、
+// 先週金曜の「18:00まで」が、今が 06:00〜18:00 の間なら今日の 18:00 として初めの値に入っていた。
+describe("publishPrefill の「何時まで」（基準 17.18・17.19）", () => {
+  /** 日本時間の時刻（dayOffset は 2026-09-22 からの日数） */
+  const jst = (hhmm: string, dayOffset = 0): Date => {
+    const [h, m] = hhmm.split(":").map(Number);
+    return new Date(Date.UTC(2026, 8, 22 + dayOffset, h - 9, m));
+  };
+  const last = (untilAt: Date, over: Partial<LastOffer> = {}): LastOffer => ({ initialCapacity: 3, capacity: 3, partyMax: 4, untilAt, couponIds: [], ...over });
+  const untilAt = (lastUntil: Date, now: Date, over: Partial<LastOffer> = {}) => publishPrefill({ lastOffer: last(lastUntil, over), coupons: [], now }).until;
+
+  it("前回が7日前の 18:00・今が 17:30 → 空欄（時分だけなら今日の 18:00 と読めてしまう）", () => {
+    expect(untilAt(jst("18:00", -7), jst("17:30"))).toBeNull();
+  });
+
+  it("前回が昨日の 18:00・今が 06:00 → 空欄", () => {
+    expect(untilAt(jst("18:00", -1), jst("06:00"))).toBeNull();
+  });
+
+  it("前回の終わりがまだ先（今より後で12時間以内）なら、その時分が入る。ちょうど今・12時間を1分でも超えると空欄", () => {
+    expect(untilAt(jst("21:00"), jst("15:00"))).toBe("21:00");
+    expect(untilAt(jst("02:00", 1), jst("15:00"))).toBe("02:00");
+    expect(untilAt(jst("03:00", 1), jst("15:00"))).toBe("03:00");
+    expect(untilAt(jst("03:01", 1), jst("15:00"))).toBeNull();
+    expect(untilAt(jst("15:00"), jst("15:00"))).toBeNull();
+  });
+
+  it("店-05: 前回が「何時まで」を入れずに公開した（自動の終わり）なら空欄——自動の時刻を店が決めた時刻として持ち越さない", () => {
+    expect(untilAt(jst("21:00"), jst("15:00"), { untilSet: false })).toBeNull();
   });
 });

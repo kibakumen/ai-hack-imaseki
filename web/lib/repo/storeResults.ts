@@ -12,14 +12,34 @@
 // ⚠️ 確保の表の別名は **`res`** で固定する（`r` は使わない・repo/reservations.ts の注）。
 //
 // ⚠️ 「今」は必ず呼ぶ側が束縛した値を渡す（実行者への契約: SQLite の datetime('now') は使わない）
-//    ——このファイルは時刻の比較を1つも持たないので、束縛する「今」も要らない。
+//    ——実績の読み取りは時刻の比較を1つも持たないので、束縛する「今」も要らない。「今日の動き」（下の
+//    `listOfferTrendCounts`・店-15）だけは今までの幅で切るので、呼ぶ側が束縛した「今」を受ける。
 
 import type { Deps } from "../ports";
+import { parseStringList } from "./d1";
 
 type Db = Deps["db"];
 
-/** オファー1件ぶんの、公開した時刻と「取得の結果に出た回数」（基準 23.2・23.7）。 */
-export type StoreOfferShownRow = { offerId: string; publishedAt: Date; shown: number };
+/**
+ * オファー1件ぶんの、公開した時刻と「取得の結果に出た回数」（基準 23.2・23.7）と、そのオファーの条件
+ * （2026-09-25 監査の指摘 店-13: 次に何組・何名まで・どのクーポンで出すかを決める材料として行に載せる）。
+ */
+export type StoreOfferShownRow = {
+  offerId: string;
+  publishedAt: Date;
+  shown: number;
+  /** 終わった（今の）配信数と、公開のときに入れた配信数 */
+  capacity: number;
+  initialCapacity: number;
+  partyMax: number;
+  untilAt: Date;
+  /** 店が「何時まで」を入れたか（店-05） */
+  untilSet: boolean;
+  endedAt: Date | null;
+  /** 保存されている終わった理由（`stopped`・`banned`・終わっていなければ null）。時刻で終わったかは手続きが導く */
+  endReason: string | null;
+  couponIds: string[];
+};
 
 /** 確保1件ぶんの、どのオファーのものかと状態を導くのに要る所だけ（数えるのは手続き側）。 */
 export type OfferReservationStateRow = { offerId: string; status: string; expiresAt: Date };
@@ -46,7 +66,7 @@ export type OfferReservationStateRow = { offerId: string; status: string; expire
  * 同じ取得が同じ店を2行持つことは無いが、数えるのは**取得の回数**なので `DISTINCT fetch_id` で括る。
  */
 const OFFER_SHOWN_SQL =
-  `SELECT o.id AS offer_id, o.published_at,` +
+  `SELECT o.id AS offer_id, o.published_at, o.capacity, o.initial_capacity, o.party_max, o.until_at, o.until_set, o.ended_at, o.end_reason, o.coupon_ids,` +
   ` (SELECT COUNT(DISTINCT fi.fetch_id) FROM fetch_items fi JOIN fetch_logs fl ON fl.id = fi.fetch_id` +
   `   WHERE fi.store_id = o.store_id` +
   `     AND fl.at >= o.published_at` +
@@ -64,6 +84,14 @@ export const listOfferShownCounts = async (db: Db, storeId: string): Promise<Sto
     offerId: row.offer_id as string,
     publishedAt: new Date(row.published_at as string),
     shown: Number(row.shown ?? 0),
+    capacity: Number(row.capacity ?? 0),
+    initialCapacity: Number(row.initial_capacity ?? 0),
+    partyMax: Number(row.party_max ?? 0),
+    untilAt: new Date(row.until_at as string),
+    untilSet: Number(row.until_set ?? 1) === 1,
+    endedAt: row.ended_at ? new Date(row.ended_at as string) : null,
+    endReason: (row.end_reason as string | null) ?? null,
+    couponIds: parseStringList(row.coupon_ids),
   }));
 };
 
@@ -77,4 +105,51 @@ export const listReservationStatesOfStore = async (db: Db, storeId: string): Pro
     status: row.status as string,
     expiresAt: new Date(row.expires_at as string),
   }));
+};
+
+// ---------- 公開中のオファーの「今日の動き」（2026-09-25 監査の指摘 店-15） ----------
+
+/**
+ * 時刻の列を、起点からの区切りの番号にする式（整数の割り算・区切りの長さは秒で渡す）。
+ * `strftime('%s', …)` は ISO 8601（ミリ秒と `Z` つき）を秒へ直す（SQLite の日時の関数・`julianday` の小数を避ける）。
+ * ⚠️ 束縛した数は実数として渡ることがある（JS の数）ので、両方を INTEGER に直してから割る——実数のままだと
+ *    割り算が小数を返し、区切りの番号が 0.4 のような値になって、どの区切りにも当たらない。
+ */
+const bucketOf = (column: string, originSecondsPlaceholder: string, bucketSecondsPlaceholder: string): string =>
+  `((CAST(strftime('%s', ${column}) AS INTEGER) - CAST(${originSecondsPlaceholder} AS INTEGER)) / CAST(${bucketSecondsPlaceholder} AS INTEGER))`;
+
+/**
+ * 公開中のオファーが**結果に出た回数**を、区切りごとに数える（実績の `shown` と同じ数え方——その店が出た取得の
+ * 回数・公開した時刻から今まで）。1つの店が同時に持てる公開中のオファーは1つだけなので、時刻で切れば
+ * そのオファーのぶんになる（上の OFFER_SHOWN_SQL の注）。
+ */
+const SHOWN_BUCKETS_SQL =
+  `SELECT ${bucketOf("fl.at", "?2", "?3")} AS bucket, COUNT(DISTINCT fi.fetch_id) AS n` +
+  ` FROM fetch_items fi JOIN fetch_logs fl ON fl.id = fi.fetch_id` +
+  ` WHERE fi.store_id = ?1 AND fl.at >= ?4 AND fl.at <= ?5` +
+  ` GROUP BY bucket`;
+
+/** 公開中のオファーで作られた確保（受け取り）を、区切りごとに数える（実績の `received` と同じ・基準 23.3）。 */
+const RECEIVED_BUCKETS_SQL = `SELECT ${bucketOf("res.created_at", "?2", "?3")} AS bucket, COUNT(*) AS n FROM reservations res WHERE res.offer_id = ?1 GROUP BY bucket`;
+
+export type TrendCounts = { shown: Array<{ bucket: number; count: number }>; received: Array<{ bucket: number; count: number }> };
+
+const toBucketCounts = (result: { results?: unknown[] }): Array<{ bucket: number; count: number }> =>
+  ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({ bucket: Number(row.bucket ?? 0), count: Number(row.n ?? 0) }));
+
+/**
+ * 公開中のオファーの、区切りごとの結果に出た回数と受け取り（店のホームが30秒ごとに読む）。
+ * 起点（`originIso`）と区切りの長さ（`bucketMs`）は domain/offerTrend が決めて渡す。
+ */
+export const listOfferTrendCounts = async (
+  db: Db,
+  input: { storeId: string; offerId: string; publishedAtIso: string; nowIso: string; originIso: string; bucketMs: number },
+): Promise<TrendCounts> => {
+  const originSeconds = Math.floor(new Date(input.originIso).getTime() / 1000);
+  const bucketSeconds = Math.floor(input.bucketMs / 1000);
+  const [shown, received] = await Promise.all([
+    db.prepare(SHOWN_BUCKETS_SQL).bind(input.storeId, originSeconds, bucketSeconds, input.publishedAtIso, input.nowIso).all(),
+    db.prepare(RECEIVED_BUCKETS_SQL).bind(input.offerId, originSeconds, bucketSeconds).all(),
+  ]);
+  return { shown: toBucketCounts(shown), received: toBucketCounts(received) };
 };

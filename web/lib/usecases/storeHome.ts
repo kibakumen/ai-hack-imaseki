@@ -7,6 +7,7 @@
 //    下の3か所の ⚠️ が、その差し込み口（ほかの行は触らずに済む形にしてある）。
 
 import { arrivalRows, ARRIVALS_WINDOW_MS, missingProfileFields, type ArrivalView, type OfferView, type PublishPrefillView, type StoreStatusView } from "../domain/storeHome";
+import type { TrendBucket } from "../domain/offerTrend";
 import type { Deps } from "../ports";
 import { listCoupons, type CouponRow } from "../repo/coupons";
 import { insertExpiredEvents } from "../repo/logs";
@@ -23,6 +24,8 @@ export type StoreHome = {
   missingProfile: string[];
   offer: OfferView | null;
   publishPrefill: PublishPrefillView;
+  /** 公開中のオファーの「今日の動き」（15分ごと・店-15）。公開中が無ければ空 */
+  trend: TrendBucket[];
   coupons: CouponRow[];
   arrivals: ArrivalView[];
 };

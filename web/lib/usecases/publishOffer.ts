@@ -21,6 +21,20 @@ export type PublishOfferResult =
 /** 「何時まで」の3つの分かれ方を、項目の断りの語へ直す（設計書「「何時まで」の入力と解釈」の表）。 */
 const untilRefusal = (kind: "in_past" | "over_window"): PublishOfferResult => ({ ok: false, kind: "invalid_input", fields: [{ name: "until", reason: kind }] });
 
+type PublishUntil = { ok: true; at: Date; set: boolean } | { ok: false; refusal: PublishOfferResult };
+
+/**
+ * 公開の「何時まで」を時点へ直す。入れなかったら公開から12時間（置ける最長の時刻）で自動で終わる（2026-09-25
+ * 監査の指摘 店-05 の案A・本人の指摘「公開終了時間は未入力でも公開可・終了タイマーとして入れる温度感」）。
+ */
+const resolvePublishUntil = (input: string | null, now: Date): PublishUntil => {
+  if (input === null) return { ok: true, at: latestUntilOf(now), set: false };
+  const resolved = resolveUntil({ input, publishedAt: now, now });
+  if (!resolved) return { ok: false, refusal: { ok: false, kind: "invalid_input", fields: [{ name: "until", reason: "bad_format" }] } };
+  if (resolved.kind !== "ok") return { ok: false, refusal: untilRefusal(resolved.kind) };
+  return { ok: true, at: resolved.at, set: true };
+};
+
 export const publishOffer = async (deps: Deps, storeId: string, input: OfferPublishInput): Promise<PublishOfferResult> => {
   const now = deps.clock.now();
   const store = await findStorePublishState(deps.db, storeId);
@@ -35,10 +49,9 @@ export const publishOffer = async (deps: Deps, storeId: string, input: OfferPubl
     return { ok: false, kind: "profile_incomplete", fields: missing.map((name) => ({ name, reason: "required" as FieldReason })) };
   }
 
-  // 公開のときの起点は今（基準 17.5）。
-  const resolved = resolveUntil({ input: input.until, publishedAt: now, now });
-  if (!resolved) return { ok: false, kind: "invalid_input", fields: [{ name: "until", reason: "bad_format" }] };
-  if (resolved.kind !== "ok") return untilRefusal(resolved.kind);
+  // 公開のときの起点は今（基準 17.5）。入れなければ公開から12時間で自動で終わる（店-05 の案A）。
+  const until = resolvePublishUntil(input.until ?? null, now);
+  if (!until.ok) return until.refusal;
 
   // 店のものでないクーポンの番号は黙って落とす（並びは店のクーポンの順＝作った順）。
   const coupons = await listCoupons(deps.db, storeId);
@@ -52,7 +65,8 @@ export const publishOffer = async (deps: Deps, storeId: string, input: OfferPubl
     capacity: input.capacity,
     partyMax: input.partyMax,
     publishedAtIso,
-    untilAtIso: resolved.at.toISOString(),
+    untilAtIso: until.at.toISOString(),
+    untilSet: until.set,
     couponIds: chosen.map((coupon) => coupon.id),
   });
   // 入らなかった＝その店に公開中のオファーがもう在る（基準 17.9）。
@@ -68,10 +82,11 @@ export const publishOffer = async (deps: Deps, storeId: string, input: OfferPubl
       // 公開した時の残りは募集する組数と同じ（要件18の基準 18.10）。
       remaining: input.capacity,
       partyMax: input.partyMax,
-      untilAt: resolved.at.toISOString(),
+      untilAt: until.at.toISOString(),
       publishedAt: publishedAtIso,
       coupons: attached,
       latestUntil: latestUntilOf(now).toISOString(),
+      untilSet: until.set,
     },
   };
 };

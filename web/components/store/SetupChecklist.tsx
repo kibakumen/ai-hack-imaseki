@@ -3,6 +3,7 @@
 // 印だけを外す（何が済んでいて何が残っているかが一目で分かる・設計書「店の画面」の1）。
 //
 // 足りないかどうかの判断は入口（usecases/storeHome）が済ませている。ここは印を付けて並べるだけ。
+// 印は済み「✓」・未済「!」（2026-09-25 監査の指摘 店-14: それまでは印も見た目も無く、素の箇条書きだった）。
 
 export type SetupChecklistProps = {
   checklist: { license: boolean; card: boolean };
@@ -23,6 +24,9 @@ export const SetupChecklist = ({ checklist, missingProfile }: SetupChecklistProp
     <ul className="setup-checklist" data-testid="setup-checklist">
       {items.map((item) => (
         <li key={item.key} data-missing={String(item.missing)}>
+          <span className="setup-checklist__mark" aria-hidden="true">
+            {item.missing ? "!" : "✓"}
+          </span>
           {item.missing ? (
             <a href={item.href}>{item.label}を登録する</a>
           ) : (

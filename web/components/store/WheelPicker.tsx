@@ -23,6 +23,12 @@
 //
 // ⚠️ 中央へ寄せるのは `scrollTop` への代入で行う（`scrollTo` は環境によって持っていない）。
 //    滑らかさは CSS の `scroll-behavior` が持つ。
+//
+// ⚠️ **空欄は「—」で出す**（2026-09-25 監査の指摘 店-04 の案A）。初めて公開する店は初めの値が空（要件17の
+//    基準 17.21）。それまでは空欄も目盛りの0番目（=1）として大きく目立たせて描き、▲は押せなかった——1 を指して
+//    いるように見えるのに「配信数を入れてください」と断られた。今は印を付けずに「—」を出し、▲か▼を押すと
+//    最小値に入る。そして**値を決めるのは人が触ったスクロールだけ**（指・ホイール・キー）。プログラムが位置を
+//    合わせ直すスクロール（初めの値・外からの値の変化）では決めない。
 
 import { useEffect, useRef, type ChangeEvent, type CSSProperties } from "react";
 
@@ -38,6 +44,9 @@ const COMMIT_DELAY_MS = 120;
 
 /** 目盛りの並び（min から max まで1つ刻み）。 */
 const optionsOf = (min: number, max: number): number[] => Array.from({ length: max - min + 1 }, (_, i) => min + i);
+
+/** まだ選んでいない（空欄・数でない文字）。ダイヤルは「—」を出し、どの目盛りにも印を付けない。 */
+const isUnset = (value: string): boolean => value.trim() === "" || Number.isNaN(Number(value));
 
 /** 値が目盛りのどこに当たるか。空欄や範囲の外は、いちばん近い目盛りを指す。 */
 const indexOf = (options: number[], value: string): number => {
@@ -71,7 +80,10 @@ export const Wheel = ({ min, max, value, onChange, unit, size = "md" }: WheelPro
   const railRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollingRef = useRef(false);
+  /** 人がダイヤルに触ってから、そのスクロールが止まるまで true（指・ホイール・キー）。 */
+  const touchedRef = useRef(false);
   const selected = indexOf(options, value);
+  const unset = isUnset(value);
 
   // 外から値が変わったとき（初めの値・入口からの取り直し・キーボード入力・矢印）だけ中央へ寄せる。
   // 指で回している間は割り込まない。
@@ -88,48 +100,60 @@ export const Wheel = ({ min, max, value, onChange, unit, size = "md" }: WheelPro
     [],
   );
 
+  const markTouched = () => {
+    touchedRef.current = true;
+  };
+
   const handleScroll = () => {
     scrollingRef.current = true;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       scrollingRef.current = false;
+      const touched = touchedRef.current;
+      touchedRef.current = false;
       const rail = railRef.current;
-      if (!rail) return;
+      // ⚠️ **人が触っていないスクロールでは値を書き換えない**（上の useEffect が自分で寄せたぶん・店-04）。
+      //    これが無いと、21 と打って断られた店の画面が、寄せ直したときに 20 へ化け（入れた内容を消さない
+      //    決まりを、この部品が破る）、空欄の店の画面は勝手に 1 が入る。jsdom は本物のスクロールを持たない
+      //    ので、受け入れ検査では出ない壊れ方（WheelPicker.test.tsx が見る）。
+      if (!rail || !touched) return;
       const index = Math.min(options.length - 1, Math.max(0, Math.round(rail.scrollTop / ITEM_HEIGHT_PX)));
-      // ⚠️ **上の useEffect が自分で寄せたぶんで値を書き換えない**。止まった先が今指している目盛りと
-      //    同じなら、動かした人は居ない（外から寄せただけ）ので何もしない。
-      //    これが無いと、21 と打って断られた店の画面が、寄せ直したときに 20 へ化ける
-      //    （＝入れた内容を消さない決まりを、この部品が破る）。jsdom は本物のスクロールを
-      //    持たないので**受け入れ検査では出ない壊れ方**。空欄のときだけは、指で回して
-      //    いちばん小さい目盛りを選べるように、この見送りをしない。
-      if (value !== "" && index === selected) return;
       const next = options[index];
       if (next !== undefined && String(next) !== value) onChange(String(next));
     }, COMMIT_DELAY_MS);
   };
 
-  /** 上下の矢印。1目盛りずつ動かす（回すのが苦手な指でも、同じ値へ届く）。 */
+  /** 上下の矢印。1目盛りずつ動かす（回すのが苦手な指でも、同じ値へ届く）。空欄なら最小値に入る。 */
   const step = (delta: number) => {
-    const index = Math.min(options.length - 1, Math.max(0, selected + delta));
+    const index = unset ? 0 : Math.min(options.length - 1, Math.max(0, selected + delta));
     const next = options[index];
     if (next !== undefined && String(next) !== value) onChange(String(next));
   };
 
-  const className = size === "lg" ? "store-dial__window store-dial__window--lg" : "store-dial__window";
+  const className = ["store-dial__window", size === "lg" ? "store-dial__window--lg" : "", unset ? "store-dial__window--unset" : ""].filter(Boolean).join(" ");
 
   return (
     <div className={className} style={ITEM_HEIGHT_VAR} aria-hidden="true">
-      <button type="button" className="store-dial__step store-dial__step--up" tabIndex={-1} onClick={() => step(-1)} disabled={selected <= 0}>
+      <button type="button" className="store-dial__step store-dial__step--up" tabIndex={-1} onClick={() => step(-1)} disabled={!unset && selected <= 0}>
         ▲
       </button>
-      <div className="store-dial__rail" ref={railRef} onScroll={handleScroll}>
+      <div
+        className="store-dial__rail"
+        ref={railRef}
+        onScroll={handleScroll}
+        onPointerDown={markTouched}
+        onTouchStart={markTouched}
+        onWheel={markTouched}
+        onKeyDown={markTouched}
+      >
         {options.map((option) => (
-          <div key={option} className={options[selected] === option ? "store-dial__item store-dial__item--on" : "store-dial__item"}>
+          <div key={option} className={!unset && options[selected] === option ? "store-dial__item store-dial__item--on" : "store-dial__item"}>
             {option}
           </div>
         ))}
       </div>
       <div className="store-dial__marker">
+        {unset ? <span className="store-dial__placeholder">—</span> : null}
         <span className="store-dial__unit">{unit}</span>
       </div>
       <button
@@ -137,7 +161,7 @@ export const Wheel = ({ min, max, value, onChange, unit, size = "md" }: WheelPro
         className="store-dial__step store-dial__step--down"
         tabIndex={-1}
         onClick={() => step(1)}
-        disabled={selected >= options.length - 1}
+        disabled={!unset && selected >= options.length - 1}
       >
         ▼
       </button>

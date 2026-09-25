@@ -13,7 +13,7 @@ const storeResultsRoute = defineRoute({
   method: "GET",
   path: "/api/store/results",
   auth: "store",
-  handler: async ({ deps, ctx }) => respond("GET /api/store/results", { items: await storeResults(deps, ctx.storeId) }),
+  handler: async ({ deps, ctx }) => respond("GET /api/store/results", await storeResults(deps, ctx.storeId)),
 });
 
 export const storeResultsRoutes: RouteDefinition[] = [storeResultsRoute];

@@ -1,10 +1,11 @@
-// オファーの入口（設計書「入口（API）の一覧」の店の入口）。公開・停止と、公開中の4つの操作。
+// オファーの入口（設計書「入口（API）の一覧」の店の入口）。公開・停止と、公開中の5つの操作。
 // 2026-09-21 タスク20 が公開中の4つ（…/add・…/reduce・…/party-max・…/until）を足した
-// （`routes.ts` は触らずに済んだ）。
+// （`routes.ts` は触らずに済んだ）。2026-09-25 に5つ目の …/coupons（見せるクーポンの選び直し・
+// 監査の指摘 不具合-03 の案A）を足した。
 // 終わったオファーを再開する入口は無い（基準 17.15。入口の一覧そのものを構造の検査が見る）。
 
-import { offerCountSchema, offerPartyMaxSchema, offerPublishSchema, offerUntilSchema } from "../../schemas/offer";
-import { addOfferCount, changeOfferPartyMax, changeOfferUntil, reduceOfferCount, type ChangeOfferResult } from "../../usecases/changeOffer";
+import { offerCountSchema, offerCouponsSchema, offerPartyMaxSchema, offerPublishSchema, offerUntilSchema } from "../../schemas/offer";
+import { addOfferCount, changeOfferCoupons, changeOfferPartyMax, changeOfferUntil, reduceOfferCount, type ChangeOfferResult } from "../../usecases/changeOffer";
 import { publishOffer } from "../../usecases/publishOffer";
 import { stopOffer } from "../../usecases/stopOffer";
 import { respond } from "../respond";
@@ -39,7 +40,12 @@ const stopOfferRoute = defineRoute({
  * 公開中の変更の結果を応答へ。手続きが決めた形をそのまま載せる（入口で組み直さない）。
  * 形・範囲の誤りは 400、今の状態との衝突は 409（設計書「入力の断りの応答の形」・対応は http/refusals の表）。
  */
-type ChangeOfferRoute = "POST /api/store/offers/current/add" | "POST /api/store/offers/current/reduce" | "POST /api/store/offers/current/party-max" | "POST /api/store/offers/current/until";
+type ChangeOfferRoute =
+  | "POST /api/store/offers/current/add"
+  | "POST /api/store/offers/current/reduce"
+  | "POST /api/store/offers/current/party-max"
+  | "POST /api/store/offers/current/until"
+  | "POST /api/store/offers/current/coupons";
 
 const changeOfferResponse = (route: ChangeOfferRoute, result: ChangeOfferResult): RouteHandlerResult =>
   result.ok ? respond(route, { ok: true, offer: result.offer }) : refusal(result.kind, result.fields ? { fields: result.fields } : {});
@@ -76,4 +82,13 @@ const offerUntilRoute = defineRoute({
   handler: async ({ input, deps, ctx }) => changeOfferResponse("POST /api/store/offers/current/until", await changeOfferUntil(deps, ctx.storeId, input)),
 });
 
-export const offerRoutes: RouteDefinition[] = [publishOfferRoute, stopOfferRoute, addOfferRoute, reduceOfferRoute, offerPartyMaxRoute, offerUntilRoute];
+/** 見せるクーポンの選び直し（要件19の基準 19.11・2026-09-25 に改めた・監査の指摘 不具合-03）。 */
+const offerCouponsRoute = defineRoute({
+  method: "POST",
+  path: "/api/store/offers/current/coupons",
+  auth: "store",
+  input: offerCouponsSchema,
+  handler: async ({ input, deps, ctx }) => changeOfferResponse("POST /api/store/offers/current/coupons", await changeOfferCoupons(deps, ctx.storeId, input)),
+});
+
+export const offerRoutes: RouteDefinition[] = [publishOfferRoute, stopOfferRoute, addOfferRoute, reduceOfferRoute, offerPartyMaxRoute, offerUntilRoute, offerCouponsRoute];

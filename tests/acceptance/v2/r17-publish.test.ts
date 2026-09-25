@@ -69,6 +69,32 @@ describeTask("9", "公開と停止", () => {
     expect((await s.api.get("/api/store/home")).json.offer.untilAt).toBe(JST("02:00", 1));
   });
 
+  // 2026-09-25 監査の指摘 店-05 の案A（本人の指摘「公開終了時間は未入力でも公開可・終了タイマーとして入れる温度感」）。
+  // それまで「何時まで」は必須で、初めて公開する店は時刻を考えないと出せなかった。
+  it("17.24・17.25（2026-09-25 に足した） 何時までを入れずに公開でき、公開から12時間で自動で終わる（untilSet false）。あとから終了タイマーを入れられる。自動の終わりは次の公開の初めの値にしない", async () => {
+    ctx.clock.set(JST("15:00"));
+    const { until: _omitted, ...withoutUntil } = body();
+    const s = await approvedStore(ctx);
+    expect([200, 201]).toContain((await s.api.post("/api/store/offers", withoutUntil)).status);
+    expect((await s.api.get("/api/store/home")).json.offer).toMatchObject({ untilAt: JST("03:00", 1), untilSet: false });
+    expect((await s.api.post("/api/store/offers/current/until", { until: "22:00" })).status).toBe(200);
+    expect((await s.api.get("/api/store/home")).json.offer).toMatchObject({ untilAt: JST("22:00"), untilSet: true });
+
+    const auto = await approvedStore(ctx);
+    expect([200, 201]).toContain((await auto.api.post("/api/store/offers", { ...withoutUntil, until: null })).status);
+    expect((await auto.api.post("/api/store/offers/current/stop", {})).status).toBe(200);
+    expect((await auto.api.get("/api/store/home")).json.publishPrefill.until).toBeNull();
+
+    const timed = await approvedStore(ctx);
+    expect([200, 201]).toContain((await timed.api.post("/api/store/offers", body({ until: "21:00" }))).status);
+    expect((await timed.api.get("/api/store/home")).json.offer.untilSet).toBe(true);
+    // 形の違う時刻は、これまでどおり断る（入れなかったのとは違う）
+    const bad = await approvedStore(ctx);
+    const refused = await bad.api.post("/api/store/offers", body({ until: "25:00" }));
+    expect(refused.status).toBe(400);
+    expect(refused.json.error.fields.map((f: any) => f.name)).toContain("until");
+  });
+
   it("17.9 公開中があると offer_exists で断る。止めたあとは公開できる", async () => {
     const s = await approvedStore(ctx);
     await publishOffer(s.api);

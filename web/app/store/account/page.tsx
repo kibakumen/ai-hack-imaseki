@@ -8,10 +8,7 @@ export default function StoreAccountPage() {
     <main className="store-main">
       <StoreNav active="account" />
       <div className="store-head">
-        <div>
-          <p className="store-eyebrow">店の画面</p>
-          <h1>アカウント</h1>
-        </div>
+        <h1>アカウント</h1>
       </div>
       <EmailForm endpoint="/api/store/email" />
       <section className="store-card store-stack-sm">
