@@ -1,8 +1,8 @@
 // 位置を地名へ直す手続きの検査。
 //
 // ⚠️ いちばん大事なのは3つ目——**逆方向の口を持たない差し替えでは外へ聞かずに `null` を返す**。
-// 受け入れ検査の偽物（`tests/acceptance/v2/_fakes.ts` の `fakeGeocoder`）はこの口を持たないので、
-// ここで倒れずに `null` を返すことが、検査の場面を壊さない支えになっている。
+// 受け入れ検査の偽物（`tests/acceptance/v2/_fakePorts.ts` の `fakeGeocoder`）は 2026-09-25 設計-03 からこの口を持つが、
+// 口の無い差し替え（`fakeGeocoder({ reverse: false })`）でも倒れずに `null` を返すことを、ここで固定する。
 import { describe, expect, it, vi } from "vitest";
 import type { Deps } from "../ports";
 import { placeLabel } from "./placeLabel";

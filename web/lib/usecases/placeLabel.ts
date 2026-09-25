@@ -19,7 +19,7 @@ export type PlaceLabelResult = { label: string | null };
  * 座標から地名を1つ作る。打ち切りは地図と同じ3秒（`GEOCODE_TIMEOUT_MS`）で、
  * 差し替えた時計と AbortSignal の両方で数える（`raceDeadline` の注）。
  *
- * 逆方向の口を持たない差し替え（受け入れ検査の偽物）では、外へ聞かずに `null` を返す。
+ * 逆方向の口を持たない差し替え（`fakeGeocoder({ reverse: false })` など）では、外へ聞かずに `null` を返す。
  */
 export const placeLabel = async (deps: Deps, input: PlaceQuery): Promise<PlaceLabelResult> => {
   // 打ち切りの合図は、最初の await より前に作る（raceDeadline の注）。

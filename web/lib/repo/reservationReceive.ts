@@ -75,8 +75,10 @@ export const findOfferSnapshot = async (db: Db, offerId: string): Promise<{ stor
 /**
  * その客の取得の記録の時刻。在らない・別の客のものなら null（受け取りの `fetchId` の確かめ）。
  *
- * `reservations.fetch_id` は取得の記録を指す（外部の鍵）ので、在らない番号で受け取ろうとすると
- * INSERT が落ちる。落ちる前に入力の断りへ倒すために見る（要件29——どんな入力でも落ちない）。
+ * `reservations.fetch_id` は取得の記録を指すが、**外部の鍵の制約は無い**（`migrations/0001_init.sql` の
+ * reservations に FOREIGN KEY (fetch_id) は無い。2026-09-25 の監査の直しで、在ると書いていた誤りを直した・設計-12）。
+ * 在らない番号・別の客の番号の受け取りは、INSERT の WHERE（その取得の結果にその店が出たか）が0行にするだけで
+ * 落ちはしないが、断りの理由を場合分けできるよう、INSERT の前に入力の断りへ倒すために見る（要件29）。
  * 取得から一定時間を過ぎた結果からは新しく受け取らせない（安全-06）ので、時刻まで返す。
  */
 export const findFetchLogAt = async (db: Db, fetchId: string, customerId: string): Promise<Date | null> => {

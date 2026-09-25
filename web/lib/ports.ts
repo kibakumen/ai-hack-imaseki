@@ -32,8 +32,9 @@ export type AiSelector = { select(input: AiSelectInput, opts: { signal?: AbortSi
  * 1本ずつ書かせる。書き手と検査官で別のモデルを使う（実物は adapters/orcarouter）。
  *
  * ⚠️ 差し替え口として**任意**にしてある（`Deps.pitch`）。無い場面では紹介文の層ごと走らせず、
- * 選定が返した決まった理由をそのまま出す——受け入れ検査の場面（この口を渡さない）で、
- * 店の選定の筋が1行も変わらないようにするため。
+ * 選定が返した決まった理由をそのまま出す——紹介文の層を外しても、店の選定の筋が1行も変わらないようにするため。
+ * 受け入れ検査の偽物もこの口を持つ（既定は `fakePitch()`。口が無い形は `pitch: undefined` を渡して作る。
+ * 2026-09-25 設計-03 で偽物に口を足したので、「受け入れ検査はこの口を渡さない」と書いていた注を直した）。
  */
 export type PitchStore = {
   name: string;
@@ -76,17 +77,18 @@ export type Geocoder = {
    * （2026-09-22 の本人の指摘「開いた瞬間にここに現在地の文字に変換した場所が入っていて」）。
    *
    * ⚠️ **任意**にしてある（`Deps.pitch` と同じ置き方）。この口を持たない場面では地名を出さずに
-   * 座標のまま探す——受け入れ検査の偽物（`tests/acceptance/v2/_fakes.ts` の `fakeGeocoder`）は
-   * この口を持たないので、**必須にすると検査の場面が落ちる**。地名は客への見せ方の飾りで、
-   * 探す筋（座標で探す）には要らない。
+   * 座標のまま探す——地名は客への見せ方の飾りで、探す筋（座標で探す）には要らない。
+   * 受け入れ検査の偽物（`tests/acceptance/v2/_fakePorts.ts` の `fakeGeocoder`）もこの口を持つ。口が無い形は
+   * `fakeGeocoder({ reverse: false })` で作る（2026-09-25 設計-03 で偽物に口を足したので注を直した）。
    */
   reverse?(point: { lat: number; lng: number }, opts: { signal?: AbortSignal }): Promise<{ ok: true; label: string } | { ok: false }>;
   /**
    * 打ちかけの文字から場所の候補を出す（入口 GET /api/customer/place-suggest・2026-09-22 の本人の指摘
    * 「場所入力欄に渋谷駅などを打っても候補がでません」）。
    *
-   * ⚠️ **任意**にしてある（`reverse` と同じ置き方）。この口を持たない場面（受け入れ検査の偽物）では
-   * 候補を出さずに空を返す——候補は入力の補助で、探す筋（文字か座標で探す）には要らない。
+   * ⚠️ **任意**にしてある（`reverse` と同じ置き方）。この口を持たない場面では候補を出さずに空を返す
+   * ——候補は入力の補助で、探す筋（文字か座標で探す）には要らない。受け入れ検査の偽物もこの口を持ち、
+   * 口が無い形は `fakeGeocoder({ suggest: false })` で作る（2026-09-25 設計-03）。
    * `source` はどの経路で取れたか（実物は Places → Geocoding の2段構え）。**記録にだけ残し、客には見せない。**
    */
   suggest?(text: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; suggestions: string[]; source: "places" | "geocoding" } | { ok: false }>;

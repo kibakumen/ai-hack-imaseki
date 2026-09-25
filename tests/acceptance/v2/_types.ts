@@ -106,7 +106,9 @@ export type Deps = {
 // 入力の断り（全部の入口で共通）: 400/409 `{ ok:false, error:{ kind, fields?:[{ name, reason }] } }`
 // 受け取り・受け取り直しの断り: 409 `{ ok:false, refusal:{ kind, partyMax?, nextStep }, home }`
 // 確保への操作（取り消し・完了済み・人数）の状態による断り: 409 `{ ok:false, current:{ state } }`
-// 見分けの断り: 401（客・未ログイン）／403（役割違い）
+// 見分けの断り: 401 `unauthenticated`（客・未ログイン・ログインの切れ）／403 `forbidden`（役割違い・書き込みの Origin の不一致）
+// 見つからない: 404 `not_found`（経路が無い・番号が無い・別の店や客のもの）／想定外の例外: 500 `internal`
+//   （どれも入力の断りと同じ `{ ok:false, error:{ kind } }` の形。語 → 状態コードの表は web/lib/http/refusals.ts・2026-09-25 横断-01・設計-15）
 //
 // GET /api/customer/home → HomeDto
 export type HomeDto = {
@@ -115,6 +117,8 @@ export type HomeDto = {
   reservation?: ReservationDto;
   expired?: { showCode: boolean; canRetry: boolean; partyMax?: number };
   pushPromptDue?: boolean;
+  /** 完了済みの表示の幅（30分）を過ぎても次の確保を作るまでの間、取得の画面から開ける前回の完了済み（2026-09-25 不具合-18） */
+  previousCompleted?: ReservationDto;
 };
 export type ReservationDto = {
   id: string;

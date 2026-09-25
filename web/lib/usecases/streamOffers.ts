@@ -99,7 +99,7 @@ export const buildOffersStream = async (deps: Deps, customerId: string, input: F
 
       send({ type: "init", fetchId: result.fetchId, items: result.items });
 
-      // 紹介文の口が無い場面（受け入れ検査）・その日の AI の予算が尽きた日・もう切断されていた要求は、
+      // 紹介文の口が無い場面（口を渡さない差し替え）・その日の AI の予算が尽きた日・もう切断されていた要求は、
       // AI の層ごと走らせず、その場で書き切って閉じる
       if (!pitchAllowed || clientGone.signal.aborted) {
         finish();

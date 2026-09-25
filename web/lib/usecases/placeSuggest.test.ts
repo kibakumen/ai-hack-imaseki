@@ -1,8 +1,8 @@
 // 場所の候補を出す手続きの検査。
 //
 // ⚠️ いちばん大事なのは2つ目——**候補の口を持たない差し替えでは外へ聞かずに空を返す**。
-// 受け入れ検査の偽物（`tests/acceptance/v2/_fakes.ts` の `fakeGeocoder`）はこの口を持たないので、
-// ここで倒れずに空を返すことが、検査の場面を壊さない支えになっている（usecases/placeLabel と同じ）。
+// 受け入れ検査の偽物（`tests/acceptance/v2/_fakePorts.ts` の `fakeGeocoder`）は 2026-09-25 設計-03 からこの口を持つが、
+// 口の無い差し替え（`fakeGeocoder({ suggest: false })`）でも倒れずに空を返すことを、ここで固定する（usecases/placeLabel と同じ）。
 import { describe, expect, it, vi } from "vitest";
 import type { Deps } from "../ports";
 import { placeSuggest } from "./placeSuggest";
