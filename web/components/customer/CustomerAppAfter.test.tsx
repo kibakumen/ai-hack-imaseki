@@ -6,7 +6,7 @@
 //   客-08    … 結果の到着・確保の成立・状態の変化を読み上げで伝え、焦点を見失わせない
 
 import React from "react";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { homeFetch, installFakeApi, reservationDto, type FakeApi } from "../../../tests/acceptance/v2/_fakes";
 import { CustomerApp } from "./CustomerApp";
@@ -166,5 +166,60 @@ describe("確保を持ったまま探しているとき（客-03）", () => {
     });
     expect(screen.queryByTestId("claimed-celebration")).toBeNull();
     expect(screen.getByTestId("view-active").textContent).toContain("11223344");
+  });
+});
+
+describe("読み上げと焦点（客-08）", () => {
+  const liveText = () => screen.getByTestId("live-status").textContent ?? "";
+
+  it("結果が届くと件数を読み上げの領域へ入れ、焦点を結果の見出しへ移す（押したボタンは畳まれて消える）", async () => {
+    api = installFakeApi({
+      "GET /api/config/public": CONFIG,
+      "GET /api/customer/home": () => ({ json: homeFetch() }),
+      "POST /api/customer/fetch": () => ({ json: { ok: true, fetchId: "f1", items: [ITEM] } }),
+    });
+    render(<CustomerApp />);
+    const live = await screen.findByTestId("live-status");
+    expect(live.getAttribute("role")).toBe("status");
+    fireEvent.click(screen.getByTestId("btn-fetch"));
+    await screen.findByTestId("result-o1");
+    await waitFor(() => expect(liveText()).toMatch(/1\s*件/));
+    await waitFor(() => expect(document.activeElement?.textContent).toMatch(/今入れるお店/));
+  });
+
+  it("受け取りが通ると確保番号を読み上げ、演出は aria-modal の画面として見出しに焦点を置き、Esc で閉じると確保番号へ焦点が移る", async () => {
+    const reservation = reservationDto({ code: "55667788" });
+    api = installFakeApi({
+      "GET /api/config/public": CONFIG,
+      "GET /api/customer/home": () => ({ json: homeFetch() }),
+      "POST /api/customer/fetch": () => ({ json: { ok: true, fetchId: "f1", items: [ITEM] } }),
+      "POST /api/customer/reservations": () => ({ json: { ok: true, reservation, home: homeFetch({ kind: "active", reservation }) } }),
+    });
+    render(<CustomerApp />);
+    fireEvent.click(await screen.findByTestId("btn-fetch"));
+    fireEvent.click(within(await screen.findByTestId("result-o1")).getByTestId("btn-receive"));
+    const dialog = await screen.findByTestId("claimed-celebration");
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    const title = document.getElementById(dialog.getAttribute("aria-labelledby") ?? "");
+    expect(title?.textContent).toMatch(/受け取りました/);
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    expect(liveText()).toMatch(/55667788/);
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("claimed-celebration")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("reservation-code")));
+  });
+
+  it("取り直しで確保中から取り消しに変わったことを読み上げる", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let kind: "active" | "store_cancelled" = "active";
+    api = installFakeApi({ "GET /api/config/public": CONFIG, "GET /api/customer/home": () => ({ json: homeFetch({ kind, reservation: reservationDto({ status: kind }) }) }) });
+    render(<CustomerApp />);
+    await screen.findByTestId("view-active");
+    kind = "store_cancelled";
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(screen.getByTestId("view-store_cancelled")).toBeTruthy();
+    expect(liveText()).toMatch(/取り消されました/);
   });
 });

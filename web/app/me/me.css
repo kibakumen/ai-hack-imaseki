@@ -1392,3 +1392,22 @@
   margin-bottom: 0.75rem;
   padding: 0.625rem 0.875rem;
 }
+
+/* 読み上げの領域（客-08）。目には見えず、読み上げには乗る */
+.visually-hidden {
+  border: 0;
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+/* 焦点を移すだけの見出し・番号（tabIndex=-1）には、押せる部品の輪を出さない */
+.offer-list__head:focus,
+.claim-ticket__code:focus,
+.claimed-title:focus {
+  outline: none;
+}

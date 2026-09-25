@@ -57,6 +57,9 @@ type ReservationViewProps = {
   from?: SearchOrigin | null;
 };
 
+/** 確保番号の要素の id（受け取った直後の演出を閉じたとき、入れ物がここへ焦点を移す・客-08） */
+export const RESERVATION_CODE_ID = "reservation-code";
+
 /** 期限を過ぎたときの扱い（横断-07 の案A）。20分は `domain/reservation` の EXPIRED_GRACE_MS（店が完了済みにできる幅） */
 export const EXPIRY_RULE_TEXT = "期限を過ぎると、確保は自動で取り消されます。過ぎてから20分以内なら、この画面をお店に見せれば、お店の判断で入れることがあります。";
 
@@ -67,7 +70,7 @@ export const ReservationView = ({ reservation, onSearchMore, onChanged, failure 
       <div className="claim-ticket">
         <p className="claim-ticket__eyebrow">確保できました</p>
         <h2 className="claim-ticket__title">席を確保しました</h2>
-        <p className="reservation-code claim-ticket__code" data-testid="reservation-code">
+        <p className="reservation-code claim-ticket__code" data-testid="reservation-code" id={RESERVATION_CODE_ID} tabIndex={-1}>
           {reservation.code}
         </p>
         <p className="claim-ticket__hint">お店でこの番号を見せてください。</p>

@@ -21,7 +21,7 @@
 // （要件32の基準 32.3・構造の検査が .tsx に色の値が無いことを見張る）。見た目の仕上げは
 // `claimed-celebration` の class に当てる。
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { routeHref, type SearchOrigin } from "../../lib/client/lastOrigin";
 import { playNotifyBeep } from "../store/beep";
 import { CouponPickNote } from "./CouponPickNote";
@@ -69,11 +69,31 @@ type ClaimedCelebrationProps = {
   onClose: () => void;
 };
 
+/** 見出しの id（前面の1枚の名前として `aria-labelledby` が指す） */
+const TITLE_ID = "claimed-title";
+
 export const ClaimedCelebration = ({ reservation, from = null, onClose }: ClaimedCelebrationProps) => {
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const latestClose = useRef(onClose);
+  useEffect(() => {
+    latestClose.current = onClose;
+  }, [onClose]);
+
   // 音は飾り（鳴らせない端末では黙って何もしない・`components/store/beep.ts` の注）。
   // 店の画面と同じ2音を使う——同じ知らせに2つの音を作らない。
   useEffect(() => {
     playNotifyBeep();
+  }, []);
+
+  // 開いたら見出しへ焦点を移し、Esc で閉じる（2026-09-25 監査の指摘 客-08——以前は role=dialog だけで、
+  // 焦点は消えた「この店に行く」と一緒に行き場を失い、閉じる手段もボタンしか無かった）。
+  useEffect(() => {
+    titleRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") latestClose.current();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
   const href = routeHref(reservation, from);
@@ -83,13 +103,14 @@ export const ClaimedCelebration = ({ reservation, from = null, onClose }: Claime
       className="claimed-celebration"
       data-testid="claimed-celebration"
       role="dialog"
-      aria-label="受け取り完了"
+      aria-modal="true"
+      aria-labelledby={TITLE_ID}
       style={{ position: "fixed", inset: 0, zIndex: 50, overflowY: "auto", background: "var(--color-background)" }}
     >
       <Confetti />
       <div className="claimed-celebration-inner" style={{ position: "relative" }}>
         <p className="claimed-eyebrow">席を確保しました</p>
-        <h2 className="claimed-title">
+        <h2 className="claimed-title" id={TITLE_ID} ref={titleRef} tabIndex={-1}>
           <span aria-hidden className="claimed-mark">
             🎉
           </span>
