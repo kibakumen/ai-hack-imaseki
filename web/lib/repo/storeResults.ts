@@ -16,11 +16,30 @@
 //    `listOfferTrendCounts`・店-15）だけは今までの幅で切るので、呼ぶ側が束縛した「今」を受ける。
 
 import type { Deps } from "../ports";
+import { parseStringList } from "./d1";
 
 type Db = Deps["db"];
 
-/** オファー1件ぶんの、公開した時刻と「取得の結果に出た回数」（基準 23.2・23.7）。 */
-export type StoreOfferShownRow = { offerId: string; publishedAt: Date; shown: number };
+/**
+ * オファー1件ぶんの、公開した時刻と「取得の結果に出た回数」（基準 23.2・23.7）と、そのオファーの条件
+ * （2026-09-25 監査の指摘 店-13: 次に何組・何名まで・どのクーポンで出すかを決める材料として行に載せる）。
+ */
+export type StoreOfferShownRow = {
+  offerId: string;
+  publishedAt: Date;
+  shown: number;
+  /** 終わった（今の）配信数と、公開のときに入れた配信数 */
+  capacity: number;
+  initialCapacity: number;
+  partyMax: number;
+  untilAt: Date;
+  /** 店が「何時まで」を入れたか（店-05） */
+  untilSet: boolean;
+  endedAt: Date | null;
+  /** 保存されている終わった理由（`stopped`・`banned`・終わっていなければ null）。時刻で終わったかは手続きが導く */
+  endReason: string | null;
+  couponIds: string[];
+};
 
 /** 確保1件ぶんの、どのオファーのものかと状態を導くのに要る所だけ（数えるのは手続き側）。 */
 export type OfferReservationStateRow = { offerId: string; status: string; expiresAt: Date };
@@ -47,7 +66,7 @@ export type OfferReservationStateRow = { offerId: string; status: string; expire
  * 同じ取得が同じ店を2行持つことは無いが、数えるのは**取得の回数**なので `DISTINCT fetch_id` で括る。
  */
 const OFFER_SHOWN_SQL =
-  `SELECT o.id AS offer_id, o.published_at,` +
+  `SELECT o.id AS offer_id, o.published_at, o.capacity, o.initial_capacity, o.party_max, o.until_at, o.until_set, o.ended_at, o.end_reason, o.coupon_ids,` +
   ` (SELECT COUNT(DISTINCT fi.fetch_id) FROM fetch_items fi JOIN fetch_logs fl ON fl.id = fi.fetch_id` +
   `   WHERE fi.store_id = o.store_id` +
   `     AND fl.at >= o.published_at` +
@@ -65,6 +84,14 @@ export const listOfferShownCounts = async (db: Db, storeId: string): Promise<Sto
     offerId: row.offer_id as string,
     publishedAt: new Date(row.published_at as string),
     shown: Number(row.shown ?? 0),
+    capacity: Number(row.capacity ?? 0),
+    initialCapacity: Number(row.initial_capacity ?? 0),
+    partyMax: Number(row.party_max ?? 0),
+    untilAt: new Date(row.until_at as string),
+    untilSet: Number(row.until_set ?? 1) === 1,
+    endedAt: row.ended_at ? new Date(row.ended_at as string) : null,
+    endReason: (row.end_reason as string | null) ?? null,
+    couponIds: parseStringList(row.coupon_ids),
   }));
 };
 
