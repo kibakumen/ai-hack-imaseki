@@ -369,7 +369,7 @@ flowchart LR
 | `push_subscriptions` | customer_id（一意）・subscription_json | 客1人に1つ（端末1台＝客1人のため） |
 | `fetch_logs`・`fetch_items`・`selections`・`reservation_events`・`ai_calls` | 要件27・33 の項目どおり。**`ai_calls` は、基準 33.1 の実費（`cost_usd`）・所要時間（`duration_ms`）・成功か失敗か（`succeeded`）に並べて、`resolved_model`・`request_id`・`fallback_level`（応答ヘッダーから。無ければ NULL）と `validation_failed`（出力が基準 7.3・7.4 に落ちたか）を持つ**（第4周の追記。3列は本人選択・23節、列の名前と `validation_failed` は AI判断。「OrcaRouter の使い方」の③④） | **追加だけ**。`lib/repo/logs.ts` には insert の関数しか置かず、この5つの表に対する UPDATE と DELETE の文がリポジトリに無いことを構造の検査で見る（基準 27.7） |
 | `reports` | id・store_id・customer_id・reason・at | — |
-| `rate_counters`【最終日】 | key・window_start・count | 固定の窓で数える。Cloudflare の連打の抑止の束縛は窓が60秒までなので（高確率）、1時間の窓（基準 30.2）には使えない |
+| `rate_counters`【最終日】 | key（主キー）・window_start・count | 固定の窓で数える。Cloudflare の連打の抑止の束縛は窓が60秒までなので（高確率）、1時間の窓（基準 30.2）には使えない。**数えは `INSERT … ON CONFLICT(key) DO UPDATE … RETURNING` の1文で原子的に足す**（2026-09-25 の監査の指摘 安全-02・`0003_rate_counters_atomic.sql` で主キーを key だけにした）。鍵の前半が規則の名前（`fetch:`・`registerCustomer:`・`registerStore:`・`report:`・`login:<メールアドレス>\|<接続元>`・`loginIp:<接続元>` など・正本は `http/rateLimits.ts` の表）。同じ表に、ログインに通った端末の印（`loginDevice:<メールアドレス>\|<印の SHA-256>`・`repo/loginDevices.ts`）と、店の画像の埋め戻しの1日1回の数え（`storeImageBackfill:<店>`）も置く |
 
 ### 客の識別子（要件2）
 
@@ -887,7 +887,7 @@ flowchart LR
 | 28.9・28.11 | 同 入口と部品【最終日】: 消した応答が Cookie を消し、画面が端末に残した内容を消す／開き直すと登録の入力 | 段1 | `http/cookies`・`client/reservationCache` |
 | 29.1・29.4 | `structure.test.ts` 構造: `app/api/**/route.ts` の全部が `defineRoute` に入力のスキーマを渡していて、要求の本文を自分で読んでいない／画面と部品が `fetch` を直接呼ばず、`client/api.ts` が応答をスキーマで検査している | 段2 | `http/defineRoute`・`client/api` |
 | 29.2・29.3 | `r29-validation.test.ts` 入口: 全部の入口に壊れた入力を送り、**応答が `schemas/error` の形（`ok: false`・`error.kind: "invalid_input"`・`error.fields` に誤った項目の名前と理由）で返り**、人が読む文が本文に無く、D1 の全部の表の中身が前と同じ（応答の形は第6周の直し。「入口の一覧」の注） | 段1 | `http/defineRoute`・`schemas/error` |
-| 30.1・30.2・30.3・30.4・30.5 | `r30-rate-limit.test.ts` 手続き【最終日】: 偽の時計で、取得は1分に5回まで・登録は同じ接続元から1時間に10回まで・通報は1時間に5回まで・ログインの失敗10回で15分断る／断った取得で偽の AI と偽の地図が呼ばれない | 段1 | `http/defineRoute`（連打の抑止）・`repo/rateCounters`・`usecases/login` |
+| 30.1・30.2・30.3・30.4・30.5 | `r30-rate-limit.test.ts` 手続き【最終日】: 偽の時計で、取得は1分に5回まで・同じ接続元からの店の登録は1時間に10回まで・客の登録は別に1時間に60回まで（人かどうかの確かめに落ちた登録は数えない）・通報は1時間に5回まで・同じアカウントへの同じ接続元からのログインの失敗10回で15分断る・同じ接続元からアカウントをまたいだ失敗30回で断る（前にその端末で入ったアカウントは断らない）／断った取得で偽の AI と偽の地図が呼ばれない（30.2・30.4 は 2026-09-25 に変更・requirements.md の要件30の補足） | 段1 | `http/defineRoute`（連打の抑止）・`http/rateLimits`・`repo/rateCounters`・`repo/loginDevices`・`usecases/login` |
 | 31.1 | `structure.test.ts` 構造: 絞り込み・点数・AI の失敗・受け取りと同時の受け取り・自動の取り消し・残りの数・公開中の変更が確保を変えないこと・完了済み、の8つの検査のファイル（`r05`・`r06`・`r07`・`r08`・`r11`・`r18`・`r19`・`r20`）が在り、それぞれ検査を1つ以上持つ | 段1 | `tests/acceptance/v2/` |
 | 31.2 | ゲートのテストのコマンドそのもの（1つのコマンドで全部走り、失敗があれば0でない終了コード）。**「全部」の読み**（第5周の直し）: ゲートの間は着手済みのタスクのブロックの全部（未着手のタスクのブロックは `describeTask` が飛ばす）、全タスクの着手のあとと、着手の記録 `.dev/runs/v2/` が無い手元（README で動かす他のメンバー・提出の前の確かめ）では文字どおり全部。「受け入れ検査をタスクごとに走らせる」の節 | 段1 | 直下の `vitest.config.ts`・`tests/acceptance/v2/_tasks.ts` |
 | 31.3 | テストの準備が `fetch` を「外へ出たら落とす」関数に差し替えていて、検査は偽の口だけで走る | 段1 | `tests/acceptance/v2/_setup.ts`・`lib/ports.ts` |

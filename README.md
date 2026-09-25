@@ -157,11 +157,27 @@ Cloudflare の D1・R2 が未作成なら先に用意する（在れば何もし
 scripts/v2-keys.sh cloudflare
 ```
 
-ビルドして Cloudflare Workers へ公開する（`web/package.json` の `deploy` スクリプト。内部で OpenNext のビルド→`wrangler deploy` の順に実行する）:
+公開の前に、本番の D1 にまだ当たっていない migration を確かめる（読むだけ・書き換えない）:
+
+```bash
+pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
+```
+
+ビルドして Cloudflare Workers へ公開する（`web/package.json` の `deploy` スクリプト）。内部では次の順に実行する:
+
+1. OpenNext のビルド（`opennextjs-cloudflare build`）
+2. **本番の D1 に未適用の migration を当てる**（`migrate:remote`＝`wrangler d1 migrations apply ai-hack-v2 --remote`）。⚠️ 本番のデータを書き換える——たとえば `0003_rate_counters_atomic.sql` は連打の抑止の数えの表 `rate_counters` を作り直す（中身は新しい表へ移す）
+3. 公開（`wrangler deploy`）
 
 ```bash
 pnpm --dir web run deploy
 ```
+
+migration の決まり:
+
+- **本番に当たった migration は書き換えない**（`0001`・`0002`、当てたあとの `0003` 以降も）。変えるときは新しい番号の migration を足す。適用済みの `0001` を後から書き換えた前例があり、`web/tests/deployProcedure.test.ts` が `0001`・`0002` の中身をハッシュで見張る
+- **番号は重ねない**（同じ番号の2本は、当てる順が名前の並びに任される。同じ検査が見張る）。本線に入っていない枝 `feat/email-verify` にも `0003_email_verification.sql` がある——合流させるときは、本番に当たっていない側を空いている次の番号へ付け替えてから合流する
+- migration を当てずにコードだけを出すと、列や制約が無いまま動いて500になる（`0002` のときに起きた）。`deploy` 以外の手で公開しない
 
 Worker の秘密（5.2 の6つ）は、初回の公開のあとに Cloudflare 側へ送る（未送信なら送る）:
 
@@ -170,6 +186,24 @@ scripts/v2-keys.sh push
 ```
 
 現在 https://ai-hack-v2.ai-shukyaku.workers.dev で公開中。
+
+店の画像は、公開のあとに手で流す手順が要らない。画像を置き場に置くのは店が情報を保存したときだけだが、まだ置かれていない承認済みの店（この仕組みより前に URL を保存した店・ダミーデータの店）は、客が最初に開いたときに店の登録の URL から取って置く（店ごとに1日1回まで・`web/lib/usecases/storeImage.ts`）。
+
+### 6.1 ログインの締め出しを解く
+
+ログインは次の2つで断る（要件30の基準 30.4・`web/lib/http/rateLimits.ts`）。どちらも15分待てば解ける:
+
+- 同じアカウントへ**同じ接続元から**10回続けて失敗した → そのアカウントへのその接続元からのログインを15分断る
+- **同じ接続元から**アカウントをまたいで15分に30回失敗した（パスワードスプレー） → その接続元からのログインを断る。ただし、前にその端末（ブラウザ）でそのアカウントに入ったことがあれば数えない（端末の印の Cookie `aihack_login_device`・30日）
+
+急ぐときは、本番の数えを消す（⚠️ 本番の D1 を書き換える。メールアドレスは小文字で、IPv6 の接続元は `2001:db8:1:2::/64` のように先頭4区切りに丸めた形で書く）:
+
+```bash
+# そのアカウントの数え（どの接続元からのものも）
+pnpm --dir web exec wrangler d1 execute ai-hack-v2 --remote --command "DELETE FROM rate_counters WHERE key LIKE 'login:<メールアドレス>|%'"
+# 接続元ごとの数え
+pnpm --dir web exec wrangler d1 execute ai-hack-v2 --remote --command "DELETE FROM rate_counters WHERE key = 'loginIp:<接続元>'"
+```
 
 ## 7. 提出前の確かめ
 
