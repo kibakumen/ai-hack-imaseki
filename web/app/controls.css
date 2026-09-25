@@ -85,13 +85,16 @@ input::placeholder {
 
 /* 断りが出ている欄は枠を赤くする（第1回の指摘「未入力欄があることがわかりにくい・枠とかを赤く」）。
    欄の aria-invalid で見分ける（components/ui/InputRefusal の fieldAria が付ける・2026-09-25 監査の指摘 横断-05）。
-   それまでは「欄の直後に断りの文」という DOM の並びで見分けていて、包まれた欄とダイヤルは赤くならなかった。 */
-[aria-invalid="true"] {
+   それまでは「欄の直後に断りの文」という DOM の並びで見分けていて、包まれた欄とダイヤルは赤くならなかった。
+   詳細度は (0,1,1) にする（横断-05 のレビュー）。素の `[aria-invalid="true"]`（0,1,0）では、後から読まれる欄の
+   class の縁（公開中のカードの `.store-tune__time`）と、上の `input:focus-visible`（0,1,1）に負け、焦点のある欄や
+   「何時まで」は断りが出ても枠が赤くならなかった。欄の規則がこれに勝たないことは web/tests/uiStyles.test.ts が見る */
+:is(input, select, textarea, fieldset)[aria-invalid="true"] {
   border-color: var(--color-danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 18%, transparent);
 }
 
-/* 押して選ぶ札の並び（チップ・予算）は、囲いの縁を赤くする */
+/* 押して選ぶ札の並び（チップ）は、囲いの縁を赤くする（縁の無い予算の札は me-after.css の輪で示す） */
 fieldset[aria-invalid="true"] {
   box-shadow: none;
 }

@@ -92,6 +92,13 @@
   margin: 0.5rem 0 0;
   padding: 0;
 }
+/* 縁を持たない並びなので、断りが出たら外側に赤い輪を出す（横断-05 のレビュー。縁の色だけでは何も見えず、
+   fieldset の赤い影も controls.css で消しているので、それまでは印がまったく出なかった） */
+.budget-chips[aria-invalid="true"] {
+  border-radius: var(--radius-md);
+  outline: 2px solid var(--color-danger);
+  outline-offset: 2px;
+}
 .budget-chips > legend {
   font-size: 0.8125rem;
   font-weight: 700;

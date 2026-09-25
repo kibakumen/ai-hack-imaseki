@@ -117,19 +117,27 @@ const rgbToHex = (rgb: Rgb): string => `#${rgb.map((v) => v.toString(16).padStar
 
 export type Palette = Record<string, string>;
 
-/** globals.css の色の変数。明るい設定は `:root`、暗い設定は `:root[data-theme="dark"]` で上書きした値。 */
+/**
+ * globals.css の色の変数。明るい設定は `:root`、暗い設定は `:root[data-theme="dark"]` で上書きした値。
+ * `--color-*` から導く色の変数（ホバーの `--hover-soft-bg` など）も、その配色の値に直して入れる
+ * （2026-09-25 横断-04 のレビュー。入れないと `var(--hover-soft-bg)` の地が読めず、その組が黙って検査から漏れた）。
+ */
 export const palette = (theme: "light" | "dark"): Palette => {
   const rules = parseCss(path.join(WEB, "app", "globals.css"));
+  const declsAt = (selector: string) => rules.filter((r) => r.selector === selector && r.at.length === 0).flatMap((r) => r.decls);
   const pick = (selector: string): Palette =>
     Object.fromEntries(
-      rules
-        .filter((r) => r.selector === selector && r.at.length === 0)
-        .flatMap((r) => r.decls)
+      declsAt(selector)
         .filter((d) => d.prop.startsWith("--color-") && /^#[0-9a-fA-F]{3,8}$/.test(d.value))
         .map((d) => [d.prop, d.value]),
     );
   const light = pick(":root");
-  return theme === "light" ? light : { ...light, ...pick(':root[data-theme="dark"]') };
+  const colors = theme === "light" ? light : { ...light, ...pick(':root[data-theme="dark"]') };
+  const derived = [...declsAt(":root"), ...(theme === "dark" ? declsAt(':root[data-theme="dark"]') : [])]
+    .filter((d) => d.prop.startsWith("--") && !d.prop.startsWith("--color-"))
+    .map((d) => [d.prop, resolveColor(d.value, colors)] as const)
+    .filter((entry): entry is readonly [string, string] => entry[1] !== null);
+  return { ...colors, ...Object.fromEntries(derived) };
 };
 
 /**
@@ -189,4 +197,109 @@ export const fillColors = (value: string, colors: Palette): string[] | null => {
   const stops = parts.filter((p) => !/^\d+deg$|^to\s/.test(p)).map((p) => p.replace(/\s+\d+(?:\.\d+)?%$/, ""));
   const resolved = stops.map((s) => resolveColor(s, colors));
   return resolved.some((c) => c === null) ? null : (resolved as string[]);
+};
+
+// ---------- 詳細度 ----------
+
+export type Specificity = [number, number, number];
+
+/** 詳細度を比べる（a が強ければ正、弱ければ負、同じなら 0）。 */
+export const compareSpecificity = (a: Specificity, b: Specificity): number => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+
+/** 閉じ括弧の位置（`open` は開き括弧の位置）。 */
+const closingParen = (text: string, open: number): number => {
+  let depth = 0;
+  for (let k = open; k < text.length; k += 1) {
+    if (text[k] === "(") depth += 1;
+    if (text[k] === ")") {
+      depth -= 1;
+      if (depth === 0) return k;
+    }
+  }
+  return text.length - 1;
+};
+
+/** 最上位の「,」で割る（括弧の中の「,」では割らない）。 */
+export const splitSelectorList = (list: string): string[] => {
+  const parts: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let k = 0; k <= list.length; k += 1) {
+    const c = list[k];
+    if (c === "(" || c === "[") depth += 1;
+    if (c === ")" || c === "]") depth -= 1;
+    if ((c === "," && depth === 0) || k === list.length) {
+      parts.push(list.slice(from, k).trim());
+      from = k + 1;
+    }
+  }
+  return parts.filter((p) => p !== "");
+};
+
+const LEGACY_PSEUDO_ELEMENTS = new Set(["before", "after", "first-line", "first-letter"]);
+const IDENT = /^-?[_a-zA-Z][-_a-zA-Z0-9]*/;
+
+/**
+ * 1つのセレクタ（「,」で割ったあとの1つ）の詳細度（Selectors Level 4 の数え方）。
+ * `:is()`・`:not()`・`:has()` は中のいちばん強いもの、`:where()` は 0、ほかの `:x()` は疑似クラス1つ。
+ */
+export const specificity = (selector: string): Specificity => {
+  const acc: Specificity = [0, 0, 0];
+  const add = (s: Specificity) => s.forEach((v, i) => (acc[i] += v));
+  let k = 0;
+  while (k < selector.length) {
+    const c = selector[k];
+    const rest = selector.slice(k + 1);
+    if (c === "#") {
+      acc[0] += 1;
+      k += 1 + (IDENT.exec(rest)?.[0].length ?? 0);
+    } else if (c === ".") {
+      acc[1] += 1;
+      k += 1 + (IDENT.exec(rest)?.[0].length ?? 0);
+    } else if (c === "[") {
+      acc[1] += 1;
+      k = selector.indexOf("]", k) + 1;
+    } else if (c === ":" && selector[k + 1] === ":") {
+      acc[2] += 1;
+      k += 2 + (IDENT.exec(selector.slice(k + 2))?.[0].length ?? 0);
+      if (selector[k] === "(") k = closingParen(selector, k) + 1;
+    } else if (c === ":") {
+      const name = IDENT.exec(rest)?.[0] ?? "";
+      k += 1 + name.length;
+      if (selector[k] === "(") {
+        const end = closingParen(selector, k);
+        const inner = selector.slice(k + 1, end);
+        k = end + 1;
+        if (name === "where") continue;
+        if (["is", "not", "has"].includes(name)) {
+          const strongest = splitSelectorList(inner)
+            .map(specificity)
+            .reduce<Specificity>((best, s) => (compareSpecificity(s, best) > 0 ? s : best), [0, 0, 0]);
+          add(strongest);
+          continue;
+        }
+        acc[1] += 1;
+        continue;
+      }
+      if (LEGACY_PSEUDO_ELEMENTS.has(name)) acc[2] += 1;
+      else acc[1] += 1;
+    } else if (IDENT.test(selector.slice(k))) {
+      acc[2] += 1;
+      k += IDENT.exec(selector.slice(k))![0].length;
+    } else k += 1;
+  }
+  return acc;
+};
+
+/** セレクタの主語（いちばん右の複合セレクタ）。括弧の中は落として返す（`:has(input)` の input を主語と読まない）。 */
+export const subjectOf = (selector: string): string => {
+  let flat = "";
+  let depth = 0;
+  for (const c of selector) {
+    if (c === "(") depth += 1;
+    if (depth === 0) flat += c;
+    if (c === ")") depth -= 1;
+  }
+  const parts = flat.trim().split(/\s*[\s>+~]\s*/);
+  return parts[parts.length - 1] ?? "";
 };

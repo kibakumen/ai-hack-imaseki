@@ -72,7 +72,8 @@
      暗い設定では差し色が明るい橙・文字が濃い茶なので、塗りを 0.92 倍に暗くしても文字は読める。
      hover の規則は全部 `@media (hover: hover)` の中に置く——指で触る端末で押した後に色が貼り付くのを防ぐ。 */
   --hover-filled-filter: brightness(0.92) saturate(1.08);
-  --hover-soft-bg: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  /* 差し色は 10%（12% だと明るい配色で濃い橙の文字が 4.46:1 になり、4.5:1 に届かなかった・横断-04 のレビュー） */
+  --hover-soft-bg: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   --hover-soft-border: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   --hover-soft-text: var(--color-text);
 

@@ -1,8 +1,9 @@
 // 全画面に共通する見た目の決めごと（2026-09-25 監査の指摘 横断-04・横断-06・横断-10・横断-13）。
 // jsdom は CSS を計算しないので、宣言の側を読んで確かめる（道具は tests/_css.ts）。
+import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { allRules, contrast, declOf, fillColors, palette, parseCss, resolveColor, WEB } from "./_css";
+import { allRules, compareSpecificity, contrast, declOf, fillColors, palette, parseCss, resolveColor, specificity, splitSelectorList, subjectOf, uiSources, WEB, type CssRule } from "./_css";
 
 const GLOBALS = path.join(WEB, "app", "globals.css");
 /** 画面の CSS 全部の規則（ファイルを分けても、セレクタで引けるようにする・設計-16 で CSS を分けた） */
@@ -44,6 +45,9 @@ const TEXT_PAIRS: Array<[string, string, string]> = [
   ["--color-danger", "--color-background", "断りの文"],
   ["--color-highlight-text", "--color-highlight", "紹介文・待つ間の文"],
   ["--color-success", "--color-background", "済んだ知らせ"],
+  // ホバーした縁だけ（soft）の札。地は --hover-soft-bg（横断-04 のレビュー: 12% では明るい配色で 4.46:1 だった）
+  ["--color-accent-strong", "--hover-soft-bg", "ホバーした札の橙の文字（ナビ・ログアウト・ダイヤルの▲▼）"],
+  ["--hover-soft-text", "--hover-soft-bg", "ホバーした行の文字"],
 ];
 
 /** 明るい橙を塗ってよい、文字を載せない飾り（増やすときは、そこに文字が載らないことを確かめてから足す）。 */
@@ -265,15 +269,126 @@ describe("指で押す部品の大きさ（横断-13）", () => {
 });
 
 // ---------- 断りの出ている欄の赤枠（横断-05） ----------
+
+/** 断りの印（aria-invalid）を受け取る欄の型 */
+const FIELD_TYPES = ["input", "select", "textarea", "fieldset"];
+
+/**
+ * 断りの印を受け取る欄に付いている class（画面のソースから拾う）。`fieldAria(…)` か `{...aria}` を持つ
+ * input・select・textarea・fieldset のタグの className。欄の class の規則が赤枠を打ち消していないかを見るため。
+ */
+const invalidFieldClasses = (): Set<string> => {
+  const found = uiSources().flatMap((file) => {
+    const text = fs.readFileSync(file, "utf8");
+    return [...text.matchAll(/fieldAria\(|\{\.\.\.aria\}/g)].flatMap((m) => {
+      const before = text.slice(0, m.index);
+      const open = Math.max(...FIELD_TYPES.map((t) => before.lastIndexOf(`<${t}`)));
+      if (open < 0) return [];
+      const tag = text.slice(open, m.index);
+      // 間に別のタグの始まりか終わりが在れば、この印は別の部品へ渡す値（aria={fieldAria(…)}）で、この欄のものではない
+      if (/\/>|<\/|<[A-Za-z]/.test(tag.slice(1))) return [];
+      return [...tag.matchAll(/className="([^"]+)"/g)].flatMap((c) => c[1].split(/\s+/));
+    });
+  });
+  return new Set(found);
+};
+
+/** 縁の色を決める宣言か（border の略記は色も初期化する） */
+const setsBorderColor = (rule: CssRule): boolean => rule.decls.some((d) => /^border(-(top|right|bottom|left))?(-color)?$/.test(d.prop));
+/** 縁を消す宣言か（幅 0・線なし） */
+const hidesBorder = (rule: CssRule): boolean =>
+  rule.decls.some((d) => (/^border(-(top|right|bottom|left))?$/.test(d.prop) && /^(0|none)\b/.test(d.value)) || (d.prop === "border-width" && /^0/.test(d.value)) || (d.prop === "border-style" && d.value === "none"));
+
+/** 縁を消していても、別の印が代わりに出る欄の class（増やすときは、印がどこに出るかを書く） */
+const MARKED_ELSEWHERE = new Map<string, string>([["store-sr-only", "目に出さないダイヤルの裏の欄。見た目のダイヤルの枠（.store-dial__rail）が赤くなる"]]);
+
 describe("断りの出ている欄の赤枠（横断-05）", () => {
+  const rules = allRules();
+  const isInvalidRule = (r: CssRule) => r.at.length === 0 && declOf(r, "border-color") === "var(--color-danger)" && splitSelectorList(r.selector).every((part) => /^(:is\([^)]*\))?\[aria-invalid="true"\]$/.test(part));
+  const invalidAt = rules.findIndex(isInvalidRule);
+
   it("赤枠は [aria-invalid] に付け、DOM の並び（欄の直後に断りの文）には頼らない", () => {
-    const rules = allRules();
     expect(rules.filter((r) => /:has\(\+\s*\.msg\)/.test(r.selector)).map((r) => r.selector)).toEqual([]);
-    const invalid = rules.find((r) => r.selector.split(",").map((s) => s.trim()).includes('[aria-invalid="true"]'));
+    const invalid = rules[invalidAt];
     expect(invalid, '[aria-invalid="true"] の規則が無い').toBeDefined();
     expect(declOf(invalid!, "border-color")).toBe("var(--color-danger)");
     const dial = rules.find((r) => /:has\(\[aria-invalid="true"\]\)/.test(r.selector) && /store-dial__rail/.test(r.selector));
     expect(dial, "ダイヤルの枠を赤くする規則が無い").toBeDefined();
     expect(declOf(dial!, "border-color")).toBe("var(--color-danger)");
+  });
+});
+
+describe("詳細度の道具（下の検査が数え違えると、何も見ないまま緑になる）", () => {
+  it.each([
+    ['[aria-invalid="true"]', [0, 1, 0]],
+    [':is(input, select, textarea, fieldset)[aria-invalid="true"]', [0, 1, 1]],
+    ["input:focus-visible", [0, 1, 1]],
+    [".store-tune__time", [0, 1, 0]],
+    ["nav > :where(a):hover", [0, 1, 1]],
+    [".store-dial:has(.store-sr-only--focusable:focus-visible) .store-dial__rail", [0, 4, 0]],
+    ["#top .a::before", [1, 1, 1]],
+  ] as const)("%s は %j", (selector, expected) => {
+    expect(specificity(selector)).toEqual(expected);
+  });
+
+  it("主語は右端の複合セレクタで、括弧の中は主語に数えない", () => {
+    expect(subjectOf(".budget-chip:has(input:checked)")).toBe(".budget-chip:has");
+    expect(subjectOf("form > input.x")).toBe("input.x");
+  });
+});
+
+describe("欄の規則が赤枠を打ち消さない（横断-05 のレビュー）", () => {
+  const rules = allRules();
+  const invalidAt = rules.findIndex(
+    (r) => r.at.length === 0 && declOf(r, "border-color") === "var(--color-danger)" && splitSelectorList(r.selector).every((part) => /^(:is\([^)]*\))?\[aria-invalid="true"\]$/.test(part)),
+  );
+  const classes = invalidFieldClasses();
+  /** 主語が、断りの印を受け取る欄（型か class）か */
+  const touchesField = (part: string): string | null => {
+    const subject = subjectOf(part);
+    const type = FIELD_TYPES.find((t) => new RegExp(`^${t}(?![-\\w])`).test(subject));
+    if (type !== undefined) return type;
+    return [...classes].find((c) => new RegExp(`\\.${c}(?![-\\w])`).test(subject)) ?? null;
+  };
+
+  it("欄の class を画面のソースから拾えている（拾えなければこの検査は何も見ない）", () => {
+    expect(classes.has("store-tune__time")).toBe(true);
+    expect(classes.has("budget-chips")).toBe(true);
+  });
+
+  it("欄の型・class の規則が、詳細度か読み込みの順で赤枠の縁の色に勝たない", () => {
+    expect(invalidAt, '[aria-invalid="true"] の規則が無い').toBeGreaterThanOrEqual(0);
+    const invalid = rules[invalidAt];
+    const strength = splitSelectorList(invalid.selector).map(specificity).reduce((a, b) => (compareSpecificity(a, b) < 0 ? a : b));
+    const offenders = rules.flatMap((rule, at) => {
+      if (rule === invalid || !setsBorderColor(rule)) return [];
+      return splitSelectorList(rule.selector)
+        .filter((part) => !part.includes("[aria-invalid") && touchesField(part) !== null)
+        .filter((part) => {
+          const order = compareSpecificity(specificity(part), strength);
+          if (order !== 0) return order > 0;
+          // 同じ強さなら後に読まれた方が勝つ。ファイルをまたぐ順は殻の import 次第なので、同じファイルで前に在るときだけ通す
+          return rule.file !== invalid.file || at > invalidAt;
+        })
+        .map((part) => `${path.basename(rule.file)}: ${part}`);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("縁を消している欄（予算の札など）には、断りのときの別の印がある", () => {
+    const offenders = rules.flatMap((rule) => {
+      if (!hidesBorder(rule)) return [];
+      return splitSelectorList(rule.selector)
+        .filter((part) => !part.includes("[aria-invalid"))
+        .map((part) => touchesField(part))
+        .filter((cls): cls is string => cls !== null && !FIELD_TYPES.includes(cls) && !MARKED_ELSEWHERE.has(cls))
+        .filter((cls) => {
+          const mark = rules.find((r) => splitSelectorList(r.selector).some((p) => p === `.${cls}[aria-invalid="true"]`));
+          const value = mark && (declOf(mark, "outline") ?? declOf(mark, "border"));
+          return !(value ?? "").includes("var(--color-danger)");
+        })
+        .map((cls) => `${path.basename(rule.file)}: .${cls}`);
+    });
+    expect(offenders).toEqual([]);
   });
 });
