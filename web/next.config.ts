@@ -48,8 +48,9 @@ export const securityHeaders = ({ dev }: { dev: boolean }): Header[] => [
   // よそへは origin だけを渡す（パス・問い合わせ文字列に載る番号を渡さない）。'no-referrer' にしないのは、
   // Turnstile の枠が解かれた場所の確かめに参照元を使う可能性があるため（確かめていない・安全側に残した）
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // 客の画面は位置を使う（自分のオリジンだけ）。ほかの強い機能は使わないので閉じる
-  { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=(), payment=(), usb=()" },
+  // 客の画面は位置と、声で入れる（客-16・components/customer/VoiceInput）のマイクを使う（どちらも自分のオリジンだけ）。
+  // ほかの強い機能は使わないので閉じる。`microphone=()` にすると Chrome が音声認識を not-allowed で止める（2026-09-26 のレビュー）。
+  { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=(self), payment=(), usb=()" },
 ];
 
 const nextConfig: NextConfig = {

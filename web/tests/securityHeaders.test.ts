@@ -81,11 +81,14 @@ describe("ほかの見出し（安全-24）", () => {
     expect(headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
   });
 
-  it("Permissions-Policy は、客の画面が使う位置（自分のオリジンだけ）を残し、使わないカメラ・マイクを閉じる", () => {
+  it("Permissions-Policy は、客の画面が使う位置と声の入力のマイク（自分のオリジンだけ）を残し、使わないカメラを閉じる", () => {
+    // マイクは「声で入れる」（客-16・components/customer/VoiceInput）が使う。`microphone=()` にすると Chrome が
+    // 音声認識を not-allowed で止め、客には「マイクの利用が許可されていません」と出る（2026-09-26 のレビュー）。
     const policy = byKey(false).get("permissions-policy") ?? "";
     expect(policy).toContain("geolocation=(self)");
+    expect(policy).toContain("microphone=(self)");
     expect(policy).toContain("camera=()");
-    expect(policy).toContain("microphone=()");
+    expect(policy).not.toContain("microphone=()");
   });
 
   it("next.config は X-Powered-By を出さず、全部の経路に同じ見出しを付ける", async () => {
