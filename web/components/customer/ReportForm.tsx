@@ -60,7 +60,7 @@ export const ReportForm = ({ storeId, storeName, onClose }: Props) => {
       }}
     >
       <h2>{storeName}を運営に知らせる</h2>
-      <p>見過ごせないことがあれば、運営へ知らせてください。返事はできませんが、緊急のときは運営が店を止めます。</p>
+      <p>見過ごせないことがあれば、運営へ知らせてください。返事はできませんが、緊急のときは運営が店の登録を取り消します。</p>
 
       <label htmlFor="report-reason">どんなことがありましたか</label>
       <textarea

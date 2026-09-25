@@ -35,7 +35,7 @@ describe("承認の状況の帯（店-12）", () => {
     withContact("ops@example.test");
     render(<StatusBanner status="banned" />);
     const banner = screen.getByTestId("status-banner");
-    expect(banner.textContent).toMatch(/止められて/);
+    expect(banner.textContent).toMatch(/登録を取り消されて/);
     expect(banner.textContent).toMatch(/取り消され/);
     expect(banner.textContent).toMatch(/通知済み/);
     expect(banner.textContent).toMatch(/期限切れ.*完了にすることもできません/);

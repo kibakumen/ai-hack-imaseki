@@ -32,6 +32,7 @@ import { TempPasswordPanel } from "./TempPasswordPanel";
 import { SubmitButton } from "../ui/Submit";
 import { useSubmit, type Submit } from "../ui/useSubmit";
 import styles from "./admin.module.css";
+import { TERMS } from "../../lib/domain/texts";
 
 // 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
 type DetailResponse = ResponseOf<"GET /api/admin/stores/:id">;
@@ -44,7 +45,7 @@ type Props = { storeId: string; listQuery?: string };
 const STATUS_LABELS: Record<StoreStatus, string> = {
   pending: "未承認",
   approved: "承認済み",
-  banned: "止められている",
+  banned: TERMS.storeBanned,
 };
 
 const statusLabel = (state: string): string => STATUS_LABELS[state as StoreStatus] ?? state;
@@ -159,8 +160,8 @@ const RESTORE: ReasonedOperation = {
  */
 const RESTORE_TO_PENDING: ReasonedOperation = {
   ...RESTORE,
-  title: "止めるのをやめる（承認待ちへ）",
-  lead: "止めたときに営業許可書を消したため、戻すと承認待ちになります。店が許可書を上げ直したら、確かめてから承認してください。",
+  title: "登録の取り消しを戻す（承認待ちへ）",
+  lead: "取り消したときに営業許可書を消したため、戻すと承認待ちになります。店が許可書を上げ直したら、確かめてから承認してください。",
   buttonLabel: "承認待ちに戻す",
   confirmText: () => "終わったオファーと取り消されたお客さまの確保は戻りません。この店は承認待ちに戻り、営業許可書を上げ直して承認されるまで公開できません。戻しますか。",
 };

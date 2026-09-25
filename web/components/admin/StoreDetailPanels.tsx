@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 import type { AdminActionDto, AdminStoreDetailDto, ResponseOf } from "../../lib/client/api";
 import { dateTimeInJst } from "../ui/jstTime";
 import styles from "./admin.module.css";
+import { TERMS } from "../../lib/domain/texts";
 
 type StoreDetailDto = AdminStoreDetailDto;
 type StoreReports = ResponseOf<"GET /api/admin/stores/:id">["reports"];
@@ -43,11 +44,11 @@ const Chips = ({ items }: { items: string[] }) =>
 const Budget = ({ store }: { store: StoreDetailDto }) =>
   store.budgetMin === null || store.budgetMax === null ? <Empty /> : <span className={styles.tabularNums}>{`${store.budgetMin}円〜${store.budgetMax}円`}</span>;
 
-/** 店の情報（項目の2列）。`dt`/`dd` を直接グリッドに並べるので桁が揃う。 */
+/** 店舗情報（項目の2列）。`dt`/`dd` を直接グリッドに並べるので桁が揃う。 */
 export const StoreFacts = ({ store }: { store: StoreDetailDto }) => (
   <section className={styles.panel} aria-labelledby="store-facts-title">
     <h2 id="store-facts-title" className={styles.panelTitle}>
-      店の情報
+      {TERMS.storeProfile}
     </h2>
     <dl className={styles.facts}>
       <dt>住所</dt>

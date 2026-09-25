@@ -10,6 +10,7 @@ import Link from "next/link";
 import type { AdminStoreRowDto } from "../../lib/client/api";
 import { dateTimeInJst } from "../ui/jstTime";
 import styles from "./admin.module.css";
+import { TERMS } from "../../lib/domain/texts";
 
 export type SortKey = "created_desc" | "claims_desc" | "price_asc" | "remaining_desc";
 
@@ -19,7 +20,7 @@ type StoreStatus = StoreRow["status"];
 const STATUS_LABELS: Record<StoreStatus, string> = {
   pending: "未承認",
   approved: "承認済み",
-  banned: "止められている",
+  banned: TERMS.storeBanned,
 };
 
 /** 日付だけ（"YYYY/M/D HH:MM" の日付の部分）。 */

@@ -20,7 +20,7 @@
 
 import { useState, type FormEvent } from "react";
 import { callApi, isFailure } from "../../lib/client/api";
-import { SUBMIT_TEXTS } from "../../lib/domain/texts";
+import { SUBMIT_TEXTS, TERMS } from "../../lib/domain/texts";
 import { PARTY_MAX, PARTY_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria, type RefusalContext } from "../ui/InputRefusal";
 import { SubmitButton } from "../ui/Submit";
@@ -107,7 +107,7 @@ const CancelButton = ({ reservationId, onChanged }: { reservationId: string; onC
       </button>
       {confirming && (
         <div className="claim-confirm" data-testid="confirm-cancel" role="group" aria-label="取り消す前の確かめ">
-          <p>この確保を取り消すと、コードは使えなくなります。取り消しますか。</p>
+          <p>この確保を取り消すと、{TERMS.reservationCode}は使えなくなります。取り消しますか。</p>
           {/* 送り終えるまで確かめを開いたままにし、「取り消す」を止める（横断-03。閉じてから送ると2度押せた） */}
           <SubmitButton
             type="button"

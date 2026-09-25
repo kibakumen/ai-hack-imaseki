@@ -21,6 +21,7 @@ import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { WheelPicker } from "./WheelPicker";
 import { SubmitButton } from "../ui/Submit";
 import { useSubmit } from "../ui/useSubmit";
+import { TERMS } from "../../lib/domain/texts";
 
 export type PublishFormCoupon = { id: string; name: string; note: string };
 export type PublishFormPrefill = { couponIds: string[]; capacity: number | null; partyMax: number | null; until: string | null };
@@ -34,7 +35,7 @@ type Props = {
 
 const FIELD_NAMES = ["capacity", "partyMax", "until"];
 /** 足りない店の情報で断られたときの行き先（基準 17.11 の案内） */
-const PROFILE_LINKS = { profile_incomplete: { href: "/store/profile", label: "店の情報を開く" } };
+const PROFILE_LINKS = { profile_incomplete: { href: "/store/profile", label: `${TERMS.storeProfile}を開く` } };
 /** 「何時まで」に関わる断りの語。返ってきたら畳んだ欄を開く */
 const UNTIL_KINDS = ["until_in_past", "until_over_window"];
 const CAPACITY_LABEL = "配信数";

@@ -16,7 +16,8 @@ describe("店向けの利用規約（店-21）", () => {
     const body = document.body.textContent ?? "";
     expect(body).toMatch(/カード/);
     expect(body).toMatch(/請求しません/);
-    expect(body).toMatch(/止める/);
+    // 店を止める操作と状態の呼び方は「登録を取り消す」に揃えた（2026-09-25 監査の指摘 横断-11）
+    expect(body).toMatch(/登録を取り消す/);
     expect(body).toMatch(/戻す/);
     expect(body).toMatch(/電話番号/);
     expect(body).toMatch(/営業許可書/);

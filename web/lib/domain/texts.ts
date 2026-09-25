@@ -4,6 +4,19 @@
 // 利用者を責める語（「不正」「誤り」「無効」）は使わない。
 
 type Ctx = Record<string, unknown>;
+
+// ---------- 用語の正本（2026-09-25 監査の指摘 横断-11） ----------
+// 1つの語に1つの意味。画面と決まった文はここから引く（web/tests/terms.test.ts が、揃える前の言い方が画面に
+// 残っていないことを見る）。語は指摘の中で最初に挙がった案（AI判断・2026-09-25）:
+//   店を止める操作と状態 … 本人が「BAN」を言い換えた「登録を取り消す」に合わせる（「止められている」「停止」をやめる）
+//   確保ごとの8桁の番号 … 客も店も「確保番号」（店の確かめの「コード」をやめる）
+//   店の情報の画面      … タブの「店舗情報」に揃える（見出しの「お店の情報」、案内の「店の情報」をやめる）
+export const TERMS = {
+  storeBan: "登録を取り消す",
+  storeBanned: "登録取り消し済み",
+  reservationCode: "確保番号",
+  storeProfile: "店舗情報",
+} as const;
 const str = (v: unknown, fallback = ""): string => (v === undefined || v === null ? fallback : String(v));
 
 // ---------- 入力の断り（kind） ----------
@@ -38,7 +51,7 @@ const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   // ⚠️ 20.25 店の画面に出す文（店が運営に止められている間の「完了済み」の断り）。
   // RECEIVE_REFUSAL_TEXTS の同じ綴りの語とは**読み手が違う**——あちらは客に出す文（その店から
   // 受け取れない）で、こちらは店の人に出す文（自分の店が止められていてこの操作ができない）。
-  store_banned: () => "運営に止められているため、完了済みにできません。",
+  store_banned: () => "運営に登録を取り消されているため、完了済みにできません。",
   human_check_failed: () => "人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください。",
   rate_limited: () => "しばらく待ってからお試しください。",
   body_too_large: () => "送る内容が大きすぎます。短くしてからお試しください。",
@@ -94,7 +107,7 @@ const RECEIVE_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   offer_ended: () => "この店の受け付けは終わりました。",
   party_over_max: (ctx) => `この店は今、${str(ctx.partyMax, "")}名までになりました。`,
   has_active_reservation: () => "今の確保があります。",
-  store_banned: () => "このお店は運営により停止されました。",
+  store_banned: () => "このお店は運営により登録が取り消されました。",
   results_stale: () => "この検索の結果からは、もう受け取れません。もう一度探してください。",
   receives_used_up: () => "このお店の今回の受け付けは、受け取れる回数を使い切りました。ほかのお店を探してください。",
 };
@@ -244,7 +257,7 @@ export const ARRIVALS_TEXTS = {
   /** 行と確かめに出す客の呼び方。客が呼び名を決めていなければ「お客さま」（見分けはコード・横断-02） */
   who: (nickname: string | null): string => (nickname ? `${nickname} さん` : "お客さま"),
   /** 電話番号の登録が無い行（発信のリンクを付けない・横断-02） */
-  noPhone: "電話番号の登録なし（コードで照合）",
+  noPhone: `電話番号の登録なし（${TERMS.reservationCode}で照合）`,
   /** 人数の札（呼び名から切り離して、省かずに出す・店-11） */
   party: (party: number): string => `${party}名`,
   /** 見出しと小見出し（店-02: 遅れている客は開いたまま、済んだぶんだけを畳む） */
@@ -257,7 +270,7 @@ export const ARRIVALS_TEXTS = {
   /** 客が取り消した行の印（横断-08 の案A。10分で一覧から消える） */
   customerCancelled: "客が取り消しました。この組の席の用意は要りません",
   /** 確かめ（店-01）。取り消しは、残りの枠が戻らないことと、来ない客は期限で枠が戻ることも言う */
-  confirmComplete: (who: string, party: number, code: string): string => `${who}・${party} 名・コード ${code} の来店を確かめましたか。`,
+  confirmComplete: (who: string, party: number, code: string): string => `${who}・${party} 名・${TERMS.reservationCode} ${code} の来店を確かめましたか。`,
   confirmCancel: "取り消すと、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります）。この確保を取り消しますか。",
   sending: SUBMIT_TEXTS.sending,
   /** 取り直し（店-08） */
@@ -275,9 +288,9 @@ export const ARRIVALS_TEXTS = {
 export const STORE_STATUS_TEXTS = {
   pending: "未承認です。運営の承認を待っています。承認されるまでオファーは公開できません。",
   pendingDetail: "承認は、営業許可書とカードの登録が揃ったあと、運営が許可書を確かめてから行います。分からないことは運営へ連絡してください:",
-  banned: "運営に止められているため、オファーは公開できません。",
+  banned: "運営に登録を取り消されているため、オファーは公開できません。",
   bannedDetail:
-    "向かっていた客の確保は取り消され、客には通知済みです。期限切れの方を完了にすることもできません。止められた理由と戻す手続きは、運営へ連絡してください:",
+    "向かっていた客の確保は取り消され、客には通知済みです。期限切れの方を完了にすることもできません。登録を取り消された理由と戻す手続きは、運営へ連絡してください:",
 } as const;
 
 // ---------- 書類の画面の説明（2026-09-25 監査の指摘 安全-20・店-21） ----------
@@ -285,7 +298,7 @@ export const STORE_STATUS_TEXTS = {
 // カードを預かる目的と「今は請求しない」こと。詳しくは店向けの利用規約（/store/terms）。
 export const DOCUMENTS_TEXTS = {
   licenseRetention:
-    "許可書は承認の確かめだけに使い、運営だけが見ます。運営が店を止めたとき・承認の前に取り下げたときに消します。個人のお名前やご住所が載っている場合は、その部分を隠した写真でもかまいません。",
+    "許可書は承認の確かめだけに使い、運営だけが見ます。運営が店の登録を取り消したとき・承認の前に取り下げたときに消します。個人のお名前やご住所が載っている場合は、その部分を隠した写真でもかまいません。",
   termsLink: "店向けの利用規約",
   contactLead: "。消してほしいときの連絡先: ",
   deleteLicense: "営業許可書を消す",

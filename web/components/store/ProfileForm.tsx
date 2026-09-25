@@ -142,7 +142,7 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
         void submit(event);
       }}
     >
-      <h2>お店の情報</h2>
+      {/* 画面の見出し（h1「店舗情報」）はページ（app/store/profile）が出す（横断-11・横断-12） */}
       <p className="store-lead">ここに入れた内容が、席を探している人に出ます。</p>
 
       <label htmlFor="store-profile-name">店名</label>

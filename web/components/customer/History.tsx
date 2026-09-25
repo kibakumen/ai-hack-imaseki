@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from "react";
 import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
-import { RESERVATION_STATUS_TEXTS } from "../../lib/domain/texts";
+import { RESERVATION_STATUS_TEXTS, TERMS } from "../../lib/domain/texts";
 import { FormMessage } from "../ui/InputRefusal";
 import { dateTimeInJst } from "../ui/jstTime";
 
@@ -67,7 +67,7 @@ export const History = ({ onSearchAgain }: HistoryProps) => {
             <li key={item.id} className="history__row" data-testid={`history-row-${item.id}`}>
               <p className="history__store">{item.storeName}</p>
               <p className="history__meta">
-                {dateTimeInJst(item.receivedAt)}・{RESERVATION_STATUS_TEXTS.label(item.status)}・コード {item.code}
+                {dateTimeInJst(item.receivedAt)}・{RESERVATION_STATUS_TEXTS.label(item.status)}・{TERMS.reservationCode} {item.code}
               </p>
               <p className="history__address">{item.storeAddress}</p>
               {item.storeUrl === null ? null : (
