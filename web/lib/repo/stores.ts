@@ -244,6 +244,17 @@ export const clearBannedStoreLicense = async (db: Db, storeId: string, read: Pic
 };
 
 /**
+ * どれかの店の行が指している許可書の鍵（今の分と承認の写し）。どこからも指されていないファイルを消す掃除
+ * （usecases/licenseSweep・安全-20 のレビュー）が、消してはいけない鍵として読む。
+ */
+export const findReferencedLicenseKeys = async (db: Db): Promise<Set<string>> => {
+  const { results } = await db
+    .prepare(`SELECT license_key AS key FROM stores WHERE license_key IS NOT NULL UNION SELECT approved_license_key FROM stores WHERE approved_license_key IS NOT NULL`)
+    .all();
+  return new Set((results ?? []).map((row) => String((row as { key: unknown }).key)));
+};
+
+/**
  * 承認の前の店が自分の許可書を取り下げる。**未承認のままで、読んだ鍵のままのときだけ**当たる——読んでから書くまでに
  * 承認されたら（承認の写しがその鍵を指す）外さない。当たれば true。
  */

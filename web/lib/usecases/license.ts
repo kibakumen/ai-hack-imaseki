@@ -10,6 +10,7 @@ import { clearBannedStoreLicense, clearPendingStoreLicense, findStoreDocuments, 
 import { ID_BYTES, LICENSE_MAX_BYTES } from "../schemas/limits";
 import { tokenFromBytes } from "../domain/token";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
+import { LICENSE_KEY_PREFIX, scheduleLicenseSweep } from "./licenseSweep";
 
 export type UploadLicenseResult = { ok: true } | { ok: false; kind: "file_unsupported" | "file_too_large" };
 
@@ -19,8 +20,11 @@ export type LicenseFile = { bytes: Uint8Array; declaredSize: number };
  * 置き場の鍵。店ごとに分け、上げ直すたびに新しい名前にする（古い名前は消す）。
  * 店の番号を鍵に含めるのは、置き場だけを見てもどの店のものかが辿れるようにするため
  * （運営が中身を確かめるときと、消し漏れを見つけるときに効く）。
+ * 置いた時刻（ミリ秒）も頭に入れる——指されていないファイルを消す掃除（usecases/licenseSweep）が、上げている途中の
+ * ファイルを見分けるため（2026-09-25 安全-20 のレビュー）。
  */
-const licenseKeyFor = (deps: Deps, storeId: string): string => `licenses/${storeId}/${tokenFromBytes(deps.rng.bytes(ID_BYTES))}`;
+const licenseKeyFor = (deps: Deps, storeId: string): string =>
+  `${LICENSE_KEY_PREFIX}${storeId}/${deps.clock.now().getTime()}-${tokenFromBytes(deps.rng.bytes(ID_BYTES))}`;
 
 /**
  * 営業許可書を1つ受け取る。断るときは置き場にも表にも何も書かない（基準 13.3）。
@@ -55,6 +59,8 @@ export const uploadLicense = async (deps: Deps, storeId: string, file: LicenseFi
       deps.logger.log({ event: "license_old_file_delete_failed", id: storeId });
     }
   }
+  // 消し損ねたファイルは、指されていないファイルの掃除が拾う（1日に1回・応答のあと）
+  scheduleLicenseSweep(deps);
   return { ok: true };
 };
 
@@ -104,7 +110,7 @@ export const readLicenseAsAdmin = async (deps: Deps, storeId: string, actor: Adm
 //   - 承認の前に店が取り下げたとき … 今の分（`withdrawLicense`・入口 DELETE /api/store/license）
 // 承認のときには消さない——承認の写しは、承認のあとの上げ直しと見比べるために運営が使う（運営-02）。
 // 表から先に外し、そのあとでファイルを消す（逆だと、途中で落ちたとき表が無いファイルを指す）。消せなかったファイルは
-// 記録に残す（鍵は `licenses/<店の番号>/` で始まるので、置き場を見れば辿れる）。
+// 記録に残し、どこからも指されていないファイルの掃除（usecases/licenseSweep・1日に1回）が消す（安全-20 のレビュー）。
 
 /** 置き場からファイルを消す。消せなくても手続きは続ける（表からはもう外してある）。 */
 const deleteLicenseFiles = async (deps: Deps, storeId: string, keys: ReadonlyArray<string | null>) => {
@@ -133,6 +139,7 @@ export const discardLicenseOfBannedStore = async (deps: Deps, storeId: string, a
   if (!keys || keys.status !== "banned") return;
   if (await clearBannedStoreLicense(deps.db, storeId, keys)) {
     await deleteLicenseFiles(deps, storeId, [keys.licenseKey, keys.approvedLicenseKey]);
+    scheduleLicenseSweep(deps);
     return;
   }
   if (attemptsLeft > 1) {
@@ -162,5 +169,6 @@ export const withdrawLicense = async (deps: Deps, storeId: string): Promise<With
   // 承認の写し（止められた店を戻した後など）が同じ鍵を指していれば、ファイルは残す
   await deleteLicenseFiles(deps, storeId, [keys.licenseKey === keys.approvedLicenseKey ? null : keys.licenseKey]);
   deps.logger.log({ event: "license_withdrawn", id: storeId });
+  scheduleLicenseSweep(deps);
   return { ok: true };
 };

@@ -384,6 +384,8 @@ export const fakeFiles = (): FakeFiles => {
     delete: async (key) => {
       store.delete(key);
     },
+    // 前置きで始まる鍵の一覧（営業許可書の掃除が使う・2026-09-25 安全-20 のレビュー）
+    list: async (prefix) => [...store.keys()].filter((key) => key.startsWith(prefix)),
   });
 };
 

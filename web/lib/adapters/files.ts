@@ -12,6 +12,21 @@ export type PermitBucket = {
   put(key: string, value: ArrayBuffer | ArrayBufferView, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
   get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; httpMetadata?: { contentType?: string } } | null>;
   delete(key: string): Promise<void>;
+  list(options: { prefix: string; cursor?: string }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
+};
+
+/**
+ * 一覧を読む頁の上限（R2 は1頁に1000件まで。10頁＝1万件。許可書は店1軒に2つまでなので、足りなくなるのは5千軒を超えてから）。
+ * 超えた分は次の掃除に回る——掃除は古いファイルを消すだけなので、読み残しても害は無い。
+ */
+const LIST_MAX_PAGES = 10;
+
+/** 前置きで始まる鍵を、頁をたどって集める（上限の頁まで）。 */
+const listKeys = async (bucket: PermitBucket, prefix: string, cursor: string | undefined, page: number): Promise<string[]> => {
+  const listed = await bucket.list({ prefix, cursor });
+  const keys = listed.objects.map((object) => object.key);
+  if (!listed.truncated || !listed.cursor || page + 1 >= LIST_MAX_PAGES) return keys;
+  return [...keys, ...(await listKeys(bucket, prefix, listed.cursor, page + 1))];
 };
 
 /** 束縛の名前は wrangler.jsonc の `PERMITS`（`adapters/env.ts` と同じく、束縛を知るのは lib/adapters だけ）。 */
@@ -35,4 +50,5 @@ export const createFileStore = (bucket: PermitBucket): FileStore => ({
   delete: async (key) => {
     await bucket.delete(key);
   },
+  list: (prefix) => listKeys(bucket, prefix, undefined, 0),
 });

@@ -80,6 +80,8 @@ export type FileStore = {
   put(key: string, body: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<{ body: Uint8Array; contentType: string } | null>;
   delete(key: string): Promise<void>;
+  /** 前置きで始まる鍵の一覧（任意。営業許可書の掃除が使う・2026-09-25 安全-20 のレビュー） */
+  list?(prefix: string): Promise<string[]>;
 };
 export type AppConfig = { turnstileSiteKey: string; vapidPublicKey: string; contactEmail: string | null; orcarouterModel: string };
 

@@ -131,6 +131,11 @@ export type FileStore = {
   put(key: string, body: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<{ body: Uint8Array; contentType: string } | null>;
   delete(key: string): Promise<void>;
+  /**
+   * その前置きで始まる鍵の一覧（任意の口）。どの店の行からも指されていない営業許可書を消す掃除（usecases/licenseSweep・
+   * 2026-09-25 安全-20 のレビュー）だけが使う。持たない口では掃除を走らせない。
+   */
+  list?(prefix: string): Promise<string[]>;
 };
 export type AppConfig = { turnstileSiteKey: string; vapidPublicKey: string; contactEmail: string | null; orcarouterModel: string };
 
