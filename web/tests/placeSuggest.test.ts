@@ -10,7 +10,7 @@
 //   6. 記録に打った文字が残らない（場所は個人データ）
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { fakeGeocoder, makeCtx, registerCustomer, type Ctx } from "../../tests/acceptance/v2/_fakes";
+import { fakeGeocoder, makeCtx, registerCustomer, type Ctx, type CtxWith } from "../../tests/acceptance/v2/_fakes";
 import type { Geocoder } from "../lib/ports";
 import { PLACE_SUGGEST_RATE_LIMIT } from "../lib/schemas/limits";
 
@@ -20,7 +20,8 @@ type ContractGeocoder = Ctx["deps"]["geocoder"];
 const SUGGESTED = ["東京都渋谷区渋谷２丁目２４ 渋谷駅", "渋谷区役所", "渋谷ヒカリエ", "渋谷スクランブルスクエア", "渋谷マークシティ", "渋谷ストリーム"];
 
 describe("入口 GET /api/customer/place-suggest", () => {
-  let ctx: Ctx;
+  // 地図の口を偽物でない物（候補の口を足した写し）に替えた場面なので、偽の地図の道具（ctx.geocoder）は無い
+  let ctx: CtxWith<{ geocoder: ContractGeocoder }>;
   const asked: string[] = [];
 
   beforeAll(async () => {

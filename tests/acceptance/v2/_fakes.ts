@@ -17,6 +17,7 @@ import {
   fakePitch,
   fakePush,
   fakeStoreImage,
+  isFake,
   MIN,
   type FakeAi,
   type FakeCard,
@@ -226,10 +227,8 @@ export const apiClient = (app: { fetch(req: Request): Promise<Response> }, cooki
 };
 
 // ---------- 場面（コンテキスト） ----------
-export type Ctx = {
-  app: { fetch(req: Request): Promise<Response>; routes: any[] };
-  deps: Deps;
-  db: Db;
+/** 場面の手元に置く偽物の道具（`ctx.<名前>`）。どれも app に渡った差し替え口そのもの */
+type FakeTools = {
   clock: FakeClock;
   ai: FakeAi;
   pitch: FakePitch;
@@ -240,20 +239,36 @@ export type Ctx = {
   human: FakeHuman;
   files: FakeFiles;
   logger: FakeLogger;
+};
+type ToolName = keyof FakeTools;
+const TOOL_NAMES: readonly ToolName[] = ["clock", "ai", "pitch", "geocoder", "storeImage", "push", "card", "human", "files", "logger"];
+
+/**
+ * 差し替え口の一部を替えた場面。**替えた口が偽物でなければ、その欄の偽物の道具は無い**——型の上でも
+ * 実行時にも undefined（2026-09-25 設計-02 のレビュー。以前は `deps.logger as FakeLogger` と型だけ偽物にしていて、
+ * 偽物でない Logger を渡すと、型は FakeLogger なのに `.entries` が実行時に黙って undefined だった）。
+ * 替えなかった口は親と同じ偽物。`CtxWith<{}>`（何も替えない）＝ `Ctx`。
+ */
+export type CtxWith<O extends Partial<Deps> = {}> = {
+  app: { fetch(req: Request): Promise<Response>; routes: any[] };
+  deps: Deps;
+  db: Db;
   api: (cookie?: string | null, opts?: { ip?: string }) => Api;
   /**
    * 一部の差し替え口を替えた別の app（同じ D1）。替えなかった口は**親と同じ偽物**で、
    * `next.geocoder === next.deps.geocoder` のように、場面の手元の偽物と app に渡る偽物が常に同じ物になる。
-   * 替えた口は、渡した物がそのまま `next.<名前>` になる（偽物でない物を渡したら、偽物の道具は無い）。
+   * 替えた口は、渡した物が偽物ならそれが `next.<名前>` になり、偽物でなければ `next.<名前>` は undefined。
    */
-  withDeps: (over: Partial<Deps>) => Promise<Ctx>;
+  withDeps: <P extends Partial<Deps>>(over: P) => Promise<CtxWith<Omit<O, keyof P> & P>>;
   dispose: () => Promise<void>;
   admin: { cookie: string; api: Api; email: string; password: string } | null;
-};
+} & { [K in ToolName]: K extends keyof O ? (O[K] extends FakeTools[K] ? FakeTools[K] : undefined) : FakeTools[K] };
+/** 差し替え口が全部偽物の場面（makeCtx() の既定） */
+export type Ctx = CtxWith;
 
-export const makeCtx = async (opts: { clockStart?: string; deps?: Partial<Deps> } = {}): Promise<Ctx> => {
+export const makeCtx = async <O extends Partial<Deps> = {}>(opts: { clockStart?: string; deps?: O } = {}): Promise<CtxWith<O>> => {
   const { db, dispose } = await openDb();
-  return buildCtx(db, dispose, opts);
+  return buildCtx<O>(db, dispose, opts);
 };
 
 /**
@@ -262,8 +277,8 @@ export const makeCtx = async (opts: { clockStart?: string; deps?: Partial<Deps> 
  * （2026-09-25 設計-02。以前は withDeps が新しい偽物を ctx に置きながら app には親の偽物を渡していて、
  * `ctx.geocoder.set(…)` がどこにも繋がらず d01 の場面が作れなかった）。
  */
-const buildCtx = async (db: Db, dispose: () => Promise<void>, opts: { clockStart?: string; deps?: Partial<Deps> }): Promise<Ctx> => {
-  const given = opts.deps ?? {};
+const buildCtx = async <O extends Partial<Deps>>(db: Db, dispose: () => Promise<void>, opts: { clockStart?: string; deps?: O }): Promise<CtxWith<O>> => {
+  const given: Partial<Deps> = opts.deps ?? {};
   const webcrypto = await loadWeb("lib/adapters/webcrypto");
   const deps: Deps = {
     db,
@@ -283,37 +298,37 @@ const buildCtx = async (db: Db, dispose: () => Promise<void>, opts: { clockStart
   };
   const { createApp } = await loadWeb("lib/http/app");
   const app = createApp(deps);
-  // 手元の偽物は、app に渡した物そのもの（替えられた口が偽物でなければ、偽物の道具は無い＝型の上だけ偽物）
-  const ctx: Ctx = {
+  // 手元の道具は、app に渡した物そのもの。偽物でない物が渡った口は undefined（型の CtxWith と同じ読み）
+  const tools = Object.fromEntries(TOOL_NAMES.map((name) => [name, isFake(deps[name]) ? deps[name] : undefined]));
+  const ctx = {
     app,
     deps,
     db,
-    clock: deps.clock as FakeClock,
-    ai: deps.ai as FakeAi,
-    pitch: deps.pitch as FakePitch,
-    geocoder: deps.geocoder as FakeGeocoder,
-    storeImage: deps.storeImage as FakeStoreImage,
-    push: deps.push as FakePush,
-    card: deps.card as FakeCard,
-    human: deps.human as FakeHuman,
-    files: deps.files as FakeFiles,
-    logger: deps.logger as FakeLogger,
-    api: (cookie = null, apiOpts = {}) => apiClient(app, cookie, apiOpts),
-    withDeps: async (over) => {
+    ...tools,
+    api: (cookie: string | null = null, apiOpts: { ip?: string } = {}) => apiClient(app, cookie, apiOpts),
+    withDeps: async (over: Partial<Deps>) => {
       const next = await buildCtx(db, async () => {}, { deps: { ...deps, ...over } });
       next.admin = ctx.admin;
       return next;
     },
     dispose,
     admin: null,
-  };
+  } as unknown as CtxWith<O>;
   return ctx;
 };
 
 // ---------- 場面の準備 ----------
+// 場面の道具は、使う欄だけを受け取る（差し替え口を替えた場面 CtxWith も、使う偽物が揃っていれば渡せる。
+// 使う偽物を偽物でない物に替えた場面は、型の検査で弾かれる）
+/** 入口を呼べる場面 */
+type ApiScene = Pick<Ctx, "api">;
+/** 運営を作れる場面 */
+type AdminScene = Pick<Ctx, "api" | "deps" | "admin">;
+/** 承認済みの店を作れる場面（店の住所を偽の地図に置くので、偽の地図が要る） */
+type StoreScene = Pick<Ctx, "api" | "deps" | "admin" | "geocoder">;
 export const CUSTOMER = { nickname: "たなか", phone: "09012345678", genres: ["和食", "居酒屋"], budgetMax: 4000 };
 
-export const registerCustomer = async (ctx: Ctx, over: Partial<typeof CUSTOMER> & { humanToken?: string } = {}) => {
+export const registerCustomer = async (ctx: ApiScene, over: Partial<typeof CUSTOMER> & { humanToken?: string } = {}) => {
   const r = await ctx.api().post("/api/register/customer", { ...CUSTOMER, humanToken: "tok-ok", ...over });
   if (![200, 201].includes(r.status)) throw new Error(`客の登録に失敗: ${r.status} ${r.text}`);
   const cookie = cookieOf(r);
@@ -321,7 +336,7 @@ export const registerCustomer = async (ctx: Ctx, over: Partial<typeof CUSTOMER> 
   return { cookie, api: ctx.api(cookie), response: r };
 };
 
-export const seedAdmin = async (ctx: Ctx, input: { email?: string; password?: string } = {}) => {
+export const seedAdmin = async (ctx: AdminScene, input: { email?: string; password?: string } = {}) => {
   const email = input.email ?? "admin@example.com";
   const password = input.password ?? "admin-pass-1234";
   const { seedAdmin: seed } = await loadWeb("lib/usecases/seedAdmin");
@@ -335,7 +350,7 @@ export const seedAdmin = async (ctx: Ctx, input: { email?: string; password?: st
 };
 
 let storeSeq = 0;
-export const registerStore = async (ctx: Ctx, over: { name?: string; email?: string; password?: string; humanToken?: string } = {}) => {
+export const registerStore = async (ctx: ApiScene, over: { name?: string; email?: string; password?: string; humanToken?: string } = {}) => {
   const n = ++storeSeq;
   const input = { name: over.name ?? `店${n}`, email: over.email ?? `store${n}-${Date.now()}@example.com`, password: over.password ?? "store-pass-1234", humanToken: over.humanToken ?? "tok-ok" };
   const r = await ctx.api().post("/api/register/store", input);
@@ -400,7 +415,7 @@ export const registerCard = async (api: Api) => {
 
 /** 承認済みの店を1つ作る（登録→店の情報→許可書→カード→運営が承認） */
 export const approvedStore = async (
-  ctx: Ctx,
+  ctx: StoreScene,
   over: Partial<StoreProfile> & { lat?: number; lng?: number; coupons?: Array<{ name: string; note: string }>; email?: string; password?: string } = {},
 ) => {
   if (!ctx.admin) await seedAdmin(ctx);
@@ -482,7 +497,7 @@ export const requireInResults = (fetched: ApiResult, offerId: string): void => {
  * 客1人が受け取りまで済ませた場面。店は場面ごとに別の場所（spot）に置き、客はそこで探して、
  * **結果に出たことを確かめてから**受け取る（本番の客と同じ順）。`at` はその場所（続けて探す検査が使う）。
  */
-export const receivedScene = async (ctx: Ctx, over: { capacity?: number; partyMax?: number; party?: number; coupons?: Array<{ name: string; note: string }>; storeName?: string } = {}) => {
+export const receivedScene = async (ctx: StoreScene, over: { capacity?: number; partyMax?: number; party?: number; coupons?: Array<{ name: string; note: string }>; storeName?: string } = {}) => {
   const at = spot();
   const store = await approvedStore(ctx, { name: over.storeName ?? "受け取りの店", coupons: over.coupons ?? [], ...at });
   const offer = await publishOffer(store.api, { capacity: over.capacity ?? 3, partyMax: over.partyMax ?? 4, couponIds: store.coupons.map((c) => c.id) });
@@ -499,7 +514,7 @@ export const receivedScene = async (ctx: Ctx, over: { capacity?: number; partyMa
  * 紹介文の着手のずらしと全体の蓋は `deps.clock` で待つので、届き終わるまで偽の時計を少しずつ進める
  * （進めた分は最大で全体の蓋の 25 秒）。
  */
-export const fetchOffersStream = async (ctx: Ctx, api: Api, over: Parameters<typeof fetchBody>[0] = {}) => {
+export const fetchOffersStream = async (ctx: Pick<Ctx, "clock">, api: Api, over: Parameters<typeof fetchBody>[0] = {}) => {
   const res = await api.open("POST", "/api/customer/fetch/stream", fetchBody(over));
   if (!(res.headers.get("content-type") ?? "").includes("ndjson") || !res.body) {
     const text = await res.text();

@@ -22,6 +22,21 @@ import type {
 /** 2026-09-22 15:00 JST（06:00Z）。偽の時計の起点 */
 export const T0 = "2026-09-22T06:00:00.000Z";
 
+// ---------- 偽物の印 ----------
+/**
+ * このファイルが作った偽物の控え。場面（_fakes.ts の buildCtx）は、差し替え口に渡った物が**本当にここで作った偽物か**を
+ * これで見分け、偽物でなければ `ctx.<名前>` を undefined にする（2026-09-25 設計-02 のレビュー。以前は
+ * `deps.logger as FakeLogger` と型だけ偽物にしていて、偽物でない物を渡すと `.entries` が実行時に黙って undefined だった）。
+ * 形で見分けず、作った物そのもので見分ける（偽物を広げて写した物は、道具の控えが元の偽物と食い違うため）。
+ */
+const FAKES = new WeakSet<object>();
+const markFake = <T extends object>(fake: T): T => {
+  FAKES.add(fake);
+  return fake;
+};
+/** このファイルの偽物そのものか */
+export const isFake = (port: unknown): boolean => typeof port === "object" && port !== null && FAKES.has(port);
+
 // ---------- 偽の時計 ----------
 export type FakeClock = Clock & {
   advance(ms: number): Promise<void>;
@@ -61,7 +76,7 @@ export const fakeClock = (startIso = T0): FakeClock => {
       }
     }
   };
-  return {
+  return markFake({
     now: () => new Date(t),
     after: (ms) =>
       new Promise<void>((resolve) => {
@@ -92,7 +107,7 @@ export const fakeClock = (startIso = T0): FakeClock => {
         notify();
       });
     },
-  };
+  });
 };
 export const MIN = 60_000;
 export const HOUR = 60 * MIN;
@@ -126,7 +141,7 @@ export const fakeAi = (): FakeAi => {
       return r;
     },
   };
-  return ai;
+  return markFake(ai);
 };
 
 /** 打ち切りの合図が来るまで返らない（偽物の「返らない外のサービス」の共通の形） */
@@ -198,7 +213,7 @@ export const fakeGeocoder = (opts: { reverse?: boolean; suggest?: boolean } = {}
   const shaped: Partial<FakeGeocoder> = { ...g };
   if (opts.reverse === false) delete shaped.reverse;
   if (opts.suggest === false) delete shaped.suggest;
-  return (opts.reverse === false || opts.suggest === false ? shaped : g) as FakeGeocoder;
+  return markFake((opts.reverse === false || opts.suggest === false ? shaped : g) as FakeGeocoder);
 };
 
 /** 偽の紹介文の書き手と検査官（本番の `deps.pitch`）。既定は1回で書けて検査も通る */
@@ -235,7 +250,7 @@ export const fakePitch = (): FakePitch => {
       return r === "hang" ? hangUntilAbort(opts?.signal, { ok: false, error: "aborted" } as PitchResult) : r;
     },
   };
-  return p;
+  return markFake(p);
 };
 
 /** 偽の店の画像の口（本番の `deps.storeImage`）。呼ばれた URL を控える */
@@ -249,7 +264,7 @@ export const fakeStoreImage = (): FakeStoreImage => {
       return s.result;
     },
   };
-  return s;
+  return markFake(s);
 };
 
 export type FakePush = PushSender & { calls: Array<{ subscription: unknown; ttlSeconds: number }>; result: { ok: true } | { ok: false; gone: boolean } | "throw" };
@@ -263,7 +278,7 @@ export const fakePush = (): FakePush => {
       return p.result;
     },
   };
-  return p;
+  return markFake(p);
 };
 
 /** Stripe の側が持つ1件（番号・どの店のものか・戻り先・入力を終えたか） */
@@ -322,7 +337,7 @@ export const fakeCard = (): FakeCard => {
       return page && page.card === c ? page.sessionId : null;
     },
   };
-  return c;
+  return markFake(c);
 };
 /** 入口の応答の URL から、その偽のカードの口を引く */
 export const cardOfCheckout = (checkoutUrl: string): FakeCard => {
@@ -347,13 +362,13 @@ export const fakeHuman = (): FakeHuman => {
       return { ok: true, human: h.mode === "human" };
     },
   };
-  return h;
+  return markFake(h);
 };
 
 export type FakeFiles = FileStore & { store: Map<string, { body: Uint8Array; contentType: string }> };
 export const fakeFiles = (): FakeFiles => {
   const store = new Map<string, { body: Uint8Array; contentType: string }>();
-  return {
+  return markFake({
     store,
     put: async (key, body, contentType) => {
       store.set(key, { body: new Uint8Array(body), contentType });
@@ -362,13 +377,13 @@ export const fakeFiles = (): FakeFiles => {
     delete: async (key) => {
       store.delete(key);
     },
-  };
+  });
 };
 
 export type FakeLogger = Logger & { entries: unknown[] };
 export const fakeLogger = (): FakeLogger => {
   const l: FakeLogger = { entries: [], log: (entry) => l.entries.push(entry) };
-  return l;
+  return markFake(l);
 };
 
 /**

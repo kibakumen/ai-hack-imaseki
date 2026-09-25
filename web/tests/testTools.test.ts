@@ -1,7 +1,7 @@
 // 検査の道具（tests/acceptance/v2/_fakes.ts）そのものの検査（2026-09-25 設計-19・設計-03）。
 // 道具が約束どおりに効かないと、それを使う検査は「実時間の打ち切りで緑」「近道で緑」になり、何も示さなくなる。
-import { describe, expect, it } from "vitest";
-import { fakeCard, fakeClock, splitSql } from "../../tests/acceptance/v2/_fakes";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { fakeCard, fakeClock, fakeGeocoder, isFake, makeCtx, splitSql, type FakeAi, type FakeGeocoder } from "../../tests/acceptance/v2/_fakes";
 
 describe("偽の時計", () => {
   it("armed は、これから作られる合図を待ってから解ける（要求を送った直後に進めても合図を取りこぼさない）", async () => {
@@ -55,5 +55,39 @@ describe("偽のカードの口", () => {
     const templated = await card.createSetupSession({ storeId: "s2", returnUrl: "https://app.test/store/documents?session_id={CHECKOUT_SESSION_ID}" });
     if (!templated.ok) throw new Error("setup failed");
     expect(card.complete(templated.url)).toBe(`https://app.test/store/documents?session_id=${templated.sessionId}`);
+  });
+});
+
+describe("場面の偽物の道具（ctx.<名前>）", () => {
+  // 2026-09-25 設計-02 のレビュー: 以前は差し替え口を偽物でない物に替えても ctx.logger が型の上だけ FakeLogger で、
+  // `.entries` が実行時に黙って undefined だった（d01 の both がこの形）。
+  it("偽物でない物に替えた口は、型の上でも実行時にも道具が無い。替えなかった口は親と同じ偽物", async () => {
+    const ctx = await makeCtx();
+    try {
+      const both = { log: (entry: Parameters<typeof ctx.logger.log>[0]) => void ctx.logger.log(entry) };
+      const next = await ctx.withDeps({ logger: both });
+      expectTypeOf(next.logger).toEqualTypeOf<undefined>();
+      expect(next.logger).toBeUndefined();
+      expect(next.deps.logger).toBe(both);
+      expectTypeOf(next.ai).toEqualTypeOf<FakeAi>();
+      expect(next.ai).toBe(ctx.ai);
+      expect(isFake(next.ai)).toBe(true);
+
+      const swapped = await next.withDeps({ geocoder: fakeGeocoder({ suggest: false }) });
+      expectTypeOf(swapped.geocoder).toEqualTypeOf<FakeGeocoder>();
+      expect(swapped.geocoder).toBe(swapped.deps.geocoder);
+      expect(isFake(swapped.geocoder)).toBe(true);
+      // 孫の場面でも、親で偽物でない物に替えた口は道具が無いまま
+      expectTypeOf(swapped.logger).toEqualTypeOf<undefined>();
+      expect(swapped.logger).toBeUndefined();
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  it("偽物を広げて写した物は偽物と見なさない（道具の控えが元の偽物と食い違うため）", () => {
+    const g = fakeGeocoder();
+    expect(isFake(g)).toBe(true);
+    expect(isFake({ ...g })).toBe(false);
   });
 });
