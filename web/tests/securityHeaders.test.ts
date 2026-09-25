@@ -5,8 +5,11 @@
 // できなくなり、Next の実行時のインラインスクリプトが止まって画面が立ち上がらない（どちらも手元の検査では
 // 気づけず、公開して初めて分かる壊れ方）。画面が実際に読むものを1つずつ当てる。
 
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import nextConfig, { contentSecurityPolicy, securityHeaders } from "../next.config";
+import { uiSources, WEB } from "./_css";
 import { TURNSTILE_SCRIPT_URL } from "../components/ui/HumanCheck";
 
 /** CSP の文字列を「指令 → 値の並び」へ。 */
@@ -39,6 +42,22 @@ describe("CSP が画面の読むものを許している（安全-24）", () => 
     expect(script).toContain("'unsafe-inline'");
     expect(script.filter((s) => /^'(nonce|sha256|sha384|sha512)-/.test(s))).toEqual([]);
     expect(script).toContain("'self'");
+  });
+
+  // 2026-09-26 のレビュー（安全-24 の残り）: script-src の 'unsafe-inline' は、要素のインラインスクリプトと一緒に
+  // イベント属性（`<img src=x onerror=…>`）も許す。React と Next はイベント属性を出さない（addEventListener で付ける）ので、
+  // 属性の側だけを閉じる。この先 XSS が1か所入ったときに、いちばんよくある形（HTML に紛れ込んだ onerror=）を止める層。
+  // script-src-attr を知らない古いブラウザは script-src に倒れる（今と同じで、悪くならない）。
+  it("インラインのイベント属性（onerror= など）は止める: script-src-attr は 'none'（本番も開発も）", () => {
+    expect(production.get("script-src-attr")).toEqual(["'none'"]);
+    expect(development.get("script-src-attr")).toEqual(["'none'"]);
+  });
+
+  it("画面のソースはイベント属性を作らない（script-src-attr 'none' で止まる書き方をしていない）。HTML を差し込むのは明暗の初期化だけ", () => {
+    const offenders = uiSources().filter((f) => /setAttribute\(\s*["'`]on[a-z]+["'`]|\bon[a-z]+\s*=\s*["'][^"']*\(/.test(fs.readFileSync(f, "utf8").replace(/\/\/.*$/gm, "")));
+    expect(offenders.map((f) => path.relative(WEB, f))).toEqual([]);
+    const injecting = uiSources().filter((f) => fs.readFileSync(f, "utf8").includes("dangerouslySetInnerHTML"));
+    expect(injecting.map((f) => path.relative(WEB, f))).toEqual([path.join("app", "layout.tsx")]);
   });
 
   it("本番では eval を許さず、手元の開発でだけ許す（React の開発時の仕組みが使う）。開発では HMR の WebSocket も許す", () => {
