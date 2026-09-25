@@ -1,5 +1,5 @@
 // 運営のアカウントの投入（要件14の基準 14.8）。画面からは作れず、手元で走らせる
-// web/scripts/seed-admin.mjs・seed-demo.mjs と受け入れ検査だけがここを呼ぶ。役割は必ず admin で、店は持たない。
+// web/scripts/seed-admin.mjs・usecases/seedDemo.ts（seed-demo.mjs）と受け入れ検査だけがここを呼ぶ。役割は必ず admin で、店は持たない。
 //
 // 2026-09-25（監査の指摘 安全-01）: 乗っ取られた運営を取り返す道として使えるようにした。
 //   - 書く前に今いる運営の一覧を返す（adminsBefore）。メールアドレスを変えられていても、呼ぶ側が気づける

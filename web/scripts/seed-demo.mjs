@@ -1,6 +1,7 @@
 // デモ用の種データを投入する（審査で本番の D1 が空のままだと1件も出ない対策）。
-// 判断は lib/usecases・lib/repo の実物が持つ。このスクリプトは D1 の口と入力を渡すだけ
-// （パスワードの保存の形をここへ書き写さない・seed-admin.mjs と同じ作り）。
+// 判断は lib/usecases/seedDemo.ts が持つ。このスクリプトは D1 の口と入力（店の配列）を渡すだけ
+// （2026-09-25 安全-01 のレビューで判断を移した。ここに置いていた店の投入は型の検査を通らず、repo の関数の名前が
+// 変わったとき〔設計-14〕に古い名前を呼んだまま落ちていた）。
 //
 // 入れるもの: 運営のアカウント1つ／承認済みの店6軒（会場・御茶ノ水ソラシティの徒歩圏）／各店の公開中のオファー1つ
 // （終了は当日23:00 JST）／各店のクーポン1〜3枚。
@@ -13,58 +14,39 @@
 //   node web/scripts/seed-demo.mjs --admin-email … --admin-password … --store-password … --print
 //       → 本番（--remote）用に、そのまま貼れる wrangler のコマンドを出す（ここでは実行しない）。
 //         本番の D1 を、確かめの無いスクリプトから黙って書き換えないため。
+//         ⚠️ --print は本番の D1 を読めないので、店は「まだ無い」前提の文になる。デモ店が既に在る本番には流さない
+//         （運営の取り返しは seed-admin.mjs、既に在るデモ店の鍵の入れ替えは運営の画面の仮のパスワードで行う・README 5.3）。
 //
-// 再実行しても安全（同じメールアドレスの店は作り直さず、既にあるクーポン・公開中のオファーは
-// 二重に作らない——repo 側の一意性の判断をそのまま使う）。
+// 運営の扱いは seed-admin.mjs と同じ（安全-01）:
+//   - 書く前に、今いる運営の一覧を出す。同じメールアドレスが在ればパスワードを入れ替え、セッションを全部切る
+//   - 別のメールアドレスの運営がいれば、黙って2人目を作らずに止まる（店にも何も書かない）。メールアドレスを
+//     変えられた運営を取り返すなら `--admin-account-id <一覧の番号>`、本当に2人目を足すときだけ `--add`
+//
+// 再実行しても安全（同じメールアドレスの店は作り直さず、既にあるクーポン・公開中のオファーは二重に作らない）。
+// 既にある店のアカウントは、パスワードを --store-password に入れ替え、そのセッションを全部切る。止められた店は
+// 承認済みへ戻す（乗っ取られて締め出されたデモ店を、作り直しで取り返せるように）。
 
 import path from "node:path";
 import { register } from "node:module";
 import { fileURLToPath } from "node:url";
+import { collectingDb, LIST_ADMINS_SQL, remoteCommand } from "./print-sql.mjs";
 
 register(new URL("./ts-resolve.mjs", import.meta.url));
 
 const WEB = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const DATABASE = "ai-hack-v2";
 
 const parseArgs = (argv) => {
-  const args = { print: false };
+  const args = { print: false, add: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--print") args.print = true;
+    else if (argv[i] === "--add") args.add = true;
     else if (argv[i] === "--admin-email") args.adminEmail = argv[++i];
     else if (argv[i] === "--admin-password") args.adminPassword = argv[++i];
+    else if (argv[i] === "--admin-account-id") args.adminAccountId = argv[++i];
     else if (argv[i] === "--store-password") args.storePassword = argv[++i];
   }
   return args;
 };
-
-/** SQL の文字列の値を1つの引用の中へ入れる（引用符は2つにして閉じない）。--print のときだけ使う。 */
-const literal = (value) => {
-  if (value === null || value === undefined) return "NULL";
-  if (typeof value === "number") return String(value);
-  return `'${String(value).replace(/'/g, "''")}'`;
-};
-
-/** ?1 ?2 … を値で埋めた1つの文にする（wrangler d1 execute は束縛の値を取らないため）。 */
-const inlined = (sql, args) => sql.replace(/\?(\d+)/g, (_, n) => literal(args[Number(n) - 1])).replace(/\s+/g, " ").trim();
-
-/**
- * --print のときの D1 の代わり。書き込みの文を集め、読み取りは「まだ無い」を返す
- * （本番はどのテーブルも空のまま・実測済みなので、先回りの読み取りは常に「無い」でよい）。
- * `run` は `meta.changes` を1で返す——`insertOfferIfNone` 等が変わった行数を見て分岐するため。
- */
-const collectingDb = (statements) => ({
-  prepare: (sql) => ({
-    bind: (...args) => ({
-      first: async () => null,
-      run: async () => {
-        statements.push(inlined(sql, args));
-        return { success: true, meta: { changes: 1 } };
-      },
-      all: async () => ({ results: [] }),
-    }),
-  }),
-  batch: async (stmts) => stmts,
-});
 
 // ---------- 会場（御茶ノ水ソラシティ・35.6984924, 139.7668622）の徒歩圏に散らした店6軒 ----------
 // 座標は会場からの直線距離144〜785m・全店 800m 圏内（座標は AI判断で計算・実在の街区に重ねた住所は目安表記）。
@@ -161,114 +143,61 @@ const STORES = [
   },
 ];
 
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const USAGE =
+  "使い方: node web/scripts/seed-demo.mjs --admin-email <メールアドレス> --admin-password <パスワード> --store-password <パスワード> [--admin-account-id <運営の番号>] [--add] [--print]";
 
-/** 「今」から見た、当日23:00（日本時間）を ISO 8601 で返す（domain/until.ts と同じ日本時間の扱い）。 */
-const closingTimeIso = (now) => {
-  const jst = new Date(now.getTime() + JST_OFFSET_MS);
-  const closingJst = Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), jst.getUTCDate(), 23, 0, 0, 0);
-  return new Date(closingJst - JST_OFFSET_MS).toISOString();
+const adminsLine = (admins) => `書く前にいた運営: ${admins.length === 0 ? "なし" : admins.map((a) => `${a.email} [${a.id}]`).join(", ")}`;
+
+const printCommands = async (seedDemo, base, input, adminAccountId) => {
+  const statements = [];
+  await seedDemo({ ...base, db: collectingDb(statements, adminAccountId) }, input);
+  console.log("# 1. まず今いる運営を確かめてください（読むだけ）。メールアドレスが変えられていたら、その番号を --admin-account-id に渡して出し直す");
+  console.log(remoteCommand(LIST_ADMINS_SQL));
+  console.log(
+    adminAccountId
+      ? `# 2. 番号 ${adminAccountId} の運営のメールアドレスとパスワードを入れ替え、その運営のセッションを全部切り、店を入れます`
+      : "# 2. 運営と店を新しく作ります（デモ店が既に在る D1 には流さない。店だけが二重にできる）",
+  );
+  for (const sql of statements) console.log(remoteCommand(sql));
+};
+
+const reportLocal = (result) => {
+  console.log(adminsLine(result.admin.adminsBefore));
+  console.log(
+    result.admin.created
+      ? "運営のアカウントを作りました"
+      : `運営のアカウント [${result.admin.accountId}] のパスワードを入れ替え、そのセッションを全部切りました`,
+  );
+  for (const store of result.stores) {
+    const spec = STORES.find((s) => s.email === store.email);
+    const offerLine = store.offerInserted ? `オファー公開（${spec.offer.capacity}組/${spec.offer.partyMax}名）` : "オファーは既に公開中のためスキップ";
+    const accountLine = store.created ? "店を登録しました" : "既存の店を更新し、パスワードを入れ替えてセッションを全部切りました";
+    console.log(`${accountLine}: ${spec.name} (${store.email}) / 承認済み / クーポン${store.couponCount}枚 / ${offerLine}`);
+  }
 };
 
 const main = async () => {
   const args = parseArgs(process.argv.slice(2));
   if (!args.adminEmail || !args.adminPassword || !args.storePassword) {
-    console.error(
-      "使い方: node web/scripts/seed-demo.mjs --admin-email <メールアドレス> --admin-password <パスワード> --store-password <パスワード> [--print]",
-    );
+    console.error(USAGE);
     process.exitCode = 1;
     return;
   }
-
-  const [{ seedAdmin }, { createHasher, createRng }, { hashPassword }, { ID_BYTES }, { tokenFromBytes }] = await Promise.all([
-    import("../lib/usecases/seedAdmin.ts"),
-    import("../lib/adapters/webcrypto.ts"),
-    import("../lib/usecases/credentials.ts"),
-    import("../lib/schemas/limits.ts"),
-    import("../lib/domain/token.ts"),
-  ]);
-  const { findAccountByEmail, insertAccount } = await import("../lib/repo/accounts.ts");
-  const { insertStoreStatement, updateStoreProfile } = await import("../lib/repo/stores.ts");
-  const { approveStoreStatement } = await import("../lib/repo/adminStores.ts");
-  const { listCoupons, insertCoupon } = await import("../lib/repo/coupons.ts");
-  const { insertOfferIfNone } = await import("../lib/repo/offers.ts");
-
-  const base = { rng: createRng(), hasher: createHasher(), clock: { now: () => new Date(), after: () => Promise.resolve() } };
-
-  /** 店1軒ぶん（店・アカウント・情報・承認・クーポン・オファー）を入れる。既にあれば作り直さない。 */
-  const seedStore = async (deps, spec, storePasswordHash) => {
-    const existingAccount = await findAccountByEmail(deps.db, spec.email);
-    let storeId;
-    let created;
-    if (existingAccount) {
-      if (existingAccount.role !== "store" || !existingAccount.storeId) {
-        throw new Error(`${spec.email} は店のアカウントに使われていません`);
-      }
-      storeId = existingAccount.storeId;
-      created = false;
-    } else {
-      storeId = tokenFromBytes(deps.rng.bytes(ID_BYTES));
-      const accountId = tokenFromBytes(deps.rng.bytes(ID_BYTES));
-      await insertStoreStatement(deps.db, { id: storeId, name: spec.name, createdAtIso: deps.clock.now().toISOString() }).run();
-      await insertAccount(deps.db, { id: accountId, email: spec.email, role: "store", storeId, passwordHash: storePasswordHash });
-      created = true;
-    }
-
-    // 情報と承認は毎回当て直す（審査前の再実行で状態が変わっていないことを確かめられるように）。
-    await updateStoreProfile(deps.db, storeId, {
-      name: spec.name,
-      address: spec.address,
-      url: null,
-      genres: spec.genres,
-      menus: spec.menus,
-      budgetMin: spec.budgetMin,
-      budgetMax: spec.budgetMax,
-      lat: spec.lat,
-      lng: spec.lng,
-    });
-    await approveStoreStatement(deps.db, storeId).run();
-
-    // ⚠️ 挿した直後に読み直さない——--print の集める役の db は読み取りを常に「無い」で返す
-    // （本番はどの表も空という前回りの前提）ので、挿した値をその場で使う。
-    let coupons = await listCoupons(deps.db, storeId);
-    if (coupons.length === 0) {
-      const inserted = [];
-      for (const coupon of spec.coupons) {
-        const id = tokenFromBytes(deps.rng.bytes(ID_BYTES));
-        const createdAtIso = deps.clock.now().toISOString();
-        await insertCoupon(deps.db, { id, storeId, name: coupon.name, note: coupon.note ?? "", createdAtIso });
-        inserted.push({ id, name: coupon.name, note: coupon.note ?? "", createdAt: createdAtIso });
-      }
-      coupons = inserted;
-    }
-
-    const offerId = tokenFromBytes(deps.rng.bytes(ID_BYTES));
-    const now = deps.clock.now();
-    const offerInserted = await insertOfferIfNone(deps.db, {
-      id: offerId,
-      storeId,
-      capacity: spec.offer.capacity,
-      partyMax: spec.offer.partyMax,
-      publishedAtIso: now.toISOString(),
-      untilAtIso: closingTimeIso(now),
-      couponIds: coupons.map((c) => c.id),
-    });
-
-    return { storeId, created, couponCount: coupons.length, offerInserted };
+  const input = {
+    admin: { email: args.adminEmail, password: args.adminPassword, accountId: args.adminAccountId, allowAnotherAdmin: args.add },
+    storePassword: args.storePassword,
+    stores: STORES,
   };
 
+  const [{ seedDemo }, { OtherAdminsExistError }, { createHasher, createRng }] = await Promise.all([
+    import("../lib/usecases/seedDemo.ts"),
+    import("../lib/usecases/seedAdmin.ts"),
+    import("../lib/adapters/webcrypto.ts"),
+  ]);
+  const base = { rng: createRng(), hasher: createHasher(), clock: { now: () => new Date(), after: () => Promise.resolve() } };
+
   if (args.print) {
-    const statements = [];
-    const deps = { ...base, db: collectingDb(statements) };
-    await seedAdmin(deps, { email: args.adminEmail, password: args.adminPassword });
-    const storePasswordHash = await hashPassword(deps, args.storePassword);
-    for (const spec of STORES) {
-      await seedStore(deps, spec, storePasswordHash);
-    }
-    console.log("# 本番の D1 へ入れるには、次を順番に実行してください（既に何か入っていると UNIQUE で落ちます）");
-    for (const sql of statements) {
-      console.log(`pnpm --dir web exec wrangler d1 execute ${DATABASE} --remote --command ${JSON.stringify(sql)}`);
-    }
+    await printCommands(seedDemo, base, input, args.adminAccountId);
     return;
   }
 
@@ -278,20 +207,12 @@ const main = async () => {
     persist: { path: path.join(WEB, ".wrangler", "state", "v3") },
   });
   try {
-    const deps = { ...base, db: proxy.env.DB };
-    const adminResult = await seedAdmin(deps, { email: args.adminEmail, password: args.adminPassword });
-    console.log(
-      adminResult.created ? `運営のアカウントを作りました: ${args.adminEmail}` : `運営のアカウントのパスワードを入れ替えました: ${args.adminEmail}`,
-    );
-
-    const storePasswordHash = await hashPassword(deps, args.storePassword);
-    for (const spec of STORES) {
-      const result = await seedStore(deps, spec, storePasswordHash);
-      const offerLine = result.offerInserted ? `オファー公開（${spec.offer.capacity}組/${spec.offer.partyMax}名）` : "オファーは既に公開中のためスキップ";
-      console.log(
-        `${result.created ? "店を登録しました" : "既存の店を更新しました"}: ${spec.name} (${spec.email}) / 承認済み / クーポン${result.couponCount}枚 / ${offerLine}`,
-      );
-    }
+    reportLocal(await seedDemo({ ...base, db: proxy.env.DB }, input));
+  } catch (error) {
+    if (!(error instanceof OtherAdminsExistError)) throw error;
+    console.error(`${error.message}。何も書いていません。`);
+    console.error("メールアドレスを変えられた運営を取り返すなら --admin-account-id <番号>、2人目を足すなら --add を付けてください。");
+    process.exitCode = 1;
   } finally {
     await proxy.dispose();
   }
