@@ -179,8 +179,14 @@ const adminStoreDetail = object({
 });
 
 const adminMetrics = object({
+  /** 数えた時点（2026-09-25 監査の指摘 運営-08。画面が「◯時◯分の時点」と出す） */
+  at: string(),
+  /** AI の実費の合計（全部の用途・全期間と今日＝日本時間。運営-08） */
+  cost: object({ totalUsd: number(), totalCalls: number(), todayUsd: number(), todayCalls: number() }),
+  /** 店の選定の AI の呼び出し（紹介文の生成と判定は byPurpose に分けて出す・不具合-10） */
   ai: object({ calls: number(), avgCostUsd: number(), avgDurationMs: number(), succeeded: number(), failed: number() }),
-  fetch: object({ count: number(), avgDurationMs: number(), aiUsed: number(), fellBack: number() }),
+  /** `fellBack` は候補が在るのに点数順になった取得、`noCandidates` は候補0件で AI を呼ばなかった取得（不具合-10） */
+  fetch: object({ count: number(), avgDurationMs: number(), aiUsed: number(), fellBack: number(), noCandidates: number(), fellBackRate: number() }),
   reservations: object({ total: number(), expiredRate: number() }),
   byModel: array(
     object({
@@ -195,6 +201,8 @@ const adminMetrics = object({
   /** 用途別の実費内訳（2026-09-22 に足した。古い形の応答には無いので任意） */
   byPurpose: optional(array(object({ purpose: string(), count: number(), totalCostUsd: number(), avgDurationMs: number() }))),
   fallbackCount: number(),
+  /** 予備のモデルが答えた割合（全部の呼び出しのうち・設計書「運営の画面」の数字） */
+  fallbackRate: number(),
 });
 
 // ---------- 入口 → 成功の本文の形 ----------

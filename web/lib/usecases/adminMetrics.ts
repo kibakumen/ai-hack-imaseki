@@ -11,7 +11,8 @@
 // ⚠️ 応答に客のデータ（電話番号・呼び名）は入れない（基準 27.6・28.2）。ここが読むのは数だけ。
 
 import type { Deps } from "../ports";
-import { aiCallTotals, byModelTotals, byPurposeTotals, fallbackCount as countFallbacks, fetchTotals, reservationTotals } from "../repo/adminMetrics";
+import { aiCallTotals, byModelTotals, byPurposeTotals, costTotals, fallbackCount as countFallbacks, fetchTotals, reservationTotals } from "../repo/adminMetrics";
+import { startOfJstDayIso } from "./aiBudget";
 
 /**
  * モデル別の表の1行（第4周の追記・タスク28）。
@@ -42,36 +43,53 @@ export type AdminMetricsByPurposeRow = {
 };
 
 export type AdminMetrics = {
+  /** 数えた時点（2026-09-25 監査の指摘 運営-08。画面が「◯時◯分の時点」と出す） */
+  at: string;
+  /** AI の実費の合計（全部の用途）。全期間と、今日＝日本時間の0時から（運営-08） */
+  cost: { totalUsd: number; totalCalls: number; todayUsd: number; todayCalls: number };
+  /** 店の選定の AI の呼び出しだけ（不具合-10。紹介文の分は byPurpose） */
   ai: { calls: number; avgCostUsd: number; avgDurationMs: number; succeeded: number; failed: number };
-  fetch: { count: number; avgDurationMs: number; aiUsed: number; fellBack: number };
-  /** `expiredRate` は確保のうち自動で取り消された（期限切れの）割合。0〜1 の小数で返す */
+  /**
+   * `fellBack` は候補が在るのに点数順になった取得、`noCandidates` は候補0件で AI を呼ばなかった取得（不具合-10）。
+   * `fellBackRate` は候補の在った取得のうち点数順になった割合（設計書「運営の画面」の「点数順に倒れた割合」）。
+   */
+  fetch: { count: number; avgDurationMs: number; aiUsed: number; fellBack: number; noCandidates: number; fellBackRate: number };
+  /** `expiredRate` は、もう終わった確保のうち自動で取り消された（期限切れの）割合。0〜1 の小数で返す */
   reservations: { total: number; expiredRate: number };
   byModel: AdminMetricsByModelRow[];
   /** 用途別の実費内訳（2026-09-22・本人の指示） */
   byPurpose: AdminMetricsByPurposeRow[];
   /** 受け皿（別のモデル）が答えた呼び出しの数（`ai_calls.fallback_level` ≥ 1） */
   fallbackCount: number;
+  /** 受け皿が答えた割合（全部の呼び出しのうち・設計書「運営の画面」の数字） */
+  fallbackRate: number;
 };
 
 /** 割合。分母が0のときは0にする（「まだ1件も無い」を「割合が求まらない」にせず、画面を止めない）。 */
 const rateOf = (part: number, whole: number): number => (whole > 0 ? part / whole : 0);
 
 export const adminMetrics = async (deps: Deps): Promise<AdminMetrics> => {
-  const nowIso = deps.clock.now().toISOString();
-  const [ai, fetch, reservations, byModel, byPurpose, fallbacks] = await Promise.all([
+  const now = deps.clock.now();
+  const nowIso = now.toISOString();
+  const [ai, fetch, reservations, byModel, byPurpose, fallbacks, total, today] = await Promise.all([
     aiCallTotals(deps.db),
     fetchTotals(deps.db),
     reservationTotals(deps.db, nowIso),
     byModelTotals(deps.db),
     byPurposeTotals(deps.db),
     countFallbacks(deps.db),
+    costTotals(deps.db),
+    costTotals(deps.db, startOfJstDayIso(now)),
   ]);
   return {
+    at: nowIso,
+    cost: { totalUsd: total.costUsd, totalCalls: total.calls, todayUsd: today.costUsd, todayCalls: today.calls },
     ai,
-    fetch,
-    reservations: { total: reservations.total, expiredRate: rateOf(reservations.expired, reservations.total) },
+    fetch: { ...fetch, fellBackRate: rateOf(fetch.fellBack, fetch.count - fetch.noCandidates) },
+    reservations: { total: reservations.total, expiredRate: rateOf(reservations.expired, reservations.settled) },
     byModel,
     byPurpose,
     fallbackCount: fallbacks,
+    fallbackRate: rateOf(fallbacks, total.calls),
   };
 };
