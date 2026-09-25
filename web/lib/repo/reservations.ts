@@ -215,9 +215,28 @@ export const findOfferSnapshot = async (db: Db, offerId: string): Promise<{ stor
  * `reservations.fetch_id` は取得の記録を指す（外部の鍵）ので、在らない番号で受け取ろうとすると
  * INSERT が落ちる。落ちる前に入力の断りへ倒すために見る（要件29——どんな入力でも落ちない）。
  */
-export const fetchLogBelongsTo = async (db: Db, fetchId: string, customerId: string): Promise<boolean> => {
-  const row = await db.prepare(`SELECT 1 AS found FROM fetch_logs WHERE id = ?1 AND customer_id = ?2 LIMIT 1`).bind(fetchId, customerId).first();
-  return row !== null;
+export const fetchLogBelongsTo = async (db: Db, fetchId: string, customerId: string): Promise<boolean> => (await findFetchLogAt(db, fetchId, customerId)) !== null;
+
+/**
+ * その客の取得の記録の時刻。在らない・別の客のものなら null（受け取りの `fetchId` の確かめ）。
+ * 取得から一定時間を過ぎた結果からは新しく受け取らせない（安全-06）ので、時刻まで返す。
+ */
+export const findFetchLogAt = async (db: Db, fetchId: string, customerId: string): Promise<Date | null> => {
+  const row = await db.prepare(`SELECT at FROM fetch_logs WHERE id = ?1 AND customer_id = ?2 LIMIT 1`).bind(fetchId, customerId).first();
+  const at = (row as { at?: unknown } | null)?.at;
+  return typeof at === "string" ? new Date(at) : null;
+};
+
+/**
+ * その客が、その取得の結果から、そのオファーを押さえた件数（受け取りと受け取り直しを合わせて・状態を問わない）。
+ * 受け取り直しの回数の上限（安全-06）の判断と、期限切れの表示で受け取り直しを勧めるかに使う。
+ */
+export const countReceivesFromFetch = async (db: Db, input: { customerId: string; offerId: string; fetchId: string }): Promise<number> => {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM reservations WHERE customer_id = ?1 AND offer_id = ?2 AND fetch_id = ?3`)
+    .bind(input.customerId, input.offerId, input.fetchId)
+    .first();
+  return Number((row as { n?: unknown } | null)?.n ?? 0);
 };
 
 export const findLastFetchAt = async (db: Db, customerId: string): Promise<Date | null> => {
@@ -239,16 +258,19 @@ export type NewReservation = {
   expiresAtIso: string;
   /** 受け取った時点のクーポンの写し（JSON の文字列） */
   couponsJson: string;
+  /** 同じ取得の結果から同じオファーを押さえられる件数（安全-06。値の正本は schemas/limits の RECEIVES_PER_FETCH_MAX） */
+  receivesPerFetchMax: number;
 };
 
 /**
  * 受け取りの1文の INSERT（設計書「確保の状態と、残りの数え方」の「受け取り」の行）。入ったら true。
  *
- * 3つの条件を**1つの文の WHERE に全部入れる**ので、読んでから書くまでの隙に別の要求が入っても、
+ * 4つの条件を**1つの文の WHERE に全部入れる**ので、読んでから書くまでの隙に別の要求が入っても、
  * 残りを超えて確保が作られることはない（基準 8.7・18.11）:
  *   ①そのオファーが受け取れる状態（店が承認済み・公開中・残りが1以上）
  *   ②人数がその時点の「何名まで」以下（基準 8.6。取得のあとに店が下げていることがある）
  *   ③その客に確保中の確保が無い（基準 8.8。期限切れ・完了済み・取り消された確保は数えない・8.9）
+ *   ④同じ取得の結果から同じオファーを押さえた件数が上限未満（受け取り直しは1回まで・安全-06 の案A）
  * 距離と予算は見ない（基準 8.6 の補足——結果に出た時点で通っており、歩いた客を断る理由が無い）。
  *
  * 店の状況も見る（止められている店から受け取らせない）。運営が店を止めるとオファーも終わるので、
@@ -265,9 +287,10 @@ export const insertReservationIfReceivable = async (db: Db, input: NewReservatio
         ` AND ${publishingOfferCondition("o", "?6")}` +
         ` AND ${remainingExpression("o", "?6")} >= 1` +
         ` AND ?4 <= o.party_max` +
-        ` AND NOT EXISTS (SELECT 1 FROM reservations ar WHERE ar.customer_id = ?2 AND ar.status = 'active' AND ar.expires_at > ?6)`,
+        ` AND NOT EXISTS (SELECT 1 FROM reservations ar WHERE ar.customer_id = ?2 AND ar.status = 'active' AND ar.expires_at > ?6)` +
+        ` AND (SELECT COUNT(*) FROM reservations pr WHERE pr.customer_id = ?2 AND pr.offer_id = ?9 AND pr.fetch_id = ?3) < ?10`,
     )
-    .bind(input.id, input.customerId, input.fetchId, input.party, input.code, input.nowIso, input.expiresAtIso, input.couponsJson, input.offerId)
+    .bind(input.id, input.customerId, input.fetchId, input.party, input.code, input.nowIso, input.expiresAtIso, input.couponsJson, input.offerId, input.receivesPerFetchMax)
     .run();
   return changedRows(result) > 0;
 };

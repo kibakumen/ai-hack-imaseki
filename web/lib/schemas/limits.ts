@@ -224,6 +224,16 @@ export const ACCOUNT_SECRET_WINDOW_MS = 15 * 60 * 1000;
 export const RECEIVE_RATE_LIMIT = 10;
 export const RECEIVE_RATE_WINDOW_MS = 10 * 60 * 1000;
 /**
+ * 同じ取得の結果から、同じ客が同じオファーを押さえられる件数（受け取り1回＋受け取り直し1回・安全-06 の案A・AI判断）。
+ * 受け取り直しの道でも、同じ fetchId でもう一度受け取る道でも、合わせてこの件数まで。超えたら探し直してもらう。
+ */
+export const RECEIVES_PER_FETCH_MAX = 2;
+/**
+ * 取得の結果から新しく受け取れる時間（60分・安全-06 の案B の一部・AI判断）。古い fetchId を貯めておいて
+ * 後から使い回す手を塞ぐ。受け取り直し（期限切れから20分以内）はこの時間を見ない——受け取り直しの回数は上で数える。
+ */
+export const FETCH_RESULT_RECEIVE_WINDOW_MS = 60 * 60 * 1000;
+/**
  * 同じ客の店の画像の取得は1分に30回まで（AI判断 2026-09-22・要件に無い・要確認）。
  *
  * **なぜ要件に無いのに置くか**: この入口は**客が渡した URL へ Worker が自分で出ていく**唯一の道で、
