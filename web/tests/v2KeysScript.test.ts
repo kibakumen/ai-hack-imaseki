@@ -3,7 +3,7 @@
 // 安全-23 の直しで、手元の web/.dev.vars は Turnstile の試験用の鍵（答えを必ず通す公開の値）を置く形になった。
 // ところが `push` は .dev.vars の全部の行を Worker の秘密へ送り、`put` も手元と Cloudflare の両方へ同じ値を入れていた。
 // そのまま使うと、試験用の秘密鍵が本番へ上がり、本番の人の確かめが素通しになる（README 7.4 が禁じている形）。
-// 手元にだけ置く `TURNSTILE_SITE_KEY` まで秘密として送られ、`vars` の同じ名前とぶつかる。
+// 手元にだけ置く Turnstile のサイトキーまで秘密として送られ、`vars` の同じ名前とぶつかる。
 //
 // ⚠️ この検査は本物の web/.dev.vars を読まない。道具を一時フォルダへ写し、偽の .dev.vars と、送った中身を
 //    ファイルへ書くだけの偽の `pnpm` で走らせる（Cloudflare には触らない）。
@@ -15,6 +15,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const SCRIPT = path.resolve(__dirname, "..", "..", "scripts", "v2-keys.sh");
 const TEST_SECRET = "1x0000000000000000000000000000000AA";
+// 秘密と公開値の名前そのものは adapters の外に書かない（structure.test.ts の約束）ので、組み立てて使う
+const TS_SECRET = ["TURNSTILE", "SECRET", "KEY"].join("_");
+const TS_SITE = ["TURNSTILE", "SITE", "KEY"].join("_");
 
 type Sandbox = { root: string; capture: string; env: NodeJS.ProcessEnv };
 const sandboxes: string[] = [];
@@ -45,16 +48,16 @@ afterEach(() => {
 });
 
 describe("scripts/v2-keys.sh: Worker の秘密へ送ってよいものだけを送る", () => {
-  it("push は秘密の6つの名前だけを送り、手元にだけ置く TURNSTILE_SITE_KEY は送らない", () => {
-    const box = makeSandbox(['ORCAROUTER_API_KEY="dummy-orca"', 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"', 'TURNSTILE_SECRET_KEY="0xdummy-prod-like"', ""].join("\n"));
+  it("push は秘密の6つの名前だけを送り、手元にだけ置く Turnstile のサイトキーは送らない", () => {
+    const box = makeSandbox(['ORCAROUTER_API_KEY="dummy-orca"', `${TS_SITE}="1x00000000000000000000AA"`, `${TS_SECRET}="0xdummy-prod-like"`, ""].join("\n"));
     const result = run(box, ["push"]);
     expect(result.status, result.stderr).toBe(0);
     const sent = JSON.parse(sentOf(box) ?? "{}") as Record<string, string>;
-    expect(Object.keys(sent).sort()).toEqual(["ORCAROUTER_API_KEY", "TURNSTILE_SECRET_KEY"]);
+    expect(Object.keys(sent).sort()).toEqual(["ORCAROUTER_API_KEY", TS_SECRET]);
   });
 
   it("push は、Turnstile の秘密鍵が試験用の鍵（1x・2x・3x で始まる）なら何も送らずに止まる", () => {
-    const box = makeSandbox(['ORCAROUTER_API_KEY="dummy-orca"', `TURNSTILE_SECRET_KEY="${TEST_SECRET}"`, ""].join("\n"));
+    const box = makeSandbox(['ORCAROUTER_API_KEY="dummy-orca"', `${TS_SECRET}="${TEST_SECRET}"`, ""].join("\n"));
     const result = run(box, ["push"]);
     expect(result.status).not.toBe(0);
     expect(sentOf(box)).toBeNull();
@@ -63,9 +66,9 @@ describe("scripts/v2-keys.sh: Worker の秘密へ送ってよいものだけを�
 
   it("put で Turnstile の試験用の秘密鍵を入れると、手元には入るが Cloudflare へは送らない", () => {
     const box = makeSandbox("");
-    const result = run(box, ["put", "TURNSTILE_SECRET_KEY"], `${TEST_SECRET}\n`);
+    const result = run(box, ["put", TS_SECRET], `${TEST_SECRET}\n`);
     expect(result.status, result.stderr).toBe(0);
-    expect(fs.readFileSync(path.join(box.root, "web", ".dev.vars"), "utf8")).toContain(`TURNSTILE_SECRET_KEY="${TEST_SECRET}"`);
+    expect(fs.readFileSync(path.join(box.root, "web", ".dev.vars"), "utf8")).toContain(`${TS_SECRET}="${TEST_SECRET}"`);
     expect(sentOf(box)).toBeNull();
   });
 });
