@@ -83,24 +83,33 @@ const INSERT_AI_CALL = `
   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
 `;
 
-export const insertFetchLog = async (db: Db, log: FetchLogRecord): Promise<void> => {
-  await db
+/** 取得1回の記録を足す文（まとまり `db.batch` に並べるため、文のまま返す）。 */
+export const fetchLogStatement = (db: Db, log: FetchLogRecord): D1PreparedStatement =>
+  db
     .prepare(INSERT_FETCH_LOG)
-    .bind(log.id, log.customerId, log.originLat, log.originLng, log.party, log.genres, log.budgetMax, log.candidateCount, log.returnedCount, log.aiUsed, log.durationMs, log.at)
-    .run();
-};
+    .bind(log.id, log.customerId, log.originLat, log.originLng, log.party, log.genres, log.budgetMax, log.candidateCount, log.returnedCount, log.aiUsed, log.durationMs, log.at);
 
-/** 返した店をまとめて1度に書く（順位の並びは呼ぶ側が決めてから渡す）。 */
-export const insertFetchItems = async (db: Db, items: readonly FetchItemRecord[]): Promise<void> => {
-  if (items.length === 0) return;
-  await db.batch(items.map((item) => db.prepare(INSERT_FETCH_ITEM).bind(item.id, item.fetchId, item.storeId, item.rank, item.score, item.reason)));
+/** 返した店1件の記録を足す文。 */
+export const fetchItemStatement = (db: Db, item: FetchItemRecord): D1PreparedStatement =>
+  db.prepare(INSERT_FETCH_ITEM).bind(item.id, item.fetchId, item.storeId, item.rank, item.score, item.reason);
+
+/** AI の呼び出し1回の記録を足す文。 */
+export const aiCallStatement = (db: Db, call: AiCallRecord): D1PreparedStatement =>
+  db
+    .prepare(INSERT_AI_CALL)
+    .bind(call.id, call.fetchId, call.purpose, call.costUsd, call.durationMs, call.succeeded, call.validationFailed, call.resolvedModel, call.requestId, call.fallbackLevel, call.at);
+
+/**
+ * 取得1回ぶんの記録（取得・AI の選定の呼び出し・返した店）を**1回の往復**で足す（2026-09-25 監査の指摘 不具合-08）。
+ * 以前は3回を順に待ってから最初のカードを送っていた。並びは fetch_logs → ai_calls → fetch_items
+ * （後の2つが取得の記録を指しているため）。1つのまとまりなので、途中で落ちたら全部戻る。
+ */
+export const insertFetchRecord = async (db: Db, record: { log: FetchLogRecord; aiCall: AiCallRecord | null; items: readonly FetchItemRecord[] }): Promise<void> => {
+  await db.batch([fetchLogStatement(db, record.log), ...(record.aiCall ? [aiCallStatement(db, record.aiCall)] : []), ...record.items.map((item) => fetchItemStatement(db, item))]);
 };
 
 export const insertAiCall = async (db: Db, call: AiCallRecord): Promise<void> => {
-  await db
-    .prepare(INSERT_AI_CALL)
-    .bind(call.id, call.fetchId, call.purpose, call.costUsd, call.durationMs, call.succeeded, call.validationFailed, call.resolvedModel, call.requestId, call.fallbackLevel, call.at)
-    .run();
+  await aiCallStatement(db, call).run();
 };
 
 // ---------- 選択と、確保の状態の変化（タスク13が足した・要件27の基準 27.3・27.4） ----------
