@@ -31,6 +31,13 @@ CREATE INDEX IF NOT EXISTS idx_fetch_items_store ON fetch_items(store_id);
 CREATE INDEX IF NOT EXISTS idx_fetch_logs_customer_at ON fetch_logs(customer_id, at);
 
 -- 公開中のオファーだけに効く部分索引（終わったオファーは溜まる一方で、読む側はほとんど公開中しか見ない）。
--- 店ごとの公開中（店のホーム・公開の二重の確かめ・運営の一覧）と、全体の公開中（取得の候補）の2つの引き方がある。
+-- 店ごとの公開中（店のホーム・公開の二重の確かめ・運営の一覧・取得の候補〔店から入る〕）と、全体の公開中
+-- （運営の画面のいちばん上の「公開中」の数）の2つの引き方がある。
 CREATE INDEX IF NOT EXISTS idx_offers_open_by_store ON offers(store_id, until_at) WHERE ended_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_offers_open_until ON offers(until_at) WHERE ended_at IS NULL;
+
+-- 取得の候補を起点の周りの四角形（domain/geo.searchBounds）で先に絞るための、店の緯度経度の索引。
+-- 四角形の条件を SQL に足しただけでは、計画は公開中のオファーの索引から入り、全国の公開中のオファーと
+-- その確保を読んだあとで四角形に当たっていた（2026-09-25 のレビューの指摘）。repo/fetchCandidates は
+-- CROSS JOIN で店から入る順に固定し、この索引の lat の範囲から引く。
+CREATE INDEX IF NOT EXISTS idx_stores_lat_lng ON stores(lat, lng);

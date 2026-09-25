@@ -36,8 +36,8 @@ const CANDIDATES_SQL = `
   SELECT o.id AS offer_id, o.party_max, o.coupon_ids,
          s.id AS store_id, s.name AS store_name, s.url AS store_url,
          s.lat, s.lng, s.genres, s.menus, s.budget_min, s.budget_max, s.created_at
-  FROM offers o
-  JOIN stores s ON s.id = o.store_id
+  FROM stores s
+  CROSS JOIN offers o ON o.store_id = s.id
   WHERE s.status = 'approved'
     AND s.lat BETWEEN ?2 AND ?3 AND s.lng BETWEEN ?4 AND ?5
     AND ${receivableCondition("o", "?1")}
@@ -49,6 +49,12 @@ const CANDIDATES_SQL = `
  * に入る店。四角形は探す範囲の円を必ず含むので、範囲の内かは `domain/filter` がこれまでどおり決める
  * （2026-09-25 監査の指摘 設計-08: 全国の受け取れるオファーを読んでから 800m 以内に絞っていた）。
  * 位置の入っていない店は四角形に入らない（BETWEEN は NULL に当たらない）。
+ *
+ * **店から入る順を `CROSS JOIN` で固定している**（SQLite は CROSS JOIN の左右を入れ替えない）。
+ * 店の緯度経度の索引（`idx_stores_lat_lng`・migration 0004）で四角形の内の店を引き、その店の公開中の
+ * オファーだけを部分索引（`idx_offers_open_by_store`）で引く。普通の JOIN のままだと、計画は公開中の
+ * オファーから入り、全国の公開中のオファーとその確保（残りの数の副問い合わせ）を読んでから四角形に当たる
+ * （2026-09-25 のレビューの指摘。`tests/readsAndIndexes.test.ts` が計画の先頭を見張る）。
  *
  * 店の状態も見る（止められている店の行を客へ出さない）。運営が店を止めるとオファーも終わる
  * （設計書「オファーの状態」）ので、この条件は受け取れる状態の判断を二重に持つものではない。

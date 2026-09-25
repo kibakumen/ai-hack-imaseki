@@ -40,12 +40,22 @@ const recordStatements = async (run: (db: Db) => Promise<unknown>): Promise<Reco
 };
 
 /**
- * 索引を使わずに読む行（`USING` の無い SCAN・SEARCH）のうち、確保・記録・オファーの表に当たるもの。
- * 店の表を並べる運営の一覧は SCAN で正しいので見ない。公開中だけの部分索引を端から読む `SCAN o USING INDEX …` は
- * 索引を使っているので通す。
+ * 確保・記録・オファーの表を広く読む行。店の表を並べる運営の一覧は SCAN で正しいので見ない。
+ *
+ * - `SEARCH` は索引か主キーで引いている（`USING` が在る）なら狭い
+ * - `SCAN` は、索引を使っていても**その索引の端から端まで読む**（`SCAN o USING INDEX …`）ので、原則は広い。
+ *   例外は公開中のオファーだけの部分索引（`idx_offers_open_*`）——終わったオファーを含まないので、端から読んでも
+ *   公開中の数しか読まない
+ *
+ * ⚠️ 2026-09-25 のレビューの指摘: 前の版は `USING` を含む行を全部通していて、索引を丸ごと読む SCAN でも通った。
  */
 const TABLES = /^(SCAN|SEARCH) (reservations|res|cr|r|n|ar|pr|prev|fetch_items|fi|fetch_logs|fl|offers|o|ao)\b/;
-const isWideRead = (detail: string): boolean => TABLES.test(detail) && !/\bUSING\b/.test(detail);
+const OPEN_OFFERS_PARTIAL_SCAN = /^SCAN \w+ USING (COVERING )?INDEX idx_offers_open_/;
+const isWideRead = (detail: string): boolean => {
+  if (!TABLES.test(detail)) return false;
+  if (detail.startsWith("SEARCH")) return !/\bUSING\b/.test(detail);
+  return !OPEN_OFFERS_PARTIAL_SCAN.test(detail);
+};
 
 describe("読み取りの幅と索引（設計-08）", () => {
   let ctx: Ctx;
@@ -92,7 +102,18 @@ describe("読み取りの幅と索引（設計-08）", () => {
     expect(await wideScansOf((db) => findFetchCandidates(db, NOW, searchBounds(SHIBUYA)))).toEqual([]);
   });
 
-  it("取得の候補の四角形の外の店（探す範囲の外）は、D1 から読まない。範囲の内の店は読む", async () => {
+  // 2026-09-25 のレビューの指摘: 四角形の条件を足しただけでは、全国の公開中のオファーとその確保を読んだあとに
+  // 四角形が当たっていた（`SEARCH o USING INDEX idx_offers_open_until` から入る計画）。店の緯度経度の索引から
+  // 入り、四角形の外の店のオファーと確保には触れないことを、実行計画の先頭で見る。
+  it("取得の候補の計画は、店の緯度経度の索引で四角形の内の店から入り、その店の公開中のオファーだけを引く", async () => {
+    const [recorded] = await recordStatements((db) => findFetchCandidates(db, NOW, searchBounds(SHIBUYA)));
+    const details = await plan(recorded);
+    expect(details[0]).toMatch(/^SEARCH s USING INDEX idx_stores_lat_lng \(lat>\? AND lat<\?\)/);
+    expect(details).toContainEqual(expect.stringMatching(/^SEARCH o USING INDEX idx_offers_open_by_store \(store_id=\?/));
+    expect(details.filter((d) => /^SCAN o\b/.test(d))).toEqual([]);
+  });
+
+  it("取得の候補は四角形の内の店だけを返す（四角形の外の店は返さない）", async () => {
     const far = await approvedStore(ctx, { name: "遠い店", lat: SHIBUYA.lat + 0.5, lng: SHIBUYA.lng });
     await publishOffer(far.api);
     const near = await approvedStore(ctx, { name: "近い店", ...north(SHIBUYA, SEARCH_RADIUS_METERS - 1) });
