@@ -25,6 +25,9 @@ export const RESERVATION_HOLD_MS = 20 * 60 * 1000;
 /**
  * 期限切れのあと、コードを出し続ける・受け取り直せる・店が完了済みにできる長さ（20分）。
  * 客の側（要件11の基準 11.6）と店の側（要件20の基準 20.5・20.7・20.13）で同じ長さ（本人選択）。
+ * 店の画面の「HH:MM まで完了にできます」（店-02）は schemas/limits の `ARRIVAL_COMPLETE_GRACE_MS` を読む
+ * （画面は lib/domain のうち texts しか読めず、lib/domain は schemas を読めない）。2つが同じ値であることは
+ * web/tests/domain/reservation.test.ts が固定する。
  */
 export const EXPIRED_GRACE_MS = 20 * 60 * 1000;
 

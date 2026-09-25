@@ -172,7 +172,8 @@ export type OfferDto = {
 };
 export type ArrivalRow = {
   reservationId: string;
-  kind: "active" | "expired" | "completed" | "store_cancelled";
+  /** customer_cancelled は、客が取り消してから10分だけ残る行（2026-09-25 横断-08 の案A） */
+  kind: "active" | "expired" | "completed" | "store_cancelled" | "customer_cancelled";
   /** 客が決めた呼び名。自動の登録の仮の呼び名（guest-…）・消した客なら null（横断-02） */
   nickname: string | null;
   /** 受け取った時点の電話番号。登録が無い（仮の番号・空）なら null（横断-02・安全-17） */

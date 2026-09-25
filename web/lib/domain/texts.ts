@@ -180,6 +180,7 @@ const ARRIVAL_KIND_LABELS: Record<string, string> = {
   expired: "期限切れ",
   completed: "完了済み",
   store_cancelled: "店が取り消し",
+  customer_cancelled: "客が取り消しました",
 };
 
 /**
@@ -225,6 +226,25 @@ export const ARRIVALS_TEXTS = {
   who: (nickname: string | null): string => (nickname ? `${nickname} さん` : "お客さま"),
   /** 電話番号の登録が無い行（発信のリンクを付けない・横断-02） */
   noPhone: "電話番号の登録なし（コードで照合）",
+  /** 人数の札（呼び名から切り離して、省かずに出す・店-11） */
+  party: (party: number): string => `${party}名`,
+  /** 見出しと小見出し（店-02: 遅れている客は開いたまま、済んだぶんだけを畳む） */
+  heading: "向かっている客",
+  lateHeading: "遅れている客",
+  lateUntil: (hhmm: string): string => `${hhmm} まで完了にできます`,
+  pastHeading: (count: number): string => `済んだぶん（${count}件）`,
+  /** 人数の変更の印（横断-08 の案B） */
+  partyChanged: (from: number, to: number): string => `人数が変わりました ${from}→${to} 名`,
+  /** 確かめ（店-01）。取り消しは、残りの枠が戻らないことと、来ない客は期限で枠が戻ることも言う */
+  confirmComplete: (who: string, party: number, code: string): string => `${who}・${party} 名・コード ${code} の来店を確かめましたか。`,
+  confirmCancel: "取り消すと、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります）。この確保を取り消しますか。",
+  sending: "送っています…",
+  /** 取り直し（店-08） */
+  refresh: "今すぐ更新",
+  updatedAt: (hhmm: string): string => `最終更新 ${hhmm}`,
+  /** 音を鳴らせる状態にするボタン（店-07。iPhone などは画面に触れるまで音を鳴らせない） */
+  unlockSound: "音を鳴らす",
+  soundLockedNote: "この端末は、画面に一度触れるまで知らせの音を鳴らせません。",
 } as const;
 
 // ---------- 客の個人データがどこに出るかの説明（2026-09-25 監査の指摘 安全-16・安全-17 の案3） ----------

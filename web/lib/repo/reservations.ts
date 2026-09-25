@@ -372,8 +372,8 @@ const HAS_NEWER_RESERVATION = (alias: string): string =>
  * 一覧に出しうる確保を読む（要件20の基準 20.1・20.5・20.14〜20.16）。
  *
  * **どの行を出すか・どう見せるかは決めない**——それは `domain/storeHome` の `arrivalRows`。
- * ここでやるのは3つだけ: ①自分の店の確保に絞る ②出す見込みの無い2つの状態を落とす（客が
- * 取り消した・運営に取り消された・基準 20.15）③読む幅を `sinceIso` で切る（残り方の
+ * ここでやるのは3つだけ: ①自分の店の確保に絞る ②出す見込みの無い状態を落とす（運営に取り消された・
+ * 基準 20.15。客が取り消した行は10分だけ出すので読む・横断-08）③読む幅を `sinceIso` で切る（残り方の
  * いちばん長い24時間ぶん。これが無いと店の一覧が日ごとに重くなる）。①と③は索引
  * `idx_reservations_store_status_at`（migrations/0004）で引く（設計-08）。
  *
@@ -387,7 +387,7 @@ export const listStoreArrivals = async (db: Db, storeId: string, sinceIso: strin
         ` ${HAS_NEWER_RESERVATION("res")} AS has_newer` +
         ` FROM reservations res` +
         ` JOIN customers c ON c.id = res.customer_id` +
-        ` WHERE res.store_id = ?1 AND res.status NOT IN ('customer_cancelled', 'admin_cancelled')` +
+        ` WHERE res.store_id = ?1 AND res.status <> 'admin_cancelled'` +
         ` AND res.status_at >= ?2`,
     )
     .bind(storeId, sinceIso)

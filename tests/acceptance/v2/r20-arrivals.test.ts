@@ -78,16 +78,22 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
     expect(rows[0].party).toBe(4);
     const empty = await receivedScene(ctx);
     await empty.customer.api.post(`/api/customer/reservations/${empty.reservation.id}/cancel`, {});
+    // 客が取り消した行は10分だけ「客が取り消した」として残る（横断-08 の案A）。過ぎれば空
+    expect((await arrivals(empty.store.api)).map((r) => r.kind)).toEqual(["customer_cancelled"]);
+    at(ctx, 16);
     expect(await arrivals(empty.store.api)).toEqual([]);
   });
 
-  it("20.5・20.14・20.15 期限切れは20分・完了済みは24時間残る。客が取り消した行は出ない（店が取り消した行はタスク18、運営はタスク21のブロック）", async () => {
+  // 2026-09-25 横断-08 の案A: 客が取り消した行は黙って消さず、10分だけ「客が取り消した」として残す（電話番号は出さない）。
+  it("20.5・20.14・20.15 期限切れは20分・完了済みは24時間残る。客が取り消した行は10分だけ、操作も電話番号も無しで残る（店が取り消した行はタスク18、運営はタスク21のブロック）", async () => {
     at(ctx, 0);
     const expired = await receivedScene(ctx);
     const completed = await receivedScene(ctx);
     await completed.store.api.post(`/api/store/reservations/${completed.reservation.id}/complete`, {});
     const byCustomer = await receivedScene(ctx);
     await byCustomer.customer.api.post(`/api/customer/reservations/${byCustomer.reservation.id}/cancel`, {});
+    expect(await arrivals(byCustomer.store.api)).toMatchObject([{ kind: "customer_cancelled", phone: null, canComplete: false, canCancel: false }]);
+    at(ctx, 11);
     expect(await arrivals(byCustomer.store.api)).toEqual([]);
     at(ctx, 25);
     let list = await arrivals(expired.store.api);

@@ -114,7 +114,8 @@ const recentStore = object({ reservationId: string(), storeId: string(), storeNa
 /** 向かっている客の1行（受け入れ検査の契約 `ArrivalRow`・domain/storeHome の ArrivalView）。 */
 const arrival = object({
   reservationId: string(),
-  kind: oneOf(["active", "expired", "completed", "store_cancelled"]),
+  // customer_cancelled は客が取り消してから10分だけ残る行（2026-09-25 横断-08 の案A）
+  kind: oneOf(["active", "expired", "completed", "store_cancelled", "customer_cancelled"]),
   // 客が決めた呼び名・登録された電話番号が無ければ null（自動の登録の仮の値を店へ渡さない・横断-02）
   nickname: nullable(string()),
   phone: nullable(string()),

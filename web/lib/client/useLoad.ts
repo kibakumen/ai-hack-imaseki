@@ -39,7 +39,10 @@ export type UseLoadOptions<T> = {
   isEmpty?: (data: T) => boolean;
   /** 取れたたびに1回呼ぶ（音を鳴らす・点を足すなど、受け取った時に済ませたいこと） */
   onLoaded?: (data: T) => void;
-  /** 定期の取り直しの間隔（ミリ秒）。渡さなければ開いた時の1回だけ */
+  /**
+   * 定期の取り直しの間隔（ミリ秒）。渡さなければ開いた時の1回だけ。渡したときは、画面に戻ったときにもすぐ1回
+   * 取り直す（店-08）。画面が隠れている間も止めない
+   */
   pollMs?: number;
 };
 
@@ -131,13 +134,23 @@ export const useLoad = <T>(load: () => Promise<T | ApiFailure>, options: UseLoad
   const pollMs = options.pollMs;
   useEffect(() => {
     if (!pollMs) return;
-    const timer = setInterval(() => {
+    const tick = () => {
       // 前の回がまだ返っていなければ送らない。返らないまま止まった回だけ、間隔の2回ぶんで見切る（usePolling と同じ決め）
       const since = inFlightSince.current;
       if (since !== null && Date.now() - since < pollMs * STUCK_INTERVALS) return;
       void send("poll");
-    }, pollMs);
-    return () => clearInterval(timer);
+    };
+    const timer = setInterval(tick, pollMs);
+    // 画面に戻ったら、間隔を待たずにすぐ1回取り直す（2026-09-25 監査の指摘 店-08。客の側の usePolling と同じ決め）。
+    // 隠れている間も**止めない**——店のホームは隠れている間こそ新しい客の音が要る（usePolling はここが違う）。
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [send, pollMs]);
 
   return { state, reload };
