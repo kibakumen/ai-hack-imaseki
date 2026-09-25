@@ -32,6 +32,7 @@ const PRIVATE_PATH_SHAPES: readonly RegExp[] = [
   /\/Users\/[\w.-]+\//,
   /~\/vault\b/,
   /~\/\.claude\b/,
+  /~\/src\/[\w.-]+\//,
   /(^|[\s`'"(（/])vault\/knowledge\//,
   /(^|[\s`'"(（/])knowledge\/(projects|models)\//,
   /(^|[\s`'"(（/~])\.claude\/(skills|state)\//,

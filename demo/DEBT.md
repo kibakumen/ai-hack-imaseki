@@ -48,7 +48,7 @@
 ## 動かし方（手元）
 
 ```
-cd ~/src/product/ai-hack/demo
+cd demo   # リポジトリの直下から
 pnpm install
 pnpm wrangler d1 migrations apply ai-hack-sekiari --local   # 手元の D1 を作る（種データ込み）
 pnpm dev --port 3100
