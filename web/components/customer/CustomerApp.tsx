@@ -35,6 +35,7 @@ import { ReportForm, type ReportTarget } from "./ReportForm";
 import { ReservationView } from "./ReservationView";
 import { ResultList, type ResultItem } from "./ResultList";
 import { StoreCancelledView } from "./StoreCancelledView";
+import { CustomerRefusals } from "../ui/InputRefusal";
 
 /** 断られた1件。`offerId` は結果のカードに出すため（受け取り直しは押した場所が1つなので null）。 */
 type RefusedReceive = { offerId: string | null; body: ReceiveRefusal };
@@ -57,7 +58,7 @@ const RECENT_ENTRY_KINDS: ReadonlyArray<HomeDto["kind"]> = ["fetch", "active", "
 /** 開いている脇の画面（同時には1つだけ）。 */
 type Panel = "none" | "recent" | "settings";
 
-export const CustomerApp = () => {
+const CustomerScreens = () => {
   const [home, setHome] = useState<HomeDto | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [stale, setStale] = useState(false);
@@ -349,5 +350,15 @@ export const CustomerApp = () => {
     </main>
   );
 };
+
+/**
+ * 客の画面の入れ物。中で出る断りの文は、客に向けた文になる（2026-09-25 レビューの指摘）——客にはログインが無く、
+ * 401・403 に「ログインが切れました」を出すと次の一手が分からない。囲むのはここ1か所（部品ごとに渡さない）。
+ */
+export const CustomerApp = () => (
+  <CustomerRefusals>
+    <CustomerScreens />
+  </CustomerRefusals>
+);
 
 export default CustomerApp;

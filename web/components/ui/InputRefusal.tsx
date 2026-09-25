@@ -1,13 +1,32 @@
+"use client";
+
 // 入力の断り（形・範囲の誤りと、項目や操作に帰せる規則の断り）を描くただ1つの部品
 // （設計書「入力の誤りの出し方」）。断りの語（error.kind・error.fields）を読むのはこのファイルだけで、
 // 自分では判断しない——受け取った語を domain/texts の文にして、項目の直下か操作の直下に出す。
 // 文の雛形に入れる数字は、呼ぶ側のフォームが schemas/limits から渡す。
+//
+// 文の読み手（店と運営か、客か）は `CustomerRefusals` で囲んだかどうかで決まる（2026-09-25 レビューの指摘）。
+// 客にはログインが無いので、同じ 401・403 でも「ログイン」を言わない文を出す。囲むのは客の画面の入れ物
+// （CustomerApp）の1か所だけで、客の部品が1つずつ読み手を渡すことはしない（渡し忘れた部品が店の文を出すため）。
 
+import { createContext, useContext, type ReactNode } from "react";
 import type { ApiFailure } from "../../lib/client/api";
-import { TEXTS } from "../../lib/domain/texts";
+import { TEXTS, type RefusalAudience } from "../../lib/domain/texts";
 
 /** 文の雛形に入れる値（項目の名前・上下の数・形の補足など）。 */
 export type RefusalContext = Record<string, unknown>;
+
+/** 囲まれていなければ店と運営の文（店と運営の画面は囲まない）。 */
+const AudienceContext = createContext<RefusalAudience>("staff");
+
+/** この中の断りの文を、客に向けた文にする（客の画面の入れ物が1か所で囲む）。 */
+export const CustomerRefusals = ({ children }: { children: ReactNode }) => <AudienceContext.Provider value="customer">{children}</AudienceContext.Provider>;
+
+/** 断りの種類（kind）の文を、今の読み手に合わせて引く。 */
+const useKindText = (): ((kind: string, ctx?: RefusalContext) => string) => {
+  const audience = useContext(AudienceContext);
+  return (kind, ctx = {}) => TEXTS.inputRefusal(kind, ctx, audience);
+};
 
 type FieldMessageProps = {
   /** 入力のスキーマの項目名（nickname・phone など） */
@@ -24,13 +43,14 @@ type FieldMessageProps = {
 
 /** その項目の断りが返っているときだけ、入力欄の直下に文を出す。 */
 export const FieldMessage = ({ name, failure, ctx, kinds = [] }: FieldMessageProps) => {
+  const kindText = useKindText();
   const error = failure?.error;
   const kind = error?.kind;
   // 項目に結びついた規則の断りが先。あれば理由の文より、その語の文を出す。
   if (kind !== undefined && kinds.includes(kind)) {
     return (
       <p className="msg" role="alert" data-testid={`msg-${name}`}>
-        {TEXTS.inputRefusal(kind, ctx)}
+        {kindText(kind, ctx)}
       </p>
     );
   }
@@ -53,11 +73,12 @@ export const FieldMessage = ({ name, failure, ctx, kinds = [] }: FieldMessagePro
  * 判断はしない——受け取った語を domain/texts の文にして、項目の直下に出すだけ。
  */
 export const FieldKindMessage = ({ name, failure, ctx }: FieldMessageProps) => {
+  const kindText = useKindText();
   const error = failure?.error;
   if (!error?.fields?.some((f) => f.name === name)) return null;
   return (
     <p className="msg" role="alert" data-testid={`msg-${name}`}>
-      {TEXTS.inputRefusal(error.kind, ctx)}
+      {kindText(error.kind, ctx)}
     </p>
   );
 };
@@ -76,6 +97,7 @@ type FormMessageProps = {
 
 /** 項目に帰せない断り（人かどうかの確かめ・規則の断り・通信の失敗）を、押した操作の直下に出す。 */
 export const FormMessage = ({ failure, fieldNames = [], ctx, links }: FormMessageProps) => {
+  const kindText = useKindText();
   const error = failure?.error;
   if (!error) return null;
   const fields = error.fields ?? [];
@@ -83,7 +105,7 @@ export const FormMessage = ({ failure, fieldNames = [], ctx, links }: FormMessag
   const link = links?.[error.kind];
   return (
     <p className="msg" role="alert" data-testid="msg-form">
-      {TEXTS.inputRefusal(error.kind, ctx)}
+      {kindText(error.kind, ctx)}
       {link ? <a href={link.href}>{link.label}</a> : null}
     </p>
   );
@@ -94,8 +116,11 @@ export const FormMessage = ({ failure, fieldNames = [], ctx, links }: FormMessag
  * （components/ui/LoadState の LoadView）が出す。語の文をそのまま出し、0件の文とは混ぜない。
  * 断りの中身を持たない失敗は、通信の失敗の文に倒す。
  */
-export const LoadMessage = ({ failure }: { failure: ApiFailure }) => (
-  <p className="msg" role="alert" data-testid="msg-load">
-    {TEXTS.inputRefusal(failure.error?.kind ?? "network")}
-  </p>
-);
+export const LoadMessage = ({ failure }: { failure: ApiFailure }) => {
+  const kindText = useKindText();
+  return (
+    <p className="msg" role="alert" data-testid="msg-load">
+      {kindText(failure.error?.kind ?? "network")}
+    </p>
+  );
+};
