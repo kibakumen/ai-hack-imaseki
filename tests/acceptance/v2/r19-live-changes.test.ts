@@ -1,6 +1,8 @@
 // 要件19 公開中の変更（手続き・純粋 domain/until）。画面は r19-live-changes.ui.test.tsx。
-// ⚠️ 19.11 は 2026-09-25 に改めた（監査の指摘 不具合-03 の案A・本人承認）: 公開中のクーポンは、専用の入口
-//    `POST /api/store/offers/current/coupons` の1文で差し替える。
+// ⚠️ 19.11 は 2026-09-25 に改めた（監査の指摘 不具合-03 の案A）: 公開中のクーポンは、専用の入口
+//    `POST /api/store/offers/current/coupons` の1文で差し替える。帰属は、カードでクーポンを選べることが本人発案
+//    （UI フィードバックの原文）、同じオファーのまま差し替える形（案A）が AI判断（本人の「全部直してほしい」を受けて
+//    指摘の最初の案を採った・本人は案A を名指ししていない）。経緯は requirements.md の要件19の補足。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
 import { approvedStore, fetchOffers, loadWeb, makeCtx, one, publishOffer, receive, receivedScene, registerCustomer, requireInResults, spot, type Ctx } from "./_fakes";
@@ -128,7 +130,7 @@ describeTask("20", "公開中の変更", () => {
     expect(late("21:00").kind).toBe("in_past");
   });
 
-  // 2026-09-25 監査の指摘 不具合-03 の案A（本人承認・要件19.11 を改めた）: それまで画面は「止める → 公開し直す」の
+  // 2026-09-25 監査の指摘 不具合-03 の案A（AI判断・要件19.11 を改めた）: それまで画面は「止める → 公開し直す」の
   // 2本の要求でクーポンを選び直していて、残りが古いオファーに割れ、見ていた客の受け取りが断られた。
   it("19.11（改） 公開中のクーポンを選び直すと、同じオファーのまま見せるクーポンだけが変わる。残り・確保のクーポンはそのまま・見ていた客は受け取れる・店のものでない番号は落ちる・終わったら offer_ended", async () => {
     ctx.clock.set(JST("15:00"));

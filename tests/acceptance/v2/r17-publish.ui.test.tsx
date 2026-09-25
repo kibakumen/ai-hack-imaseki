@@ -80,7 +80,7 @@ describeTask("9", "公開のフォームと公開中のカード", () => {
   });
 
   // 2026-09-25 監査の指摘 店-05 の案A（本人の指摘「公開終了時間は未入力でも公開可・終了タイマーとして入れる」）
-  it("17.6（改） 終了タイマーは初め畳まれていて、入れずに「公開する」を押すと何時までを載せずに送る。公開から12時間で自動で終わることが出る", async () => {
+  it("17.24（2026-09-25 に足した） 終了タイマーは初め畳まれていて、入れずに「公開する」を押すと何時までを載せずに送る。公開から12時間で自動で終わることが出る", async () => {
     await renderHome(storeHomeDto({ coupons: COUPONS, publishPrefill: { couponIds: [], capacity: 3, partyMax: 4, until: null } }), {
       "POST /api/store/offers": () => ({ status: 201, json: { ok: true, offer: offerDto() } }),
     });
