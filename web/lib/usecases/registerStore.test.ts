@@ -8,12 +8,12 @@
 // （タスク4の監査の指摘 F1・反論役も AGREE）。
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { makeCtx, type Ctx } from "../../../tests/acceptance/v2/_fakes";
+import { makeCtx, STORE_TERMS_AGREEMENT, type Ctx } from "../../../tests/acceptance/v2/_fakes";
 import type { Deps } from "../ports";
 import { registerStore } from "./registerStore";
 
 const EMAIL = "race@example.com";
-const INPUT = { name: "同時の店", email: EMAIL, password: "store-pass-1234", humanToken: "tok-ok" };
+const INPUT = { name: "同時の店", email: EMAIL, password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT };
 
 let ctx: Ctx;
 

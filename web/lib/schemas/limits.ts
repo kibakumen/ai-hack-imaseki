@@ -356,3 +356,19 @@ export const HUMAN_CHECK_ACTIONS = {
   registerCustomer: "register-customer",
 } as const;
 export type HumanCheckAction = (typeof HUMAN_CHECK_ACTIONS)[keyof typeof HUMAN_CHECK_ACTIONS];
+
+// 店向けの利用規約の版（2026-09-25 監査の指摘 店-21 のレビュー）
+/**
+ * 今の店向けの利用規約の版（日付）。登録の入口（schemas/account の agreedTermsVersion）が今の版への同意を求め、
+ * 通った登録は版と同意の時刻を店の行に残す（migration 0010 の stores.terms_version・terms_agreed_at）。登録の画面
+ * （components/store/RegisterForm）と規約のページ（app/store/terms）も読むので、両方が読めるここに置く。
+ *
+ * それまで同意は画面の中だけで持ち、入口は同意なしでも登録を通し、同意したことも版も残らなかった（争いになったとき
+ * 運営に拠り所が無い）。
+ *
+ * ⚠️ 規約の文面（app/store/terms）を変えたら、この版を上げる。上げると、開いたままの古い画面から送られた登録は断られ
+ *    （読み込み直せば通る）、以後の登録は新しい版で残る。受け入れ検査の場面づくり（tests/acceptance/v2/_fakes の
+ *    STORE_TERMS_AGREEMENT）も同じ値に上げる（schemas/storeTermsVersion.test.ts が見張る）。
+ * ⚠️ すでに登録した店に新しい版へ同意し直してもらう仕組みは無い（AI判断・今は請求しないので、版を上げる予定が無い）。
+ */
+export const STORE_TERMS_VERSION = "2026-09-25";

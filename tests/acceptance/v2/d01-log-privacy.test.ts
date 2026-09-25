@@ -1,7 +1,7 @@
 // 設計の決め: ログに個人データを出さない（振る舞い）。console の全部の出口を捕まえ、偽の Logger に渡った項目も見る。
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { describeTask } from "./_tasks";
-import { approvedStore, fetchOffers, loadWeb, makeCtx, publishOffer, receive, registerCustomer, type Ctx } from "./_fakes";
+import { approvedStore, fetchOffers, loadWeb, makeCtx, publishOffer, receive, registerCustomer, STORE_TERMS_AGREEMENT, type Ctx } from "./_fakes";
 
 const MARKERS = { nickname: "めじるしのなまえ", phone: "08019190019", storeEmail: "marker-store@example.com", password: "marker-password-9", place: "めじるしの場所", reason: "めじるしの理由" };
 
@@ -30,7 +30,7 @@ describeTask("25", "ログに個人データを出さない", () => {
     await c.api.post("/api/customer/reports", { storeId: store.id, reason: MARKERS.reason });
     await rc.api().post("/api/auth/login", { email: MARKERS.storeEmail, password: MARKERS.password, humanToken: "tok-ok" });
     await rc.api().post("/api/register/customer", { nickname: MARKERS.nickname, phone: "abc", genres: [], humanToken: "tok-ok" });
-    await rc.api().post("/api/register/store", { name: "x", email: MARKERS.storeEmail, password: MARKERS.password, humanToken: "tok-ok" });
+    await rc.api().post("/api/register/store", { name: "x", email: MARKERS.storeEmail, password: MARKERS.password, humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
     rc.ai.respond(() => {
       throw new Error(`AI down while serving ${MARKERS.nickname}`);
     });

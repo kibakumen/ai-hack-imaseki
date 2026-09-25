@@ -12,6 +12,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { STORE_TERMS_VERSION } from "../../lib/schemas/limits";
 import { TEXTS } from "../../lib/domain/texts";
 import { RegisterForm } from "./RegisterForm";
 
@@ -125,10 +126,12 @@ describe("店の登録のパスワードの欄（店-20）", () => {
 describe("店向けの利用規約への同意（店-21）", () => {
   it("規約へのリンクがあり、同意しないまま「登録する」を押すと送らずに同意の欄の直下に文が出る。同意すれば送る", async () => {
     const posts: string[] = [];
+    const bodies: unknown[] = [];
     const previous = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(String(input), "http://localhost").pathname;
       if ((init?.method ?? "GET") === "POST") posts.push(path);
+      if (path === "/api/register/store") bodies.push(JSON.parse(String(init?.body)));
       const json = path === "/api/config/public" ? { turnstileSiteKey: "", vapidPublicKey: "v", contactEmail: null } : { ok: false, error: { kind: "email_taken", fields: [{ name: "email", reason: "not_allowed" }] } };
       return new Response(JSON.stringify(json), { status: path === "/api/config/public" ? 200 : 409, headers: { "content-type": "application/json" } });
     }) as typeof fetch;
@@ -148,5 +151,29 @@ describe("店向けの利用規約への同意（店-21）", () => {
     expect(screen.queryByTestId("msg-agreeTerms")).toBeNull();
     fireEvent.click(screen.getByTestId("btn-register"));
     await waitFor(() => expect(posts.filter((p) => p === "/api/register/store")).toHaveLength(1));
+    // 同意した規約の版を送る（入口が今の版と突き合わせて、版と時刻を残す・店-21 のレビュー）
+    expect(bodies[0]).toMatchObject({ agreedTermsVersion: STORE_TERMS_VERSION });
+  });
+
+  it("入口が「同意した版が今の版と違う」で断ったら、同意の欄の直下に読み込み直しを求める文が出る", async () => {
+    const previous = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      const json =
+        path === "/api/config/public"
+          ? { turnstileSiteKey: "", vapidPublicKey: "v", contactEmail: null }
+          : { ok: false, error: { kind: "invalid_input", fields: [{ name: "agreedTermsVersion", reason: "not_allowed" }] } };
+      return new Response(JSON.stringify(json), { status: path === "/api/config/public" ? 200 : 400, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    restore = () => {
+      globalThis.fetch = previous;
+    };
+    render(<RegisterForm />);
+    fireEvent.change(screen.getByTestId("field-name"), { target: { value: "検査の店" } });
+    fireEvent.change(screen.getByTestId("field-email"), { target: { value: "s@example.com" } });
+    fireEvent.change(screen.getByTestId("field-password"), { target: { value: "store-pass-1234" } });
+    fireEvent.click(screen.getByTestId("field-agreeTerms"));
+    fireEvent.click(screen.getByTestId("btn-register"));
+    expect((await screen.findByTestId("msg-agreedTermsVersion")).textContent).toMatch(/新しくなりました.*読み込み直し/);
   });
 });

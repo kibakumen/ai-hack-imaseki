@@ -349,11 +349,18 @@ export const seedAdmin = async (ctx: AdminScene, input: { email?: string; passwo
   return admin;
 };
 
+/**
+ * 店の登録で送る「同意した店向けの利用規約の版」（2026-09-25 監査の指摘 店-21 のレビュー）。入口は今の版と一致しない
+ * 登録を断り、通った登録は版と同意の時刻を残す。版は入口と画面の正本（web/lib/schemas/limits の STORE_TERMS_VERSION）と同じ値
+ * ——ずれたら web/lib/schemas/storeTermsVersion.test.ts が落ちる（規約の版を上げたら、ここも上げる）。
+ */
+export const STORE_TERMS_AGREEMENT = { agreedTermsVersion: "2026-09-25" } as const;
+
 let storeSeq = 0;
 export const registerStore = async (ctx: ApiScene, over: { name?: string; email?: string; password?: string; humanToken?: string } = {}) => {
   const n = ++storeSeq;
   const input = { name: over.name ?? `店${n}`, email: over.email ?? `store${n}-${Date.now()}@example.com`, password: over.password ?? "store-pass-1234", humanToken: over.humanToken ?? "tok-ok" };
-  const r = await ctx.api().post("/api/register/store", input);
+  const r = await ctx.api().post("/api/register/store", { ...input, ...STORE_TERMS_AGREEMENT });
   if (![200, 201].includes(r.status)) throw new Error(`店の登録に失敗: ${r.status} ${r.text}`);
   let cookie = cookieOf(r);
   if (!cookie) {

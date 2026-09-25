@@ -9,12 +9,12 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
-import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN } from "../../lib/schemas/limits";
+import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN, STORE_TERMS_VERSION } from "../../lib/schemas/limits";
 import { STORE_TERMS_TEXTS } from "../../lib/domain/texts";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 
-const FIELD_NAMES = ["name", "email", "password"];
+const FIELD_NAMES = ["name", "email", "password", "agreedTermsVersion"];
 /**
  * メールアドレスの欄は、形の誤りだけでなく「もう登録されている」も直下に出す（要件12の基準 12.2）。
  * 入口は 409 で `kind` に登録済みの語を、`fields` に `email`／`not_allowed` を返す。ここを渡さないと
@@ -28,6 +28,8 @@ const PASSWORD_HINT_ID = "store-register-password-hint";
 /** 断りのあとパスワードを消すか。パスワードの欄の断りと、人の確かめの断り（入れ直しを求める場面）だけ。 */
 const shouldClearPassword = (failure: ApiFailure): boolean =>
   failure.error?.kind === "human_check_failed" || (failure.error?.fields ?? []).some((field) => field.name === "password");
+/** 同意した規約の版が今の版と違うと断られたか（古い画面から送った・店-21 のレビュー） */
+const termsOutdated = (failure: ApiFailure | null): boolean => (failure?.error?.fields ?? []).some((field) => field.name === "agreedTermsVersion");
 /** 登録が済んだら店のホームへ（画面の遷移は1本だけ・呼ぶ側に渡さない） */
 const STORE_HOME_PATH = "/store";
 
@@ -65,7 +67,8 @@ export const RegisterForm = () => {
       setAskAgree(true);
       return;
     }
-    const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken } });
+    // 同意した規約の版も送る（入口が今の版と突き合わせ、版と時刻を残す・店-21 のレビュー）
+    const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken, agreedTermsVersion: STORE_TERMS_VERSION } });
     if (isFailure(result)) {
       setFailure(result);
       if (shouldClearPassword(result)) setPassword("");
@@ -154,6 +157,11 @@ export const RegisterForm = () => {
       {askAgree ? (
         <p className="msg" role="alert" data-testid="msg-agreeTerms">
           {STORE_TERMS_TEXTS.agreeRequired}
+        </p>
+      ) : null}
+      {termsOutdated(failure) ? (
+        <p className="msg" role="alert" data-testid="msg-agreedTermsVersion">
+          {STORE_TERMS_TEXTS.versionOutdated}
         </p>
       ) : null}
 

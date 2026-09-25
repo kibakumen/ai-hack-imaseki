@@ -12,12 +12,18 @@ type Db = Deps["db"];
 export type StoreStatus = "pending" | "approved" | "banned";
 
 /** `createdAtIso` は店の登録の時刻（同点・同距離のときの並び・要件6の基準 6.4。タスク9 で追加）。 */
-export type NewStore = { id: string; name: string; createdAtIso: string };
+/**
+ * 新しい店の行。`terms` は同意した店向けの利用規約の版と時刻（登録の画面を通った店だけ・店-21 のレビュー）。
+ * デモの種データの店は画面を通らないので持たない（NULL のまま）。
+ */
+export type NewStore = { id: string; name: string; createdAtIso: string; terms?: { version: string; agreedAtIso: string } };
 
 export type StoreSummary = { id: string; name: string; status: StoreStatus };
 
 const insertStoreStatement = (db: Db, store: NewStore) =>
-  db.prepare(`INSERT INTO stores (id, name, created_at, status) VALUES (?1, ?2, ?3, 'pending')`).bind(store.id, store.name, store.createdAtIso);
+  db
+    .prepare(`INSERT INTO stores (id, name, created_at, status, terms_version, terms_agreed_at) VALUES (?1, ?2, ?3, 'pending', ?4, ?5)`)
+    .bind(store.id, store.name, store.createdAtIso, store.terms?.version ?? null, store.terms?.agreedAtIso ?? null);
 
 /**
  * 店の登録（基準 12.1）。店・アカウント・セッションを1つのまとまり（`db.batch`）で書く——途中で落ちて、

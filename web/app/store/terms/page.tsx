@@ -10,6 +10,7 @@
 
 import type { Metadata } from "next";
 import { ContactEmail } from "../../../components/ui/ContactEmail";
+import { STORE_TERMS_VERSION } from "../../../lib/schemas/limits";
 import "./terms.css";
 
 export const metadata: Metadata = { title: "店向けの利用規約 | イマセキ" };
@@ -18,6 +19,10 @@ export default function StoreTermsPage() {
   return (
     <main className="store-terms">
       <h1>店向けの利用規約</h1>
+      {/* 版は登録のときに同意の記録として残す（lib/schemas/limits の STORE_TERMS_VERSION・店-21 のレビュー）。文面を変えたら版も上げる */}
+      <p className="store-terms__lead" data-testid="terms-version">
+        版: {STORE_TERMS_VERSION}
+      </p>
       <p className="store-terms__lead">
         イマセキは、空いている席を近くのお客さまに知らせ、お客さまがその場で席を確保できるようにするサービスです。大会の審査期間中のデモとして動かしています。
       </p>

@@ -7,7 +7,7 @@
 //   - 別の運営がいるのに黙って2人目を作らない（スクリプトはこの形で呼ぶ）
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cookieOf, makeCtx, one, rows, type Ctx } from "../../../tests/acceptance/v2/_fakes";
+import { cookieOf, makeCtx, one, rows, STORE_TERMS_AGREEMENT, type Ctx } from "../../../tests/acceptance/v2/_fakes";
 import { OtherAdminsExistError, seedAdmin } from "./seedAdmin";
 
 let ctx: Ctx;
@@ -72,7 +72,7 @@ describe("seedAdmin", () => {
   });
 
   it("店のアカウントは運営に変えない（メールアドレスでも番号でも）", async () => {
-    const store = await ctx.api().post("/api/register/store", { name: "店", email: "seed-store@example.com", password: "store-pass-1234", humanToken: "tok-ok" });
+    const store = await ctx.api().post("/api/register/store", { name: "店", email: "seed-store@example.com", password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
     expect([200, 201]).toContain(store.status);
     const account = await one<{ id: string }>(ctx.db, "SELECT id FROM accounts WHERE email = ?", "seed-store@example.com");
     await expect(seedAdmin(ctx.deps, { email: "seed-store@example.com", password: "admin-pass-1234" })).rejects.toThrow();

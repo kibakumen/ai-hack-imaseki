@@ -5,7 +5,7 @@
 // 画面の部品が同じ用途を Turnstile に名乗ることは components/ui/HumanCheck.test.tsx が見る。
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CUSTOMER, makeCtx, type Ctx } from "../../tests/acceptance/v2/_fakes";
+import { CUSTOMER, makeCtx, STORE_TERMS_AGREEMENT, type Ctx } from "../../tests/acceptance/v2/_fakes";
 import { ROUTE_DEFINITIONS } from "../lib/http/routes";
 import type { HumanCheck, HumanCheckOptions } from "../lib/ports";
 import { HUMAN_CHECK_ACTIONS } from "../lib/schemas/limits";
@@ -37,7 +37,7 @@ describe("入口が確かめに渡す期待（安全-23）", () => {
     const { seen, human } = recordingHuman();
     const next = await ctx.withDeps({ human });
     const api = next.api(null, { ip: "203.0.113.9" });
-    await api.post("/api/register/store", { name: "確かめの店", email: "hc-store@example.com", password: "store-pass-1234", humanToken: "tok-ok" });
+    await api.post("/api/register/store", { name: "確かめの店", email: "hc-store@example.com", password: "store-pass-1234", humanToken: "tok-ok", ...STORE_TERMS_AGREEMENT });
     await api.post("/api/register/customer", { ...CUSTOMER, humanToken: "tok-ok" });
     await api.post("/api/auth/login", { email: "hc-store@example.com", password: "store-pass-1234", humanToken: "tok-ok" });
     expect(seen).toEqual([
