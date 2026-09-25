@@ -11,6 +11,8 @@ import { placeLabel } from "./placeLabel";
 const depsWith = (geocoder: Partial<Deps["geocoder"]>): Deps =>
   ({
     clock: { now: () => new Date("2026-09-22T06:00:00.000Z"), after: () => new Promise<void>(() => {}) },
+    // アプリ全体の1日の地図の上限（usecases/mapsBudget・2026-09-26）の数え。いつも「今日の1回目」と答える
+    db: { prepare: () => ({ bind: () => ({ first: async () => ({ window_start: "2026-09-22T06:00:00.000Z", count: 1 }) }) }) },
     geocoder: { geocode: async () => ({ ok: false as const }), ...geocoder },
   }) as unknown as Deps;
 

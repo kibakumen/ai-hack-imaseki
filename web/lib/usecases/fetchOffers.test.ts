@@ -38,8 +38,10 @@ const until = async (ready: () => boolean, withinMs = 2_000): Promise<void> => {
 describe("AI の打ち切りは起点が決まってから数える（不具合-20）", () => {
   it("場所の文字を位置に直すのに2.5秒かかっても、AI は起点が決まってから6秒まで待ってもらえる", async () => {
     // 地図は偽の時計で2.5秒かかる
+    let geocodeStarted = false;
     const geocoder: Geocoder = {
       geocode: async () => {
+        geocodeStarted = true;
         await ctx.clock.after(2_500);
         return { ok: true, lat: SHIBUYA.lat, lng: SHIBUYA.lng };
       },
@@ -57,9 +59,10 @@ describe("AI の打ち切りは起点が決まってから数える（不具合-
     };
     const deps: Deps = { ...ctx.deps, geocoder, ai };
 
-    const armed = ctx.clock.armed();
     const pending = fetchOffers(deps, customerId, { party: 2, place: "渋谷駅" });
-    await armed;
+    // 地図を呼ぶ前に、その日の地図の回数を D1 で数える（usecases/mapsBudget・2026-09-26）。地図の2.5秒の時計が
+    // 張られてから進める
+    await until(() => geocodeStarted);
     await ctx.clock.advance(2_500);
     await until(() => asked.length === 1);
     // 手続きの始まりから6.5秒・AI を呼んでから4秒。以前は始まりから6秒で打ち切られ、点数順に倒れた
@@ -131,14 +134,14 @@ describe("取得1回の記録は1つのまとまりで書く（不具合-08 の�
   });
 });
 
-describe("Google から来た店の座標の手入れを預ける（設計-20）", () => {
-  it("取得のたびに、応答のあとの手入れ（1時間に1回まで・usecases/googleUpkeep）を預ける", async () => {
+describe("Google から来た店の座標の手入れと許可書の掃除を預ける（設計-20・安全-20）", () => {
+  it("取得のたびに、応答のあとの手入れ2つ（座標の手入れ・usecases/googleUpkeep と許可書の掃除・usecases/licenseSweep）を預ける", async () => {
     const kept: Array<Promise<unknown>> = [];
     const deps: Deps = { ...ctx.deps, defer: (task) => kept.push(task) };
     ctx.geocoder.set("渋谷駅", SHIBUYA);
     await fetchOffers(deps, customerId, { party: 2, place: "渋谷駅" });
     await fetchOffers(deps, customerId, { party: 2, lat: SHIBUYA.lat, lng: SHIBUYA.lng });
-    expect(kept).toHaveLength(2);
+    expect(kept).toHaveLength(4);
     await Promise.all(kept);
   });
 });
