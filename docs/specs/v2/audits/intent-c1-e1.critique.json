@@ -7,22 +7,22 @@
       "verdict": "DISAGREE_EVIDENCE",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/main/requirements.md",
+          "path": "docs/specs/main/requirements.md",
           "line": 100,
           "quote": "3. 構造化の結果が基準2の検査に落ちた場合、システムは登録を保存せず、落ちた理由を添えて客に書き直しを求める（本人選択）こと［段1］"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/main/requirements.md",
+          "path": "docs/specs/main/requirements.md",
           "line": 111,
           "quote": "基準3は intent 基準13で「本人がまだ決めていない」とされ、要件の段の第1周のあとに本人が選んだもの。選ばなかった案: 嗜好なし（ジャンル・予算・アレルギーとも未指定）で登録する"
         },
         {
-          "path": "vault/knowledge/projects/ai-hack-2026/02_題材と注文.md",
+          "path": "（非公開）02_題材と注文.md",
           "line": 122,
-          "quote": "**入口の LLM（嗜好の構造化）の出力が検査に落ちたら、登録を保存せず理由を添えて書き直しを求める** | 本人選択（AI提示の2案から） | 嗜好なしで登録する（アレルギーを取りこぼしたまま配信対象になりうる）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 16,
           "quote": "「v1」＝`docs/specs/main/intent.md`"
         }
@@ -34,22 +34,22 @@
       "verdict": "AGREE",
       "evidence": [
         {
-          "path": "vault/knowledge/projects/ai-hack-2026/04_v2の注文.md",
+          "path": "（非公開）04_v2の注文.md",
           "line": 53,
-          "quote": "本人選択 | 店が決めた番号を登録して全員に同じものを見せる／両方（登録が無ければ発行）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "vault/knowledge/projects/ai-hack-2026/04_v2の注文.md",
+          "path": "（非公開）04_v2の注文.md",
           "line": 52,
-          "quote": "本人選択 | SMS で本人確認・ログイン（外部の SMS サービスと費用が要る）／来店時の本人の識別（下4桁の照合）／保存だけ"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 133,
           "quote": "**店が決めた1つの番号を全員に見せる形のクーポン**（本人選択で不採用。外部クーポンの手入力は基準13で別に入れる）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 134,
           "quote": "**運営が店のアカウントを作って招待する形／店が登録してすぐ公開される形**（本人選択で不採用）"
         }
@@ -62,12 +62,12 @@
       "claim": "チーム案（05）の絞り込みにある「直近に提示済み」のハード除外が、受け入れ基準にも「やらないこと」にも無い。チーム案の他の要素（Workers AI・ジオフェンス通知・今ブースト・店頭 POP／QR・教師データの記録・状態を持たない時間枠の判定）は採否が全部書かれているのに、判定ロジックの中でこれだけ採否が記録されていない。監査役は『受け入れ基準と「やらないこと」の対応はほぼ過不足なく一致していた』（unbroken 1件目）と判定したが、これは取りこぼしている。",
       "evidence": [
         {
-          "path": "vault/knowledge/projects/ai-hack-2026/05_チームのv2設計.md",
+          "path": "（非公開）05_チームのv2設計.md",
           "line": 161,
-          "quote": "/ 直近に提示済み\"] -->|\"約25件\"| F3"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 89,
           "quote": "21. **決定論の絞り込み**: 地理（探す範囲）・受付時間・アレルギー・予算・人数による絞り込みは、モデルの推論を使わず、同じ入力なら毎回同じ結果を出すこと（本人選択）"
         }
@@ -77,22 +77,22 @@
       "claim": "本人の判断を待っている項目が3件、「本人が決めること（この文書では決めない）」節の外に散っている。同節には「効果を示す数字」1件しか無い。とくに深刻なのは、v1 で本人選択だった Web プッシュを外す判断（36行・130行）が AI判断のまま「やらないこと」の中に置かれていること——v1 の本人の決定を覆す提案が、本人の判断を集める節に載っていない。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 130,
           "quote": "v1 の本人選択「Web プッシュで実機に届ける」を外すことになるので、本人に確かめる"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 36,
           "quote": "pull 型からの読み（AI判断・本人に要確認）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 138,
           "quote": "チーム案は初回から記録するよう勧めているが、v1 の本人選択を覆すかは本人が決める"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 126,
           "quote": "- **効果を示す数字**（01_要件の未決事項。v1 から引き継ぐ）"
         }
@@ -102,19 +102,19 @@
       "claim": "受け入れ基準39件の全部を「提出までに必ず動いているもの」と宣言していて、落とす順番も最小集合も無い。提出は 2026-09-22 15:00（遅れたら審査対象外）で今日は 09-20、しかもコードは demo とは別の場所に1から書く前提。39件にはログイン・見える範囲の制御・同時の受け取りの排他・自動テスト・連打の抑止まで入っている。物差し（requirements@1）の欠陥の型の外なので監査役が見なかったのは筋が通るが、承認のときに本人が最初に知るべき事実なので上げる。直し方は文書の欠陥の修正ではなく本人の優先順位の決定（何を落とすか）。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 46,
           "quote": "提出版（2026-09-22 15:00 までに出す GitHub の public リポジトリと、Cloudflare 上で動いている版）と、最終日（9/23 の会場）で必ず動いているもの。"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 113,
           "quote": "37. コードは `demo/` とは別の新しいフォルダに1から書くこと（v2 の依頼「割と1から作り始めて」・本人発案）"
         },
         {
-          "path": "vault/knowledge/projects/ai-hack-2026/01_要件.md",
+          "path": "（非公開）01_要件.md",
           "line": 11,
-          "quote": "**9/22(火・休日) 15:00** | **最終提出の締切**（Google フォーム）。**遅れた場合は審査の対象外**"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ]
     }

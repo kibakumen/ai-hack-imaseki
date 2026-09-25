@@ -40,7 +40,7 @@
 
 ## 公開の状態（2026-09-19 16:00 時点）
 
-- 本番: https://ai-hack-sekiari.ai-shukyaku.workers.dev （Cloudflare Workers ＋ D1・本人のアカウント・`wrangler login` の OAuth）
+- 本番: Cloudflare Workers の `ai-hack-sekiari`（＋ D1・本人のアカウント・`wrangler login` の OAuth）。のちに速成版（`sprint/`）で上書きした。**2026-09-25 の監査（安全-05）で止める判断になった**——速成版の古い鍵が公開のリポジトリの履歴に残っているため。公開先の URL はここに載せない
 - 本番の D1 に種データ（店1軒・登録客80人）を入れた。店の鍵は手元と同じ（`.store-key.local`）
 - 本番の OrcaRouter のキーは `wrangler secret put ORCAROUTER_API_KEY` で登録する（未登録なら規則による読み取りと定型文で動く）
 - ⚠️ GitHub のリポジトリは未作成・未 push。**提出は public リポジトリ**なので、作る前に秘密情報が入っていないことを確かめる（`.env*`・`.dev.vars`・`*.local`・`.wrangler/` は git の対象外にしてある）
@@ -48,7 +48,7 @@
 ## 動かし方（手元）
 
 ```
-cd ~/src/product/ai-hack/demo
+cd demo   # リポジトリの直下から
 pnpm install
 pnpm wrangler d1 migrations apply ai-hack-sekiari --local   # 手元の D1 を作る（種データ込み）
 pnpm dev --port 3100

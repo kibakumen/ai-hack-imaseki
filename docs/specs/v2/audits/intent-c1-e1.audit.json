@@ -10,12 +10,12 @@
       "claim": "基準2（客の嗜好構造化AIが検査に落ちたときの挙動）を「v1から引き継ぐ・本人選択」と述べているが、引用元のv1 intent.mdはこの項目を明示的に「本人がまだ決めておらず」と書いており、v2の帰属表示は自分が引く一次データと矛盾している。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 61,
           "quote": "AI の出力が検査に落ちたら、登録を保存せず、理由を添えて書き直しを求めること（v1 から引き継ぐ・本人選択）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/main/intent.md",
+          "path": "docs/specs/main/intent.md",
           "line": 54,
           "quote": "入口（基準9の嗜好の構造化）で LLM の出力が検査に落ちたときの振る舞い（登録し直しを求めるか・嗜好なしで登録するか等）は本人がまだ決めておらず、要件の段で決める。"
         }
@@ -30,22 +30,22 @@
       "claim": "04_v2の注文.md 3節の「選ばなかった案」に列挙された選択肢の一部（8桁クーポンコードの「両方（登録が無ければ発行）」案、電話番号の「保存だけ」案）が、intent.md の「やらないこと」節に引き継がれていない。同じ表の別の選択肢（店が決めた番号を全員に見せる／SMSでの本人確認・下4桁照合）は引き継がれているのに、これらだけ抜けている。",
       "evidence": [
         {
-          "path": "vault/knowledge/projects/ai-hack-2026/04_v2の注文.md",
+          "path": "（非公開）04_v2の注文.md",
           "line": 53,
-          "quote": "選ばなかった案 | ... 店が決めた番号を登録して全員に同じものを見せる／両方（登録が無ければ発行）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 133,
           "quote": "**店が決めた1つの番号を全員に見せる形のクーポン**（本人選択で不採用。外部クーポンの手入力は基準13で別に入れる）"
         },
         {
-          "path": "vault/knowledge/projects/ai-hack-2026/04_v2の注文.md",
+          "path": "（非公開）04_v2の注文.md",
           "line": 52,
-          "quote": "選ばなかった案 | SMS で本人確認・ログイン（外部の SMS サービスと費用が要る）／来店時の本人の識別（下4桁の照合）／保存だけ"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/intent.md",
+          "path": "docs/specs/v2/intent.md",
           "line": 132,
           "quote": "**電話番号の SMS による本人確認・ログインと、来店時の下4桁での照合**（本人選択で不採用）。"
         }

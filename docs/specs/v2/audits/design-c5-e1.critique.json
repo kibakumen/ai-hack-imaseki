@@ -22,14 +22,14 @@
           "quote": "| テスト | `[\"pnpm\",\"exec\",\"vitest\",\"run\"]` |"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 31,
-          "quote": ".filter((name) => (Array.isArray(gate[name]) ? gate[name].length : gate[name]))"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 97,
-          "quote": ": [`ゲート通過（タスク ${taskId}）`, ...header, ...notes].join(\"\\n\");"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ],
       "note": "実物を自分で開いて確認した——空配列の3本は走らせる対象から除外され（31行目の filter）、注意文は通過の報告に添えられるだけで終了コードは errors だけで決まる（100行目 `return errors.length ? 1 : 0`）＝ゲートは黙って通る。補足2点（どちらも直す手順に効く）: ①`dev.config.json` は役割を問わず書けない場所（`lib/config.mjs` の INFRA_DENY 24行目）なので、書き込むのは進行役の手 ②同ファイルは検査の土台の指紋（`git.mjs` の sentinelHashes 76行目）なので、`record.mjs start` の後に書き換えると「検査の土台が着手時から変わっています」で落ちる＝着手前に書くこと。"
@@ -104,19 +104,19 @@
           "quote": "検査のファイルは `tests/acceptance/v2/`（タスク分割の段で設計者が書く）。"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 25,
-          "quote": "const result = spawnSync(cmd, args, { cwd: repo, shell, encoding: \"utf8\" });"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 47,
-          "quote": "...Object.keys(current).filter((rel) => !(rel in approved)).map((rel) => `タスク表の承認後に受け入れ検査が足されています（改ざん）: ${rel}`),"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": "/home/kibaku/.claude/skills/dev/SKILL.md",
+          "path": "（非公開）開発ハーネス（skill dev）の SKILL.md",
           "line": 26,
-          "quote": "**周回の上限を守る。** ゲートの差し戻しは1段あたり3回"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/v2/design.md",

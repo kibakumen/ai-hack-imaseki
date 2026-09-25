@@ -26,7 +26,7 @@ phase: tasks
 - **鍵と環境は本人が準備済み**（2026-09-21・`07_鍵と環境の準備.md` の8節-6: 秘密5つが手元 `web/.dev.vars` と Cloudflare の Worker の両方に在る。`ADMIN_CONTACT_EMAIL` だけ未・最終日でよい）。骨組みのタスク（1）はこれを前提に書く。確認の記録はタスク35（本人・済の確認）。
 - **Worker・D1・R2 のバケットの名前**: `ai-hack-v2`・`ai-hack-v2`・`ai-hack-v2-permits`（22節・AI判断の既定を本人が受けた）。D1 の `database_id` は `09a71aee-5f9e-4733-b92e-275afa4cbc57`（07 の控え）。束縛の名前は `DB`・`PERMITS`（AI判断・受け入れ検査 `_fakes.ts` の `openDb` と `structure.test.ts` が見る）。
 - **`web/wrangler.jsonc` の `vars` はこの3つだけ**: `ORCAROUTER_MODEL=orcarouter/ai-sekitori`・`TURNSTILE_SITE_KEY=0x4AAAAAAE98fYv_yiGU_Aa_`・`VAPID_PUBLIC_KEY=BLacCvDVdQI5_Rgb1DqHDa0m_K50tyQVp9ry6YNhaI_9nwnd77KWSmqO1Zmy5wIIecMDpSZid3sEp_AKjIeG7MI`（値は 07 の控え・本人がメモ）。秘密の名前・メールアドレスは `vars` に書かない（34.6 の走査が落とす）。
-- **OrcaRouter（3点セット A-1・タスク27）**: `ORCAROUTER_MODEL` の既定は `orcarouter/auto`（コード側）。要求本文の `models` の受け皿は `anthropic/claude-haiku-4.5`（**ドット**）、候補は `openai/gpt-4o-mini`・`google/gemini-2.5-flash`。Named Router `ai-sekitori`・Guardrails `ai-sekitori`・鍵 `AIHACK` は本人が管理画面で作成済み（23節）。**A〜C は本体の後ろの独立したタスクで、間に合わなければ落とせる**（23節・本人選択）。B の2つの検査（`tools` が無い構造・`guardrail_blocked` を通る振る舞い）は本体のタスク11に入れた。
+- **OrcaRouter（3点セット A-1・タスク27）**: `ORCAROUTER_MODEL` の既定は `orcarouter/auto`（コード側）。要求本文の `models` の受け皿は `anthropic/claude-haiku-4.5`（**ドット**）、候補は `openai/gpt-4o-mini`・`google/gemini-2.5-flash`。Named Router `ai-sekitori`・Guardrails・予算上限つきの鍵は本人が管理画面で作成済み（23節。Guardrails のルールと鍵の設定の中身は公開の文書に書かない・安全-25）。**A〜C は本体の後ろの独立したタスクで、間に合わなければ落とせる**（23節・本人選択）。B の2つの検査（`tools` が無い構造・`guardrail_blocked` を通る振る舞い）は本体のタスク11に入れた。
 - **ゲート**: 型検査 `pnpm exec tsc --noEmit -p tsconfig.json`／lint `pnpm --dir web exec eslint .`／テスト `pnpm exec vitest run`（設計書の配列。進行役が `dev.config.json` へ写す・承認の直後・タスク1の着手前）。
 - **受け入れ検査の走り方**: `tests/acceptance/v2/_tasks.ts` の `describeTask` が、着手の記録 `.dev/runs/v2/task-<番号>.json` の無いタスクのブロックを飛ばす。`_setup.ts` は fetch を「外へ出たら落とす」に差し替え、**着手済みで未完了の AI のタスクに、その番号を名乗るブロックが0件なら例外を投げる**（第7周の本人判断の受け皿・進行役の指示）。`structure.test.ts` の「最上位のブロックが全部 `describeTask`」の見張りはタスク1の番号（第7周の反論役の見落とし）。
 
@@ -257,7 +257,7 @@ phase: tasks
   - _担当: 本人_
 
 - [ ] 36. 公開と段3の確かめ: `pnpm --dir web run deploy`（OpenNext・進行役が手を貸してよい）で公開し、URL が応答する／README の「提出前の確かめ」を歩く——10回の取得が8秒以内（`orcarouter/auto` と `orcarouter/ai-sekitori` で10回ずつ・記事の数字を控える・A-4）／テスト用のカードで登録が最後まで終わる／Android と iPhone（ホーム画面に追加）の実機に2つの場面のプッシュが届く／実物の Turnstile が人を止めない
-  - 予算上限は鍵 `AIHACK` の $1/日。20回の取得の途中で管理画面の実費を1回見る
+  - 本番の鍵には1日の予算上限がある（額は公開の文書に書かない・安全-25）。20回の取得の途中で管理画面の実費を1回見る
   - _要件: 34.2, 4.13, 13.11, 22.13_
   - _受け入れ検査: なし_
   - _担当: 本人_
@@ -267,7 +267,7 @@ phase: tasks
   - _受け入れ検査: なし_
   - _担当: 本人_
 
-- [ ] 38. GitHub の public リポジトリ: 提出用の写し（`git clone --no-local`）で履歴から `sprint/` を消し（`git filter-repo --path sprint/ --invert-paths`）、`git log --all --oneline -- sprint/` が0行と古い鍵が履歴に無いことを確かめてから、public のリポジトリを作って push する（手順は `07_鍵と環境の準備.md` 9節）。公開中の速成版 `ai-hack-sekiari` が古い鍵で動いているなら、先に鍵を入れ替える
+- [ ] 38. 【2026-09-25 更新: このタスクは行わない。履歴は書き換えない（本人選択）。今の履歴のまま 2026-09-22 に public で公開済みで、代わりに速成版の Worker を止める・安全-05。完了の印は付けない。以下は当時の記録】GitHub の public リポジトリ: 提出用の写し（`git clone --no-local`）で履歴から `sprint/` を消し（`git filter-repo --path sprint/ --invert-paths`）、`git log --all --oneline -- sprint/` が0行と古い鍵が履歴に無いことを確かめてから、public のリポジトリを作って push する（手順は `07_鍵と環境の準備.md` 9節）。公開中の速成版 `ai-hack-sekiari` が古い鍵で動いているなら、先に鍵を入れ替える
   - 履歴から `sprint/` を消して push することは本人選択（19節）。手元の作業用のリポジトリは書き換えない（設計者の案・AI判断）
   - _要件: 34.8_
   - _受け入れ検査: なし_

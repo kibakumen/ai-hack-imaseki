@@ -25,7 +25,7 @@
           "quote": "本人発案「データモデルに関する実装も今回の要件外」を、進行役がこう読んだ。**解釈は推測**。DB そのものを持たない意味かどうかは本人に確かめる）"
         },
         {
-          "path": "/home/kibaku/src/product/ai-hack/.dev/runs/main/intent.gate.txt",
+          "path": ".dev/runs/main/intent.gate.txt",
           "line": 2,
           "quote": "「AI判断」の印: 14件（承認のときに本人が確認する）"
         }
@@ -40,9 +40,9 @@
       "claim": "01_要件.md が「本人が決める」未決事項として挙げた「自律度の見せ方（承認つき実行か、例外だけ人へ回すか）」が、intent.md の受け入れ基準にもやらないことにも一切現れず、決定も先送りの明記もされていない。",
       "evidence": [
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/01_要件.md",
+          "path": "（非公開）01_要件.md",
           "line": 92,
-          "quote": "自律度の見せ方（承認つき実行か、例外だけ人へ回すか）"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         }
       ],
       "confidence": "確実",
@@ -80,9 +80,9 @@
       "claim": "受け入れ基準7「LLM の呼び出しはすべて OrcaRouter を経由すること」を「大会の必須条件」と断定しているが、01_要件.md の必須条件は「OrcaRouter を使用すること」であり、「すべて」という全数要求は書かれていない。全数要求は進行役の追加解釈であり、本来は（AI判断）の印が要る。",
       "evidence": [
         {
-          "path": "/home/kibaku/vault/knowledge/projects/ai-hack-2026/01_要件.md",
+          "path": "（非公開）01_要件.md",
           "line": 40,
-          "quote": "スポンサーの **OrcaRouter を使用する**こと"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/main/intent.md",

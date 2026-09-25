@@ -10,17 +10,17 @@
       "claim": "「残り」の一般式（基準13.10）が下限0を明記しておらず、下限を明記する基準13.5・8.5と食い違う。個数を発行済み数より少なく減らすと式どおりでは負の値になる。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 381,
           "quote": "5. 店が単位の組の個数を減らした時、システムは残りを新しい個数からその日に発行されたコードの数を引いた値（0より小さければ0。AI判断）にすること［段1］"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 386,
           "quote": "10. オファーの残りは、単位の組の個数から、日本時間のその日に発行されたコードの数を引いた数（日ごとに登録した個数へ戻すのは本人選択・区切りを日本時間の暦日にするのはAI判断）であること［段1］"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 257,
           "quote": "5. 残りが1のオファーを複数の客が同時に受け取ろうとした場合、システムは1人にだけコードを発行し、残りを0より小さくしないこと［段1］"
         }
@@ -35,12 +35,12 @@
       "claim": "「オファーを消す」が行の削除ではなく状態変更と定義された（用語節）にも関わらず、「1店が同時に持てるオファーは3つまで」（基準12.2）が消された状態のオファーを数に含めるかを定義しておらず、店が3つ作って消すと4つ目を永久に作れなくなる読み方が成り立つ。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 348,
           "quote": "2. 1店が同時に持てるオファーは3つまでで、4つ目を作ろうとした場合、システムは作らず上限に達していることを示すこと［段1］"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 44,
           "quote": "**オファーを消す**: 店がオファーを取り下げること。**オファーの記録は残し、消された状態にする**（行そのものを消さない。AI判断）。消した後も発行済みのコードは有効（要件8の基準 8.7）で、取得と受け取りの記録（要件18）もそのオファーを指し続ける"
         }
@@ -55,17 +55,17 @@
       "claim": "決定論の絞り込み・点数づけの結果、候補が0件になった場合でも、基準6.6と基準7.2の文言はAIの呼び出しを省略せず必ず1回行うことを求めており、要件6自身の目的（AIに渡す前に安く絞ってAIの費用と待ち時間を抑える）と衝突する。",
       "evidence": [
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 199,
           "quote": "**目的:** 本人として、AI に渡す前に安い処理で候補を絞りたい。それにより、AI の費用と待ち時間を抑えられる"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 208,
           "quote": "6. 候補の店が10件に満たない場合、システムはあるだけの店をAI に渡すこと［段1］"
         },
         {
-          "path": "src/product/ai-hack/docs/specs/v2/requirements.md",
+          "path": "docs/specs/v2/requirements.md",
           "line": 228,
           "quote": "2. 渡す店が何件であっても、システムは取得1回につき AI の呼び出しを1回だけ行うこと［段1］"
         }

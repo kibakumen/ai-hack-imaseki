@@ -7,14 +7,14 @@
       "verdict": "AGREE",
       "evidence": [
         {
-          "path": ".claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 34,
-          "quote": "      if (result.status === 0) return { shown, error: null };"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
-          "path": ".claude/skills/dev/scripts/gate-code.mjs",
+          "path": "（非公開）開発ハーネス（skill dev）の gate-code.mjs",
           "line": 97,
-          "quote": "    : [`ゲート通過（タスク ${taskId}）`, ...header, ...notes].join(\"\\n\");"
+          "quote": "（伏せた: リポジトリの外の、公開しない文書からの引用。2026-09-25 の監査の指摘 安全-26・安全-27）"
         },
         {
           "path": "docs/specs/v2/design.md",
