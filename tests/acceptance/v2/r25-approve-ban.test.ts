@@ -1,7 +1,7 @@
 // 要件25 承認と緊急の停止（手続き）。承認はタスク8、停止と復帰はタスク21。画面は r24-admin.ui.test.tsx。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { approvedStore, fetchOffers, makeCtx, one, PDF_BYTES, receivedScene, registerCard, registerCustomer, registerStore, seedAdmin, snapshot, uploadLicense, type Ctx } from "./_fakes";
+import { approvedStore, fetchOffers, makeCtx, one, PDF_BYTES, receive, receivedScene, registerCard, registerCustomer, registerStore, requireInResults, seedAdmin, snapshot, uploadLicense, type Ctx } from "./_fakes";
 
 describeTask("8", "承認", () => {
   let ctx: Ctx;
@@ -69,8 +69,10 @@ describeTask("21", "緊急の停止と復帰", () => {
     const scene = await receivedScene(ctx, { capacity: 3 });
     const second = await (async () => {
       const c = await registerCustomer(ctx, { nickname: "ふたりめ", phone: "08022223333" });
-      const f = await fetchOffers(c.api, { party: 2 });
-      const r = await c.api.post("/api/customer/reservations", { offerId: scene.offer.id, party: 2, fetchId: f.json.fetchId });
+      // 店の場所で探し、結果に出たことを確かめてから受け取る（本番の客と同じ順・_types.ts の約束7）
+      const f = await fetchOffers(c.api, { party: 2, ...scene.at });
+      requireInResults(f, scene.offer.id);
+      const r = await receive(c.api, { offerId: scene.offer.id, party: 2, fetchId: f.json.fetchId });
       expect(r.status).toBe(200);
       return { customer: c, reservation: r.json.reservation };
     })();
@@ -115,11 +117,17 @@ describeTask("21", "緊急の停止と復帰", () => {
 
   it("25.7 止めたあと、その店は公開できず、取得の結果にも出ない", async () => {
     const scene = await receivedScene(ctx);
+    const other = await registerCustomer(ctx, { nickname: "さがすひと", phone: "08044445555" });
+    // 陽性対照: 止める前は、同じ場所で探すとその店が結果に出る（出ない場所で探すと、止める処理が壊れていても通る）
+    const seen = await fetchOffers(other.api, { party: 2, ...scene.at });
+    expect(seen.status).toBe(200);
+    expect(seen.json.items.map((i: any) => i.storeId)).toContain(scene.store.id);
     await ctx.admin!.api.post(`/api/admin/stores/${scene.store.id}/ban`, {});
     const pub = await scene.store.api.post("/api/store/offers", { couponIds: [], capacity: 2, partyMax: 4, until: "23:00" });
     expect(pub.status).toBe(409);
-    const other = await registerCustomer(ctx, { nickname: "さがすひと", phone: "08044445555" });
-    const f = await fetchOffers(other.api, { party: 2 });
+    // 公開中が残っていたから断られた（offer_exists）のではなく、止められているから断られた
+    expect(pub.json.error.kind).not.toBe("offer_exists");
+    const f = await fetchOffers(other.api, { party: 2, ...scene.at });
     expect(f.status).toBe(200);
     expect(f.json.items.map((i: any) => i.storeId)).not.toContain(scene.store.id);
   });
