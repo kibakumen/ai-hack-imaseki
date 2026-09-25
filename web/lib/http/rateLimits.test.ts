@@ -9,6 +9,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+// 偽の時計は受け入れ検査の道具を使う（写しを持たない・設計-19）。人かどうかの確かめの打ち切りは、進めないので起きない
+import { fakeClock } from "../../../tests/acceptance/v2/_fakes";
 import type { Deps } from "../ports";
 import type { RateCounterRow } from "../repo/rateCounters";
 import { FETCH_RATE_LIMIT, LOGIN_FAILURE_LIMIT, LOGIN_LOCK_WINDOW_MS, REGISTER_RATE_LIMIT, STORE_IMAGE_RATE_LIMIT } from "../schemas/limits";
@@ -50,24 +52,13 @@ const fakeDb = (customers: Record<string, string> = {}) => {
   };
 };
 
-const fakeClock = (startIso = T0) => {
-  let nowMs = Date.parse(startIso);
-  return {
-    now: () => new Date(nowMs),
-    // 人かどうかの確かめの打ち切りは、この検査では起こさない（偽の確かめがすぐ返る）。
-    after: () => new Promise<void>(() => {}),
-    set: (iso: string) => {
-      nowMs = Date.parse(iso);
-    },
-  };
-};
 
 /** 客の Cookie の値 → 客の番号。見分けは値を SHA-256 にして引くので、偽の Hasher も同じ形で写す。 */
 const hashOf = (value: string) => `sha256(${value})`;
 
 const makeDeps = (customers: Record<string, string> = {}) => {
   const db = fakeDb(customers);
-  const clock = fakeClock();
+  const clock = fakeClock(T0);
   /** 人かどうかの確かめが呼ばれた回数（断った要求で外へ聞きに行っていないことを見る）。 */
   const human = { calls: 0 };
   const deps = {
