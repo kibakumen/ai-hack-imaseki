@@ -76,11 +76,13 @@ export const saveStoreProfile = async (deps: Deps, storeId: string, input: Store
   // 保存済みの住所と同じで、位置もあるなら、地図へ問い合わせずに前の位置のまま住所以外を書き換える
   // （2026-09-25 監査の指摘 店-18: 予算だけを直しても毎回地図を呼び、地図の不調で何も保存できなかった）。
   // 位置が消されている（利用条件の30日で消した・まだ無い）ときは問い合わせる。
+  // 書く文は「住所が読んだときのままで、位置が在る」ときだけ当たる。読んでから書くまでに別のタブが住所を変えていたら
+  // 当たらないので、地図へ問い合わせる道へ落とす（店-18 のレビュー: 住所 X に Y の位置が残る食い違いを作らない）。
   const current = await findStoreLocation(deps.db, storeId);
   const previousUrl = current?.url ?? null;
-  if (current && current.address === input.address && current.lat !== null && current.lng !== null) {
-    await updateStoreDetails(deps.db, storeId, record);
-  } else {
+  const keptLocation =
+    current !== null && current.address === input.address && current.lat !== null && current.lng !== null && (await updateStoreDetails(deps.db, storeId, record));
+  if (!keptLocation) {
     const location = await locate(deps, input.address);
     if (!location) return { ok: false, kind: "address_unresolved", fields: [{ name: "address", reason: "not_allowed" }] };
     // 位置を Google で直した時刻も残す（利用条件の30日で取り直す起点・usecases/googleUpkeep・設計-20）

@@ -112,12 +112,20 @@ export const findStoreLocation = async (db: Db, storeId: string): Promise<StoreL
 /**
  * 店の情報だけを書き換え、位置（lat・lng・geocoded_at）は触らない（住所を変えていない保存・店-18）。
  * 位置を直した時刻も触らないので、Google の利用条件の30日の手入れ（usecases/googleUpkeep）の起点はずれない。
+ *
+ * **保存済みの住所が今の住所のままで、位置が在るときだけ**当たる（店-18 のレビュー）。読んでから書くまでの間に
+ * 別のタブが住所と位置を変えていたら、ここで住所だけを書き戻すと「住所 X に Y の位置」が残り、客を違う場所へ案内する。
+ * 当たったら true。当たらなければ呼ぶ側が地図へ問い合わせる道へ戻る。
  */
-export const updateStoreDetails = async (db: Db, storeId: string, profile: Omit<StoreProfileRecord, "lat" | "lng">): Promise<void> => {
-  await db
-    .prepare(`UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8 WHERE id = ?1`)
+export const updateStoreDetails = async (db: Db, storeId: string, profile: Omit<StoreProfileRecord, "lat" | "lng">): Promise<boolean> => {
+  const result = await db
+    .prepare(
+      `UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8 WHERE id = ?1
+          AND address = ?3 AND lat IS NOT NULL AND lng IS NOT NULL`,
+    )
     .bind(storeId, profile.name, profile.address, profile.url, JSON.stringify(profile.genres), JSON.stringify(profile.menus), profile.budgetMin, profile.budgetMax)
     .run();
+  return changedRows(result) > 0;
 };
 
 // ---------- 営業許可書とカード（タスク7・要件13） ----------
