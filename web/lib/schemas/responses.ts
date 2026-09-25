@@ -139,6 +139,8 @@ const storeHome = object({
   mustChangePassword: boolean(),
   /** 公開中のオファーの「今日の動き」——15分ごとの結果に出た回数と受け取り（公開中が無ければ空・2026-09-25 店-15） */
   trend: array(object({ at: string(), shown: number(), received: number() })),
+  /** カードの登録を始めて（決済会社の画面を開いて）、まだ確かめていない。画面は開いたときに確かめを1回送る（2026-09-25 不具合-01） */
+  cardSetupPending: boolean(),
 });
 
 const storeProfile = object({

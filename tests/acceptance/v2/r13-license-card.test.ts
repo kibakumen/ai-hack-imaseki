@@ -71,6 +71,8 @@ describeTask("7", "営業許可書とカード", () => {
     expect(admin.headers.get("cache-control")).toMatch(/no-store/);
   });
 
+  // 2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1: 確かめの入口は、要求が持ってくる番号を使わず、
+  // **その店のために控えた番号**だけを Stripe に照会する。番号を本文に載せても無視される（別の店の番号でも同じ）。
   it("13.6・13.8・13.9 偽のカードの口が成功→登録済み／失敗・別の店のセッション→登録済みにならず card_setup_failed。応答にあるのは登録済みかどうかだけ", async () => {
     const s = await registerStore(ctx);
     const other = await registerStore(ctx);
@@ -90,6 +92,10 @@ describeTask("7", "営業許可書とカード", () => {
     const wrong = await other.api.post("/api/store/card/confirm", { sessionId });
     expect(wrong.status).toBe(409);
     expect(wrong.json.error.kind).toBe("card_setup_failed");
+    expect((await other.api.get("/api/store/home")).json.checklist.card).toBe(false);
+    // 別の店が自分の登録を始めていても（控えが在っても）、他店の番号を載せて登録済みにはなれない
+    expect((await other.api.post("/api/store/card/setup", {})).status).toBe(200);
+    expect((await other.api.post("/api/store/card/confirm", { sessionId })).status).toBe(409);
     expect((await other.api.get("/api/store/home")).json.checklist.card).toBe(false);
     ctx.card.confirmOk = false;
     const failConfirm = await s.api.post("/api/store/card/confirm", { sessionId });
@@ -114,12 +120,35 @@ describeTask("7", "営業許可書とカード", () => {
     expect((await s.api.get("/api/store/home")).json.checklist.card).toBe(false);
   });
 
-  // 画面と同じ道（開始 → Stripe で入力を終える → 戻り先へ戻る → 画面が確かめを送る）で登録済みになること。
-  // 今は戻り先に番号が載らず、控えた番号で確かめる入口も無いので、画面から登録が完了しない。
-  it.fails("既知の不具合（不具合-01）: 画面と同じ道（開始 → Stripe で入力 → 戻り先へ戻る → 確かめ）で、カードが登録済みになる", async () => {
+  // 画面と同じ道（開始 → Stripe で入力を終える → 戻り先へ戻る → 画面が確かめを送る）で登録済みになること（不具合-01）。
+  // 戻り先は書類の画面で、戻ったことだけを印（`card=returned`）で伝える。番号は載せない（画面は番号を持たない）。
+  it("不具合-01 画面と同じ道（開始 → Stripe で入力 → 戻り先へ戻る → 確かめ）で、カードが登録済みになる", async () => {
     const s = await registerStore(ctx);
-    const { confirm } = await registerCardAsPage(s.api);
+    const { back, confirm } = await registerCardAsPage(s.api);
+    const backUrl = new URL(back, "https://example.test");
+    expect(backUrl.pathname).toBe("/store/documents");
+    expect(backUrl.searchParams.get("card")).toBe("returned");
+    expect(back).not.toMatch(/cs_test_/);
     expect(confirm.status).toBe(200);
-    expect((await s.api.get("/api/store/home")).json.checklist.card).toBe(true);
+    const home = (await s.api.get("/api/store/home")).json;
+    expect(home.checklist.card).toBe(true);
+    // 登録済みになったら、確かめ待ちの印は下りる（画面が開くたびに確かめ直さない）
+    expect(home.cardSetupPending).toBe(false);
+  });
+
+  // 戻る前にタブを閉じた店を救うため、ホームは「決済会社の画面を開いたが、まだ確かめていない」を印で返す（不具合-01）。
+  // 画面はこの印を見て、開いたときに確かめを1回送る。
+  it("不具合-01 登録を始めて確かめていない店のホームは cardSetupPending が立ち、確かめて登録済みになると下りる。始めていない店は立たない", async () => {
+    const s = await registerStore(ctx);
+    expect((await s.api.get("/api/store/home")).json.cardSetupPending).toBe(false);
+    const setup = await s.api.post("/api/store/card/setup", {});
+    expect((await s.api.get("/api/store/home")).json.cardSetupPending).toBe(true);
+    // 入力を終えずに確かめても、印は立ったまま（まだ戻ってくるかもしれない）
+    expect((await s.api.post("/api/store/card/confirm", {})).status).toBe(409);
+    expect((await s.api.get("/api/store/home")).json.cardSetupPending).toBe(true);
+    ctx.card.complete(setup.json.url);
+    expect((await s.api.post("/api/store/card/confirm", {})).status).toBe(200);
+    const home = (await s.api.get("/api/store/home")).json;
+    expect(home).toMatchObject({ cardSetupPending: false, checklist: { card: true } });
   });
 });

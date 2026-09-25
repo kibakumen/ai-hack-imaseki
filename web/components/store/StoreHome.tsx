@@ -9,13 +9,14 @@
 //   「来た客を完了にする」操作だから。公開の設定はその下（1日に何度も触るものではない）。
 // 画面のあいだの行き来はタブに変えた（StoreNav）。新しい客が増えた時は音で知らせる。
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { callApi, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
 import { LoadView } from "../ui/LoadState";
 import { ArrivalsList } from "./ArrivalsList";
 import { playNotifyBeep } from "./beep";
+import { confirmCardSetup } from "./cardReturn";
 import { PublishForm } from "./PublishForm";
 import { OfferPanel } from "./OfferPanel";
 import { SetupChecklist } from "./SetupChecklist";
@@ -92,6 +93,19 @@ export const StoreHome = () => {
   const refresh = () => {
     void reload();
   };
+
+  // カードの登録を始めたまま確かめていない店（決済会社の画面から戻る前にタブを閉じた店）は、ホームを開いたときにも
+  // 確かめを1回送る（2026-09-25 カード登録が画面から完了しない件（不具合-01））。通らなくても文は出さない
+  // （入力を終えていないだけかもしれない。やり直しは書類の画面から）。
+  const cardChecked = useRef(false);
+  const pendingCard = state.status === "ready" && state.data.cardSetupPending && !state.data.checklist.card;
+  useEffect(() => {
+    if (!pendingCard || cardChecked.current) return;
+    cardChecked.current = true;
+    void (async () => {
+      if ((await confirmCardSetup()) === null) await reload();
+    })();
+  }, [pendingCard, reload]);
 
   // 読めなかった・ログインが切れたときも、見出しとタブは出す（空の main で止めない・横断-01）。
   return (

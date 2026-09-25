@@ -7,15 +7,16 @@
 // 断られたときは、ファイルの欄の直下（種類・大きさ）か「カードを登録する」の直下（やり直し）に文が出て、
 // 画面はそのまま、前に登録したものの表示も変わらない（設計書「入力の誤りの出し方」の 13.3 の行）。
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { LICENSE_MAX_MEGABYTES } from "../../lib/schemas/limits";
 import { FieldKindMessage, FormMessage } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
+import { cameBackFromCardSetup, clearCardReturnMark, confirmCardSetup } from "./cardReturn";
 
 /** 店のホームの応答のうち、この画面が読む分（型は schemas/responses の表から・設計-07）。 */
-type DocumentsView = Pick<StoreHomeDto, "checklist">;
+type DocumentsView = Pick<StoreHomeDto, "checklist" | "cardSetupPending">;
 
 const REGISTERED = "登録済み";
 const NOT_REGISTERED = "まだ登録されていません";
@@ -29,6 +30,29 @@ export const DocumentsPanel = () => {
   const [file, setFile] = useState<File | null>(null);
   const [licenseFailure, setLicenseFailure] = useState<ApiFailure | null>(null);
   const [cardFailure, setCardFailure] = useState<ApiFailure | null>(null);
+  /** 開いたときの確かめを送ったか（1回だけ・不具合-01） */
+  const cardChecked = useRef(false);
+
+  // 決済会社の画面から戻ってきた（`?card=returned`）か、始めたまままだ確かめていない（`cardSetupPending`）なら、
+  // 開いたときに確かめを1回送る（2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1）。
+  // 戻ってきたのに通らなかったときだけ断りの文を出す——始めただけの店は、入力を終えていないだけかもしれない。
+  const loaded = state.status === "ready" || state.status === "empty" ? state.data : null;
+  useEffect(() => {
+    if (loaded === null || cardChecked.current) return;
+    cardChecked.current = true;
+    const returned = cameBackFromCardSetup();
+    clearCardReturnMark();
+    if (loaded.checklist.card || !(returned || loaded.cardSetupPending)) return;
+    void (async () => {
+      const failure = await confirmCardSetup();
+      if (failure === null) {
+        setCardFailure(null);
+        await reload();
+        return;
+      }
+      if (returned) setCardFailure(failure);
+    })();
+  }, [loaded, reload]);
 
   const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
     setFile(event.target.files?.[0] ?? null);

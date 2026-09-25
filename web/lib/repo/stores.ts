@@ -107,6 +107,8 @@ export type StoreHomeRow = StoreSummary &
     genres: string[];
     budgetMin: number | null;
     budgetMax: number | null;
+    /** カードの登録の口を開いて、まだ確かめていない（控えの番号が在り、登録済みでない）。不具合-01 */
+    cardSetupPending: boolean;
   };
 
 /**
@@ -134,11 +136,14 @@ export const findStoreDocuments = async (db: Db, storeId: string): Promise<Store
 /** 店のホームが要る列をまとめて1回で読む。 */
 export const findStoreHomeRow = async (db: Db, storeId: string): Promise<StoreHomeRow | null> => {
   const row = await db
-    .prepare(`SELECT id, name, status, address, genres, budget_min, budget_max, license_key, license_mime, card_registered_at FROM stores WHERE id = ?1`)
+    .prepare(
+      `SELECT id, name, status, address, genres, budget_min, budget_max, license_key, license_mime, card_registered_at, card_setup_session_id FROM stores WHERE id = ?1`,
+    )
     .bind(storeId)
     .first();
   if (!row) return null;
   return {
+    cardSetupPending: row.card_setup_session_id !== null && row.card_setup_session_id !== undefined && row.card_registered_at === null,
     id: row.id as string,
     name: row.name as string,
     status: row.status as StoreStatus,
@@ -168,7 +173,20 @@ export const saveCardSetupSession = async (db: Db, storeId: string, sessionId: s
   await db.prepare(`UPDATE stores SET card_setup_session_id = ?2 WHERE id = ?1`).bind(storeId, sessionId).run();
 };
 
-/** カードが登録済みになった時刻。画面と運営に出るのはこれが在るかどうかだけ（基準 13.8）。 */
+/**
+ * 確かめに使う控えの番号（2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1）。画面は番号を持たないので、
+ * 確かめの入口はここで読んだ番号だけを外のサービスに照会する。控えが無ければ null。
+ */
+export const findCardSetupSession = async (db: Db, storeId: string): Promise<string | null> => {
+  const row = await db.prepare(`SELECT card_setup_session_id FROM stores WHERE id = ?1`).bind(storeId).first();
+  const sessionId = (row as { card_setup_session_id?: unknown } | null)?.card_setup_session_id;
+  return typeof sessionId === "string" && sessionId !== "" ? sessionId : null;
+};
+
+/**
+ * カードが登録済みになった時刻。画面と運営に出るのはこれが在るかどうかだけ（基準 13.8）。
+ * 確かめ終えた控えの番号は消す（画面が開くたびに確かめ直さない・不具合-01）。
+ */
 export const markCardRegistered = async (db: Db, storeId: string, atIso: string): Promise<void> => {
-  await db.prepare(`UPDATE stores SET card_registered_at = ?2 WHERE id = ?1`).bind(storeId, atIso).run();
+  await db.prepare(`UPDATE stores SET card_registered_at = ?2, card_setup_session_id = NULL WHERE id = ?1`).bind(storeId, atIso).run();
 };

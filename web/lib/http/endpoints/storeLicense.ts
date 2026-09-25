@@ -11,8 +11,12 @@ import { respond } from "../respond";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
 import { notFound, refusal } from "../refusals";
 
-/** 店が戻ってくる先（外のカードの画面から）。要求そのものの URL を起点にする（環境ごとに書き分けない）。 */
-const DOCUMENTS_PATH = "/store/documents";
+/**
+ * 店が戻ってくる先（外のカードの画面から）。要求そのものの URL を起点にする（環境ごとに書き分けない）。
+ * 戻ったことだけを印（`card=returned`）で伝え、番号は載せない——書類の画面はこの印を見て確かめを送り、
+ * 確かめの入口はサーバーが控えた番号を照会する（2026-09-25 カード登録が画面から完了しない件（不具合-01）の案1）。
+ */
+const CARD_RETURN_PATH = "/store/documents?card=returned";
 
 /**
  * ファイルの応答。**保存させない・種類を勝手に読み替えさせない**（設計書「秘密情報と個人データの扱い」）。
@@ -79,7 +83,7 @@ const cardSetupRoute = defineRoute({
   path: "/api/store/card/setup",
   auth: "store",
   handler: async ({ req, deps, ctx }) => {
-    const returnUrl = new URL(DOCUMENTS_PATH, req.url).toString();
+    const returnUrl = new URL(CARD_RETURN_PATH, req.url).toString();
     const result = await startCardSetup(deps, ctx.storeId, returnUrl);
     if (!result.ok) return refusal("card_setup_failed");
     return respond("POST /api/store/card/setup", { ok: true, url: result.url });
@@ -91,8 +95,8 @@ const cardConfirmRoute = defineRoute({
   path: "/api/store/card/confirm",
   auth: "store",
   input: cardConfirmSchema,
-  handler: async ({ input, deps, ctx }) => {
-    const result = await confirmCardSetup(deps, ctx.storeId, input.sessionId);
+  handler: async ({ deps, ctx }) => {
+    const result = await confirmCardSetup(deps, ctx.storeId);
     if (!result.ok) return refusal("card_setup_failed");
     // 応答に在るのは登録済みかどうかだけ（基準 13.8。受け皿の番号も外の識別子も返さない）。
     return respond("POST /api/store/card/confirm", { ok: true, cardRegistered: true });
