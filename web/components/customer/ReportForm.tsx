@@ -8,12 +8,12 @@
 //   `reason` の断り（required・too_long） … 欄の直下（FieldMessage）。書いた理由はそのまま残る
 //   その店へは通報できない（report_not_allowed） … 「送る」の直下（FormMessage）
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, isFailure } from "../../lib/client/api";
 import { SUBMIT_TEXTS } from "../../lib/domain/texts";
 import { REPORT_REASON_MAX, REPORT_REASON_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
-import { SubmitButton } from "../ui/Submit";
+import { DoneNotice, SubmitButton } from "../ui/Submit";
 import { useSubmit } from "../ui/useSubmit";
 
 const FIELD_NAMES = ["reason"];
@@ -24,19 +24,24 @@ export type ReportTarget = { storeId: string; storeName: string };
 type Props = ReportTarget & { onClose: () => void };
 
 /**
- * 送れたあと（2026-09-25 監査の指摘 横断-03）。欄と「送る」を畳み、送れたことだけを出す——それまでは送ったあとも
+ * 送れたあと（2026-09-25 監査の指摘 横断-03）。欄と「送る」を畳み、「閉じる」だけを残す——それまでは送ったあとも
  * 「送る」が押せ、同じ通報が重ねて届いた（運営が通報の件数を読み違える）。
+ * 「送る」ごとフォームを外すので、描いたら焦点を「閉じる」へ移す（移さないと焦点が body へ落ちる・横断-03 のレビュー）。
+ * 送れたことの1文は、ここではなく親の DoneNotice が出す（読み上げの領域を送る前から置いておくため）。
  */
-const ReportSent = ({ storeName, onClose }: { storeName: string; onClose: () => void }) => (
-  <section className="report-sent" aria-label={`${storeName}の通報`}>
-    <p className="done-notice" role="status" data-testid="report-sent">
-      {SUBMIT_TEXTS.reportSent}
-    </p>
-    <button type="button" onClick={onClose}>
-      閉じる
-    </button>
-  </section>
-);
+const ReportSent = ({ storeName, onClose }: { storeName: string; onClose: () => void }) => {
+  const close = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    close.current?.focus();
+  }, []);
+  return (
+    <section className="report-sent" aria-label={`${storeName}の通報`}>
+      <button ref={close} type="button" onClick={onClose}>
+        閉じる
+      </button>
+    </section>
+  );
+};
 
 export const ReportForm = ({ storeId, storeName, onClose }: Props) => {
   const [reason, setReason] = useState("");
@@ -49,40 +54,46 @@ export const ReportForm = ({ storeId, storeName, onClose }: Props) => {
     if (result !== null && !isFailure(result)) setSent(true);
   };
 
-  if (sent) return <ReportSent storeName={storeName} onClose={onClose} />;
-
+  // 送れたことの読み上げの領域は、送る前から置いておき、送れたら中身だけを入れる（入れ物ごと差し込むと告げない・横断-03 のレビュー）
   return (
-    <form
-      data-testid="form-report"
-      noValidate
-      onSubmit={(event) => {
-        void submit(event);
-      }}
-    >
-      <h2>{storeName}を運営に知らせる</h2>
-      <p>見過ごせないことがあれば、運営へ知らせてください。返事はできませんが、緊急のときは運営が店の登録を取り消します。</p>
+    <>
+      <DoneNotice message={sent ? SUBMIT_TEXTS.reportSent : null} testId="report-sent" />
+      {sent ? (
+        <ReportSent storeName={storeName} onClose={onClose} />
+      ) : (
+        <form
+          data-testid="form-report"
+          noValidate
+          onSubmit={(event) => {
+            void submit(event);
+          }}
+        >
+          <h2>{storeName}を運営に知らせる</h2>
+          <p>見過ごせないことがあれば、運営へ知らせてください。返事はできませんが、緊急のときは運営が店の登録を取り消します。</p>
 
-      <label htmlFor="report-reason">どんなことがありましたか</label>
-      <textarea
-        id="report-reason"
-        data-testid="field-reason"
-        rows={4}
-        value={reason}
-        maxLength={REPORT_REASON_MAX}
-        onChange={(event) => setReason(event.target.value)}
-        {...fieldAria("reason", report.failure, "report-reason")}
-      />
-      <FieldMessage inputId="report-reason" name="reason" failure={report.failure} ctx={REASON_CTX} />
+          <label htmlFor="report-reason">どんなことがありましたか</label>
+          <textarea
+            id="report-reason"
+            data-testid="field-reason"
+            rows={4}
+            value={reason}
+            maxLength={REPORT_REASON_MAX}
+            onChange={(event) => setReason(event.target.value)}
+            {...fieldAria("reason", report.failure, "report-reason")}
+          />
+          <FieldMessage inputId="report-reason" name="reason" failure={report.failure} ctx={REASON_CTX} />
 
-      <SubmitButton type="submit" data-testid="btn-send-report" busy={report.busy}>
-        送る
-      </SubmitButton>
-      <FormMessage failure={report.failure} fieldNames={FIELD_NAMES} />
+          <SubmitButton type="submit" data-testid="btn-send-report" busy={report.busy}>
+            送る
+          </SubmitButton>
+          <FormMessage failure={report.failure} fieldNames={FIELD_NAMES} />
 
-      <button type="button" onClick={onClose}>
-        閉じる
-      </button>
-    </form>
+          <button type="button" onClick={onClose}>
+            閉じる
+          </button>
+        </form>
+      )}
+    </>
   );
 };
 

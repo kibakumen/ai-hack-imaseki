@@ -23,6 +23,7 @@ import { PasswordForm } from "../store/PasswordForm";
 import { ProfileForm } from "../store/ProfileForm";
 import { PublishForm } from "../store/PublishForm";
 import { RegisterForm as StoreRegisterForm } from "../store/RegisterForm";
+import { DoneNotice } from "./Submit";
 import { useSubmit } from "./useSubmit";
 
 vi.mock("../../lib/client/geolocation", () => ({ currentLocation: async () => ({ ok: true, lat: 35.6, lng: 139.7 }) }));
@@ -343,5 +344,53 @@ describe("済んだことを知らせる（横断-03）", () => {
     const notice = await screen.findByTestId("done-notice");
     expect(notice.textContent).toBe(SUBMIT_TEXTS.couponCreated);
     await screen.findByTestId("row-c1");
+  });
+});
+
+/**
+ * 読み上げの領域（role=status）は、中身が変わる前から DOM に在らないと告げない組み合わせが多い
+ * （横断-03 のレビュー）。それまで DoneNotice と通報の「送りました」は、知らせが来た瞬間に role=status の入れ物ごと
+ * 差し込んでいた。見るのは、知らせの前から空の領域が在り、知らせはその同じ入れ物の中身として出ること。
+ */
+describe("済んだ知らせの読み上げの領域（横断-03 のレビュー）", () => {
+  it("DoneNotice は知らせが無くても空の role=status を描き、知らせは同じ入れ物に入る", () => {
+    const { rerender } = render(<DoneNotice message={null} testId="notice" />);
+    const region = screen.getByRole("status");
+    expect(region.textContent).toBe("");
+    expect(screen.queryByTestId("notice")).toBeNull();
+    rerender(<DoneNotice message="保存しました。" testId="notice" />);
+    expect(screen.getByTestId("notice")).toBe(region);
+    expect(region.textContent).toBe("保存しました。");
+  });
+
+  it("クーポンを作ったときの知らせは、押す前から在った領域に入る", async () => {
+    let items: any[] = [];
+    api = installFakeApi({
+      "GET /api/store/coupons": () => ({ json: { ok: true, items } }),
+      "POST /api/store/coupons": () => {
+        items = [{ id: "c1", name: "生ビール1杯", note: "", createdAt: "2026-09-25T01:00:00.000Z" }];
+        return { status: 201, json: { ok: true, coupon: items[0] } };
+      },
+    });
+    render(<CouponEditor />);
+    fireEvent.change(await screen.findByTestId("field-name"), { target: { value: "生ビール1杯" } });
+    const region = within(screen.getByTestId("form-coupon")).getByRole("status");
+    expect(region.textContent).toBe("");
+    fireEvent.click(screen.getByTestId("btn-create-coupon"));
+    expect(await screen.findByTestId("done-notice")).toBe(region);
+  });
+
+  it("通報の「送りました」は、送る前から在った領域に入り、焦点は「閉じる」へ移る（body へ落とさない）", async () => {
+    api = installFakeApi({ "POST /api/customer/reports": () => ({ status: 201, json: { ok: true } }) });
+    render(<ReportForm storeId="s1" storeName="テスト食堂" onClose={() => undefined} />);
+    const region = screen.getByRole("status");
+    expect(region.textContent).toBe("");
+    fireEvent.change(screen.getByTestId("field-reason"), { target: { value: "店が開いていませんでした" } });
+    const send = screen.getByTestId("btn-send-report");
+    send.focus();
+    fireEvent.click(send);
+    expect(await screen.findByTestId("report-sent")).toBe(region);
+    expect(region.textContent).toBe(SUBMIT_TEXTS.reportSent);
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("閉じる"));
   });
 });
