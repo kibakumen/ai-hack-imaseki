@@ -1268,3 +1268,18 @@
   font-size: 0.8125rem;
   margin: 0;
 }
+
+/* ------------------------------------------------------------------
+   確保を取ったあと（2026-09-25 監査の指摘 客-03〜客-14・不具合-18）。
+   色は globals.css の変数だけで指す（構造の検査 32.3 が .css も見る）。
+   ------------------------------------------------------------------ */
+
+/* 取得の画面の上の「前回: ◯◯（完了済み）を開く」（基準 9.4・不具合-18）。主役の「今すぐ探す」より控えめに */
+.previous-completed__open {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+}

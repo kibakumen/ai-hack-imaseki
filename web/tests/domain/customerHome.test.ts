@@ -100,6 +100,19 @@ describe("customerHomeView の優先の順", () => {
     expect(customerHomeView({ reservation: old, offer: liveOffer, lastFetchAt: null }, NOW).kind).toBe("fetch");
   });
 
+  // 不具合-18: 既定の幅を過ぎても、次の確保を作るまでは取得の画面から完了済みの表示を開ける（基準 9.4）。
+  // 入口（「前回: ◯◯（完了済み）を開く」）が無く、注だけが「開ける」と書いていた。
+  it("5 既定の幅を過ぎた完了済みは、取得の画面に「前回の完了済み」として載る（9.4）。ほかの状態では載らない", () => {
+    const old = reservation({ status: "completed", statusAt: minutes(-24 * 60) });
+    const view = customerHomeView({ reservation: old, offer: liveOffer, lastFetchAt: minutes(-1) }, NOW);
+    expect(view.kind).toBe("fetch");
+    expect(view.previousCompleted).toMatchObject({ id: "res-1", storeName: "受け取りの店", status: "completed" });
+    const cancelled = reservation({ status: "customer_cancelled", statusAt: minutes(-24 * 60) });
+    expect(customerHomeView({ reservation: cancelled, offer: liveOffer, lastFetchAt: null }, NOW).previousCompleted).toBeUndefined();
+    const recent = reservation({ status: "completed", statusAt: minutes(-1) });
+    expect(customerHomeView({ reservation: recent, offer: liveOffer, lastFetchAt: null }, NOW).previousCompleted).toBeUndefined();
+  });
+
   it("6 客が取り消したあとは、すぐ取得の画面（9.5）", () => {
     const row = reservation({ status: "customer_cancelled", statusAt: minutes(-1) });
     expect(customerHomeView({ reservation: row, offer: liveOffer, lastFetchAt: null }, NOW)).toEqual({ kind: "fetch" });

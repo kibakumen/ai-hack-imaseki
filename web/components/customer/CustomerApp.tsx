@@ -31,7 +31,8 @@ import { EraseRegistration } from "./EraseRegistration";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
 import { FetchForm, type FetchResult } from "./FetchForm";
-import type { HomeDto, ReceiveRefusal } from "./home";
+import type { HomeDto, ReceiveRefusal, ReservationDto } from "./home";
+import { PreviousCompletedEntry } from "./PreviousCompleted";
 import { RecentStores } from "./RecentStores";
 import { RegisterForm } from "./RegisterForm";
 import { ReportForm, type ReportTarget } from "./ReportForm";
@@ -110,6 +111,8 @@ const CustomerScreens = () => {
   const [unreachable, setUnreachable] = useState<ApiFailure | null>(null);
   /** この端末の登録を消したばかりか（登録の入力の上に「消しました」を出す・基準 28.11） */
   const [erased, setErased] = useState(false);
+  /** 取得の画面から、前回の完了済み（応答の `previousCompleted`）を開いているか（基準 9.4・不具合-18） */
+  const [previousOpen, setPreviousOpen] = useState(false);
 
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
@@ -284,8 +287,11 @@ const CustomerScreens = () => {
   }
 
   const reservation = home.reservation;
+  /** 既定の幅を過ぎた完了済み（取得の画面のときだけ載る・基準 9.4）。開いていればその表示を出す */
+  const previous = home.kind === "fetch" ? home.previousCompleted : undefined;
+  const showingPrevious = previousOpen && previous !== undefined;
   // 確保が載っていない表示の種類（応答の形は検査していない）でも、取得の画面なら出せる
-  const onFetchScreen = home.kind === "fetch" || searching || reservation === undefined;
+  const onFetchScreen = !showingPrevious && (home.kind === "fetch" || searching || reservation === undefined);
   // 結果が1件以上あるときだけ条件を畳む（断られたとき・0件のときは畳まない——入れ直したい人が欄にたどり着けるように）
   const hasItems = fetchResult !== null && fetchResult.items.length > 0;
   const collapsed = hasItems && !conditionsOpen;
@@ -294,12 +300,12 @@ const CustomerScreens = () => {
    * 部品（`ReservationView`・`CompletedView`）の中身として渡す——囲い（`view-active`・
    * `view-completed`）はその部品が持っている。
    */
-  const reportEntry =
-    reservation !== undefined && REPORT_VIEW_KINDS.includes(home.kind) ? (
-      <button type="button" data-testid="btn-report" onClick={() => setReportTarget({ storeId: reservation.storeId, storeName: reservation.storeName })}>
-        このお店を通報する
-      </button>
-    ) : null;
+  const reportButton = (target: ReservationDto) => (
+    <button type="button" data-testid="btn-report" onClick={() => setReportTarget({ storeId: target.storeId, storeName: target.storeName })}>
+      このお店を通報する
+    </button>
+  );
+  const reportEntry = reservation !== undefined && REPORT_VIEW_KINDS.includes(home.kind) ? reportButton(reservation) : null;
 
   /**
    * 経路の出発地（探したときの起点）。確保中の画面と確定の演出の**両方が同じ値**を使う。
@@ -316,6 +322,14 @@ const CustomerScreens = () => {
 
   /** 確保を持つ客の表示（優先の順の2〜5）。種類ごとに部品が1つ。 */
   const reservationView = () => {
+    // 取得の画面から開いた前回の完了済み（基準 9.4）。「ほかの店を探す」で取得の画面へ戻る
+    if (showingPrevious) {
+      return (
+        <CompletedView reservation={previous} onSearchAgain={() => setPreviousOpen(false)}>
+          {reportButton(previous)}
+        </CompletedView>
+      );
+    }
     if (reservation === undefined) return null;
     if (home.kind === "active") {
       return (
@@ -377,6 +391,7 @@ const CustomerScreens = () => {
 
       {onFetchScreen ? (
         <section ref={fetchScreenRef} className={hasItems ? "fetch-screen fetch-screen--with-fab" : "fetch-screen"}>
+          {previous !== undefined && fetchResult === null ? <PreviousCompletedEntry reservation={previous} onOpen={() => setPreviousOpen(true)} /> : null}
           <FetchForm
             profile={home.profile}
             party={party}
