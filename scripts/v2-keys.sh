@@ -8,7 +8,8 @@
 #   scripts/v2-keys.sh put <名前>       鍵を1つ入れる（入力は画面に出ない）。手元の web/.dev.vars と Cloudflare の両方へ
 #   scripts/v2-keys.sh all              入っていない鍵を順に聞く
 #   scripts/v2-keys.sh vapid            Web プッシュの鍵の組を作って入れる（秘密の側だけ秘密にする）
-#   scripts/v2-keys.sh push             手元の web/.dev.vars の中身を Cloudflare の Worker の秘密へまとめて送る
+#   scripts/v2-keys.sh push             手元の web/.dev.vars の秘密（SECRET_NAMES の6つだけ）を Cloudflare の Worker の秘密へまとめて送る
+#                                       （Turnstile の試験用の秘密鍵が入っていたら何も送らずに止まる）
 #
 # 名前は設計書（docs/specs/v2/design.md の「秘密情報と個人データの扱い」）のとおり。
 # Worker・D1・R2 の名前は設計書に決めが無いので、ここの既定が最初の決め（AI判断・2026-09-21）。
@@ -49,6 +50,9 @@ wr() { pnpm dlx wrangler@4 "$@"; }
 
 die() { echo "✖ $*" >&2; exit 1; }
 known() { local n; for n in "${SECRET_NAMES[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
+# Turnstile の試験用の秘密鍵（Cloudflare が配布している公開の値・1x/2x/3x で始まる）。答えを必ず通す（か必ず断る）ので、
+# 手元の web/.dev.vars には置いてよいが、Worker の秘密（本番）へは送らない（README 7.4・2026-09-25 の監査の直し 安全-23 の続き）
+is_test_turnstile_secret() { [ "$1" = TURNSTILE_SECRET_KEY ] && [[ "$2" =~ ^[123]x ]]; }
 
 has_local() { [ -f "$DEV_VARS" ] && grep -q "^$1=" "$DEV_VARS"; }
 
@@ -86,7 +90,11 @@ cmd_put() {
   mkdir -p "$ROOT/.dev"
   printf '%s' "$value" | write_local "$name"
   echo "  ✔ 手元（web/.dev.vars）へ入れました"
-  printf '%s' "$value" | put_remote "$name"
+  if is_test_turnstile_secret "$name" "$value"; then
+    echo "  ・ Turnstile の試験用の鍵なので、Cloudflare（本番の Worker）へは送りませんでした（手元だけ）"
+  else
+    printf '%s' "$value" | put_remote "$name"
+  fi
   unset value
 }
 
@@ -116,14 +124,23 @@ cmd_vapid() {
 
 cmd_push() {
   [ -f "$DEV_VARS" ] || die "web/.dev.vars がありません"
-  # .dev.vars を JSON にして標準入力で渡す（ファイルを作らない）
-  node -e '
-    const fs=require("fs"); const out={};
+  # .dev.vars のうち、秘密の名前（SECRET_NAMES）の行だけを JSON にして標準入力で渡す（ファイルを作らない）。
+  # 手元にだけ置く値（試験用の TURNSTILE_SITE_KEY など）は送らない——vars の同じ名前とぶつかり、本番の値を上書きする。
+  # 試験用の Turnstile の秘密鍵が入っていたら、何も送らずに止める（本番の人の確かめが素通しになる）。
+  local json
+  json="$(node -e '
+    const fs=require("fs"); const allow=new Set(process.argv[2].split(" ")); const out={};
     for (const line of fs.readFileSync(process.argv[1],"utf8").split("\n")) {
-      const m=line.match(/^([A-Z0-9_]+)="?(.*?)"?$/); if (m) out[m[1]]=m[2];
+      const m=line.match(/^([A-Z0-9_]+)="?(.*?)"?$/); if (m && allow.has(m[1])) out[m[1]]=m[2];
+    }
+    if (/^[123]x/.test(out.TURNSTILE_SECRET_KEY ?? "")) {
+      process.stderr.write("TURNSTILE_SECRET_KEY が Turnstile の試験用の鍵です。本番の秘密鍵は wrangler secret put で別に入れてください（何も送っていません）\n");
+      process.exit(3);
     }
     process.stdout.write(JSON.stringify(out));
-  ' "$DEV_VARS" | wr secret bulk --name "$WORKER"
+  ' "$DEV_VARS" "${SECRET_NAMES[*]}")" || die "送るのをやめました"
+  printf '%s' "$json" | wr secret bulk --name "$WORKER"
+  unset json
 }
 
 cmd_cloudflare() {
@@ -164,5 +181,5 @@ case "${1:-}" in
   all) cmd_all ;;
   vapid) cmd_vapid ;;
   push) cmd_push ;;
-  *) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+  *) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
 esac
