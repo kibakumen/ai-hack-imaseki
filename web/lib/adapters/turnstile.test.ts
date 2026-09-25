@@ -30,11 +30,60 @@ describe("adapters/turnstile", () => {
     expect(calls[0].signal).toBe(controller.signal);
   });
 
-  // ホスト名と用途を見ていないので、本番の鍵で解いた値が localhost でも通る。どのホスト名で解かれたか分からない答えは、人と認めない
-  // （以前の検査は hostname の無い応答を「人」として固めていた・設計-04）。
-  it.fails("既知の不具合（安全-23）: 応答に hostname が無い（どこで解かれたか分からない）ときは、人と認めない", async () => {
+  // どのホスト名で解かれたか分からない答えは、人と認めない（以前の検査は hostname の無い応答を「人」として固めていた・設計-04）。
+  // 2026-09-25 に安全-23 を直したので、普通の it に戻した。
+  it("安全-23 応答に hostname が無い（どこで解かれたか分からない）ときは、人と認めない", async () => {
     const fetchImpl = (async () => jsonResponse({ success: true })) as unknown as typeof globalThis.fetch;
     expect(await createHumanCheck({ secretKey: "s", fetch: fetchImpl }).verify("tok", {})).not.toEqual({ ok: true, human: true });
+  });
+
+  // 安全-23: 本番のサイトキーを自前の localhost のページに置いて解いた値を、本番の登録やログインに流せた。
+  // 解かれたホスト名が要求の来たホスト名と合うか、用途（action）が入口の用途と合うかを見る。
+  describe("解かれた場所と用途の確かめ（安全-23）", () => {
+    const answering = (body: unknown) => {
+      const bodies: string[] = [];
+      const fetchImpl = (async (_url: string, init: RequestInit) => {
+        bodies.push(String(init.body));
+        return jsonResponse(body);
+      }) as unknown as typeof globalThis.fetch;
+      return { bodies, human: createHumanCheck({ secretKey: "secret-key", fetch: fetchImpl }) };
+    };
+    const expected = { expectedHostname: "app.test", expectedAction: "login" };
+
+    it("ホスト名も用途も合えば人", async () => {
+      const { human } = answering({ success: true, hostname: "app.test", action: "login" });
+      expect(await human.verify("tok", expected)).toEqual({ ok: true, human: true });
+    });
+
+    it("別のホスト名（localhost など）で解かれた値は、人と認めない", async () => {
+      const { human } = answering({ success: true, hostname: "localhost", action: "login" });
+      expect(await human.verify("tok", expected)).toEqual({ ok: true, human: false });
+    });
+
+    it("別の用途（登録の部品で解いた値をログインに流す等）は、人と認めない。用途の無い答えも同じ", async () => {
+      expect(await answering({ success: true, hostname: "app.test", action: "register-store" }).human.verify("tok", expected)).toEqual({ ok: true, human: false });
+      expect(await answering({ success: true, hostname: "app.test" }).human.verify("tok", expected)).toEqual({ ok: true, human: false });
+    });
+
+    it("ホスト名は大小を区別せずに比べる", async () => {
+      const { human } = answering({ success: true, hostname: "APP.test", action: "login" });
+      expect(await human.verify("tok", expected)).toEqual({ ok: true, human: true });
+    });
+
+    it("接続元が渡されれば remoteip として Cloudflare へ送る。無ければ送らない", async () => {
+      const withIp = answering({ success: true, hostname: "app.test", action: "login" });
+      await withIp.human.verify("tok", { ...expected, remoteIp: "203.0.113.5" });
+      expect(new URLSearchParams(withIp.bodies[0]).get("remoteip")).toBe("203.0.113.5");
+      const withoutIp = answering({ success: true, hostname: "app.test", action: "login" });
+      await withoutIp.human.verify("tok", { ...expected, remoteIp: null });
+      expect(new URLSearchParams(withoutIp.bodies[0]).has("remoteip")).toBe(false);
+    });
+
+    it("Cloudflare の試験用の秘密鍵（手元の開発用）では、決まった値（localhost・test）が返るので、ホスト名と用途を見ない", async () => {
+      const fetchImpl = (async () => jsonResponse({ success: true, hostname: "localhost", action: "test" })) as unknown as typeof globalThis.fetch;
+      const human = createHumanCheck({ secretKey: "1x0000000000000000000000000000000AA", fetch: fetchImpl });
+      expect(await human.verify("XXXX.DUMMY.TOKEN.XXXX", { expectedHostname: "127.0.0.1", expectedAction: "login" })).toEqual({ ok: true, human: true });
+    });
   });
 
   it("success が false なら人でない（確かめ自体は済んでいる）", async () => {

@@ -3,6 +3,7 @@
 // 手続きを呼んで応答の形に直すだけ。
 
 import { customerRegisterSchema } from "../../schemas/customer";
+import { HUMAN_CHECK_ACTIONS } from "../../schemas/limits";
 import { placeQuerySchema } from "../../schemas/place";
 import { placeSuggestQuerySchema } from "../../schemas/placeSuggest";
 import { customerHome } from "../../usecases/customerHome";
@@ -18,7 +19,7 @@ const registerCustomerRoute = defineRoute({
   method: "POST",
   path: "/api/register/customer",
   auth: "public",
-  human: true,
+  human: HUMAN_CHECK_ACTIONS.registerCustomer,
   input: customerRegisterSchema,
   handler: async ({ input, deps }) => {
     const { token } = await registerCustomer(deps, input);

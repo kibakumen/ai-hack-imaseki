@@ -317,3 +317,16 @@ export const PUSH_KEY_MAX = 255;
  * 上限そのものなので、**これより長くしない**（値は基準のまま・AI判断ではない）。
  */
 export const ARRIVALS_REFRESH_MS = 30_000;
+
+// 人かどうかの確かめ（Turnstile）の用途（2026-09-25 監査の指摘 安全-23）
+/**
+ * 部品（components/ui/HumanCheck）が Turnstile に名乗る用途と、入口（http/defineRoute）が答えに求める用途。
+ * 画面とサーバーが同じ値を使うので、両方が読めるここに置く。Turnstile の決まりで英数字・_・- の32字以内。
+ * 登録の部品で解いた値をログインに流す、のような使い回しを入口が断れるようにする。
+ */
+export const HUMAN_CHECK_ACTIONS = {
+  login: "login",
+  registerStore: "register-store",
+  registerCustomer: "register-customer",
+} as const;
+export type HumanCheckAction = (typeof HUMAN_CHECK_ACTIONS)[keyof typeof HUMAN_CHECK_ACTIONS];

@@ -5,7 +5,7 @@
 import type { ZodType } from "zod";
 import type { FieldReason } from "../domain/inputRefusal";
 import type { Deps } from "../ports";
-import { DEFAULT_MAX_BODY_BYTES } from "../schemas/limits";
+import { DEFAULT_MAX_BODY_BYTES, type HumanCheckAction } from "../schemas/limits";
 import { LOGIN_DEVICE_COOKIE_NAME, parseCookies } from "./cookies";
 import { checkOrigin, identifyCustomer, identifySession, renewSession } from "./guards";
 import { admitRequest, rateRulesFor, settleCharges } from "./rateLimits";
@@ -52,8 +52,11 @@ export type RouteConfig<TInput, TAuth extends RouteAuth> = {
   method: HttpMethod;
   path: string;
   auth: TAuth;
-  /** 人かどうかの確かめ（Turnstile）つきの入口か。登録・ログインの入口だけ true にする。 */
-  human?: boolean;
+  /**
+   * 人かどうかの確かめ（Turnstile）つきの入口なら、その用途（登録・ログインの入口だけが持つ）。
+   * 答えがこの用途と、要求の来たホスト名で解かれたものでなければ断る（2026-09-25 監査の指摘 安全-23）。
+   */
+  human?: HumanCheckAction;
   /** 入力のスキーマ。無ければ検査はしない（GET で入力を持たない入口など）。 */
   input?: ZodType<TInput>;
   /**
@@ -69,6 +72,8 @@ export type RouteDefinition = {
   path: string;
   auth: RouteAuth;
   human: boolean;
+  /** 人かどうかの確かめの用途（確かめの無い入口は null） */
+  humanAction: HumanCheckAction | null;
   /** 本文の大きさの上限（バイト）。構造の検査が、広げた入口を見張る */
   maxBodyBytes: number;
   handle: (req: Request, deps: Deps, params?: Record<string, string>) => Promise<Response>;
@@ -188,18 +193,29 @@ const HUMAN_CHECK_TIMEOUT_MS = 3000;
 
 const TIMED_OUT: unique symbol = Symbol("human-check-timed-out");
 
+/** 確かめの答えに求めるもの（入口の用途・要求の来たホスト名）と、利用者の接続元。 */
+type HumanExpectation = { expectedAction: HumanCheckAction; expectedHostname: string; remoteIp: string | null };
+
+const humanExpectationOf = (req: Request, action: HumanCheckAction): HumanExpectation => ({
+  expectedAction: action,
+  expectedHostname: new URL(req.url).hostname,
+  remoteIp: req.headers.get("cf-connecting-ip"),
+});
+
 /**
  * 人かどうかの確かめを、打ち切りの合図と競争させる（設計書「時間の割り振り」: 時計と AbortSignal の両方で書く）。
  * 答えが返らない・確かめられない・人でない、のどれでも false（断るのは呼ぶ側）。
  *
  * ⚠️ `deadline` は**この関数の外で、要求を読み始める前に**作る。差し替えた時計は「今」を進めた
  * その時に待っている合図だけを起こすので、進めたあとに作った合図はもう起きない。
+ *
+ * 答えに求めるのは、入口の用途（action）と、要求の来たホスト名で解かれたこと（安全-23）。接続元も渡す。
  */
-const verifyHuman = async (deps: Deps, token: string, deadline: Promise<void>): Promise<boolean> => {
+const verifyHuman = async (deps: Deps, token: string, expected: HumanExpectation, deadline: Promise<void>): Promise<boolean> => {
   const controller = new AbortController();
   const verifying = (async () => {
     try {
-      return await deps.human.verify(token, { signal: controller.signal });
+      return await deps.human.verify(token, { signal: controller.signal, ...expected });
     } catch {
       return { ok: false as const };
     }
@@ -260,12 +276,12 @@ const readInput = async <TInput>(schema: ZodType<TInput> | undefined, req: Reque
 };
 
 /** 人かどうかの確かめ。値が無ければ外のサービスに聞かずに断る。 */
-const passHumanCheck = async (deps: Deps, raw: unknown, deadline: Promise<void>): Promise<boolean> => {
+const passHumanCheck = async (deps: Deps, raw: unknown, expected: HumanExpectation, deadline: Promise<void>): Promise<boolean> => {
   const rawToken = (raw as Record<string, unknown> | null)?.humanToken;
   const token = typeof rawToken === "string" && rawToken !== "" ? rawToken : null;
   // 値が無ければ、外のサービスに聞かずに断る（設計書「人かどうかの確かめ」: 確かめが取れないときも
   // 断る・本人選択。守りが、部品の読み込みや外の調子で黙って外れないようにするため）。
-  return token !== null && (await verifyHuman(deps, token, deadline));
+  return token !== null && (await verifyHuman(deps, token, expected, deadline));
 };
 
 /**
@@ -302,7 +318,9 @@ const handleRoute = async <TInput, TAuth extends RouteAuth>(config: RouteConfig<
   if (!read.ok) return toResponse(read.result, renewCookies);
   const { raw, input } = read;
 
-  if (humanDeadline && !(await passHumanCheck(deps, raw, humanDeadline))) return toResponse(refusal("human_check_failed"));
+  if (config.human && humanDeadline && !(await passHumanCheck(deps, raw, humanExpectationOf(req, config.human), humanDeadline))) {
+    return toResponse(refusal("human_check_failed"));
+  }
 
   // 【最終日】連打の抑止（要件30）。見分け・入力の検査・人かどうかの確かめが済んだ時点で数え、手続きより
   // 手前で断る——断った取得では AI も地図も呼ばれない（基準 30.5）。どの入口を数えるかは rateLimits.ts の表。
@@ -332,7 +350,8 @@ export const defineRoute = <TInput, TAuth extends RouteAuth>(config: RouteConfig
   method: config.method,
   path: config.path,
   auth: config.auth,
-  human: config.human ?? false,
+  human: config.human !== undefined,
+  humanAction: config.human ?? null,
   maxBodyBytes: config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
   handle: async (req, deps, params = {}) => {
     // 見分け・連打の抑止・記録の読み書きで起きた想定外の例外も、ここで受け止める（設計-15）。
