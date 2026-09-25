@@ -4,7 +4,12 @@
 // ⚠️ この殻が無いあいだ、`me.css`（756行）は**誰からも import されておらず本番に1バイトも載っていなかった**。
 // 本番の CSS チャンクを実測して判った（`.claimed-celebration` も `.offer-card` も 0 件）。
 // Next.js は import された CSS だけを束ねるので、ファイルが在るだけでは配信されない。
+// 客の画面の CSS は続きの順のまま5つに分けた（2026-09-25 監査の指摘 設計-16）——読み込む順を変えない
 import "./me.css";
+import "./me-reservation.css";
+import "./me-entry.css";
+import "./me-celebration.css";
+import "./me-after.css";
 import { ThemeToggle } from "../../components/ui/ThemeToggle";
 
 // 明暗の切り替えボタンはここで1つだけ足す（客の画面は今 `/me` の1ページだけなので、この殻が唯一の入口）。

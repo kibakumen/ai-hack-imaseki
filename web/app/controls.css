@@ -1,0 +1,345 @@
+/* globals.css の続き（入力の面・押せるもの・入口とログイン・断りと済んだ知らせ・明暗の切り替え・表）。2026-09-25 監査の指摘 設計-16 で分けた。
+   読み込む順は殻の layout.tsx の import の順（元の1ファイルの並びのまま）。色は app/globals.css の変数だけで指す。 */
+
+/* ---------- 入力の面 ---------- */
+
+form {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.375rem;
+  padding: 1.25rem 1.125rem 1.375rem;
+}
+
+form > h2,
+form > h3 {
+  margin-bottom: 0.25rem;
+}
+
+/* 見出しと最初の欄の間、欄と次のラベルの間に息を入れる（ラベルは前の欄から離す） */
+form > label,
+form > fieldset,
+form > legend {
+  margin-top: 0.625rem;
+}
+
+form > label:first-of-type {
+  margin-top: 0.25rem;
+}
+
+legend,
+label {
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+legend {
+  padding: 0 0.25rem;
+}
+
+input,
+select,
+textarea {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font: inherit;
+  padding: 0.6875rem 0.75rem;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+  width: 100%;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-accent);
+  width: auto;
+}
+
+input[type="file"] {
+  padding: 0.5rem;
+}
+
+/* 焦点の輪の既定（2026-09-25 監査の指摘 横断-06）。影だけの輪は背景との差が 1.4〜2:1 しかなく、Windows の
+   ハイコントラスト（強制色）では影ごと消えて印が無くなった。2px の実線＋すき間で描く（影は下の各規則が足してよい）。 */
+:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
+  outline-offset: 1px;
+}
+
+/* 薄めない（70% に透かすと 3.15:1 で、「空のままなら今いる場所で探します」の案内が読めなかった・横断-04） */
+input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* 断りが出ている欄は枠を赤くする（第1回の指摘「未入力欄があることがわかりにくい・枠とかを赤く」）。
+   欄の aria-invalid で見分ける（components/ui/InputRefusal の fieldAria が付ける・2026-09-25 監査の指摘 横断-05）。
+   それまでは「欄の直後に断りの文」という DOM の並びで見分けていて、包まれた欄とダイヤルは赤くならなかった。 */
+[aria-invalid="true"] {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 18%, transparent);
+}
+
+/* 押して選ぶ札の並び（チップ・予算）は、囲いの縁を赤くする */
+fieldset[aria-invalid="true"] {
+  box-shadow: none;
+}
+
+fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem 0.875rem;
+}
+
+/* 並んだチェックの欄（ジャンル）は、丸い札にして横に流す。
+   中の `<label><input type=checkbox>…</label>` の形は .tsx のまま（検査が引いている data-testid も動かさない）。 */
+fieldset:has(input[type="checkbox"]) {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+fieldset:has(input[type="checkbox"]) > legend {
+  flex: 1 0 100%;
+}
+
+fieldset:has(input[type="checkbox"]) > label {
+  align-items: center;
+  min-height: var(--tap-min);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.8125rem;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+fieldset:has(input[type="checkbox"]) > label:has(input:checked) {
+  background: var(--color-accent-soft);
+  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
+  color: var(--color-accent-strong);
+}
+
+/* ---------- 押せるもの ---------- */
+
+/* 塗りのボタンは濃い橙の地に地の色の文字（明るい配色で 5.46:1・横断-04 の案A。明るい橙の地では 3.56:1 だった） */
+button {
+  background: var(--color-accent-strong);
+  border: 1px solid var(--color-accent-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  min-height: var(--tap-min);
+  padding: 0.5625rem 1rem;
+  transition: filter 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+/* 塗り（filled）。地を少し濃くするだけで、文字（--color-accent-text）はそのまま */
+@media (hover: hover) {
+  button:hover:not(:disabled) {
+    filter: var(--hover-filled-filter);
+  }
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+/* 主な操作（送る）は大きく・影を落として、副の操作と段を作る */
+form > button[type="submit"] {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+  font-size: 1.0625rem;
+  margin-top: 0.875rem;
+  padding: 0.9375rem 1rem;
+}
+
+/* ---------- 入口（/）とログインの面（/login） ---------- */
+
+.entry {
+  background: linear-gradient(165deg, color-mix(in srgb, var(--color-accent) 12%, var(--color-background)), var(--color-background));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--color-border));
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 2rem;
+  padding: 2.25rem 1.5rem 2rem;
+  text-align: center;
+}
+
+.entry__eyebrow,
+.auth-head__eyebrow {
+  color: var(--color-accent-strong);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.entry__title {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.entry__lead {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0 auto;
+  max-width: 24rem;
+}
+
+.entry__actions {
+  display: grid;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+}
+
+/* 勾配の終わりは赤みへ寄せる（琥珀へ寄せると明るくなり、白い文字が 2.62:1 まで沈んでいた・横断-04） */
+.entry__primary {
+  background: linear-gradient(135deg, var(--color-accent-strong), color-mix(in srgb, var(--color-danger) 35%, var(--color-accent-strong)));
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+  color: var(--color-accent-text);
+  font-size: 1.0625rem;
+  font-weight: 800;
+  padding: 1rem;
+  text-decoration: none;
+}
+
+/* 塗り。`nav > a` の soft ホバーより詳細度が高い（(0,2,0) > (0,1,1)）ので、地も文字もここが決める */
+@media (hover: hover) {
+  .entry__primary:hover {
+    background: linear-gradient(135deg, var(--color-accent-strong), color-mix(in srgb, var(--color-danger) 35%, var(--color-accent-strong)));
+    color: var(--color-accent-text);
+    filter: var(--hover-filled-filter);
+  }
+}
+
+.entry__secondary {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  padding: 0.6875rem 1rem;
+  text-decoration: none;
+}
+
+.auth-head {
+  display: grid;
+  gap: 0.125rem;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.auth-head__title {
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.auth-foot {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+/* ---------- 断りの文 ---------- */
+
+/* 入力の断りの文（components/ui/InputRefusal）。背景に対して読める濃さを明暗それぞれで持つ。 */
+.msg {
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-background));
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: var(--radius-xs);
+  color: var(--color-danger);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+  padding: 0.375rem 0.625rem;
+}
+
+/* 済んだことの1行（components/ui/Submit の DoneNotice・横断-03）。断りの文と同じ形で、色だけ済んだ側 */
+.done-notice {
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+  border-radius: var(--radius-xs);
+  color: var(--color-success);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+  padding: 0.375rem 0.625rem;
+}
+
+/* ---------- 明暗の切り替えボタン（`components/ui/ThemeToggle.tsx`）----------
+   3画面（客・店・運営）の殻（layout.tsx）から届く固定位置の丸ボタン。
+   本人が客の画面の演出にこだわっているので、控えめな色にする（地は surface、縁は border、差し色のオレンジは使わない）。
+   大きさは指で押せる 44px（36px だった・横断-13）。置く画面では main の上をこの分あける（上の `body:has(> .theme-toggle)`）。
+   宝くじの演出（.offer-reveal）と確定の演出（.claimed-celebration・どちらも z-index 50）
+   より低い z-index にして、演出中は自然に隠れる（動きの主役を譲る）。 */
+.theme-toggle {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  font-size: 0.9375rem;
+  height: var(--theme-toggle-size);
+  justify-content: center;
+  padding: 0;
+  position: fixed;
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  top: var(--theme-toggle-top);
+  transition: filter 140ms ease, transform 140ms ease;
+  width: var(--theme-toggle-size);
+  z-index: 40;
+}
+
+/* 縁だけ（soft）。中身は絵文字なので文字色は関係ないが、塗りの filter は打ち消して soft の地にする */
+@media (hover: hover) {
+  .theme-toggle:hover:not(:disabled) {
+    background: var(--hover-soft-bg);
+    border-color: var(--hover-soft-border);
+    filter: none;
+    transform: scale(1.05);
+  }
+}
+
+.theme-toggle:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+/* ---------- 表（運営の数字・店の結果） ---------- */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}

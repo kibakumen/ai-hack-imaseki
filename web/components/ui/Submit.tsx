@@ -3,7 +3,7 @@
 // 送る操作のボタンと、済んだ知らせの1行（2026-09-25 監査の指摘 横断-03）。状態は components/ui/useSubmit が持つ。
 //   SubmitButton … 送っている間は押せず、文言を「送っています…」（または渡した文）に替える。aria-busy も立てる
 //   DoneNotice   … 済んだことを role=status の1行で伝える（読み上げにも届く）
-// 色は持たない（globals.css の `.done-notice`）。
+// 色は持たない（app/controls.css の `.done-notice`）。
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { SUBMIT_TEXTS } from "../../lib/domain/texts";

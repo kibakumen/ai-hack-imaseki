@@ -5,9 +5,12 @@ import { describe, expect, it } from "vitest";
 import { allRules, contrast, declOf, fillColors, palette, parseCss, resolveColor, WEB } from "./_css";
 
 const GLOBALS = path.join(WEB, "app", "globals.css");
+/** 画面の CSS 全部の規則（ファイルを分けても、セレクタで引けるようにする・設計-16 で CSS を分けた） */
+const RULES = allRules();
+const STORE_RULES = RULES.filter((r) => r.file.startsWith(path.join(WEB, "app", "store") + path.sep));
 
 describe("明暗の手動の選択は、ブラウザ標準の部品にも効く（横断-10）", () => {
-  const rules = parseCss(GLOBALS);
+  const rules = RULES;
   const find = (selector: string, media?: RegExp) => rules.find((r) => r.selector === selector && (media ? r.at.some((a) => media.test(a)) : r.at.length === 0));
 
   it("「明るい」を選んだら color-scheme は light だけ（端末が暗くても、時刻の欄・select・チェックが明るく描かれる）", () => {
@@ -167,7 +170,7 @@ const PROGRAMMATIC_FOCUS = new Set([".offer-list__head:focus", ".claim-ticket__c
 
 describe("焦点の輪（横断-06）", () => {
   it("全体の既定: :focus-visible は 2px 以上の実線とすき間で描く", () => {
-    const base = parseCss(GLOBALS).find((r) => r.selector === ":focus-visible" && r.at.length === 0);
+    const base = RULES.find((r) => r.selector === ":focus-visible" && r.at.length === 0);
     expect(base, ":focus-visible の既定の規則が無い").toBeDefined();
     expect(declOf(base!, "outline")).toMatch(/^(2|3)px solid /);
     expect(declOf(base!, "outline-offset")).toMatch(/^\d+px$/);
@@ -182,7 +185,7 @@ describe("焦点の輪（横断-06）", () => {
   });
 
   it("目に出さない欄は、焦点が入ったら見える（store-sr-only--focusable）。ダイヤルの枠にも輪を映す", () => {
-    const store = parseCss(path.join(WEB, "app", "store", "store.css"));
+    const store = STORE_RULES;
     const reveal = store.filter((r) => r.selector.startsWith(".store-sr-only--focusable:focus"));
     expect(reveal.length, ".store-sr-only--focusable:focus / :focus-within の規則が無い").toBeGreaterThan(0);
     for (const rule of reveal) {
@@ -222,14 +225,14 @@ describe("指で押す部品の大きさ（横断-13）", () => {
 
   for (const [file, selector] of TAP_TARGETS) {
     it(`${selector}（${file}）は min-height が --tap-min`, () => {
-      const rule = rules.find((r) => path.basename(r.file) === file && r.selector === selector && r.at.length === 0);
+      const rule = rules.find((r) => r.selector === selector && r.at.length === 0);
       expect(rule, `${file} に ${selector} の規則が無い`).toBeDefined();
       expect(declOf(rule!, "min-height")).toBe(TAP_MIN);
     });
   }
 
   it("ダイヤルの▲▼は高さ --tap-min（28px だった）。中央の帯の位置も同じ数から計算する", () => {
-    const store = parseCss(path.join(WEB, "app", "store", "store.css"));
+    const store = STORE_RULES;
     const step = store.find((r) => r.selector === ".store-dial__step");
     expect(step && declOf(step, "height")).toBe(TAP_MIN);
     const marker = store.find((r) => r.selector === ".store-dial__marker");
@@ -237,14 +240,14 @@ describe("指で押す部品の大きさ（横断-13）", () => {
   });
 
   it("「完了」と、その真下の「取り消す」のすき間は 0.75rem 以上（6px だった）", () => {
-    const actions = parseCss(path.join(WEB, "app", "store", "store.css")).find((r) => r.selector === ".store-arrival__actions");
+    const actions = STORE_RULES.find((r) => r.selector === ".store-arrival__actions");
     const gap = actions && declOf(actions, "gap");
     expect(gap).toMatch(/^\d+(\.\d+)?rem$/);
     expect(parseFloat(gap!)).toBeGreaterThanOrEqual(0.75);
   });
 
   it("明暗の切り替えは --theme-toggle-size の四角で、置く画面では main の上をその分あける（タブ・見出しに重ねない）", () => {
-    const globals = parseCss(GLOBALS);
+    const globals = RULES;
     const toggle = globals.find((r) => r.selector === ".theme-toggle");
     expect(toggle && declOf(toggle, "height")).toBe("var(--theme-toggle-size)");
     expect(toggle && declOf(toggle, "width")).toBe("var(--theme-toggle-size)");

@@ -1,0 +1,173 @@
+/* globals.css の続き（紙吹雪・画面をまたいで使う動き・読み込みの状態）。2026-09-25 監査の指摘 設計-16 で分けた。
+   読み込む順は殻の layout.tsx の import の順（元の1ファイルの並びのまま）。色は app/globals.css の変数だけで指す。 */
+
+/* ---------- 紙吹雪（components/ui/Confetti）---------- */
+
+/* 部品は `components/ui` に在って画面をまたげるので、面もここに置く。
+   1片ごとの左の位置・遅れ・速さは .tsx が inline の style で渡す（色は渡さない）。 */
+.confetti {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+}
+
+.confetti__piece {
+  animation-fill-mode: forwards;
+  animation-name: confetti-fall;
+  animation-timing-function: ease-in;
+  font-size: 1.25rem;
+  line-height: 1;
+  position: absolute;
+  top: 0;
+}
+
+/* ---------- 動き（画面をまたいで使う） ---------- */
+
+/* カードが下からふわっと出る（結果の一覧・向かっている客） */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.875rem) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 当たりが出た時の跳ね（宝くじの演出・確保の紙） */
+@keyframes prize-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-6deg);
+  }
+
+  55% {
+    opacity: 1;
+    transform: scale(1.08) rotate(2deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes prize-fade-out {
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+/* 紙吹雪の1片が落ちて回る */
+@keyframes confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translateY(-1rem) rotate(0deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(18rem) rotate(360deg);
+  }
+}
+
+/* 紹介文が届くまでの光の帯と、届いた瞬間の縁取り */
+@keyframes text-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes sparkle {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes reveal-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-highlight-edge) 0%, transparent);
+    opacity: 0;
+    transform: translateY(0.3rem);
+  }
+
+  35% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-highlight-edge) 55%, transparent);
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-highlight-edge) 0%, transparent);
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 待っている間ずっと動くものは、動きを減らす設定を尊重する（1回で終わる演出は残す——
+   受け取れたことが伝わらなくなるため。ただし長さは詰める）。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- 読み込みの状態とログインの切れ（2026-09-25 監査の指摘 横断-01） ----------
+   components/ui/LoadState（読み込み中・読めなかった・取り直しが失敗している帯）と
+   components/ui/SessionExpired（ログインが切れました・/login への道）。色は変数だけで指す。 */
+.load-state {
+  color: var(--color-text-muted);
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+  padding: 1rem 0;
+}
+
+.load-state__stale {
+  background: var(--color-highlight);
+  border-color: var(--color-highlight-edge);
+  color: var(--color-highlight-text);
+}
+
+.session-expired {
+  align-items: center;
+  background: var(--color-highlight);
+  border-bottom: 1px solid var(--color-highlight-edge);
+  color: var(--color-highlight-text);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.session-expired p {
+  font-weight: 600;
+  margin: 0;
+}
+
+.session-expired a {
+  color: inherit;
+  font-weight: 700;
+}

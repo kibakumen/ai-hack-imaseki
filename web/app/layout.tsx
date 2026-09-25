@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { SiteFooter } from "../components/ui/SiteFooter";
+// 全画面の見た目の土台。globals.css を続きの順のまま3つに分けた（2026-09-25 監査の指摘 設計-16）——読み込む順を変えない
 import "./globals.css";
+import "./controls.css";
+import "./motion.css";
 import "./site-footer.css";
 
 export const metadata: Metadata = {
