@@ -24,7 +24,9 @@ const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("theme-cho
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="ja">
+    // 明暗を選んだ端末では、水和の前に上の同期スクリプトが data-theme を足す（サーバーの HTML には無い）。
+    // 抑えるのはこの要素自身の属性の食い違いだけで、子の水和の誤りは今までどおり出る（2026-09-25 監査の指摘 設計-21）。
+    <html lang="ja" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>

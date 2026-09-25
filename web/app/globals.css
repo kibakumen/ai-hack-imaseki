@@ -77,6 +77,7 @@
    この2つが無いと、手動の選択が OS の設定に負ける（本人の指摘の核）。 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --color-background: #17120e;
     --color-surface: #241b14;
     --color-text: #f6ece2;
@@ -94,7 +95,14 @@
   }
 }
 
+/* 手で選んだ側は color-scheme も決め打つ（2026-09-25 監査の指摘 横断-10）。`:root` の `light dark` のままだと、
+   端末が暗い店が「明るい」を選んでも、時刻の欄の時計の印・select の一覧・チェック・スクロールバーは暗いまま描かれる。 */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --color-background: #17120e;
   --color-surface: #241b14;
   --color-text: #f6ece2;
