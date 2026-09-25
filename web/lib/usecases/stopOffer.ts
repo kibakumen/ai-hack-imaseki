@@ -3,15 +3,15 @@
 // すでに確保している客の確保は確保中のまま（基準 17.16）。残りも戻さない（オファーが終わるので、
 // その枠を別の客が受け取ることは無い）。
 
-import type { InputRefusalKind } from "../domain/inputRefusal";
 import type { Deps } from "../ports";
 import { stopLiveOffer } from "../repo/offers";
 
-export type StopOfferResult = { ok: true } | { ok: false; status: 409; kind: InputRefusalKind };
+/** 断りは種類だけ。状態コードへの対応は入口の表（http/refusals）が持つ（設計-13） */
+export type StopOfferResult = { ok: true } | { ok: false; kind: "offer_ended" };
 
 export const stopOffer = async (deps: Deps, storeId: string): Promise<StopOfferResult> => {
   const nowIso = deps.clock.now().toISOString();
   const stopped = await stopLiveOffer(deps.db, storeId, nowIso);
   // 公開中が無い＝もう終わっている（止めたあと・「何時まで」を過ぎたあと）。
-  return stopped ? { ok: true } : { ok: false, status: 409, kind: "offer_ended" };
+  return stopped ? { ok: true } : { ok: false, kind: "offer_ended" };
 };

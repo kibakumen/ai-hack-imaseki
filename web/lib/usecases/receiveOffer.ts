@@ -40,19 +40,15 @@ export type ReceiveRefusalBody = { kind: ReceiveRefusalKind; partyMax?: number; 
 
 export type ReceiveOfferResult =
   | { ok: true; reservation: ReservationView; home: CustomerHome }
-  /** 入力の断り（形・範囲・足りない項目）。全部の入口で1つの形 */
-  | { ok: false; status: 400; error: { kind: "invalid_input"; fields: Array<{ name: string; reason: "required" | "bad_format" }> } }
-  /** 受け取りの断り。理由・次の一手・新しいホームを1つの応答で返す */
-  | { ok: false; status: 409; refusal: ReceiveRefusalBody; home: CustomerHome };
+  /** 入力の断り（形・範囲・足りない項目）。全部の入口で1つの形。状態コードは入口の表（http/refusals）が決める */
+  | { ok: false; kind: "invalid_input"; fields: Array<{ name: string; reason: "required" | "bad_format" }> }
+  /** 受け取りの断り。理由・次の一手・新しいホームを1つの応答で返す（入口は 409） */
+  | { ok: false; refusal: ReceiveRefusalBody; home: CustomerHome };
 
 /** 見分けの直後に登録が消えた場合だけ（入口が 401 に倒す）。 */
 export type ReceiveOfferMissing = null;
 
-const invalidInput = (fields: Array<{ name: string; reason: "required" | "bad_format" }>): ReceiveOfferResult => ({
-  ok: false,
-  status: 400,
-  error: { kind: "invalid_input", fields },
-});
+const invalidInput = (fields: Array<{ name: string; reason: "required" | "bad_format" }>): ReceiveOfferResult => ({ ok: false, kind: "invalid_input", fields });
 
 const newId = (deps: Deps): string => tokenFromBytes(deps.rng.bytes(ID_BYTES));
 
@@ -124,7 +120,7 @@ const refuse = async (deps: Deps, customerId: string, offerId: string, party: nu
   );
   const home = await customerHome(deps, customerId);
   if (!home) return null;
-  return { ok: false, status: 409, refusal: { ...refusal, nextStep: nextStep(refusal.kind, home as CustomerHomeView) }, home };
+  return { ok: false, refusal: { ...refusal, nextStep: nextStep(refusal.kind, home as CustomerHomeView) }, home };
 };
 
 /**

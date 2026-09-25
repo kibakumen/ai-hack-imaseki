@@ -18,13 +18,13 @@ import { ID_BYTES } from "../schemas/limits";
  */
 export type ReportResult =
   | { ok: true }
-  | { ok: false; status: 400; error: { kind: "invalid_input"; fields: Array<{ name: string; reason: "required" }> } }
-  | { ok: false; status: 409; error: { kind: "report_not_allowed" } };
+  | { ok: false; kind: "invalid_input"; fields: Array<{ name: string; reason: "required" }> }
+  | { ok: false; kind: "report_not_allowed" };
 
 export const reportStore = async (deps: Deps, customerId: string, input: ReportInput): Promise<ReportResult> => {
   // 前後の空白を落としてから数える（空白だけは「入れていない」と同じ・基準 26.2）。
   const reason = input.reason.trim();
-  if (reason === "") return { ok: false, status: 400, error: { kind: "invalid_input", fields: [{ name: "reason", reason: "required" }] } };
+  if (reason === "") return { ok: false, kind: "invalid_input", fields: [{ name: "reason", reason: "required" }] };
 
   const now = deps.clock.now();
   const allowed = await canReportStore(deps.db, {
@@ -34,7 +34,7 @@ export const reportStore = async (deps: Deps, customerId: string, input: ReportI
     recentFromIso: recentWindowStart(now).toISOString(),
   });
   // 無い店も、行っていない店と同じ断り（店が在るかどうかを客に教えない・AI判断）。
-  if (!allowed) return { ok: false, status: 409, error: { kind: "report_not_allowed" } };
+  if (!allowed) return { ok: false, kind: "report_not_allowed" };
 
   await insertReport(deps.db, {
     id: tokenFromBytes(deps.rng.bytes(ID_BYTES)),

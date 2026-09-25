@@ -115,6 +115,6 @@ describe("店の入口の見分け", () => {
     const { deps } = fakeDeps(sessionRow(minutesFromNow(90), { store_id: null }));
     const res = await route.handle(requestWithCookie(), deps);
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ ok: false, error: { kind: "invalid_input" } });
+    expect(await res.json()).toEqual({ ok: false, error: { kind: "forbidden" } });
   });
 });

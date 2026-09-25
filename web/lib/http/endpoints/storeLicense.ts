@@ -6,6 +6,7 @@ import { confirmCardSetup, startCardSetup } from "../../usecases/card";
 import { readLicense, uploadLicense, type LicenseContent } from "../../usecases/license";
 import { cardConfirmSchema, licenseUploadSchema } from "../../schemas/documents";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
+import { notFound, refusal } from "../refusals";
 
 /** 店が戻ってくる先（外のカードの画面から）。要求そのものの URL を起点にする（環境ごとに書き分けない）。 */
 const DOCUMENTS_PATH = "/store/documents";
@@ -27,8 +28,6 @@ const licenseResponse = (file: LicenseContent): RouteHandlerResult => ({
   },
 });
 
-const notFound = (): RouteHandlerResult => ({ status: 404, body: { ok: false, error: { kind: "invalid_input" } } });
-
 const uploadLicenseRoute = defineRoute({
   method: "POST",
   path: "/api/store/license",
@@ -39,7 +38,7 @@ const uploadLicenseRoute = defineRoute({
     const result = await uploadLicense(deps, ctx.storeId, { bytes, declaredSize: input.file.size });
     if (!result.ok) {
       const reason = result.kind === "file_too_large" ? "too_long" : "not_allowed";
-      return { status: 400, body: { ok: false, error: { kind: result.kind, fields: [{ name: "file", reason }] } } };
+      return refusal(result.kind, { fields: [{ name: "file", reason }] });
     }
     return { status: 200, body: { ok: true } };
   },
@@ -72,7 +71,7 @@ const cardSetupRoute = defineRoute({
   handler: async ({ req, deps, ctx }) => {
     const returnUrl = new URL(DOCUMENTS_PATH, req.url).toString();
     const result = await startCardSetup(deps, ctx.storeId, returnUrl);
-    if (!result.ok) return { status: 409, body: { ok: false, error: { kind: "card_setup_failed" } } };
+    if (!result.ok) return refusal("card_setup_failed");
     return { status: 200, body: { ok: true, url: result.url } };
   },
 });
@@ -84,7 +83,7 @@ const cardConfirmRoute = defineRoute({
   input: cardConfirmSchema,
   handler: async ({ input, deps, ctx }) => {
     const result = await confirmCardSetup(deps, ctx.storeId, input.sessionId);
-    if (!result.ok) return { status: 409, body: { ok: false, error: { kind: "card_setup_failed" } } };
+    if (!result.ok) return refusal("card_setup_failed");
     // 応答に在るのは登録済みかどうかだけ（基準 13.8。受け皿の番号も外の識別子も返さない）。
     return { status: 200, body: { ok: true, cardRegistered: true } };
   },

@@ -6,6 +6,7 @@ import { login, logout } from "../../usecases/login";
 import { loginSchema } from "../../schemas/account";
 import { SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, expireCookie, parseCookies, serializeCookie } from "../cookies";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { refusal } from "../refusals";
 
 const loginRoute = defineRoute({
   method: "POST",
@@ -16,7 +17,7 @@ const loginRoute = defineRoute({
   handler: async ({ input, deps }) => {
     const result = await login(deps, input);
     // どちらが違うかは言わない（基準 14.2）。状態も本文も1通りだけ。
-    if (!result.ok) return { status: 401, body: { ok: false, error: { kind: result.kind } } };
+    if (!result.ok) return refusal(result.kind);
     return {
       status: 200,
       body: { ok: true, role: result.role, mustChangePassword: result.mustChangePassword },

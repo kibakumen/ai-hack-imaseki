@@ -11,6 +11,7 @@ import { placeSuggest } from "../../usecases/placeSuggest";
 import { registerCustomer } from "../../usecases/registerCustomer";
 import { CUSTOMER_COOKIE_MAX_AGE_SECONDS, CUSTOMER_COOKIE_NAME, serializeCookie } from "../cookies";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { unauthenticated } from "../refusals";
 
 const registerCustomerRoute = defineRoute({
   method: "POST",
@@ -36,7 +37,7 @@ const customerHomeRoute = defineRoute({
   handler: async ({ deps, ctx }) => {
     const home = await customerHome(deps, ctx.customerId);
     // 見分けの直後に登録が消えた場合だけ null になる。客のデータは返さない（基準 2.5）。
-    if (!home) return { status: 401, body: { ok: false, error: { kind: "invalid_input" } } };
+    if (!home) return unauthenticated();
     return { status: 200, body: home };
   },
 });

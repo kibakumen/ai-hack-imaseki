@@ -18,6 +18,7 @@ import { cancelByCustomer, type CancelByCustomerResult } from "../../usecases/ca
 import { changeParty, type ChangePartyResult } from "../../usecases/changeParty";
 import { receiveOffer } from "../../usecases/receiveOffer";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
+import { notFound, receiveRefused, refusal, stateConflict, unauthenticated } from "../refusals";
 
 const receiveRoute = defineRoute({
   method: "POST",
@@ -27,10 +28,11 @@ const receiveRoute = defineRoute({
   handler: async ({ input, deps, ctx }) => {
     const result = await receiveOffer(deps, ctx.customerId, input);
     // 見分けの直後に登録が消えた場合だけ（客のデータは返さない・基準 2.5）
-    if (!result) return { status: 401, body: { ok: false, error: { kind: "invalid_input" } } };
+    if (!result) return unauthenticated();
     if (!result.ok) {
-      const body = "refusal" in result ? { ok: false, refusal: result.refusal, home: result.home } : { ok: false, error: result.error };
-      return { status: result.status, body };
+      // 受け取りの断りは 409 で、理由・次の一手・新しいホームを返す。入力の断りは表どおり（400）。
+      if ("refusal" in result) return receiveRefused(result.refusal, result.home);
+      return refusal(result.kind, { fields: result.fields });
     }
     return { status: 200, body: { ok: true, reservation: result.reservation, home: result.home } };
   },
@@ -42,10 +44,11 @@ const receiveRoute = defineRoute({
  * 手続きが `null` を返すのは、見分けの直後に登録が消えた場合だけ（客のデータは返さない・基準 2.5）。
  */
 const reservationOperationResponse = (result: CancelByCustomerResult | ChangePartyResult | null): RouteHandlerResult => {
-  if (!result) return { status: 401, body: { ok: false, error: { kind: "invalid_input" } } };
+  if (!result) return unauthenticated();
   if (result.ok) return { status: 200, body: { ok: true, home: result.home } };
-  if ("current" in result) return { status: result.status, body: { ok: false, current: result.current } };
-  return { status: result.status, body: { ok: false, error: result.error } };
+  if (result.kind === "not_found") return notFound();
+  if (result.kind === "state") return stateConflict(result.state);
+  return refusal(result.kind, { partyMax: result.partyMax });
 };
 
 const cancelReservationRoute = defineRoute({

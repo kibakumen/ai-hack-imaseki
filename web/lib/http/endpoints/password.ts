@@ -9,6 +9,7 @@ import { changeOwnPasswordSchema, changePasswordSchema } from "../../schemas/acc
 import { changeOwnPassword, changePassword } from "../../usecases/changePassword";
 import { issueTempPassword } from "../../usecases/issueTempPassword";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { notFound, refusal } from "../refusals";
 
 const issueTempPasswordRoute = defineRoute({
   method: "POST",
@@ -17,7 +18,7 @@ const issueTempPasswordRoute = defineRoute({
   handler: async ({ params, deps }) => {
     const issued = await issueTempPassword(deps, params.id);
     // 店が無い番号。運営にも在る無しを取り違えさせないよう、ほかの当たらない入口と同じ 404 に倒す。
-    if (!issued) return { status: 404, body: { ok: false, error: { kind: "invalid_input" } } };
+    if (!issued) return notFound();
     // ここが仮のパスワードを見せるただ1回（基準 14.13）。運営の画面の一覧・詳細はこの値を持たない。
     return { status: 200, body: { ok: true, tempPassword: issued.tempPassword } };
   },
@@ -42,7 +43,7 @@ const changeAdminPasswordRoute = defineRoute({
   handler: async ({ input, deps, ctx }) => {
     const result = await changeOwnPassword(deps, ctx.accountId, input);
     // 今のパスワードが合わない。見分け（401）とは別の断りなので 403 にし、どの欄かも返す。
-    if (!result.ok) return { status: 403, body: { ok: false, error: { kind: result.kind, fields: [{ name: "currentPassword", reason: "not_allowed" }] } } };
+    if (!result.ok) return refusal(result.kind, { fields: [{ name: "currentPassword", reason: "not_allowed" }] });
     return { status: 200, body: { ok: true } };
   },
 });

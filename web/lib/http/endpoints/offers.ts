@@ -8,6 +8,7 @@ import { addOfferCount, changeOfferPartyMax, changeOfferUntil, reduceOfferCount,
 import { publishOffer } from "../../usecases/publishOffer";
 import { stopOffer } from "../../usecases/stopOffer";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
+import { refusal } from "../refusals";
 
 const publishOfferRoute = defineRoute({
   method: "POST",
@@ -16,10 +17,8 @@ const publishOfferRoute = defineRoute({
   input: offerPublishSchema,
   handler: async ({ input, deps, ctx }) => {
     const result = await publishOffer(deps, ctx.storeId, input);
-    if (!result.ok) {
-      // 形・範囲の誤りは 400、今の状態との衝突は 409（設計書「入力の断りの応答の形」）。
-      return { status: result.status, body: { ok: false, error: { kind: result.kind, ...(result.fields ? { fields: result.fields } : {}) } } };
-    }
+    // 形・範囲の誤りは 400、今の状態との衝突は 409（設計書「入力の断りの応答の形」・対応は http/refusals の表）。
+    if (!result.ok) return refusal(result.kind, result.fields ? { fields: result.fields } : {});
     return { status: 201, body: { ok: true, offer: result.offer } };
   },
 });
@@ -30,19 +29,17 @@ const stopOfferRoute = defineRoute({
   auth: "store",
   handler: async ({ deps, ctx }) => {
     const result = await stopOffer(deps, ctx.storeId);
-    if (!result.ok) return { status: result.status, body: { ok: false, error: { kind: result.kind } } };
+    if (!result.ok) return refusal(result.kind);
     return { status: 200, body: { ok: true } };
   },
 });
 
 /**
  * 公開中の変更の結果を応答へ。手続きが決めた形をそのまま載せる（入口で組み直さない）。
- * 形・範囲の誤りは 400、今の状態との衝突は 409（設計書「入力の断りの応答の形」）。
+ * 形・範囲の誤りは 400、今の状態との衝突は 409（設計書「入力の断りの応答の形」・対応は http/refusals の表）。
  */
 const changeOfferResponse = (result: ChangeOfferResult): RouteHandlerResult =>
-  result.ok
-    ? { status: 200, body: { ok: true, offer: result.offer } }
-    : { status: result.status, body: { ok: false, error: { kind: result.kind, ...(result.fields ? { fields: result.fields } : {}) } } };
+  result.ok ? { status: 200, body: { ok: true, offer: result.offer } } : refusal(result.kind, result.fields ? { fields: result.fields } : {});
 
 const addOfferRoute = defineRoute({
   method: "POST",

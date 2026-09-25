@@ -9,7 +9,7 @@ describeTask("2", "入力の断りの語と文（純粋）", () => {
   it("domain/inputRefusal に閉じた語の一覧が在り、domain/texts が全部の kind と reason に文を持つ。文に責める語が無い", async () => {
     const { INPUT_REFUSAL_KINDS, FIELD_REASONS } = await loadWeb("lib/domain/inputRefusal");
     const { TEXTS } = await loadWeb("lib/domain/texts");
-    for (const k of ["invalid_input", "party_over_max", "email_taken", "limit_reached", "coupon_in_use", "address_unresolved", "profile_incomplete", "offer_exists", "offer_ended", "until_in_past", "until_over_window", "approval_missing", "file_unsupported", "file_too_large", "card_setup_failed", "login_failed", "place_unresolved", "report_not_allowed", "human_check_failed", "rate_limited", "location_required", "network"]) {
+    for (const k of ["invalid_input", "party_over_max", "email_taken", "limit_reached", "coupon_in_use", "address_unresolved", "profile_incomplete", "offer_exists", "offer_ended", "until_in_past", "until_over_window", "approval_missing", "file_unsupported", "file_too_large", "card_setup_failed", "login_failed", "place_unresolved", "report_not_allowed", "human_check_failed", "rate_limited", "unauthenticated", "forbidden", "not_found", "internal", "location_required", "network"]) {
       expect(INPUT_REFUSAL_KINDS, k).toContain(k);
     }
     for (const r of ["required", "too_short", "too_long", "out_of_range", "not_integer", "bad_format", "not_allowed", "too_many", "min_over_max", "over_capacity", "over_remaining", "in_past", "over_window"]) {

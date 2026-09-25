@@ -11,6 +11,7 @@ import { recentStores } from "../../usecases/recentStores";
 import { reportStore } from "../../usecases/reportStore";
 import { reportSchema } from "../../schemas/report";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { refusal } from "../refusals";
 
 const createReportRoute = defineRoute({
   method: "POST",
@@ -19,7 +20,7 @@ const createReportRoute = defineRoute({
   input: reportSchema,
   handler: async ({ input, deps, ctx }) => {
     const result = await reportStore(deps, ctx.customerId, input);
-    if (!result.ok) return { status: result.status, body: { ok: false, error: result.error } };
+    if (!result.ok) return refusal(result.kind, "fields" in result ? { fields: result.fields } : {});
     return { status: 201, body: { ok: true } };
   },
 });

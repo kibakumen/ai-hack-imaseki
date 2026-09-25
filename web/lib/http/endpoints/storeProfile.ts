@@ -8,6 +8,7 @@
 import { readStoreProfile, saveStoreProfile } from "../../usecases/saveStoreProfile";
 import { storeProfileSchema } from "../../schemas/store";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { refusal, unauthenticated } from "../refusals";
 
 const getStoreProfileRoute = defineRoute({
   method: "GET",
@@ -16,7 +17,7 @@ const getStoreProfileRoute = defineRoute({
   handler: async ({ deps, ctx }) => {
     const profile = await readStoreProfile(deps, ctx.storeId);
     // 見分けの直後に店が消えた場合だけ null。店のデータは返さない。
-    if (!profile) return { status: 401, body: { ok: false, error: { kind: "invalid_input" } } };
+    if (!profile) return unauthenticated();
     return { status: 200, body: { ok: true, profile } };
   },
 });
@@ -28,11 +29,8 @@ const putStoreProfileRoute = defineRoute({
   input: storeProfileSchema,
   handler: async ({ input, deps, ctx }) => {
     const result = await saveStoreProfile(deps, ctx.storeId, input);
-    if (!result.ok) {
-      // 住所が位置に直せなかったのは形の誤りではないので 409（設計書「入力の断りの応答の形」）。
-      const status = result.kind === "address_unresolved" ? 409 : 400;
-      return { status, body: { ok: false, error: { kind: result.kind, fields: result.fields } } };
-    }
+    // 住所が位置に直せなかったのは形の誤りではないので 409（設計書「入力の断りの応答の形」・対応は http/refusals の表）。
+    if (!result.ok) return refusal(result.kind, { fields: result.fields });
     return { status: 200, body: { ok: true, profile: result.profile } };
   },
 });

@@ -7,6 +7,7 @@
 import { deleteCustomer } from "../../usecases/deleteCustomer";
 import { CUSTOMER_COOKIE_NAME, expireCookie } from "../cookies";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { refusal, unauthenticated } from "../refusals";
 
 const deleteCustomerRoute = defineRoute({
   method: "DELETE",
@@ -15,10 +16,10 @@ const deleteCustomerRoute = defineRoute({
   handler: async ({ deps, ctx }) => {
     const result = await deleteCustomer(deps, ctx.customerId);
     // 見分けの直後に登録が消えた場合だけ（客のデータは返さない・基準 2.5）。
-    if (!result.ok && result.kind === "not_found") return { status: 401, body: { ok: false, error: { kind: "invalid_input" } } };
+    if (!result.ok && result.kind === "not_found") return unauthenticated();
     // 確保中・期限から20分以内の期限切れ（基準 28.5）。今の状態ではなく断りの語で返す
     // ——画面は `domain/texts` で文に直し、InputRefusal が「登録を消す」の直下に出す。
-    if (!result.ok) return { status: 409, body: { ok: false, error: { kind: result.kind } } };
+    if (!result.ok) return refusal(result.kind);
     return { status: 200, body: { ok: true }, cookies: [expireCookie(CUSTOMER_COOKIE_NAME)] };
   },
 });

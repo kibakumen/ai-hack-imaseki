@@ -8,6 +8,7 @@
 import { customerRegisterSchema } from "../../schemas/customer";
 import { updateCustomerProfile } from "../../usecases/updateCustomerProfile";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
+import { unauthenticated } from "../refusals";
 
 const updateCustomerProfileRoute = defineRoute({
   method: "PATCH",
@@ -17,7 +18,7 @@ const updateCustomerProfileRoute = defineRoute({
   handler: async ({ input, deps, ctx }) => {
     const profile = await updateCustomerProfile(deps, ctx.customerId, input);
     // 見分けの直後に登録が消えた場合だけ null。客のデータは返さない（基準 2.5）。
-    if (!profile) return { status: 401, body: { ok: false, error: { kind: "invalid_input" } } };
+    if (!profile) return unauthenticated();
     return { status: 200, body: { ok: true, profile } };
   },
 });
