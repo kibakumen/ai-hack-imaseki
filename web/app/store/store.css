@@ -1717,3 +1717,20 @@
   margin: 0;
   padding: 0.5rem 0.75rem;
 }
+
+/* 未承認・止められているときの帯の2段目（次に起きること・運営の連絡先・店-12） */
+.status-banner__lead,
+.status-banner__detail {
+  margin: 0;
+}
+
+.status-banner__detail {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.status-banner__detail a {
+  color: inherit;
+  font-weight: 700;
+}
