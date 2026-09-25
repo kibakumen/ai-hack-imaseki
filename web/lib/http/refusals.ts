@@ -42,6 +42,8 @@ const STATUS_BY_KIND: Record<ServerRefusalKind, number> = {
   report_not_allowed: 409,
   has_active_reservation: 409,
   store_banned: 409,
+  // 本文が大きすぎる（読み切る前に断る・安全-13）
+  body_too_large: 413,
   rate_limited: 429,
   internal: 500,
 };

@@ -90,6 +90,12 @@ export const STORE_GENRES_MAX = 3;
 export const MENU_NAME_MIN = 1;
 export const MENU_NAME_MAX = 40;
 export const MENUS_MAX = 5;
+/**
+ * おすすめメニューの並びの、入力の形としての緩い上限（2026-09-25 監査の指摘 安全-13・AI判断）。
+ * 件数の上限（基準 15.7 の MENUS_MAX）は手続きが too_many で返すので、ここはそれより十分に広く取り、
+ * 大きすぎる並びを形の検査の段で早く切るためだけに置く。
+ */
+export const MENUS_INPUT_MAX = 50;
 // 店の予算の幅の範囲は、客の予算の上限と同じ 0〜100,000（基準 15.8）。同じ数を2度書かないため
 // BUDGET_MAX_MIN・BUDGET_MAX_MAX をそのまま使う（schemas/store.ts がこの2つを読む）。
 
@@ -117,6 +123,16 @@ export const STORE_IMAGE_TIMEOUT_MS = 3000;
 // 要件13（営業許可書とカード）の基準 13.3
 /** 営業許可書の大きさの上限（10MB・値は AI判断）。ちょうど10MB は通り、1バイト超えると断る */
 export const LICENSE_MAX_BYTES = 10 * 1024 * 1024;
+/**
+ * 要求の本文の大きさの既定の上限（2026-09-25 監査の指摘 安全-13・値は AI判断）。どの入口の JSON も数KB に収まる
+ * （いちばん大きいのは通報の理由500字や店の情報で、UTF-8 でも数KB）。超えた本文は読み切る前に 413 で断る。
+ */
+export const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
+/**
+ * 営業許可書の入口だけの本文の上限。ファイルの上限（LICENSE_MAX_BYTES）に multipart の包みの分を足す
+ * （ちょうど10MB を1バイト超えるファイルは、今までどおり手続きが file_too_large で断る）。
+ */
+export const LICENSE_UPLOAD_MAX_BODY_BYTES = LICENSE_MAX_BYTES + 64 * 1024;
 /** 画面の「◯MB まで」の文と、入力欄の補助に使う表示用の数（正本は上のバイト数） */
 export const LICENSE_MAX_MEGABYTES = 10;
 /** カードの登録の口が返す受け皿の番号の長さの上限（外の値をそのまま持ち歩かないため・AI判断） */

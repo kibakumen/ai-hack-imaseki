@@ -64,12 +64,13 @@ describeTask("25", "全部の入口の入力の検査", () => {
     expect(await snapshot(ctx.db, { except: ["rate_counters"] })).toBe(before);
   });
 
-  // 要求の本文を丸ごと読んでから大きさを見ている。上限（既定16KB）を超えたら、読み切る前に 413 で断る。
-  it.fails("既知の不具合（安全-13）: 本文が大きすぎる要求（約120KB）は 413 で断り、D1 が変わらない", async () => {
+  // 要求の本文を丸ごと読んでから大きさを見ていた。上限（既定16KB）を超えたら、読み切る前に 413 で断る（安全-13）。
+  it("安全-13: 本文が大きすぎる要求（約120KB）は 413 で断り、D1 が変わらない", async () => {
     const scene = await receivedScene(ctx);
     const before = await snapshot(ctx.db, { except: ["rate_counters"] });
     const r = await scene.customer.api.post("/api/customer/reports", { storeId: scene.store.id, reason: "あ".repeat(40_000) });
     expect(r.status).toBe(413);
+    expect(r.json.error.kind).toBe("body_too_large");
     expect(await snapshot(ctx.db, { except: ["rate_counters"] })).toBe(before);
   });
 
