@@ -5,7 +5,8 @@
 // 呼び先は ORCAROUTER_ENDPOINT を読んで突き合わせる。
 
 import { describe, expect, it } from "vitest";
-import { createOrcaRouterPitchWriter, createOrcaRouterSelector, FALLBACK_MODEL, JUDGE_MODEL, ORCAROUTER_ENDPOINT, PITCH_MAX_TOKENS, JUDGE_MAX_TOKENS } from "./orcarouter";
+import { createOrcaRouterSelector, FALLBACK_MODEL, JUDGE_MODEL, ORCAROUTER_ENDPOINT, PITCH_MAX_TOKENS, JUDGE_MAX_TOKENS } from "./orcarouter";
+import { createOrcaRouterPitchWriter } from "./orcarouterPitch";
 import type { AiSelectInput, PitchInput } from "../ports";
 import { unfoundedPraiseList } from "../domain/claims";
 
@@ -189,13 +190,33 @@ describe("紹介文の口（書き手と検査官）", () => {
       if (body.model === JUDGE_MODEL) return jsonResponse(JSON.stringify({ error: { code: "model_access_denied" } }), { status: 403 });
       return jsonResponse(okBody('{"ok":true,"reason":""}'));
     }) as typeof fetch;
-    const writer = createOrcaRouterPitchWriter({ apiKey: "k", model: "orcarouter/ai-sekitori", fetch: fake });
+    // 覚えは鍵ごとにモジュールに残る（設計-11）ので、ほかの検査と鍵を分ける
+    const writer = createOrcaRouterPitchWriter({ apiKey: "k-scope-403", model: "orcarouter/ai-sekitori", fetch: fake });
     const first = await writer.judge({ text: "文", store: { name: "店", genres: [], menus: [], couponName: null } }, {});
     expect(first).toMatchObject({ ok: true });
     expect(calls.map((c) => c.body.model)).toEqual([JUDGE_MODEL, "orcarouter/ai-sekitori"]);
     // 2回目は 403 を踏みに行かない（1店ごとに無駄な往復をしない）
     await writer.judge({ text: "文", store: { name: "店", genres: [], menus: [], couponName: null } }, {});
     expect(calls.map((c) => c.body.model)).toEqual([JUDGE_MODEL, "orcarouter/ai-sekitori", "orcarouter/ai-sekitori"]);
+  });
+
+  // 2026-09-25 監査の指摘 設計-11: 覚えを作る関数の中に置いていたので、要求ごとに Deps（とこの口）を作り直す本番では
+  // 1つの要求の中でしか残らず、店ごとに毎回 403 を踏みに行っていた。
+  it("403 の覚えは、要求ごとに作り直した口（新しい createOrcaRouterPitchWriter）をまたいで残る", async () => {
+    const calls: Captured[] = [];
+    const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      calls.push({ url: String(input), headers: new Headers(init?.headers), body });
+      if (body.model === JUDGE_MODEL) return jsonResponse(JSON.stringify({ error: { code: "model_access_denied" } }), { status: 403 });
+      return jsonResponse(okBody('{"ok":true,"reason":""}'));
+    }) as typeof fetch;
+    const store = { name: "店", genres: [], menus: [], couponName: null };
+    await createOrcaRouterPitchWriter({ apiKey: "k-across-requests", model: "orcarouter/ai-sekitori", fetch: fake }).judge({ text: "文", store }, {});
+    await createOrcaRouterPitchWriter({ apiKey: "k-across-requests", model: "orcarouter/ai-sekitori", fetch: fake }).judge({ text: "文", store }, {});
+    expect(calls.map((c) => c.body.model)).toEqual([JUDGE_MODEL, "orcarouter/ai-sekitori", "orcarouter/ai-sekitori"]);
+    // 別の鍵は覚えを共有しない（鍵の scope は鍵ごと）
+    await createOrcaRouterPitchWriter({ apiKey: "k-another-key", model: "orcarouter/ai-sekitori", fetch: fake }).judge({ text: "文", store }, {});
+    expect(calls.at(-2)?.body.model).toBe(JUDGE_MODEL);
   });
 });
 

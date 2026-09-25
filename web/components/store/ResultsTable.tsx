@@ -33,7 +33,7 @@ const END_LABELS: Record<ResultRow["endReason"], string> = {
   live: "公開中",
   stopped: "止めた",
   time_up: "時刻で終了",
-  banned: "運営が停止",
+  banned: "運営が登録を取り消し",
 };
 
 /** 割合（分母が0なら「—」）。 */

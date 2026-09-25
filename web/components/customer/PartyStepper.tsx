@@ -11,7 +11,7 @@
 
 import type { ApiFailure } from "../../lib/client/api";
 import { PARTY_MAX, PARTY_MIN } from "../../lib/schemas/limits";
-import { FieldMessage } from "../ui/InputRefusal";
+import { FieldMessage, fieldAria } from "../ui/InputRefusal";
 
 /** 欄の文字を人数として読めるか（読めなければ null）。 */
 export const partyCount = (raw: string): number | null => {
@@ -53,13 +53,14 @@ export const PartyStepper = ({ party, onPartyChange, failure }: PartyStepperProp
           max={PARTY_MAX}
           value={party}
           onChange={(event) => onPartyChange(event.target.value)}
+          {...fieldAria("party", failure, "fetch-party")}
         />
         <span className="party-stepper__unit">名</span>
         <button type="button" className="party-stepper__step" data-testid="btn-party-plus" aria-label="1人増やす" disabled={count !== null && count >= PARTY_MAX} onClick={() => onPartyChange(stepped(party, 1))}>
           ＋
         </button>
       </div>
-      <FieldMessage name="party" failure={failure} ctx={{ field: "人数", min: PARTY_MIN, max: PARTY_MAX }} />
+      <FieldMessage inputId="fetch-party" name="party" failure={failure} ctx={{ field: "人数", min: PARTY_MIN, max: PARTY_MAX }} />
     </div>
   );
 };

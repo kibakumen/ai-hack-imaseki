@@ -16,7 +16,7 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
-import { TEXTS } from "../../lib/domain/texts";
+import { SUBMIT_TEXTS, TEXTS } from "../../lib/domain/texts";
 import {
   BUDGET_MAX_MAX,
   BUDGET_MAX_MIN,
@@ -31,8 +31,10 @@ import {
   STORE_NAME_MIN,
   STORE_URL_MAX,
 } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
+import { DoneNotice, SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 /** 店の情報（型は schemas/responses の表から・設計-07）。 */
 type StoreProfile = ResponseOf<"GET /api/store/profile">["profile"];
@@ -78,8 +80,9 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
   const [menu, setMenu] = useState("");
   const [budgetMin, setBudgetMin] = useState(() => asNumberText(initial.budgetMin));
   const [budgetMax, setBudgetMax] = useState(() => asNumberText(initial.budgetMax));
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
-  const [saved, setSaved] = useState(false);
+  // 送っている間は「保存する」を止め、済んだら role=status で知らせる（2026-09-25 監査の指摘 横断-03）
+  const save = useSubmit();
+  const failure = save.failure;
 
   /** 外すのはいつでもできる。足すのは上限まで（画面の側でも止める・下の fieldset の注を参照）。 */
   const toggleGenre = (genre: string) => {
@@ -114,24 +117,21 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("PUT /api/store/profile", {
-      body: {
-        name,
-        address,
-        url,
-        genres,
-        menus,
-        budgetMin: asNumber(budgetMin),
-        budgetMax: asNumber(budgetMax),
-      },
-    });
-    if (isFailure(result)) {
-      setFailure(result);
-      setSaved(false);
-      return;
-    }
-    setFailure(null);
-    setSaved(true);
+    await save.run(
+      () =>
+        callApi("PUT /api/store/profile", {
+          body: {
+            name,
+            address,
+            url,
+            genres,
+            menus,
+            budgetMin: asNumber(budgetMin),
+            budgetMax: asNumber(budgetMax),
+          },
+        }),
+      SUBMIT_TEXTS.profileSaved,
+    );
   };
 
   return (
@@ -142,7 +142,7 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
         void submit(event);
       }}
     >
-      <h2>お店の情報</h2>
+      {/* 画面の見出し（h1「店舗情報」）はページ（app/store/profile）が出す（横断-11・横断-12） */}
       <p className="store-lead">ここに入れた内容が、席を探している人に出ます。</p>
 
       <label htmlFor="store-profile-name">店名</label>
@@ -153,8 +153,9 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
         value={name}
         maxLength={STORE_NAME_MAX}
         onChange={(event) => setName(event.target.value)}
+        {...fieldAria("name", failure, "store-profile-name")}
       />
-      <FieldMessage name="name" failure={failure} ctx={{ field: "店名", min: STORE_NAME_MIN, max: STORE_NAME_MAX }} />
+      <FieldMessage inputId="store-profile-name" name="name" failure={failure} ctx={{ field: "店名", min: STORE_NAME_MIN, max: STORE_NAME_MAX }} />
 
       <label htmlFor="store-profile-address">住所</label>
       <input
@@ -164,8 +165,10 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
         value={address}
         maxLength={STORE_ADDRESS_MAX}
         onChange={(event) => setAddress(event.target.value)}
+        {...fieldAria("address", failure, "store-profile-address", { kinds: ADDRESS_KINDS })}
       />
       <FieldMessage
+        inputId="store-profile-address"
         name="address"
         failure={failure}
         kinds={ADDRESS_KINDS}
@@ -180,14 +183,15 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
         value={url}
         maxLength={STORE_URL_MAX}
         onChange={(event) => setUrl(event.target.value)}
+        {...fieldAria("url", failure, "store-profile-url")}
       />
-      <FieldMessage name="url" failure={failure} ctx={{ field: "ホームページの URL", hint: URL_HINT, max: STORE_URL_MAX }} />
+      <FieldMessage inputId="store-profile-url" name="url" failure={failure} ctx={{ field: "ホームページの URL", hint: URL_HINT, max: STORE_URL_MAX }} />
 
       {/* ⚠️ 上限（3個）は**チェックを付けさせない形**で示す（2026-09-21 の本人の指摘）。
           4つ目を押せてから入口に断られるより、押せないほうが早く分かる。
           下限（1個）と上限そのものの正本は入口——ここは同じ数を schemas/limits から読んで
           見た目に映すだけで、規則を画面に写し取ってはいない。 */}
-      <fieldset className="store-field">
+      <fieldset id="store-profile-genres" className="store-field" {...fieldAria("genres", failure, "store-profile-genres")}>
         <legend>
           ジャンル（{genres.length}/{STORE_GENRES_MAX}・{STORE_GENRES_MIN}〜{STORE_GENRES_MAX}個）
         </legend>
@@ -210,7 +214,7 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
           })}
         </div>
       </fieldset>
-      <FieldMessage name="genres" failure={failure} ctx={{ field: "ジャンル", min: STORE_GENRES_MIN, max: STORE_GENRES_MAX }} />
+      <FieldMessage inputId="store-profile-genres" name="genres" failure={failure} ctx={{ field: "ジャンル", min: STORE_GENRES_MIN, max: STORE_GENRES_MAX }} />
 
       {/* おすすめメニューは**1行1枚の札**にして、名前と「消す」を離す（2026-09-22 の本人の指摘
           「メニュー名と消すボタンが重なっている」）。足す欄とボタンは1行に並べる。 */}
@@ -245,12 +249,13 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
           enterKeyHint="enter"
           onChange={(event) => setMenu(event.target.value)}
           onKeyDown={onMenuKeyDown}
+          {...fieldAria("menus", failure, "store-profile-menu")}
         />
         <button type="button" className="store-btn store-btn--quiet" data-testid="btn-add-menu" onClick={addMenu}>
           ＋ 足す
         </button>
       </div>
-      <FieldMessage name="menus" failure={failure} ctx={{ field: "おすすめメニュー", min: MENU_NAME_MIN, max: MENUS_MAX }} />
+      <FieldMessage inputId="store-profile-menu" name="menus" failure={failure} ctx={{ field: "おすすめメニュー", min: MENU_NAME_MIN, max: MENUS_MAX }} />
 
       {/* 予算の最低と最高は横に並べる（「〜の最低は最高以下に」の文が、2つの欄を見比べながら読める） */}
       <div className="store-pair">
@@ -265,8 +270,9 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
             min={BUDGET_MAX_MIN}
             max={BUDGET_MAX_MAX}
             onChange={(event) => setBudgetMin(event.target.value)}
+            {...fieldAria("budgetMin", failure, "store-profile-budget-min")}
           />
-          <FieldMessage name="budgetMin" failure={failure} ctx={{ field: BUDGET_LABEL, min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+          <FieldMessage inputId="store-profile-budget-min" name="budgetMin" failure={failure} ctx={{ field: BUDGET_LABEL, min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
         </div>
         <div className="store-field">
           <label htmlFor="store-profile-budget-max">{BUDGET_LABEL}（最高・円）</label>
@@ -279,16 +285,17 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
             min={BUDGET_MAX_MIN}
             max={BUDGET_MAX_MAX}
             onChange={(event) => setBudgetMax(event.target.value)}
+            {...fieldAria("budgetMax", failure, "store-profile-budget-max")}
           />
-          <FieldMessage name="budgetMax" failure={failure} ctx={{ field: BUDGET_LABEL, min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+          <FieldMessage inputId="store-profile-budget-max" name="budgetMax" failure={failure} ctx={{ field: BUDGET_LABEL, min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
         </div>
       </div>
 
-      <button type="submit" data-testid="btn-save-profile">
+      <SubmitButton type="submit" data-testid="btn-save-profile" busy={save.busy}>
         保存する
-      </button>
+      </SubmitButton>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
-      {saved && <p data-testid="profile-saved">保存しました。</p>}
+      <DoneNotice message={save.done} testId="profile-saved" />
     </form>
   );
 };

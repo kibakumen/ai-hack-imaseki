@@ -1,0 +1,167 @@
+/* store.css の続き（向かっている客とボタン）。2026-09-25 監査の指摘 設計-16 で分けた。
+   読み込む順は殻の layout.tsx の import の順（元の1ファイルの並びのまま）。色は app/globals.css の変数だけで指す。 */
+
+/* ---------- 向かっている客（いちばん上・横長・完了がすぐ押せる） ---------- */
+
+.store-arrivals {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.store-arrivals > h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.store-arrival-grid {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 48rem) {
+  .store-arrival-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.store-arrival {
+  align-items: center;
+  animation: store-pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+  background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  border-left: 0.375rem solid var(--color-accent);
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 12%, transparent);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.75rem;
+}
+
+.store-arrival--done {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  border-left-color: var(--color-border);
+  box-shadow: none;
+  color: var(--color-text-muted);
+}
+
+.store-arrival__main {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.store-arrival__name {
+  font-weight: 700;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-arrival__meta {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.store-arrival__side {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.75rem;
+}
+
+.store-arrival__code {
+  color: var(--color-accent-strong);
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  margin: 0;
+}
+
+/* 「完了」と、その真下の「取り消す」は離す（6px だったので押し損ねた・横断-13） */
+.store-arrival__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.store-past {
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.store-past > summary {
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.store-past .store-arrival-grid {
+  margin-top: 0.5rem;
+}
+
+/* ---------- ボタン ---------- */
+
+.store-btn {
+  border-radius: 0.75rem;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.625rem 1rem;
+}
+
+.store-btn--primary {
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  font-size: 0.9375rem;
+}
+
+.store-btn--quiet {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4375rem 0.75rem;
+}
+
+@media (hover: hover) {
+  .store-btn--quiet:hover:not(:disabled) {
+    background: var(--hover-soft-bg);
+    border-color: var(--hover-soft-border);
+    color: var(--hover-soft-text);
+    filter: none;
+  }
+}
+
+.store-btn--danger {
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--color-background));
+  border-color: color-mix(in srgb, var(--color-danger) 55%, var(--color-border));
+  color: var(--color-danger);
+}
+
+@media (hover: hover) {
+  .store-btn--danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger) 20%, var(--color-background));
+    filter: none;
+  }
+}
+
+/* 行の中に置く小さなボタン（受付を締める・終了タイマー） */
+.store-btn--small {
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+}
+
+/* `<a>` をボタンの形で出す */
+.store-btn--link {
+  display: inline-block;
+  text-decoration: none;
+}

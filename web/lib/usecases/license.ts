@@ -5,7 +5,7 @@
 import { detectFileType } from "../domain/fileType";
 import type { Deps } from "../ports";
 import { insertAdminAction } from "../repo/adminActions";
-import { findApprovedLicense } from "../repo/adminStores";
+import { findApprovedLicense } from "../repo/adminStoreActions";
 import { clearBannedStoreLicense, clearPendingStoreLicense, findStoreDocuments, findStoreLicenseKeys, updateStoreLicense, type StoreStatus } from "../repo/stores";
 import { ID_BYTES, LICENSE_MAX_BYTES } from "../schemas/limits";
 import { tokenFromBytes } from "../domain/token";

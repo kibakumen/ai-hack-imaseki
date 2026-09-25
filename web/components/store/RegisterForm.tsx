@@ -10,9 +10,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
 import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN, STORE_TERMS_VERSION } from "../../lib/schemas/limits";
-import { STORE_TERMS_TEXTS } from "../../lib/domain/texts";
+import { STORE_TERMS_TEXTS, TERMS } from "../../lib/domain/texts";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 const FIELD_NAMES = ["name", "email", "password", "agreedTermsVersion"];
 /**
@@ -38,7 +40,9 @@ export const RegisterForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は「登録する」を止める（2026-09-25 監査の指摘 横断-03）
+  const register = useSubmit();
+  const failure = register.failure;
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const humanRef = useRef<HumanCheckHandle | null>(null);
@@ -68,16 +72,15 @@ export const RegisterForm = () => {
       return;
     }
     // 同意した規約の版も送る（入口が今の版と突き合わせ、版と時刻を残す・店-21 のレビュー）
-    const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken, agreedTermsVersion: STORE_TERMS_VERSION } });
+    const result = await register.run(() => callApi("POST /api/register/store", { body: { name, email, password, humanToken, agreedTermsVersion: STORE_TERMS_VERSION } }));
+    if (result === null) return;
     if (isFailure(result)) {
-      setFailure(result);
       if (shouldClearPassword(result)) setPassword("");
       // 確かめの値は使い切り。次に送るときのために、その場で取り直す。
       setHumanToken(null);
       humanRef.current?.reset();
       return;
     }
-    setFailure(null);
     window.location.assign(STORE_HOME_PATH);
   };
 
@@ -100,8 +103,9 @@ export const RegisterForm = () => {
         value={name}
         maxLength={STORE_NAME_MAX}
         onChange={(event) => setName(event.target.value)}
+        {...fieldAria("name", failure, "store-register-name")}
       />
-      <FieldMessage name="name" failure={failure} ctx={{ field: "店名", min: STORE_NAME_MIN, max: STORE_NAME_MAX }} />
+      <FieldMessage inputId="store-register-name" name="name" failure={failure} ctx={{ field: "店名", min: STORE_NAME_MIN, max: STORE_NAME_MAX }} />
 
       <label htmlFor="store-register-email">メールアドレス</label>
       <input
@@ -112,8 +116,9 @@ export const RegisterForm = () => {
         value={email}
         maxLength={EMAIL_MAX}
         onChange={(event) => setEmail(event.target.value)}
+        {...fieldAria("email", failure, "store-register-email", { kinds: EMAIL_KINDS })}
       />
-      <FieldMessage name="email" failure={failure} kinds={EMAIL_KINDS} ctx={{ field: "メールアドレス", hint: EMAIL_HINT, max: EMAIL_MAX }} />
+      <FieldMessage inputId="store-register-email" name="email" failure={failure} kinds={EMAIL_KINDS} ctx={{ field: "メールアドレス", hint: EMAIL_HINT, max: EMAIL_MAX }} />
 
       <label htmlFor="store-register-password">パスワード</label>
       <input
@@ -121,7 +126,7 @@ export const RegisterForm = () => {
         data-testid="field-password"
         type={showPassword ? "text" : "password"}
         autoComplete="new-password"
-        aria-describedby={PASSWORD_HINT_ID}
+        {...fieldAria("password", failure, "store-register-password", { describedBy: PASSWORD_HINT_ID })}
         value={password}
         maxLength={PASSWORD_MAX}
         onChange={(event) => setPassword(event.target.value)}
@@ -133,10 +138,11 @@ export const RegisterForm = () => {
         <input type="checkbox" data-testid="toggle-show-password" checked={showPassword} onChange={(event) => setShowPassword(event.target.checked)} />
         パスワードを表示
       </label>
-      <FieldMessage name="password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
+      <FieldMessage inputId="store-register-password" name="password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
 
       {/* 店向けの利用規約（2026-09-25 監査の指摘 店-21 の案1）。カードを預かる目的と「今は請求しない」こと・
-          止める条件・客のデータの扱い・退会・問い合わせ先を先に示し、同意してから登録する。 */}
+          登録を取り消す条件・客のデータの扱い・退会・問い合わせ先を先に示し、同意してから登録する。
+          呼び方は TERMS の「登録を取り消す」にそろえる（横断-11 のレビュー）。 */}
       <label className="store-agree">
         <input
           type="checkbox"
@@ -151,7 +157,7 @@ export const RegisterForm = () => {
           <a href="/store/terms" target="_blank" rel="noopener" data-testid="link-store-terms">
             店向けの利用規約
           </a>
-          （カードの扱い・止める条件・お客さまの情報の扱い）を読み、同意します
+          （カードの扱い・{TERMS.storeBan}条件・お客さまの情報の扱い）を読み、同意します
         </span>
       </label>
       {askAgree ? (
@@ -167,9 +173,9 @@ export const RegisterForm = () => {
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.registerStore} onToken={handleToken} />}
 
-      <button type="submit" data-testid="btn-register">
+      <SubmitButton type="submit" data-testid="btn-register" busy={register.busy}>
         登録する
-      </button>
+      </SubmitButton>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
     </form>
   );

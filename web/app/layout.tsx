@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { SiteFooter } from "../components/ui/SiteFooter";
+// 全画面の見た目の土台。globals.css を続きの順のまま3つに分けた（2026-09-25 監査の指摘 設計-16）——読み込む順を変えない
 import "./globals.css";
+import "./controls.css";
+import "./motion.css";
 import "./site-footer.css";
 
 export const metadata: Metadata = {
-  title: "イマセキ",
+  // 各ページが自分の名前（`metadata.title`）を持ち、タブと履歴では「◯◯ | イマセキ」と出る（2026-09-25 監査の指摘 横断-12。
+  // それまでは全画面「イマセキ」だけで見分けられなかった）。名前を持たない入口（/）だけが「イマセキ」。
+  title: { default: "イマセキ", template: "%s | イマセキ" },
   description: "近くのお店の空席を見つけるサービス",
   // ホーム画面に追加したときのアプリとしての記述（2026-09-25 監査の指摘 客-04 の案C）。manifest は app/manifest.ts が出す。
   // `appleWebApp.capable` は新しい名前（mobile-web-app-capable）だけを出すので、古い iOS が読む名前も並べて出す。
@@ -24,7 +29,9 @@ const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("theme-cho
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="ja">
+    // 明暗を選んだ端末では、水和の前に上の同期スクリプトが data-theme を足す（サーバーの HTML には無い）。
+    // 抑えるのはこの要素自身の属性の食い違いだけで、子の水和の誤りは今までどおり出る（2026-09-25 監査の指摘 設計-21）。
+    <html lang="ja" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>

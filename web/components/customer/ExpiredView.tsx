@@ -23,6 +23,8 @@ import type { SearchOrigin } from "../../lib/client/lastOrigin";
 import type { ExpiredDto, ReceiveRefusal, ReservationDto } from "./home";
 import { RefusalNotice } from "./RefusalNotice";
 import { RouteButton } from "./RouteButton";
+import { SUBMIT_TEXTS } from "../../lib/domain/texts";
+import { SubmitButton } from "../ui/Submit";
 
 type ExpiredViewProps = {
   reservation: ReservationDto;
@@ -30,13 +32,15 @@ type ExpiredViewProps = {
   /** 受け取り直しが断られたとき（無ければ何も出さない）。 */
   refusal?: ReceiveRefusal | null;
   onRetry: () => void;
+  /** 受け取り直しを送っている間 true（ボタンを止めて「席を確保しています…」にする・横断-03） */
+  retrying?: boolean;
   onNextStep: () => void;
   onSearchAgain: () => void;
   /** 経路の出発地（確保中の画面と同じ値）。分からなければ null */
   from?: SearchOrigin | null;
 };
 
-export const ExpiredView = ({ reservation, expired, refusal = null, onRetry, onNextStep, onSearchAgain, from = null }: ExpiredViewProps) => {
+export const ExpiredView = ({ reservation, expired, refusal = null, onRetry, retrying = false, onNextStep, onSearchAgain, from = null }: ExpiredViewProps) => {
   // 応答に `expired` が無い形でも表示を止めない（コードは出さず、取得し直す入口だけにする）
   const showCode = expired?.showCode ?? false;
   const canRetry = expired?.canRetry ?? false;
@@ -65,9 +69,9 @@ export const ExpiredView = ({ reservation, expired, refusal = null, onRetry, onN
       )}
       {refusal === null ? null : <RefusalNotice refusal={refusal} onNextStep={onNextStep} />}
       {canRetry ? (
-        <button type="button" data-testid="btn-retry" onClick={onRetry}>
+        <SubmitButton type="button" data-testid="btn-retry" busy={retrying} busyLabel={SUBMIT_TEXTS.receiving} onClick={onRetry}>
           同じ人数で受け取り直す
-        </button>
+        </SubmitButton>
       ) : (
         <button type="button" data-testid="btn-search-again" onClick={onSearchAgain}>
           ほかの店を探し直す

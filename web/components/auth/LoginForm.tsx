@@ -5,10 +5,12 @@
 // （設計書「入力の誤りの出し方」の規則5。文の正本は domain/texts）。
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, getPublicConfig, isFailure } from "../../lib/client/api";
 import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 const FIELD_NAMES = ["email", "password"];
 const HOME_BY_ROLE: Record<string, string> = { store: "/store", admin: "/admin" };
@@ -27,7 +29,9 @@ const destinationAfterLogin = (role: string | undefined, mustChangePassword: boo
 export const LoginForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は「ログイン」を止める（2026-09-25 監査の指摘 横断-03）
+  const login = useSubmit();
+  const failure = login.failure;
   const [siteKey, setSiteKey] = useState<string | null>(null);
   // 【最終日】パスワードを忘れた店の申し出先（基準 14.17）。設定に無ければ案内を出さない。
   const [contactEmail, setContactEmail] = useState<string | null>(null);
@@ -52,16 +56,15 @@ export const LoginForm = () => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("POST /api/auth/login", { body: { email, password, humanToken } });
+    const result = await login.run(() => callApi("POST /api/auth/login", { body: { email, password, humanToken } }));
+    if (result === null) return;
     if (isFailure(result)) {
-      setFailure(result);
       // 入れたメールアドレスは残す（基準 14.2）。パスワードだけ打ち直してもらう。
       setPassword("");
       setHumanToken(null);
       humanRef.current?.reset();
       return;
     }
-    setFailure(null);
     window.location.assign(destinationAfterLogin(result.role, result.mustChangePassword));
   };
 
@@ -84,8 +87,9 @@ export const LoginForm = () => {
         value={email}
         maxLength={EMAIL_MAX}
         onChange={(event) => setEmail(event.target.value)}
+        {...fieldAria("email", failure, "login-email")}
       />
-      <FieldMessage name="email" failure={failure} ctx={{ field: "メールアドレス", max: EMAIL_MAX }} />
+      <FieldMessage name="email" inputId="login-email" failure={failure} ctx={{ field: "メールアドレス", max: EMAIL_MAX }} />
 
       <label htmlFor="login-password">パスワード</label>
       <input
@@ -96,14 +100,15 @@ export const LoginForm = () => {
         value={password}
         maxLength={PASSWORD_MAX}
         onChange={(event) => setPassword(event.target.value)}
+        {...fieldAria("password", failure, "login-password")}
       />
-      <FieldMessage name="password" failure={failure} ctx={{ field: "パスワード", max: PASSWORD_MAX }} />
+      <FieldMessage name="password" inputId="login-password" failure={failure} ctx={{ field: "パスワード", max: PASSWORD_MAX }} />
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.login} onToken={handleToken} />}
 
-      <button type="submit" data-testid="btn-login">
+      <SubmitButton type="submit" data-testid="btn-login" busy={login.busy}>
         ログイン
-      </button>
+      </SubmitButton>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
 
       {contactEmail !== null && (

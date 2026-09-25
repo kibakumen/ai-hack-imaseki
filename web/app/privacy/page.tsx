@@ -11,7 +11,7 @@ import type { Metadata } from "next";
 import { ContactEmail } from "../../components/ui/ContactEmail";
 import "./privacy.css";
 
-export const metadata: Metadata = { title: "送信先と個人情報の扱い | イマセキ" };
+export const metadata: Metadata = { title: "送信先と個人情報の扱い" };
 
 type Destination = { key: string; to: string; what: string; when: string; why: string };
 
@@ -27,7 +27,7 @@ const DESTINATIONS: readonly Destination[] = [
   {
     key: "cloudflare",
     to: "Cloudflare, Inc.（米国）— Workers・D1・R2",
-    what: "画面からの要求のすべて。保存するもの: 客の識別子（端末の Cookie。サーバーには変換した値だけ）・呼び名（自動で作ります）・電話番号（任意）・好みのジャンル・予算の上限、探したときの起点の緯度経度と条件、席の確保、通知の宛先。店の情報・営業許可書・店の画像",
+    what: "画面からの要求のすべて。保存するもの: 客の識別子（端末の Cookie。サーバーには変換した値だけ）・呼び名（自動で作ります）・電話番号（任意）・好みのジャンル・予算の上限、探したときの起点の緯度経度と条件、席の確保、通知の宛先。店舗情報・営業許可書・店の画像",
     when: "使うたび",
     why: "サービスを動かし、席の確保を店とつなぐため",
   },
@@ -41,7 +41,7 @@ const DESTINATIONS: readonly Destination[] = [
   {
     key: "ai",
     to: "OrcaRouter（所在は運営者が確認中）と、その先の AI の事業者（Google・OpenAI・Anthropic。いずれも米国）",
-    what: "その回の人数・ジャンル・予算の上限と、候補の店の情報（店名・ジャンル・メニュー・距離・クーポン）。呼び名と電話番号は渡しません",
+    what: "その回の人数・ジャンル・予算の上限と、候補の店舗情報（店名・ジャンル・メニュー・距離・クーポン）。呼び名と電話番号は渡しません",
     when: "「今すぐ探す」を押したとき",
     why: "条件に合う店を選び、紹介文を書くため",
   },

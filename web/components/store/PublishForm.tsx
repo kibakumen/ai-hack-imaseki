@@ -17,8 +17,11 @@
 import { useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { WheelPicker } from "./WheelPicker";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
+import { TERMS } from "../../lib/domain/texts";
 
 export type PublishFormCoupon = { id: string; name: string; note: string };
 export type PublishFormPrefill = { couponIds: string[]; capacity: number | null; partyMax: number | null; until: string | null };
@@ -32,7 +35,7 @@ type Props = {
 
 const FIELD_NAMES = ["capacity", "partyMax", "until"];
 /** 足りない店の情報で断られたときの行き先（基準 17.11 の案内） */
-const PROFILE_LINKS = { profile_incomplete: { href: "/store/profile", label: "店の情報を開く" } };
+const PROFILE_LINKS = { profile_incomplete: { href: "/store/profile", label: `${TERMS.storeProfile}を開く` } };
 /** 「何時まで」に関わる断りの語。返ってきたら畳んだ欄を開く */
 const UNTIL_KINDS = ["until_in_past", "until_over_window"];
 const CAPACITY_LABEL = "配信数";
@@ -59,11 +62,14 @@ const UntilField = ({
   open,
   onToggle,
   onChange,
+  failure,
 }: {
   value: string;
   open: boolean;
   onToggle: () => void;
   onChange: (next: string) => void;
+  /** 断りが返っていれば、欄が文を指す（横断-05） */
+  failure: ApiFailure | null;
 }) => (
   <div className="store-timer">
     <div className="store-row">
@@ -76,7 +82,14 @@ const UntilField = ({
       <div className="store-field">
         <label htmlFor="publish-until">何時に終わるか（公開から12時間以内）</label>
         <div className="store-inline">
-          <input id="publish-until" data-testid="field-until" type="time" value={value} onChange={(event) => onChange(event.target.value)} />
+          <input
+            id="publish-until"
+            data-testid="field-until"
+            type="time"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            {...fieldAria("until", failure, "publish-until")}
+          />
           {value === "" ? null : (
             <button type="button" className="store-btn store-btn--quiet" onClick={() => onChange("")}>
               タイマーを外す
@@ -143,7 +156,9 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
   const [until, setUntil] = useState(prefill.until ?? "");
   // 終了タイマーはいつも畳んでおく（入れなくても公開できる・店-05）。断られたら開く
   const [untilOpen, setUntilOpen] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は「公開する」を止める（2026-09-25 監査の指摘 横断-03）
+  const publish = useSubmit();
+  const failure = publish.failure;
 
   const toggleCoupon = (id: string) => {
     setCouponIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
@@ -151,22 +166,23 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("POST /api/store/offers", {
-      body: {
-        couponIds,
-        capacity: toNumberOrNull(capacity),
-        partyMax: toNumberOrNull(partyMax),
-        // 空欄は載せない＝終了タイマーなし（公開から12時間で自動で終わる・店-05）
-        until: until === "" ? undefined : until,
-      },
-    });
+    const result = await publish.run(() =>
+      callApi("POST /api/store/offers", {
+        body: {
+          couponIds,
+          capacity: toNumberOrNull(capacity),
+          partyMax: toNumberOrNull(partyMax),
+          // 空欄は載せない＝終了タイマーなし（公開から12時間で自動で終わる・店-05）
+          until: until === "" ? undefined : until,
+        },
+      }),
+    );
+    if (result === null) return;
     if (isFailure(result)) {
       // 画面は移らず、入れた内容もそのまま（設計書「入力の誤りの出し方」の規則3）。
-      setFailure(result);
       if (untilRefused(result)) setUntilOpen(true);
       return;
     }
-    setFailure(null);
     onPublished();
   };
 
@@ -194,6 +210,7 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
           max={OFFER_CAPACITY_MAX}
           value={capacity}
           onChange={setCapacity}
+          aria={fieldAria("capacity", failure, "publish-capacity")}
         />
         <WheelPicker
           testId="field-partyMax"
@@ -204,19 +221,20 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
           max={OFFER_PARTY_MAX_MAX}
           value={partyMax}
           onChange={setPartyMax}
+          aria={fieldAria("partyMax", failure, "publish-party-max")}
         />
       </div>
-      <FieldMessage name="capacity" failure={failure} ctx={{ field: CAPACITY_LABEL, min: OFFER_CAPACITY_MIN, max: OFFER_CAPACITY_MAX }} />
-      <FieldMessage name="partyMax" failure={failure} ctx={{ field: PARTY_MAX_LABEL, min: OFFER_PARTY_MAX_MIN, max: OFFER_PARTY_MAX_MAX }} />
+      <FieldMessage inputId="publish-capacity" name="capacity" failure={failure} ctx={{ field: CAPACITY_LABEL, min: OFFER_CAPACITY_MIN, max: OFFER_CAPACITY_MAX }} />
+      <FieldMessage inputId="publish-party-max" name="partyMax" failure={failure} ctx={{ field: PARTY_MAX_LABEL, min: OFFER_PARTY_MAX_MIN, max: OFFER_PARTY_MAX_MAX }} />
 
-      <UntilField value={until} open={untilOpen} onToggle={() => setUntilOpen((open) => !open)} onChange={setUntil} />
-      <FieldMessage name="until" failure={failure} ctx={{ field: "何時まで" }} />
+      <UntilField value={until} open={untilOpen} onToggle={() => setUntilOpen((open) => !open)} onChange={setUntil} failure={failure} />
+      <FieldMessage inputId="publish-until" name="until" failure={failure} ctx={{ field: "何時まで" }} />
 
       <CouponChoices coupons={coupons} selected={couponIds} onToggle={toggleCoupon} />
 
-      <button type="submit" className="store-btn store-btn--primary" data-testid="btn-publish">
+      <SubmitButton type="submit" className="store-btn store-btn--primary" data-testid="btn-publish" busy={publish.busy}>
         公開する
-      </button>
+      </SubmitButton>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} links={PROFILE_LINKS} />
     </form>
   );

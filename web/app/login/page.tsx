@@ -1,8 +1,11 @@
 // 店と運営のログイン（1つの URL。通ったあと役割で行き先を分ける・設計書「店の画面」）。
 // 2026-09-22 に見た目を直した: 入力欄が枠線だけで浮いていたので、どの面に何を打つのかが
 // 分かるように見出しと案内を付けた（形だけ・色は `app/globals.css` の変数）。
+import type { Metadata } from "next";
 import Link from "next/link";
 import { LoginForm } from "../../components/auth/LoginForm";
+
+export const metadata: Metadata = { title: "ログイン" };
 
 export default function LoginPage() {
   return (

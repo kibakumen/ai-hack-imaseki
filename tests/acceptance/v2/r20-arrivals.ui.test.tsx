@@ -166,6 +166,7 @@ describeTask("21", "止められている店の一覧（画面）: 20.23・20.25
     expect(within(screen.getByTestId(TID.row("r1"))).queryByTestId(TID.btn("complete"))).toBeNull();
     fireEvent.click(within(screen.getByTestId(TID.row("r2"))).getByTestId(TID.btn("complete")));
     fireEvent.click(within(await screen.findByTestId("confirm-complete")).getByTestId(TID.btn("confirm")));
-    await waitFor(() => expect(screen.getByTestId("arrivals").textContent).toMatch(/止められて/));
+    // 要件 20.25 の「止められている」に当たる文（呼び方は「登録を取り消す」に揃えた・横断-11）
+    await waitFor(() => expect(screen.getByTestId("arrivals").textContent).toMatch(/登録を取り消されて/));
   });
 });

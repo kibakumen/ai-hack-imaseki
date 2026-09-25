@@ -47,3 +47,16 @@ describe("層の約束", () => {
     expect(statusOfRefusal("internal")).toBe(500);
   });
 });
+
+describe("外の呼び出しの打ち切り（2026-09-25 監査の指摘 設計-11）", () => {
+  // 人かどうかの確かめ（lib/http/defineRoute の verifyHuman）と店の住所の位置直し（usecases/saveStoreProfile）が、
+  // usecases/deadline の raceDeadline と同じ打ち切り（時計の合図との競争・AbortController）を別々に書いていた。
+  // 片方だけ直す事故を避けるため、打ち切りの競争は raceDeadline の1か所に置く。
+  // streamOffers の競争は、紹介文の層の持ち時間（外の呼び出しの打ち切りではない）なので別に数える。
+  it("入口と手続きの層で Promise.race を書くのは usecases/deadline.ts（と streamOffers の持ち時間）だけ", () => {
+    const racing = [...sourcesUnder(path.join(LIB, "http")), ...sourcesUnder(path.join(LIB, "usecases"))]
+      .filter((f) => /Promise\.race\(/.test(fs.readFileSync(f, "utf8")))
+      .map((f) => path.relative(LIB, f).split(path.sep).join("/"));
+    expect(racing.sort()).toEqual(["usecases/deadline.ts", "usecases/streamOffers.ts"]);
+  });
+});

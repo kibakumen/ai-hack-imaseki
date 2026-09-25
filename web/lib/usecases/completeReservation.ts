@@ -12,8 +12,8 @@
 
 import { effectiveState, EXPIRED_GRACE_MS, isWithinExpiredGrace, type EffectiveState } from "../domain/reservation";
 import type { Deps } from "../ports";
-import { findStoreStatus } from "../repo/adminStores";
-import { completeReservationIfAllowed, findStoreReservation } from "../repo/reservations";
+import { findStoreStatus } from "../repo/adminStoreActions";
+import { completeReservationIfAllowed, findStoreReservation } from "../repo/reservationsOfStore";
 
 export type CompleteReservationResult =
   | { ok: true }

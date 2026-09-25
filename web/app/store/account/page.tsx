@@ -1,7 +1,10 @@
 // 店のアカウントの画面（2026-09-22 追加）: ログインのメールアドレスの変更と、パスワードの変更への道。
 // パスワードの変更そのものは `/store/password`（仮のパスワードで入った店と同じ画面）で行う。
+import type { Metadata } from "next";
 import { EmailForm } from "../../../components/auth/EmailForm";
 import { StoreNav } from "../../../components/store/StoreNav";
+
+export const metadata: Metadata = { title: "アカウント" };
 
 export default function StoreAccountPage() {
   return (

@@ -12,7 +12,7 @@ import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { phoneOrPlaceholder } from "../../lib/client/guestIdentity";
 import { PERSONAL_DATA_TEXTS } from "../../lib/domain/texts";
 import { GUEST_PHONE_PLACEHOLDER, PHONE_MAX_LENGTH } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 
 const PHONE_HINT = "数字10桁か11桁";
 
@@ -91,8 +91,9 @@ export const PhoneField = ({ phone, change, failure, saved, persist }: PhoneFiel
       maxLength={PHONE_MAX_LENGTH}
       onChange={(event) => change(event.target.value)}
       onBlur={() => void persist()}
+      {...fieldAria("phone", failure, "fetch-phone")}
     />
-    <FieldMessage name="phone" failure={failure} ctx={{ field: "電話番号", hint: PHONE_HINT }} />
+    <FieldMessage inputId="fetch-phone" name="phone" failure={failure} ctx={{ field: "電話番号", hint: PHONE_HINT }} />
     <FormMessage failure={failure} fieldNames={["phone"]} />
     {saved ? (
       <p className="fetch-phone-status" data-testid="phone-saved">

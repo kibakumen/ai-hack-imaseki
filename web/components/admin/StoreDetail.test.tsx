@@ -151,7 +151,7 @@ describe("取り消し・戻すの理由と、止めたときの影響（運営-
 });
 
 describe("状況が先に変わっていたとき（運営-04）と、断りの出し場所（運営-13）", () => {
-  it("409 の今の状況を受けたら「ほかの操作で、すでに『止められている』になっていました」と出し、詳細を取り直す", async () => {
+  it("409 の今の状況を受けたら「ほかの操作で、すでに『登録取り消し済み』になっていました」と出し、詳細を取り直す", async () => {
     let status = "approved";
     api = installFakeApi({
       "GET /api/admin/stores/:id": () => detail({ status }),
@@ -165,7 +165,7 @@ describe("状況が先に変わっていたとき（運営-04）と、断りの�
     const confirm = await screen.findByTestId("confirm-ban");
     fireEvent.change(within(confirm).getByTestId("field-reason"), { target: { value: "x" } });
     fireEvent.click(within(confirm).getByTestId("btn-confirm"));
-    expect((await screen.findByTestId("state-conflict")).textContent).toMatch(/ほかの操作で、すでに『止められている』になっていました/);
+    expect((await screen.findByTestId("state-conflict")).textContent).toMatch(/ほかの操作で、すでに『登録取り消し済み』になっていました/);
     await waitFor(() => expect(detailLoads().length).toBeGreaterThanOrEqual(2));
     expect(await screen.findByTestId("form-restore")).toBeTruthy();
     expect(screen.queryByTestId("confirm-ban")).toBeNull();

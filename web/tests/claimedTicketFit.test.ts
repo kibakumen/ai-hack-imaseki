@@ -8,7 +8,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const CSS = fs.readFileSync(path.join(__dirname, "..", "app", "me", "me.css"), "utf8");
+// 客の画面の CSS は続きの順のまま分けてある（2026-09-25 設計-16）ので、app/me の .css を全部つないで読む
+const ME_DIR = path.join(__dirname, "..", "app", "me");
+const CSS = fs
+  .readdirSync(ME_DIR)
+  .filter((f) => f.endsWith(".css"))
+  .map((f) => fs.readFileSync(path.join(ME_DIR, f), "utf8"))
+  .join("\n");
 const REM = 16;
 /** 等幅の字1つの幅（em）。ui-monospace・SFMono・一般的な等幅体はおおむね 0.6em */
 const MONO_ADVANCE_EM = 0.6;

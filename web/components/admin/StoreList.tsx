@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, isFailure, type AdminStoreRowDto, type ApiFailure, type ResponseOf } from "../../lib/client/api";
-import { TEXTS } from "../../lib/domain/texts";
+import { TERMS, TEXTS } from "../../lib/domain/texts";
 import { ADMIN_SEARCH_MAX } from "../../lib/schemas/limits";
 import { FormMessage } from "../ui/InputRefusal";
 import { toListQueryString, type ListQuery } from "./listQuery";
@@ -37,7 +37,7 @@ const FILTERS = [
   { value: "publishing", label: "オファー公開中" },
   { value: "approved", label: "承認済み" },
   { value: "pending", label: "未承認" },
-  { value: "banned", label: "止められている" },
+  { value: "banned", label: TERMS.storeBanned },
 ] as const;
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [

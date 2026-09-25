@@ -19,7 +19,7 @@ import { useState, type KeyboardEvent } from "react";
 import type { ApiFailure } from "../../lib/client/api";
 import { usePlaceSuggestions } from "../../lib/client/placeSuggest";
 import { PLACE_MAX } from "../../lib/schemas/limits";
-import { FieldMessage } from "../ui/InputRefusal";
+import { FieldMessage, fieldAria } from "../ui/InputRefusal";
 import type { LocateState } from "./useHereLocation";
 
 /**
@@ -156,6 +156,7 @@ export const PlaceField = ({ place, onPlaceChange, locate, hereLabel, away, onUs
             if (typing) setSuggestOpen(true);
           }}
           onBlur={closeList}
+          {...fieldAria("place", failure, "fetch-place", { kinds: PLACE_KINDS })}
         />
         {listVisible ? (
           <ul
@@ -188,7 +189,7 @@ export const PlaceField = ({ place, onPlaceChange, locate, hereLabel, away, onUs
           </ul>
         ) : null}
       </div>
-      <FieldMessage name="place" failure={failure} kinds={PLACE_KINDS} ctx={{ field: "場所", min: 1, max: PLACE_MAX }} />
+      <FieldMessage inputId="fetch-place" name="place" failure={failure} kinds={PLACE_KINDS} ctx={{ field: "場所", min: 1, max: PLACE_MAX }} />
     </div>
   );
 };

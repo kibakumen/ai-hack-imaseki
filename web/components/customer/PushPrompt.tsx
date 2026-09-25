@@ -57,7 +57,7 @@ export const PushPrompt = ({ due }: PushPromptProps) => {
 
   return (
     <section className="push-prompt" data-testid="push-prompt" aria-label="取り消しの通知">
-      <p className="push-prompt__lead">お店の都合や運営の停止で確保が取り消されたときだけ、通知でお知らせします。</p>
+      <p className="push-prompt__lead">お店の都合や、運営がお店の登録を取り消したことで確保が取り消されたときだけ、通知でお知らせします。</p>
       {supported ? (
         <p className="push-prompt__actions">
           <button type="button" data-testid="btn-push-allow" onClick={allow}>

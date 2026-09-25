@@ -31,6 +31,7 @@
 //    合わせ直すスクロール（初めの値・外からの値の変化）では決めない。
 
 import { useEffect, useRef, type ChangeEvent, type CSSProperties } from "react";
+import type { FieldAria } from "../ui/InputRefusal";
 
 /**
  * 目盛り1つの高さ。**この数は CSS にも要る**（窓の高さ・上下の余白・中央の枠がこれで決まる）ので、
@@ -180,10 +181,12 @@ type Props = {
   /** 打った文字そのまま（数に直さない） */
   value: string;
   onChange: (next: string) => void;
+  /** 裏の欄に付ける断りとの結びつき（components/ui/InputRefusal の fieldAria・横断-05） */
+  aria?: FieldAria;
 };
 
 /** ラベル ＋ ダイヤル ＋ 裏の入力欄。公開のフォームが使う。 */
-export const WheelPicker = ({ testId, inputId, label, unit, min, max, value, onChange }: Props) => {
+export const WheelPicker = ({ testId, inputId, label, unit, min, max, value, onChange, aria = {} }: Props) => {
   const handleInput = (event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value);
 
   return (
@@ -195,13 +198,15 @@ export const WheelPicker = ({ testId, inputId, label, unit, min, max, value, onC
       <input
         id={inputId}
         data-testid={testId}
-        className="store-sr-only"
+        // 目には出さないが、Tab で焦点が入ったら見せる（2026-09-25 監査の指摘 横断-06）
+        className="store-sr-only store-sr-only--focusable"
         type="number"
         inputMode="numeric"
         min={min}
         max={max}
         value={value}
         onChange={handleInput}
+        {...aria}
       />
     </div>
   );

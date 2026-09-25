@@ -13,7 +13,7 @@
 
 import { canCancelByStore, effectiveState, type EffectiveState } from "../domain/reservation";
 import type { Deps } from "../ports";
-import { cancelReservationByStore, findReservationOfStore } from "../repo/reservations";
+import { cancelReservationByStore, findReservationOfStore } from "../repo/reservationsOfStore";
 import { sendCancellationPush } from "./pushMessage";
 
 export type CancelByStoreResult =

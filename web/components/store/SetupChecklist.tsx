@@ -5,6 +5,8 @@
 // 足りないかどうかの判断は入口（usecases/storeHome）が済ませている。ここは印を付けて並べるだけ。
 // 印は済み「✓」・未済「!」（2026-09-25 監査の指摘 店-14: それまでは印も見た目も無く、素の箇条書きだった）。
 
+import { TERMS } from "../../lib/domain/texts";
+
 export type SetupChecklistProps = {
   checklist: { license: boolean; card: boolean };
   /** 公開に足りない店の情報の項目（空なら店の情報は済んでいる） */
@@ -17,7 +19,7 @@ export const SetupChecklist = ({ checklist, missingProfile }: SetupChecklistProp
   const items: Item[] = [
     { key: "license", label: "営業許可書", missing: !checklist.license, href: "/store/documents" },
     { key: "card", label: "カード", missing: !checklist.card, href: "/store/documents" },
-    { key: "profile", label: "店の情報（店名・住所・ジャンル・予算の幅）", missing: missingProfile.length > 0, href: "/store/profile" },
+    { key: "profile", label: `${TERMS.storeProfile}（店名・住所・ジャンル・予算の幅）`, missing: missingProfile.length > 0, href: "/store/profile" },
   ];
 
   return (

@@ -12,10 +12,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { callApi, isFailure, type AdminStoreDetailDto } from "../../lib/client/api";
 import { ADMIN_NOTE_MAX } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { dateTimeInJst } from "../ui/jstTime";
 import { Empty } from "./StoreDetailPanels";
-import { useAdminAction } from "./useAdminAction";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 import styles from "./admin.module.css";
 
 type StoreDetailDto = AdminStoreDetailDto;
@@ -35,7 +36,7 @@ export const CHANGED_SINCE_SEEN_TEXT = "開いている間に、店名・住所�
 
 /** 承認後の変更（運営-02）。写しの無い店・変わっていない店では何も出さない。 */
 export const ApprovalChanges = ({ store, onChanged }: ReloadProps) => {
-  const acknowledge = useAdminAction();
+  const acknowledge = useSubmit();
   const [changedWhileOpen, setChangedWhileOpen] = useState(false);
   if (!store.changedSinceApproval || !store.approval) return null;
   const approval = store.approval;
@@ -87,9 +88,9 @@ export const ApprovalChanges = ({ store, onChanged }: ReloadProps) => {
             承認に使った営業許可書を開く
           </a>
         )}
-        <button type="button" data-testid="btn-acknowledge" disabled={acknowledge.busy} onClick={() => void confirmChanges()}>
+        <SubmitButton type="button" data-testid="btn-acknowledge" busy={acknowledge.busy} onClick={() => void confirmChanges()}>
           今の内容を確かめた
-        </button>
+        </SubmitButton>
       </div>
       {changedWhileOpen && (
         <p data-testid="acknowledge-conflict" className={styles.note} role="alert">
@@ -108,7 +109,7 @@ const NoteForm = ({ store, onChanged }: ReloadProps) => {
   const [note, setNote] = useState(store.note ?? "");
   const [contacted, setContacted] = useState(store.contacted);
   const [saved, setSaved] = useState(false);
-  const save = useAdminAction();
+  const save = useSubmit();
 
   const submit = async () => {
     const result = await save.run(() => callApi("POST /api/admin/stores/:id/note", { params: { id: store.id }, body: { note, contacted } }));
@@ -128,16 +129,16 @@ const NoteForm = ({ store, onChanged }: ReloadProps) => {
       }}
     >
       <label htmlFor="admin-store-note">運営のメモ（店には見えません）</label>
-      <textarea id="admin-store-note" data-testid="field-note" rows={3} maxLength={ADMIN_NOTE_MAX} value={note} onChange={(event) => setNote(event.target.value)} />
-      <FieldMessage name="note" failure={save.failure} ctx={{ field: "メモ", min: 0, max: ADMIN_NOTE_MAX }} />
+      <textarea id="admin-store-note" data-testid="field-note" rows={3} maxLength={ADMIN_NOTE_MAX} value={note} onChange={(event) => setNote(event.target.value)} {...fieldAria("note", save.failure, "admin-store-note")} />
+      <FieldMessage inputId="admin-store-note" name="note" failure={save.failure} ctx={{ field: "メモ", min: 0, max: ADMIN_NOTE_MAX }} />
       <label className={styles.checkLabel}>
         <input type="checkbox" data-testid="field-contacted" checked={contacted} onChange={(event) => setContacted(event.target.checked)} />
         店へ連絡済み（未承認のあいだは承認待ちの数から外す。許可書が上げ直されたら、また数える）
       </label>
       {store.contactedAt && <p className={styles.cardMeta}>{`連絡済みにした日時: ${dateTimeInJst(store.contactedAt)}`}</p>}
-      <button type="submit" data-testid="btn-save-note" disabled={save.busy}>
+      <SubmitButton type="submit" data-testid="btn-save-note" busy={save.busy}>
         メモを保存する
-      </button>
+      </SubmitButton>
       <FormMessage failure={save.failure} fieldNames={FIELD_NAMES} />
       {saved && <p role="status">保存しました</p>}
     </form>

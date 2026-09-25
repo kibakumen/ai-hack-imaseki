@@ -8,6 +8,11 @@
 // 文の読み手（店と運営か、客か）は `CustomerRefusals` で囲んだかどうかで決まる（2026-09-25 レビューの指摘）。
 // 客にはログインが無いので、同じ 401・403 でも「ログイン」を言わない文を出す。囲むのは客の画面の入れ物
 // （CustomerApp）の1か所だけで、客の部品が1つずつ読み手を渡すことはしない（渡し忘れた部品が店の文を出すため）。
+//
+// 欄との結びつき（2026-09-25 監査の指摘 横断-05）: 項目の断りの文は、欄の id から決まる id（`refusalIdOf`）を持ち、
+// 欄は `fieldAria` で aria-invalid と aria-describedby を付けてその文を指す。**文を出す条件と欄に印を付ける条件は
+// 同じ関数（`fieldRefused`）で決める**——片方だけ直してずれないように。赤枠は CSS の `[aria-invalid="true"]` が付ける
+// （それまでは「欄の直後に文がある」という DOM の並びに頼っていて、包まれた欄とダイヤルは赤くならなかった）。
 
 import { createContext, useContext, type ReactNode } from "react";
 import type { ApiFailure } from "../../lib/client/api";
@@ -28,9 +33,37 @@ const useKindText = (): ((kind: string, ctx?: RefusalContext) => string) => {
   return (kind, ctx = {}) => TEXTS.inputRefusal(kind, ctx, audience);
 };
 
+/** 欄の断りの文の id。欄の id から決める（欄の aria-describedby がこれを指す）。 */
+export const refusalIdOf = (inputId: string): string => `${inputId}-refusal`;
+
+/** その項目の断りが返っているか（項目に結びつけた規則の断りの語か、項目の理由）。FieldMessage が文を出す条件と同じ。 */
+const fieldRefused = (name: string, failure: ApiFailure | null, kinds: readonly string[]): boolean => {
+  const error = failure?.error;
+  if (error === undefined) return false;
+  if (kinds.includes(error.kind)) return true;
+  return (error.fields ?? []).some((f) => f.name === name);
+};
+
+/** 欄に付ける属性。`"aria-invalid"` は断りのあるときだけ。 */
+export type FieldAria = { "aria-invalid"?: true; "aria-describedby"?: string };
+
+/**
+ * 欄に付ける aria-invalid と aria-describedby（横断-05）。断りが返っていれば、同じ `inputId` で描いた
+ * FieldMessage の文を指す。`describedBy` は欄がもともと持つ説明（字数の案内など）の id で、断りが無いときも残す。
+ * `kinds` は FieldMessage に渡すのと同じ語の一覧（項目に結びつけた規則の断り）。
+ */
+export const fieldAria = (name: string, failure: ApiFailure | null, inputId: string, options: { kinds?: readonly string[]; describedBy?: string } = {}): FieldAria => {
+  const { kinds = [], describedBy } = options;
+  if (!fieldRefused(name, failure, kinds)) return describedBy === undefined ? {} : { "aria-describedby": describedBy };
+  const ids = [describedBy, refusalIdOf(inputId)].filter((id): id is string => id !== undefined);
+  return { "aria-invalid": true, "aria-describedby": ids.join(" ") };
+};
+
 type FieldMessageProps = {
   /** 入力のスキーマの項目名（nickname・phone など） */
   name: string;
+  /** この文が説明する欄の id（文の id を決める。欄は fieldAria に同じ値を渡す） */
+  inputId: string;
   failure: ApiFailure | null;
   ctx?: RefusalContext;
   /**
@@ -42,23 +75,17 @@ type FieldMessageProps = {
 };
 
 /** その項目の断りが返っているときだけ、入力欄の直下に文を出す。 */
-export const FieldMessage = ({ name, failure, ctx, kinds = [] }: FieldMessageProps) => {
+export const FieldMessage = ({ name, inputId, failure, ctx, kinds = [] }: FieldMessageProps) => {
   const kindText = useKindText();
+  if (!fieldRefused(name, failure, kinds)) return null;
   const error = failure?.error;
   const kind = error?.kind;
   // 項目に結びついた規則の断りが先。あれば理由の文より、その語の文を出す。
-  if (kind !== undefined && kinds.includes(kind)) {
-    return (
-      <p className="msg" role="alert" data-testid={`msg-${name}`}>
-        {kindText(kind, ctx)}
-      </p>
-    );
-  }
   const field = error?.fields?.find((f) => f.name === name);
-  if (!field) return null;
+  const text = kind !== undefined && kinds.includes(kind) ? kindText(kind, ctx) : TEXTS.fieldReason(field?.reason ?? "", ctx);
   return (
-    <p className="msg" role="alert" data-testid={`msg-${name}`}>
-      {TEXTS.fieldReason(field.reason, ctx)}
+    <p className="msg" role="alert" id={refusalIdOf(inputId)} data-testid={`msg-${name}`}>
+      {text}
     </p>
   );
 };
@@ -72,12 +99,12 @@ export const FieldMessage = ({ name, failure, ctx, kinds = [] }: FieldMessagePro
  * （設計書「入力の誤りの出し方」の 13.3 の行: ファイルの欄の直下にこの文を出す）。
  * 判断はしない——受け取った語を domain/texts の文にして、項目の直下に出すだけ。
  */
-export const FieldKindMessage = ({ name, failure, ctx }: FieldMessageProps) => {
+export const FieldKindMessage = ({ name, inputId, failure, ctx }: FieldMessageProps) => {
   const kindText = useKindText();
   const error = failure?.error;
   if (!error?.fields?.some((f) => f.name === name)) return null;
   return (
-    <p className="msg" role="alert" data-testid={`msg-${name}`}>
+    <p className="msg" role="alert" id={refusalIdOf(inputId)} data-testid={`msg-${name}`}>
       {kindText(error.kind, ctx)}
     </p>
   );

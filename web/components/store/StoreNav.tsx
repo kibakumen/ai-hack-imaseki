@@ -8,13 +8,14 @@
 // 客の電話番号や確保の操作を残さないため。ボタン自体は店と運営で共用の部品（components/auth/LogoutButton）。
 
 import { LogoutButton } from "../auth/LogoutButton";
+import { TERMS } from "../../lib/domain/texts";
 
 export type StoreTabKey = "home" | "coupons" | "profile" | "documents" | "results" | "account";
 
 const TABS: Array<{ key: StoreTabKey; label: string; href: string }> = [
   { key: "home", label: "オファー", href: "/store" },
   { key: "coupons", label: "クーポン", href: "/store/coupons" },
-  { key: "profile", label: "店舗情報", href: "/store/profile" },
+  { key: "profile", label: TERMS.storeProfile, href: "/store/profile" },
   { key: "documents", label: "書類", href: "/store/documents" },
   { key: "results", label: "実績", href: "/store/results" },
   // 2026-09-22 追加: ログインのメールアドレス・パスワードの変更。

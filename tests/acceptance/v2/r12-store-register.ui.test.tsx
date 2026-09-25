@@ -92,7 +92,8 @@ describeTask("7", "店のホームの帯とチェックリスト", () => {
   it("12.9 止められている: 運営に止められているため公開できないことが出て、公開のフォームが無い", async () => {
     await renderHome(storeHomeDto({ status: "banned" }));
     await screen.findByTestId("status-banner");
-    expect(screen.getByTestId("status-banner").textContent).toMatch(/止められて/);
+    // 店を止める状態の呼び方は「登録を取り消す」に揃えた（2026-09-25 監査の指摘 横断-11。要件 12.9 の「止められている」に当たる文）
+    expect(screen.getByTestId("status-banner").textContent).toMatch(/登録を取り消されて/);
     expect(screen.getByTestId("status-banner").textContent).toMatch(/公開できません|公開できない/);
     expect(screen.queryByTestId(TID.btn("publish"))).toBeNull();
   });

@@ -7,11 +7,16 @@
 // その欄の直下。文の正本は domain/texts で、この部品は語を読まない。
 
 import { useState, type FormEvent } from "react";
-import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure } from "../../lib/client/api";
 import { EMAIL_MAX, PASSWORD_MAX } from "../../lib/schemas/limits";
-import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+import { DoneNotice, SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 const FIELD_NAMES = ["email", "currentPassword"];
+/** 欄の直下に語の文で出す、項目に結びつけた規則の断り */
+const EMAIL_KINDS = ["email_taken"];
+const MISMATCH_KINDS = ["password_mismatch"];
 
 type Props = {
   /** 叩く入口。店は `/api/store/email`、運営は `/api/admin/email`。 */
@@ -23,18 +28,19 @@ type Props = {
 export const EmailForm = ({ endpoint, onChanged }: Props) => {
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は押せない（2026-09-25 監査の指摘 横断-03）
+  const change = useSubmit();
+  const failure = change.failure;
   const [changedTo, setChangedTo] = useState<string | null>(null);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi(`POST ${endpoint}` as const, { body: { email, currentPassword } });
+    const result = await change.run(() => callApi(`POST ${endpoint}` as const, { body: { email, currentPassword } }));
+    if (result === null) return;
     if (isFailure(result)) {
-      setFailure(result);
       setChangedTo(null);
       return;
     }
-    setFailure(null);
     setChangedTo(email);
     // パスワードは画面に残さない。新しいアドレスは「次からこれで入る」と見せるため残す。
     setCurrentPassword("");
@@ -61,8 +67,9 @@ export const EmailForm = ({ endpoint, onChanged }: Props) => {
         value={email}
         maxLength={EMAIL_MAX}
         onChange={(event) => setEmail(event.target.value)}
+        {...fieldAria("email", failure, "account-new-email", { kinds: EMAIL_KINDS })}
       />
-      <FieldMessage name="email" failure={failure} ctx={{ field: "メールアドレス", hint: "name@example.com の形", max: EMAIL_MAX }} kinds={["email_taken"]} />
+      <FieldMessage name="email" inputId="account-new-email" failure={failure} ctx={{ field: "メールアドレス", hint: "name@example.com の形", max: EMAIL_MAX }} kinds={EMAIL_KINDS} />
 
       <label htmlFor="account-current-password">今のパスワード</label>
       <input
@@ -73,13 +80,14 @@ export const EmailForm = ({ endpoint, onChanged }: Props) => {
         value={currentPassword}
         maxLength={PASSWORD_MAX}
         onChange={(event) => setCurrentPassword(event.target.value)}
+        {...fieldAria("currentPassword", failure, "account-current-password", { kinds: MISMATCH_KINDS })}
       />
-      <FieldMessage name="currentPassword" failure={failure} ctx={{ field: "今のパスワード" }} kinds={["password_mismatch"]} />
+      <FieldMessage name="currentPassword" inputId="account-current-password" failure={failure} ctx={{ field: "今のパスワード" }} kinds={MISMATCH_KINDS} />
 
-      <button type="submit" data-testid="btn-change-email">
+      <SubmitButton type="submit" data-testid="btn-change-email" busy={change.busy}>
         メールアドレスを変える
-      </button>
-      {changedTo !== null && <p data-testid="email-changed">メールアドレスを {changedTo} に変えました。次のログインからこのアドレスを使ってください。</p>}
+      </SubmitButton>
+      <DoneNotice message={changedTo === null ? null : `メールアドレスを ${changedTo} に変えました。次のログインからこのアドレスを使ってください。`} testId="email-changed" />
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
     </form>
   );

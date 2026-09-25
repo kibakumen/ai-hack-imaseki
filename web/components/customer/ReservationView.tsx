@@ -24,7 +24,6 @@
 // 期限が切れてから初めて知らされた）。
 
 import type { ReactNode } from "react";
-import type { ApiFailure } from "../../lib/client/api";
 import type { SearchOrigin } from "../../lib/client/lastOrigin";
 import { CouponPickNote } from "./CouponPickNote";
 import { PushPrompt } from "./PushPrompt";
@@ -32,7 +31,6 @@ import { RemainingTime } from "./RemainingTime";
 import { ReservationActions } from "./ReservationActions";
 import { RouteButton } from "./RouteButton";
 import { timeInJst } from "../ui/jstTime";
-import { FormMessage } from "../ui/InputRefusal";
 import type { ReservationDto } from "./home";
 
 type ReservationViewProps = {
@@ -40,15 +38,12 @@ type ReservationViewProps = {
   /** 「ほかの店を探す」＝確保を持ったまま取得の画面へ（基準 8.10 の入口）。 */
   onSearchMore: () => void;
   /**
-   * 取り消し・人数の変更が通ったときの新しいホーム（`ReservationActions` からそのまま上がる）。
+   * 取り消し・人数の変更が通ったときの新しいホームと、済んだことの1文（`ReservationActions` からそのまま上がる）。
    * 今の状態と衝突して断られたときは何も渡さず呼ばれる＝入れ物がホームを取り直す（基準 10.3・9.8）。
+   * 操作の断りは `ReservationActions` が操作ごとに持つ（2026-09-25 監査の指摘 設計-11: どこからも渡されない
+   * `failure` の口がここに残っていたので消した）。
    */
-  onChanged: (home?: unknown) => void;
-  /**
-   * 確保への操作が断られたときの受け皿（タスク15 の人数の変更で使う）。
-   * 項目に帰せる断りは項目の直下に出るので、ここでは操作の直下の分だけを出す。
-   */
-  failure?: ApiFailure | null;
+  onChanged: (home?: unknown, done?: string) => void;
   /** まだ通知を許可していない客だけ true（要件22の基準 22.8・タスク19） */
   pushPromptDue?: boolean;
   /** この囲いの中に置く入口（通報ボタン・基準 26.1）。 */
@@ -63,7 +58,7 @@ export const RESERVATION_CODE_ID = "reservation-code";
 /** 期限を過ぎたときの扱い（横断-07 の案A）。20分は `domain/reservation` の EXPIRED_GRACE_MS（店が完了済みにできる幅） */
 export const EXPIRY_RULE_TEXT = "期限を過ぎると、確保は自動で取り消されます。過ぎてから20分以内なら、この画面をお店に見せれば、お店の判断で入れることがあります。";
 
-export const ReservationView = ({ reservation, onSearchMore, onChanged, failure = null, pushPromptDue = false, children = null, from = null }: ReservationViewProps) => {
+export const ReservationView = ({ reservation, onSearchMore, onChanged, pushPromptDue = false, children = null, from = null }: ReservationViewProps) => {
   return (
     <section className="claim-view" data-testid="view-active">
       {/* 店頭で見せる面。番号をいちばん大きく、そのまわりに店名と期限を置く（基準 9.1・9.2） */}
@@ -133,8 +128,6 @@ export const ReservationView = ({ reservation, onSearchMore, onChanged, failure 
         </button>
         {children}
       </div>
-
-      <FormMessage failure={failure} fieldNames={["party"]} />
     </section>
   );
 };

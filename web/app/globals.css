@@ -1,3 +1,10 @@
+/* 全画面の見た目の土台の目次。
+   2026-09-25 監査の指摘 設計-16 で、続きの順のまま分けた（中身と並びは同じ。読み込む順は layout.tsx の import の順）:
+     globals.css … 色・角丸・影の変数と、文字・行き先・ナビの素の見た目
+     controls.css … 入力の面・押せるもの・入口とログイン・断りと済んだ知らせ・明暗の切り替え・表
+     motion.css … 紙吹雪・画面をまたいで使う動き・読み込みの状態
+*/
+
 /* 見た目の土台（2026-09-22。速成版 `sprint/app/globals.css` と `sprint/app/me/page.tsx` で
    本人が練り上げたオレンジ基調の視覚言語を v2 へ移した）。
 
@@ -36,7 +43,8 @@
   --color-highlight: #fef3c7;
   --color-highlight-text: #7c4a09;
   --color-highlight-edge: #f0b429;
-  --color-success: #15803d;
+  /* 済んだ知らせの文字。淡い緑の地（10〜15%）の上でも 4.5:1 を保つ濃さ（#15803d では 4.03:1 だった・横断-04） */
+  --color-success: #166534;
 
   /* ---- 角丸 ---- */
   --radius-xs: 0.5rem;
@@ -64,9 +72,17 @@
      暗い設定では差し色が明るい橙・文字が濃い茶なので、塗りを 0.92 倍に暗くしても文字は読める。
      hover の規則は全部 `@media (hover: hover)` の中に置く——指で触る端末で押した後に色が貼り付くのを防ぐ。 */
   --hover-filled-filter: brightness(0.92) saturate(1.08);
-  --hover-soft-bg: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  /* 差し色は 10%（12% だと明るい配色で濃い橙の文字が 4.46:1 になり、4.5:1 に届かなかった・横断-04 のレビュー） */
+  --hover-soft-bg: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   --hover-soft-border: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   --hover-soft-text: var(--color-text);
+
+  /* ---- 指で押す部品の大きさ（2026-09-25 監査の指摘 横断-13）----
+     ボタン・タブ・候補の行・チップの最小の高さ（44px）。明暗の切り替えは右上に固定する四角で、
+     置く画面は main の上をこの分あける（店の画面ではタブの右端に重なり、タブを押したつもりで明暗が変わった）。 */
+  --tap-min: 2.75rem;
+  --theme-toggle-size: 2.75rem;
+  --theme-toggle-top: max(0.75rem, env(safe-area-inset-top, 0px));
 }
 
 /* ---- 色（暗い設定） ----
@@ -77,6 +93,7 @@
    この2つが無いと、手動の選択が OS の設定に負ける（本人の指摘の核）。 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --color-background: #17120e;
     --color-surface: #241b14;
     --color-text: #f6ece2;
@@ -94,7 +111,14 @@
   }
 }
 
+/* 手で選んだ側は color-scheme も決め打つ（2026-09-25 監査の指摘 横断-10）。`:root` の `light dark` のままだと、
+   端末が暗い店が「明るい」を選んでも、時刻の欄の時計の印・select の一覧・チェック・スクロールバーは暗いまま描かれる。 */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --color-background: #17120e;
   --color-surface: #241b14;
   --color-text: #f6ece2;
@@ -141,6 +165,11 @@ body:has([data-testid="admin-nav"]) main {
   max-width: 72rem;
 }
 
+/* 明暗の切り替え（右上に固定）の下に部品を置かない（横断-13）。運営の画面は殻のナビの段に置くので除く */
+body:has(> .theme-toggle):not(:has([data-testid="admin-nav"])) main {
+  padding-top: calc(var(--theme-toggle-top) + var(--theme-toggle-size) + 0.75rem);
+}
+
 /* ---------- 文字 ---------- */
 
 h1,
@@ -172,10 +201,12 @@ p {
 
 /* ---------- 行き先 ---------- */
 
+/* 文字の橙は濃い方（--color-accent-strong）。明るい橙は明るい配色で 3.51:1 しかなく、基準の 4.5:1 に届かない
+   （2026-09-25 監査の指摘 横断-04 の案A: 塗りのボタンと橙の文字は濃い橙、明るい橙は飾り——縁・影・帯——にだけ使う）。 */
 a {
-  color: var(--color-accent);
+  color: var(--color-accent-strong);
   font-weight: 600;
-  text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--color-accent-strong) 45%, transparent);
   text-underline-offset: 0.2em;
 }
 
@@ -183,7 +214,8 @@ a {
    自分のホバーを書いたとき、ここに負けないようにする。 */
 @media (hover: hover) {
   :where(a):hover {
-    color: var(--color-accent-strong);
+    text-decoration-color: currentColor;
+    text-decoration-thickness: 2px;
   }
 }
 
@@ -195,6 +227,9 @@ nav {
 
 /* 素のリンクが並ぶだけの案内（入口・運営の殻）は、押せる面に見せる */
 nav > a {
+  align-items: center;
+  display: inline-flex;
+  min-height: var(--tap-min);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
@@ -204,10 +239,22 @@ nav > a {
   text-decoration: none;
 }
 
+/* 運営の殻のナビ（2026-09-25 監査の指摘 横断-12・横断-13）。画面の左上の角に張り付かないよう main と同じ幅と余白に
+   揃え、右端は明暗の切り替え（右上に固定）の分をあけて同じ段に置く。 */
+[data-testid="admin-nav"] {
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  margin: 0 auto;
+  max-width: 72rem;
+  padding-block: var(--theme-toggle-top) 0.75rem;
+  padding-inline-end: calc(var(--theme-toggle-size) + 1.25rem);
+  padding-inline-start: 1rem;
+}
+
 /* 今いる画面（運営の殻のナビ・運営-11）。押せる面のまま、塗りで「ここ」を示す */
 [data-testid="admin-nav"] > a[aria-current="page"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
   color: var(--color-accent-text);
 }
 
@@ -266,555 +313,4 @@ nav > a {
   display: inline-flex;
   font-weight: 600;
   gap: 0.375rem;
-}
-
-/* ---------- 入力の面 ---------- */
-
-form {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  display: grid;
-  gap: 0.375rem;
-  padding: 1.25rem 1.125rem 1.375rem;
-}
-
-form > h2,
-form > h3 {
-  margin-bottom: 0.25rem;
-}
-
-/* 見出しと最初の欄の間、欄と次のラベルの間に息を入れる（ラベルは前の欄から離す） */
-form > label,
-form > fieldset,
-form > legend {
-  margin-top: 0.625rem;
-}
-
-form > label:first-of-type {
-  margin-top: 0.25rem;
-}
-
-legend,
-label {
-  color: var(--color-text);
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-legend {
-  padding: 0 0.25rem;
-}
-
-input,
-select,
-textarea {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-  font: inherit;
-  padding: 0.6875rem 0.75rem;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
-  width: 100%;
-}
-
-input[type="checkbox"],
-input[type="radio"] {
-  accent-color: var(--color-accent);
-  width: auto;
-}
-
-input[type="file"] {
-  padding: 0.5rem;
-}
-
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
-  outline: none;
-}
-
-input::placeholder {
-  color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
-}
-
-/* 断りが出ている欄は枠を赤くする（第1回の指摘「未入力欄があることがわかりにくい・枠とかを赤く」）。
-   断りの文（`.msg`）は欄の直下に置かれるので、直後の兄弟で見分けられる＝.tsx を触らずに効く。 */
-input:has(+ .msg),
-select:has(+ .msg),
-textarea:has(+ .msg) {
-  border-color: var(--color-danger);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 18%, transparent);
-}
-
-fieldset:has(+ .msg) {
-  border-color: var(--color-danger);
-}
-
-fieldset {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  display: grid;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0.75rem 0.875rem 0.875rem;
-}
-
-/* 並んだチェックの欄（ジャンル）は、丸い札にして横に流す。
-   中の `<label><input type=checkbox>…</label>` の形は .tsx のまま（検査が引いている data-testid も動かさない）。 */
-fieldset:has(input[type="checkbox"]) {
-  display: flex;
-  flex-wrap: wrap;
-}
-
-fieldset:has(input[type="checkbox"]) > legend {
-  flex: 1 0 100%;
-}
-
-fieldset:has(input[type="checkbox"]) > label {
-  align-items: center;
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 0.875rem;
-  font-weight: 600;
-  gap: 0.375rem;
-  padding: 0.4375rem 0.8125rem;
-  transition: background 140ms ease, border-color 140ms ease;
-}
-
-fieldset:has(input[type="checkbox"]) > label:has(input:checked) {
-  background: var(--color-accent-soft);
-  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
-  color: var(--color-accent-strong);
-}
-
-/* ---------- 押せるもの ---------- */
-
-button {
-  background: var(--color-accent);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  color: var(--color-accent-text);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 700;
-  padding: 0.5625rem 1rem;
-  transition: filter 140ms ease, transform 140ms ease, box-shadow 140ms ease;
-}
-
-/* 塗り（filled）。地を少し濃くするだけで、文字（--color-accent-text）はそのまま */
-@media (hover: hover) {
-  button:hover:not(:disabled) {
-    filter: var(--hover-filled-filter);
-  }
-}
-
-button:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-button:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
-  outline: none;
-}
-
-/* 主な操作（送る）は大きく・影を落として、副の操作と段を作る */
-form > button[type="submit"] {
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-raised);
-  font-size: 1.0625rem;
-  margin-top: 0.875rem;
-  padding: 0.9375rem 1rem;
-}
-
-/* ---------- 入口（/）とログインの面（/login） ---------- */
-
-.entry {
-  background: linear-gradient(165deg, color-mix(in srgb, var(--color-accent) 12%, var(--color-background)), var(--color-background));
-  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--color-border));
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
-  display: grid;
-  gap: 0.5rem;
-  margin-top: 2rem;
-  padding: 2.25rem 1.5rem 2rem;
-  text-align: center;
-}
-
-.entry__eyebrow,
-.auth-head__eyebrow {
-  color: var(--color-accent-strong);
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
-.entry__title {
-  font-size: 2rem;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-}
-
-.entry__lead {
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-  margin: 0 auto;
-  max-width: 24rem;
-}
-
-.entry__actions {
-  display: grid;
-  gap: 0.625rem;
-  margin-top: 1.25rem;
-}
-
-.entry__primary {
-  background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 50%, var(--color-accent)));
-  border: none;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-raised);
-  color: var(--color-accent-text);
-  font-size: 1.0625rem;
-  font-weight: 800;
-  padding: 1rem;
-  text-decoration: none;
-}
-
-/* 塗り。`nav > a` の soft ホバーより詳細度が高い（(0,2,0) > (0,1,1)）ので、地も文字もここが決める */
-@media (hover: hover) {
-  .entry__primary:hover {
-    background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-highlight-edge) 50%, var(--color-accent)));
-    color: var(--color-accent-text);
-    filter: var(--hover-filled-filter);
-  }
-}
-
-.entry__secondary {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  padding: 0.6875rem 1rem;
-  text-decoration: none;
-}
-
-.auth-head {
-  display: grid;
-  gap: 0.125rem;
-  margin-top: 1.5rem;
-  text-align: center;
-}
-
-.auth-head__title {
-  font-size: 1.5rem;
-  font-weight: 900;
-}
-
-.auth-foot {
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  text-align: center;
-}
-
-/* ---------- 断りの文 ---------- */
-
-/* 入力の断りの文（components/ui/InputRefusal）。背景に対して読める濃さを明暗それぞれで持つ。 */
-.msg {
-  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-background));
-  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
-  border-radius: var(--radius-xs);
-  color: var(--color-danger);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  margin-top: 0.25rem;
-  padding: 0.375rem 0.625rem;
-}
-
-/* ---------- 明暗の切り替えボタン（`components/ui/ThemeToggle.tsx`）----------
-   3画面（客・店・運営）の殻（layout.tsx）から届く固定位置の小さな丸ボタン。
-   本人が客の画面の演出にこだわっているので、主役を食わない大きさ・控えめな色にする
-   （地は surface、縁は border、差し色のオレンジは使わない）。
-   宝くじの演出（.offer-reveal, z-index 50）とファンファーレ（.claim-celebration, z-index 60）
-   より低い z-index にして、演出中は自然に隠れる（動きの主役を譲る）。 */
-.theme-toggle {
-  align-items: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  font-size: 0.9375rem;
-  height: 2.25rem;
-  justify-content: center;
-  padding: 0;
-  position: fixed;
-  right: max(0.75rem, env(safe-area-inset-right, 0px));
-  top: max(0.75rem, env(safe-area-inset-top, 0px));
-  transition: filter 140ms ease, transform 140ms ease;
-  width: 2.25rem;
-  z-index: 40;
-}
-
-/* 縁だけ（soft）。中身は絵文字なので文字色は関係ないが、塗りの filter は打ち消して soft の地にする */
-@media (hover: hover) {
-  .theme-toggle:hover:not(:disabled) {
-    background: var(--hover-soft-bg);
-    border-color: var(--hover-soft-border);
-    filter: none;
-    transform: scale(1.05);
-  }
-}
-
-.theme-toggle:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
-  outline: none;
-}
-
-/* 運営の画面はいちばん上に横並びの入口（admin-nav）が在るので、その邪魔にならないよう
-   少し下げる（`app/admin/layout.tsx` の nav の高さぶん）。 */
-body:has([data-testid="admin-nav"]) .theme-toggle {
-  top: max(3.25rem, calc(env(safe-area-inset-top, 0px) + 3.25rem));
-}
-
-/* ---------- 表（運営の数字・店の結果） ---------- */
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-/* ---------- 紙吹雪（components/ui/Confetti）---------- */
-
-/* 部品は `components/ui` に在って画面をまたげるので、面もここに置く。
-   1片ごとの左の位置・遅れ・速さは .tsx が inline の style で渡す（色は渡さない）。 */
-.confetti {
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  position: absolute;
-}
-
-.confetti__piece {
-  animation-fill-mode: forwards;
-  animation-name: confetti-fall;
-  animation-timing-function: ease-in;
-  font-size: 1.25rem;
-  line-height: 1;
-  position: absolute;
-  top: 0;
-}
-
-/* ---------- 動き（画面をまたいで使う） ---------- */
-
-/* カードが下からふわっと出る（結果の一覧・向かっている客） */
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.875rem) scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* 当たりが出た時の跳ね（宝くじの演出・確保の紙） */
-@keyframes prize-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.4) rotate(-6deg);
-  }
-
-  55% {
-    opacity: 1;
-    transform: scale(1.08) rotate(2deg);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-  }
-}
-
-@keyframes prize-fade-out {
-  to {
-    opacity: 0;
-    transform: scale(0.94);
-  }
-}
-
-@keyframes claim-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-
-  70% {
-    opacity: 1;
-    transform: scale(1.04);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* 紙吹雪の1片が落ちて回る */
-@keyframes confetti-fall {
-  0% {
-    opacity: 1;
-    transform: translateY(-1rem) rotate(0deg);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translateY(18rem) rotate(360deg);
-  }
-}
-
-/* 紹介文が届くまでの光の帯と、届いた瞬間の縁取り */
-@keyframes text-shimmer {
-  from {
-    transform: translateX(-100%);
-  }
-
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes sparkle {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: scale(0.9);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.15);
-  }
-}
-
-@keyframes reveal-ring {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-highlight-edge) 0%, transparent);
-    opacity: 0;
-    transform: translateY(0.3rem);
-  }
-
-  35% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-highlight-edge) 55%, transparent);
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-highlight-edge) 0%, transparent);
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 「ここを押せば戻せる」を静かに示す脈 */
-@keyframes attention-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent);
-  }
-
-  50% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-accent) 0%, transparent);
-  }
-}
-
-/* 入力の誤りを1度だけ揺らして知らせる */
-@keyframes shake-x {
-  10%,
-  90% {
-    transform: translateX(-1px);
-  }
-
-  20%,
-  80% {
-    transform: translateX(2px);
-  }
-
-  30%,
-  50%,
-  70% {
-    transform: translateX(-4px);
-  }
-
-  40%,
-  60% {
-    transform: translateX(4px);
-  }
-}
-
-/* 待っている間ずっと動くものは、動きを減らす設定を尊重する（1回で終わる演出は残す——
-   受け取れたことが伝わらなくなるため。ただし長さは詰める）。 */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* ---------- 読み込みの状態とログインの切れ（2026-09-25 監査の指摘 横断-01） ----------
-   components/ui/LoadState（読み込み中・読めなかった・取り直しが失敗している帯）と
-   components/ui/SessionExpired（ログインが切れました・/login への道）。色は変数だけで指す。 */
-.load-state {
-  color: var(--color-text-muted);
-  display: grid;
-  gap: 0.5rem;
-  justify-items: start;
-  padding: 1rem 0;
-}
-
-.load-state__stale {
-  background: var(--color-highlight);
-  border-color: var(--color-highlight-edge);
-  color: var(--color-highlight-text);
-}
-
-.session-expired {
-  align-items: center;
-  background: var(--color-highlight);
-  border-bottom: 1px solid var(--color-highlight-edge);
-  color: var(--color-highlight-text);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  padding: 0.75rem 1rem;
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
-
-.session-expired p {
-  font-weight: 600;
-  margin: 0;
-}
-
-.session-expired a {
-  color: inherit;
-  font-weight: 700;
 }

@@ -35,6 +35,7 @@ import { guestNickname, phoneOrPlaceholder } from "../../lib/client/guestIdentit
 import { HUMAN_CHECK_ACTIONS } from "../../lib/schemas/limits";
 import { HumanCheck } from "../ui/HumanCheck";
 import { CustomerApp } from "./CustomerApp";
+import { CustomerMain } from "./CustomerMain";
 
 /** 確かめの値がこれだけ来なければ、部品を普通の濃さで見せて押すよう促す（客-02 の案A・AI判断の値）。 */
 const HUMAN_CHECK_HINT_MS = 3000;
@@ -154,17 +155,17 @@ export const GuestEntry = () => {
 
   if (phase === "busy") {
     return (
-      <main data-testid="guest-entry-busy">
+      <CustomerMain testId="guest-entry-busy">
         <p role="alert">ただいま混み合っています。少し時間をおいてから、このページを開き直してください。</p>
         <button type="button" onClick={() => window.location.reload()}>
           開き直す
         </button>
-      </main>
+      </CustomerMain>
     );
   }
 
   return (
-    <main aria-busy="true" data-testid="guest-entry">
+    <CustomerMain busy testId="guest-entry">
       <p>お店を探す準備をしています…</p>
       {slow ? (
         <p className="human-check-prompt" role="status" data-testid="human-check-prompt">
@@ -183,7 +184,7 @@ export const GuestEntry = () => {
           人かどうかの確かめに Cloudflare Turnstile を使い、ブラウザの情報が Cloudflare に送られます（<Link href="/privacy">送信先の一覧</Link>）。
         </p>
       ) : null}
-    </main>
+    </CustomerMain>
   );
 };
 

@@ -10,6 +10,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SUBMIT_TEXTS } from "../../lib/domain/texts";
 import { ReservationActions } from "./ReservationActions";
 
 type FakeResponse = { status?: number; json: unknown };
@@ -57,7 +58,8 @@ describe("確保中の表示の2つの操作", () => {
     expect(fake!.calls).toHaveLength(0);
 
     fireEvent.click(within(screen.getByTestId("confirm-cancel")).getByTestId("btn-confirm"));
-    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(home));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(home, SUBMIT_TEXTS.reservationCancelled));
+    // 済んだことの1文も一緒に渡す（画面が取得の画面へ切り替わるので、親が上に出す・横断-03）
     expect(fake!.calls.map((c) => c.path)).toEqual(["/api/customer/reservations/res-1/cancel"]);
   });
 
@@ -118,7 +120,7 @@ describe("確保中の表示の2つの操作", () => {
     fireEvent.change(within(form).getByTestId("field-party"), { target: { value: "3" } });
     fireEvent.click(within(form).getByTestId("btn-change-party"));
 
-    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(home));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(home, SUBMIT_TEXTS.partyChanged(3)));
     expect(within(form).queryByTestId("msg-party")).toBeNull();
     expect(within(form).queryByTestId("msg-form")).toBeNull();
     expect(fake!.calls.at(-1)).toEqual({ path: "/api/customer/reservations/res-1/party", body: { party: 3 } });

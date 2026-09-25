@@ -11,10 +11,12 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 import { callApi, isFailure, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { LICENSE_MAX_MEGABYTES } from "../../lib/schemas/limits";
-import { DOCUMENTS_TEXTS } from "../../lib/domain/texts";
+import { DOCUMENTS_TEXTS, SUBMIT_TEXTS } from "../../lib/domain/texts";
 import { ContactEmail } from "../ui/ContactEmail";
-import { FieldKindMessage, FormMessage } from "../ui/InputRefusal";
+import { FieldKindMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
+import { DoneNotice, SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 import { cameBackFromCardSetup, clearCardReturnMark, confirmCardSetup, resetAutoConfirmTurn, takeAutoConfirmTurn } from "./cardReturn";
 
 /** 店のホームの応答のうち、この画面が読む分（型は schemas/responses の表から・設計-07）。 */
@@ -30,8 +32,15 @@ export const DocumentsPanel = () => {
   // 読めなかったときは空の section で止めず、断りの文と読み直す道を出す（2026-09-25 監査の指摘 横断-01）。
   const { state, reload } = useLoad(loadView);
   const [file, setFile] = useState<File | null>(null);
-  const [licenseFailure, setLicenseFailure] = useState<ApiFailure | null>(null);
-  const [cardFailure, setCardFailure] = useState<ApiFailure | null>(null);
+  /**
+   * 許可書を上げる・消すの送信（最大10MB を送る間も押せていた・2026-09-25 監査の指摘 横断-03）と、カードの登録の送信。
+   * 送っている間はボタンを止める。済んだら role=status で知らせる。
+   */
+  const license = useSubmit();
+  const card = useSubmit();
+  /** 決済会社の画面から戻ったのに確かめが通らなかったときの断り（開いたときの自動の確かめ・不具合-01） */
+  const [returnFailure, setReturnFailure] = useState<ApiFailure | null>(null);
+  const cardFailure = card.failure ?? returnFailure;
   /** 開いたときの確かめを送ったか（1回だけ・不具合-01） */
   const cardChecked = useRef(false);
 
@@ -50,11 +59,11 @@ export const DocumentsPanel = () => {
     void (async () => {
       const failure = await confirmCardSetup();
       if (failure === null) {
-        setCardFailure(null);
+        setReturnFailure(null);
         await reload();
         return;
       }
-      if (returned) setCardFailure(failure);
+      if (returned) setReturnFailure(failure);
     })();
   }, [loaded, reload]);
 
@@ -67,13 +76,9 @@ export const DocumentsPanel = () => {
     if (!file) return;
     const form = new FormData();
     form.append("file", file);
-    const result = await callApi("POST /api/store/license", { body: form });
-    if (isFailure(result)) {
-      // 選んだファイルは残す（同じものを選び直させない）。前に登録した表示も触らない。
-      setLicenseFailure(result);
-      return;
-    }
-    setLicenseFailure(null);
+    const result = await license.run(() => callApi("POST /api/store/license", { body: form }), SUBMIT_TEXTS.licenseUploaded);
+    // 断られたら選んだファイルは残す（同じものを選び直させない）。前に登録した表示も触らない。
+    if (result === null || isFailure(result)) return;
     await reload();
   };
 
@@ -82,25 +87,17 @@ export const DocumentsPanel = () => {
 
   /** 承認の前の店が、自分の許可書を消す（2026-09-25 監査の指摘 安全-20）。確かめてから送る。 */
   const deleteLicense = async () => {
+    const result = await license.run(() => callApi("DELETE /api/store/license"), SUBMIT_TEXTS.licenseDeleted);
+    if (result === null) return;
     setAskingDelete(false);
-    const result = await callApi("DELETE /api/store/license");
-    if (isFailure(result)) {
-      setLicenseFailure(result);
-      await reload();
-      return;
-    }
-    setLicenseFailure(null);
     await reload();
   };
 
   const startCardSetup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("POST /api/store/card/setup", { body: {} });
-    if (isFailure(result)) {
-      setCardFailure(result);
-      return;
-    }
-    setCardFailure(null);
+    setReturnFailure(null);
+    const result = await card.run(() => callApi("POST /api/store/card/setup", { body: {} }));
+    if (result === null || isFailure(result)) return;
     // やり直したので、戻らずにタブを閉じても次に開いたとき1回は確かめる
     resetAutoConfirmTurn();
     // カードを打つのは外の画面（この画面には欄が無い・基準 13.7）。
@@ -109,7 +106,10 @@ export const DocumentsPanel = () => {
 
   return (
     <section className="store-stack">
-      <h2>書類</h2>
+      {/* 画面の見出し（横断-12）。タブ（StoreNav）はページがこの前に置く */}
+      <div className="store-head">
+        <h1>書類</h1>
+      </div>
 
       <LoadView state={state} onRetry={() => void reload()}>
         {(view) => (
@@ -132,13 +132,14 @@ export const DocumentsPanel = () => {
               </p>
 
               <label htmlFor="license-file">ファイルを選ぶ</label>
-              <input id="license-file" data-testid="field-file" type="file" accept={ACCEPTED_TYPES} onChange={chooseFile} />
-              <FieldKindMessage name="file" failure={licenseFailure} ctx={{ field: "ファイル", max: LICENSE_MAX_MEGABYTES }} />
+              <input id="license-file" data-testid="field-file" type="file" accept={ACCEPTED_TYPES} onChange={chooseFile} {...fieldAria("file", license.failure, "license-file")} />
+              <FieldKindMessage inputId="license-file" name="file" failure={license.failure} ctx={{ field: "ファイル", max: LICENSE_MAX_MEGABYTES }} />
 
-              <button type="submit" data-testid="btn-upload-license" disabled={file === null}>
+              <SubmitButton type="submit" data-testid="btn-upload-license" busy={license.busy} busyLabel={SUBMIT_TEXTS.uploading} disabled={file === null}>
                 営業許可書を上げる
-              </button>
-              <FormMessage failure={licenseFailure} fieldNames={["file"]} />
+              </SubmitButton>
+              <FormMessage failure={license.failure} fieldNames={["file"]} />
+              <DoneNotice message={license.done} />
 
               {/* 承認の前だけ、店が自分で許可書を取り下げられる（承認済みは承認の根拠なので、退会は運営へ連絡・安全-20） */}
               {view.checklist.license && view.status !== "approved" ? (
@@ -150,17 +151,18 @@ export const DocumentsPanel = () => {
                 <div className="store-confirm" role="dialog" aria-label="営業許可書を消す確かめ" data-testid="confirm-delete-license">
                   <p>{DOCUMENTS_TEXTS.deleteLicenseConfirm}</p>
                   <div className="store-confirm__buttons">
-                    <button
+                    <SubmitButton
                       type="button"
                       className="store-btn store-btn--danger"
                       data-testid="btn-confirm-delete-license"
+                      busy={license.busy}
                       onClick={() => {
                         void deleteLicense();
                       }}
                     >
                       {DOCUMENTS_TEXTS.deleteLicense}
-                    </button>
-                    <button type="button" className="store-btn store-btn--quiet" onClick={() => setAskingDelete(false)}>
+                    </SubmitButton>
+                    <button type="button" className="store-btn store-btn--quiet" disabled={license.busy} onClick={() => setAskingDelete(false)}>
                       やめる
                     </button>
                   </div>
@@ -183,9 +185,9 @@ export const DocumentsPanel = () => {
                 {DOCUMENTS_TEXTS.cardPurpose} <a href="/store/terms">{DOCUMENTS_TEXTS.termsLink}</a>
               </p>
 
-              <button type="submit" data-testid="btn-card-setup">
+              <SubmitButton type="submit" data-testid="btn-card-setup" busy={card.busy}>
                 カードを登録する
-              </button>
+              </SubmitButton>
               <FormMessage failure={cardFailure} />
             </form>
           </>

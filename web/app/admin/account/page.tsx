@@ -1,8 +1,11 @@
 // 運営のアカウントの画面（2026-09-22 追加）: 自分のログインのメールアドレスとパスワードを変える。
 // 運営のアカウントは種データで作る（基準 14.8）ので、それまでは値を変えるのに seed-admin を
 // 走らせ直すしか無かった。どちらも今のパスワードの再入力で本人を確かめる。
+import type { Metadata } from "next";
 import { EmailForm } from "../../../components/auth/EmailForm";
 import { PasswordForm } from "../../../components/store/PasswordForm";
+
+export const metadata: Metadata = { title: "アカウント（運営）" };
 
 export default function AdminAccountPage() {
   return (

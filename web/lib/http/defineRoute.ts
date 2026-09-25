@@ -11,6 +11,7 @@ import { checkOrigin, identifyCustomer, identifySession, renewSession } from "./
 import { admitRequest, rateRulesFor, settleCharges } from "./rateLimits";
 import { forbidden, refusal, unauthenticated } from "./refusals";
 import { internalError } from "./unhandled";
+import { raceDeadline } from "../usecases/deadline";
 
 export type RouteAuth = "public" | "customer" | "store" | "admin";
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -191,8 +192,6 @@ const parseBody = async (req: Request, maxBytes: number): Promise<unknown> => {
 /** 打ち切り3秒（設計書「入口の一覧」の注）。差し替えた時計が after を進める。 */
 const HUMAN_CHECK_TIMEOUT_MS = 3000;
 
-const TIMED_OUT: unique symbol = Symbol("human-check-timed-out");
-
 /** 確かめの答えに求めるもの（入口の用途・要求の来たホスト名）と、利用者の接続元。 */
 type HumanExpectation = { expectedAction: HumanCheckAction; expectedHostname: string; remoteIp: string | null };
 
@@ -205,6 +204,8 @@ const humanExpectationOf = (req: Request, action: HumanCheckAction): HumanExpect
 /**
  * 人かどうかの確かめを、打ち切りの合図と競争させる（設計書「時間の割り振り」: 時計と AbortSignal の両方で書く）。
  * 答えが返らない・確かめられない・人でない、のどれでも false（断るのは呼ぶ側）。
+ * 打ち切りは手続きと同じ usecases/deadline の raceDeadline（2026-09-25 監査の指摘 設計-11: それまで同じ競争をここに
+ * 別に書いていた）。打ち切ったら外への呼び出しも止まる。
  *
  * ⚠️ `deadline` は**この関数の外で、要求を読み始める前に**作る。差し替えた時計は「今」を進めた
  * その時に待っている合図だけを起こすので、進めたあとに作った合図はもう起きない。
@@ -212,21 +213,8 @@ const humanExpectationOf = (req: Request, action: HumanCheckAction): HumanExpect
  * 答えに求めるのは、入口の用途（action）と、要求の来たホスト名で解かれたこと（安全-23）。接続元も渡す。
  */
 const verifyHuman = async (deps: Deps, token: string, expected: HumanExpectation, deadline: Promise<void>): Promise<boolean> => {
-  const controller = new AbortController();
-  const verifying = (async () => {
-    try {
-      return await deps.human.verify(token, { signal: controller.signal, ...expected });
-    } catch {
-      return { ok: false as const };
-    }
-  })();
-  const result = await Promise.race([verifying, deadline.then((): typeof TIMED_OUT => TIMED_OUT)]);
-  if (result === TIMED_OUT) {
-    // 外への呼び出しを解く（実物の fetch はここで止まる）。
-    controller.abort();
-    return false;
-  }
-  return result.ok && result.human;
+  const answer = await raceDeadline(HUMAN_CHECK_TIMEOUT_MS, deadline, (signal) => deps.human.verify(token, { signal, ...expected }));
+  return answer.ok && answer.value.ok && answer.value.human;
 };
 
 /** 見分けの結果。断るときは応答、通すときは文脈と、延ばしたセッションの Set-Cookie。 */

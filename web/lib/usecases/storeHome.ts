@@ -11,7 +11,7 @@ import type { TrendBucket } from "../domain/offerTrend";
 import type { Deps } from "../ports";
 import { listCoupons, type CouponRow } from "../repo/coupons";
 import { insertExpiredEvents } from "../repo/logs";
-import { listStoreArrivals } from "../repo/reservations";
+import { listStoreArrivals } from "../repo/reservationsOfStore";
 import { findStoreHomeRow } from "../repo/stores";
 import { storeHomeOfferPart } from "./storeHomeOffer";
 

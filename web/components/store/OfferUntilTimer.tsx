@@ -13,7 +13,7 @@
 
 import { useState, type FormEvent } from "react";
 import type { ApiFailure } from "../../lib/client/api";
-import { FieldMessage, FormMessage, type RefusalContext } from "../ui/InputRefusal";
+import { FieldMessage, FormMessage, fieldAria, type RefusalContext } from "../ui/InputRefusal";
 import { timeInJst } from "../ui/jstTime";
 
 type Props = {
@@ -63,15 +63,15 @@ export const OfferUntilTimer = ({ offer, value, changed, failure, onChange, onSu
         <label className="store-label" htmlFor="offer-until">
           何時に終わるか
         </label>
-        <input id="offer-until" data-testid="field-until" className="store-tune__time" type="time" value={value} onChange={(event) => onChange(event.target.value)} />
+        <input id="offer-until" data-testid="field-until" className="store-tune__time" type="time" value={value} onChange={(event) => onChange(event.target.value)} {...fieldAria("until", failure, "offer-until")} />
         <p className="store-note">
           {timeInJst(offer.publishedAt)} 公開・最長 {latestUntil} まで
         </p>
       </div>
-      <button type="submit" className="store-sr-only" data-testid="btn-until">
+      <button type="submit" className="store-sr-only store-sr-only--focusable" data-testid="btn-until">
         何時までを変える
       </button>
-      <FieldMessage name="until" failure={failure} ctx={ctx} />
+      <FieldMessage inputId="offer-until" name="until" failure={failure} ctx={ctx} />
       <FormMessage failure={failure} fieldNames={["until"]} ctx={ctx} />
     </form>
   );

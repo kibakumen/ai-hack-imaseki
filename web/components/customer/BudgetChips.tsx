@@ -10,7 +10,7 @@
 
 import type { ApiFailure } from "../../lib/client/api";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN } from "../../lib/schemas/limits";
-import { FieldMessage } from "../ui/InputRefusal";
+import { FieldMessage, fieldAria } from "../ui/InputRefusal";
 
 /** よく使う額（1人あたり・円）。 */
 const PRESETS: readonly number[] = [1000, 2000, 3000, 5000];
@@ -39,7 +39,7 @@ type BudgetChipsProps = {
 
 export const BudgetChips = ({ value, onChange, registered = null, failure }: BudgetChipsProps) => (
   <>
-    <fieldset className="budget-chips" data-testid="field-budgetMax">
+    <fieldset id="fetch-budget" className="budget-chips" data-testid="field-budgetMax" {...fieldAria("budgetMax", failure, "fetch-budget")}>
       <legend>1人あたりの予算の上限（この回だけ）</legend>
       <label className="budget-chip">
         <input type="radio" name="fetch-budget" data-testid="budget-none" checked={value.trim() === ""} onChange={() => onChange("")} />
@@ -52,6 +52,6 @@ export const BudgetChips = ({ value, onChange, registered = null, failure }: Bud
         </label>
       ))}
     </fieldset>
-    <FieldMessage name="budgetMax" failure={failure} ctx={{ field: "予算の上限", min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+    <FieldMessage inputId="fetch-budget" name="budgetMax" failure={failure} ctx={{ field: "予算の上限", min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
   </>
 );

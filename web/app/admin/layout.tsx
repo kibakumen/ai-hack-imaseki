@@ -21,8 +21,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       {/* ナビとログアウト（安全-09）は AdminNav が持つ */}
       <AdminNav />
       {children}
-      {/* `position: fixed` で描く（`app/globals.css` の `.theme-toggle` が admin-nav の
-          高さぶん下げる）。children の DOM 構造は変えない。 */}
+      {/* `position: fixed` で右上に描く。殻のナビ（admin-nav）は右端をこの分あけて同じ段に置く（`app/globals.css`・横断-13）。
+          children の DOM 構造は変えない。 */}
       <ThemeToggle />
     </>
   );
