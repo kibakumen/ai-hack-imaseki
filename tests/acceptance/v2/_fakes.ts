@@ -15,8 +15,13 @@ import type {
   Geocoder,
   HumanCheck,
   Logger,
+  PitchInput,
+  PitchJudgeInput,
+  PitchResult,
+  PitchWriter,
   PushSender,
   Rng,
+  StoreImageFetcher,
 } from "./_types";
 
 export const WEB = path.join(REPO, "web");
@@ -56,13 +61,28 @@ export const componentOf = async (rel: string, name: string) => {
 };
 
 // ---------- 偽の時計 ----------
-export type FakeClock = Clock & { advance(ms: number): Promise<void>; set(iso: string): void };
+export type FakeClock = Clock & {
+  advance(ms: number): Promise<void>;
+  set(iso: string): void;
+  /**
+   * これから `count` 本の合図（`after`）が作られるまで待つ約束を返す。**要求を送る前に**呼ぶ。
+   *
+   * 差し替えた時計は「今」を進めたその時に待っている合図しか起こさない。要求を送った直後に
+   * `advance` すると、手続きがまだ合図を作っていないことがあり、その合図は二度と鳴らない——
+   * 検査は実時計の打ち切り（AbortSignal.timeout の3秒・6秒）で緑になり、偽の時計が効いているかを
+   * 何も示さなくなる（2026-09-25 設計-19）。この約束を待ってから進めること。
+   * 実時間で `withinMs` のうちに作られなければ、理由つきで落ちる。
+   */
+  armed(count?: number, withinMs?: number): Promise<void>;
+};
 const flush = async () => {
   for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
 };
 export const fakeClock = (startIso = T0): FakeClock => {
   let t = new Date(startIso).getTime();
+  let created = 0;
   const waiters: Array<{ at: number; resolve: () => void }> = [];
+  const watchers: Array<{ target: number; resolve: () => void }> = [];
   const fire = () => {
     for (const w of [...waiters]) {
       if (w.at <= t) {
@@ -71,9 +91,22 @@ export const fakeClock = (startIso = T0): FakeClock => {
       }
     }
   };
+  const notify = () => {
+    for (const w of [...watchers]) {
+      if (created >= w.target) {
+        watchers.splice(watchers.indexOf(w), 1);
+        w.resolve();
+      }
+    }
+  };
   return {
     now: () => new Date(t),
-    after: (ms) => new Promise<void>((resolve) => waiters.push({ at: t + ms, resolve })),
+    after: (ms) =>
+      new Promise<void>((resolve) => {
+        waiters.push({ at: t + ms, resolve });
+        created++;
+        notify();
+      }),
     advance: async (ms) => {
       t += ms;
       fire();
@@ -82,6 +115,20 @@ export const fakeClock = (startIso = T0): FakeClock => {
     set: (iso) => {
       t = new Date(iso).getTime();
       fire();
+    },
+    armed: (count = 1, withinMs = 2_000) => {
+      const target = created + count;
+      return new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`偽の時計の合図が ${withinMs}ms のうちに ${count} 本作られませんでした（手続きが deps.clock.after を使っていない）`)), withinMs);
+        watchers.push({
+          target,
+          resolve: () => {
+            clearTimeout(timer);
+            resolve();
+          },
+        });
+        notify();
+      });
     },
   };
 };
@@ -120,31 +167,127 @@ export const fakeAi = (): FakeAi => {
   return ai;
 };
 
-export type FakeGeocoder = Geocoder & {
+/** 打ち切りの合図が来るまで返らない（偽物の「返らない外のサービス」の共通の形） */
+const hangUntilAbort = <T>(signal: AbortSignal | undefined, onAbort: T): Promise<T> =>
+  new Promise<T>((resolve) => {
+    signal?.addEventListener("abort", () => resolve(onAbort));
+  });
+
+type ReverseAnswer = { label: string } | "none" | "fail" | "hang";
+export type FakeGeocoder = Required<Geocoder> & {
+  /** 地名 → 位置（geocode）の呼ばれた文字 */
   calls: string[];
   set: (text: string, result: { lat: number; lng: number } | "none" | "fail" | "hang") => void;
+  /** 位置 → 地名（reverse）の呼ばれた位置 */
+  reverseCalls: Array<{ lat: number; lng: number }>;
+  /** 逆引きの返し方（既定は、どこでも「渋谷駅周辺」） */
+  setReverse: (result: ReverseAnswer) => void;
+  /** 場所の候補（suggest）の呼ばれた文字 */
+  suggestCalls: string[];
+  setSuggest: (text: string, suggestions: string[] | "fail" | "hang") => void;
 };
-export const fakeGeocoder = (): FakeGeocoder => {
+/**
+ * 偽の地図。本番の口（`web/lib/ports.ts` の Geocoder）と同じく、逆引き（reverse）と場所の候補（suggest）も持つ。
+ * 2026-09-25 設計-03: 以前は geocode だけで、客の画面が開いた瞬間に通る逆引きと候補の道を、
+ * 受け入れ検査が一度も通っていなかった。無い形を試したいときは `{ reverse: false, suggest: false }`。
+ */
+export const fakeGeocoder = (opts: { reverse?: boolean; suggest?: boolean } = {}): FakeGeocoder => {
   const table = new Map<string, { lat: number; lng: number } | "none" | "fail" | "hang">();
+  const suggestTable = new Map<string, string[] | "fail" | "hang">();
+  let reverseAnswer: ReverseAnswer = { label: "渋谷駅周辺" };
   const g: FakeGeocoder = {
     calls: [],
+    reverseCalls: [],
+    suggestCalls: [],
     set: (text, result) => {
       table.set(text, result);
+    },
+    setReverse: (result) => {
+      reverseAnswer = result;
+    },
+    setSuggest: (text, suggestions) => {
+      suggestTable.set(text, suggestions);
     },
     geocode: async (text, opts) => {
       g.calls.push(text);
       const r = table.get(text) ?? "none";
       if (r === "none") return { ok: false };
       if (r === "fail") throw new Error("geocoder failure");
-      if (r === "hang") {
-        return new Promise((resolve) => {
-          opts?.signal?.addEventListener("abort", () => resolve({ ok: false }));
-        });
-      }
+      if (r === "hang") return hangUntilAbort(opts?.signal, { ok: false } as const);
       return { ok: true, lat: r.lat, lng: r.lng };
     },
+    reverse: async (point, opts) => {
+      g.reverseCalls.push({ lat: point.lat, lng: point.lng });
+      const r = reverseAnswer;
+      if (r === "none") return { ok: false };
+      if (r === "fail") throw new Error("reverse geocoder failure");
+      if (r === "hang") return hangUntilAbort(opts?.signal, { ok: false } as const);
+      return { ok: true, label: r.label };
+    },
+    suggest: async (text, opts) => {
+      g.suggestCalls.push(text);
+      const r = suggestTable.get(text) ?? [];
+      if (r === "fail") throw new Error("suggest failure");
+      if (r === "hang") return hangUntilAbort(opts?.signal, { ok: false } as const);
+      return { ok: true, suggestions: [...r], source: "geocoding" };
+    },
   };
-  return g;
+  // 口そのものを持たない場面（usecases の「口が無ければ外へ聞かない」の枝）を作るため
+  const shaped: Partial<FakeGeocoder> = { ...g };
+  if (opts.reverse === false) delete shaped.reverse;
+  if (opts.suggest === false) delete shaped.suggest;
+  return (opts.reverse === false || opts.suggest === false ? shaped : g) as FakeGeocoder;
+};
+
+/** 偽の紹介文の書き手と検査官（本番の `deps.pitch`）。既定は1回で書けて検査も通る */
+export type FakePitch = PitchWriter & {
+  writes: PitchInput[];
+  judges: PitchJudgeInput[];
+  /** 書き方を差し替える。"hang" は打ち切りまで返らない */
+  respondWrite: (fn: (input: PitchInput) => PitchResult | "hang") => void;
+  respondJudge: (fn: (input: PitchJudgeInput) => PitchResult | "hang") => void;
+  /** 書き手と検査官の呼ばれた合計（取得1回あたりの AI の呼び出しを数える・要件7.2） */
+  total: () => number;
+};
+export const fakePitch = (): FakePitch => {
+  let writer: (input: PitchInput) => PitchResult | "hang" = (input) => ({ ok: true, text: `${input.store.menus[0] ?? input.store.name}が近くで味わえます`, costUsd: 0.0004, truncated: false });
+  let judge: (input: PitchJudgeInput) => PitchResult | "hang" = () => ({ ok: true, text: JSON.stringify({ ok: true, reason: "" }), costUsd: 0.0002, truncated: false });
+  const p: FakePitch = {
+    writes: [],
+    judges: [],
+    respondWrite: (fn) => {
+      writer = fn;
+    },
+    respondJudge: (fn) => {
+      judge = fn;
+    },
+    total: () => p.writes.length + p.judges.length,
+    write: async (input, opts) => {
+      p.writes.push(JSON.parse(JSON.stringify(input)));
+      const r = writer(input);
+      return r === "hang" ? hangUntilAbort(opts?.signal, { ok: false, error: "aborted" } as PitchResult) : r;
+    },
+    judge: async (input, opts) => {
+      p.judges.push(JSON.parse(JSON.stringify(input)));
+      const r = judge(input);
+      return r === "hang" ? hangUntilAbort(opts?.signal, { ok: false, error: "aborted" } as PitchResult) : r;
+    },
+  };
+  return p;
+};
+
+/** 偽の店の画像の口（本番の `deps.storeImage`）。呼ばれた URL を控える */
+export type FakeStoreImage = StoreImageFetcher & { calls: string[]; result: { ok: true; imageUrl: string } | { ok: false } };
+export const fakeStoreImage = (): FakeStoreImage => {
+  const s: FakeStoreImage = {
+    calls: [],
+    result: { ok: true, imageUrl: "https://images.example.com/store.jpg" },
+    fetch: async (homepageUrl) => {
+      s.calls.push(homepageUrl);
+      return s.result;
+    },
+  };
+  return s;
 };
 
 export type FakePush = PushSender & { calls: Array<{ subscription: unknown; ttlSeconds: number }>; result: { ok: true } | { ok: false; gone: boolean } | "throw" };
@@ -161,26 +304,69 @@ export const fakePush = (): FakePush => {
   return p;
 };
 
-export type FakeCard = CardRegistrar & { sessions: Map<string, string>; setupOk: boolean; confirmOk: boolean };
+/** Stripe の側が持つ1件（番号・どの店のものか・戻り先・入力を終えたか） */
+export type FakeCheckoutSession = { sessionId: string; storeId: string; returnUrl: string; completed: boolean };
+export type FakeCard = CardRegistrar & {
+  /** Stripe の側が知っている番号 → 中身。**画面はこれを知らない**（検査が「番号を知っている要求」を作るときだけ使う） */
+  sessions: Map<string, FakeCheckoutSession>;
+  setupOk: boolean;
+  confirmOk: boolean;
+  /**
+   * 店が Stripe の画面で入力を終える。Stripe と同じく、戻り先（success_url）の `{CHECKOUT_SESSION_ID}` を
+   * 番号で埋めた URL を返す——戻り先に置き場が無ければ、番号はどこにも載らない。
+   */
+  complete: (checkoutUrl: string) => string;
+  /** 移り先の URL から番号を引く（Stripe の側の控え。画面の道ではない） */
+  sessionIdOf: (checkoutUrl: string) => string | null;
+};
+/** 偽の Stripe の画面の URL → その持ち主（場面づくりが、入口の応答の URL だけから完了させるため） */
+const checkoutPages = new Map<string, { card: FakeCard; sessionId: string }>();
+let checkoutSeq = 0;
+/**
+ * 偽のカードの口。移り先の URL は**番号で終わらない**（本物の Checkout の URL も番号をそのまま見せない）。
+ * 2026-09-25 設計-03: 以前は URL の末尾が番号で、場面づくりが `url.split("/").pop()` で番号を取り出して
+ * confirm を呼んでいた。本物の画面は番号を受け取れないので、画面から登録が完了しないカード登録が完了しないの件（不具合-01）を
+ * 検査が一度も示さなかった。
+ */
 export const fakeCard = (): FakeCard => {
   let n = 0;
   const c: FakeCard = {
     sessions: new Map(),
     setupOk: true,
     confirmOk: true,
-    createSetupSession: async ({ storeId }) => {
+    createSetupSession: async ({ storeId, returnUrl }) => {
       if (!c.setupOk) return { ok: false };
       const sessionId = `cs_test_${++n}`;
-      c.sessions.set(sessionId, storeId);
-      return { ok: true, url: `https://checkout.stripe.test/${sessionId}`, sessionId };
+      c.sessions.set(sessionId, { sessionId, storeId, returnUrl, completed: false });
+      const url = `https://checkout.stripe.test/c/pay/page-${++checkoutSeq}`;
+      checkoutPages.set(url, { card: c, sessionId });
+      return { ok: true, url, sessionId };
     },
     confirmSetup: async (sessionId) => {
-      const ref = c.sessions.get(sessionId);
-      if (!c.confirmOk || !ref) return { ok: false };
-      return { ok: true, clientReference: ref };
+      const session = c.sessions.get(sessionId);
+      // 本物は status が complete のときだけ（web/lib/adapters/stripe.ts）
+      if (!c.confirmOk || !session || !session.completed) return { ok: false };
+      return { ok: true, clientReference: session.storeId };
+    },
+    complete: (checkoutUrl) => {
+      const page = checkoutPages.get(checkoutUrl);
+      if (!page || page.card !== c) throw new Error(`偽の Stripe の画面ではない URL です: ${checkoutUrl}`);
+      const session = c.sessions.get(page.sessionId)!;
+      session.completed = true;
+      return session.returnUrl.split("{CHECKOUT_SESSION_ID}").join(session.sessionId);
+    },
+    sessionIdOf: (checkoutUrl) => {
+      const page = checkoutPages.get(checkoutUrl);
+      return page && page.card === c ? page.sessionId : null;
     },
   };
   return c;
+};
+/** 入口の応答の URL から、その偽のカードの口を引く */
+const cardOfCheckout = (checkoutUrl: string): FakeCard => {
+  const page = checkoutPages.get(checkoutUrl);
+  if (!page) throw new Error(`偽の Stripe の画面ではない URL です: ${checkoutUrl}`);
+  return page.card;
 };
 
 export type FakeHuman = HumanCheck & { mode: "human" | "bot" | "fail" | "hang"; tokens: Array<string | null> };
@@ -223,12 +409,17 @@ export const fakeLogger = (): FakeLogger => {
   return l;
 };
 
-/** 決め打ちの乱数（コードの引き直しの検査など） */
-export const fakeRng = (sequence: Uint8Array[]): Rng & { calls: number } => {
+/**
+ * 決め打ちの乱数（コードの引き直しの検査など）。`onlyLength` を渡すと、その長さの引きだけを決め打ち、
+ * ほかの長さの引き（識別子・セッションの番号など）は本物の乱数にする——決め打ちの値を識別子が食って、
+ * 見たい引きに届かない・識別子どうしが重なる、を避ける（2026-09-25 設計-02）。`calls` は決め打った引きの回数。
+ */
+export const fakeRng = (sequence: Uint8Array[], opts: { onlyLength?: number } = {}): Rng & { calls: number } => {
   let i = 0;
   const r = {
     calls: 0,
     bytes: (n: number) => {
+      if (opts.onlyLength !== undefined && n !== opts.onlyLength) return crypto.getRandomValues(new Uint8Array(n));
       r.calls++;
       const next = sequence[Math.min(i, sequence.length - 1)];
       i++;
@@ -242,18 +433,62 @@ export const fakeRng = (sequence: Uint8Array[]): Rng & { calls: number } => {
 
 // ---------- 手元の D1 ----------
 export type Db = { prepare(sql: string): any; batch(stmts: any[]): Promise<any[]>; exec(sql: string): Promise<any> };
+/**
+ * SQL の文を1つずつに分ける。行の注（`--`）を落とし、文字列の中の `;` と、トリガーの本文
+ * （`BEGIN … END`）の中の `;` では切らない。
+ */
+export const splitSql = (sql: string): string[] => {
+  const out: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  let depth = 0;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "-" && sql[i + 1] === "-") {
+      while (i < sql.length && sql[i] !== "\n") i++;
+      current += "\n";
+      continue;
+    }
+    if (ch === "'" || ch === '"') quote = ch;
+    if (/[A-Za-z_]/.test(ch) && !/[A-Za-z0-9_]/.test(sql[i - 1] ?? "")) {
+      const word = /^[A-Za-z_][A-Za-z0-9_]*/.exec(sql.slice(i))![0].toUpperCase();
+      if (word === "BEGIN" && /\bTRIGGER\b/i.test(current)) depth++;
+      else if (word === "CASE" && depth > 0) depth++;
+      else if (word === "END" && depth > 0) depth--;
+    }
+    if (ch === ";" && depth === 0) {
+      if (current.trim()) out.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+};
+/**
+ * `web/migrations/*.sql` を番号順に流す。**migration を流す道具はここ1つ**（2026-09-25 設計-19）——
+ * 以前は同じ `split(";")` が3か所に写されていて、`;` を含む文やトリガーを足すと写しのどれかだけが壊れた。
+ * web/ の単体の検査も `openDb` かこの関数を使う。
+ */
+export const applyMigrations = async (db: Db): Promise<void> => {
+  const dir = path.join(WEB, "migrations");
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    for (const statement of splitSql(fs.readFileSync(path.join(dir, file), "utf8"))) await db.prepare(statement).run();
+  }
+};
 export const openDb = async (): Promise<{ db: Db; dispose: () => Promise<void> }> => {
   const { getPlatformProxy } = await import("wrangler");
   const persist = fs.mkdtempSync(path.join(os.tmpdir(), "ai-hack-v2-"));
   const proxy = await getPlatformProxy<{ DB: Db }>({ configPath: path.join(WEB, "wrangler.jsonc"), persist: { path: persist } });
   const db = proxy.env.DB;
   if (!db) throw new Error("web/wrangler.jsonc に D1 の束縛 DB がありません");
-  const dir = path.join(WEB, "migrations");
-  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    const sql = fs.readFileSync(path.join(dir, file), "utf8").replace(/--[^\n]*/g, "");
-    const stmts = sql.split(";").map((s) => s.trim()).filter(Boolean);
-    for (const s of stmts) await db.prepare(s).run();
-  }
+  await applyMigrations(db);
   return {
     db,
     dispose: async () => {
@@ -284,14 +519,21 @@ export const dbContains = async (db: Db, needle: string): Promise<boolean> => (a
 
 // ---------- 入口の呼び出し ----------
 export type ApiResult = { status: number; json: any; text: string; headers: Headers; setCookies: string[] };
+type Send = (path: string, body?: unknown, init?: RequestInit) => Promise<ApiResult>;
 export type Api = {
   get(path: string, init?: RequestInit): Promise<ApiResult>;
-  post(path: string, body?: unknown, init?: RequestInit): Promise<ApiResult>;
-  put(path: string, body?: unknown, init?: RequestInit): Promise<ApiResult>;
-  patch(path: string, body?: unknown, init?: RequestInit): Promise<ApiResult>;
-  del(path: string, body?: unknown, init?: RequestInit): Promise<ApiResult>;
+  post: Send;
+  put: Send;
+  patch: Send;
+  /** DELETE。HTTP の方法の名前（小文字）でも引けるように `delete` も同じもの（r29 が `api[method.toLowerCase()]` で引く） */
+  del: Send;
+  delete: Send;
   raw(req: Request): Promise<ApiResult>;
+  /** 本文を読まずに応答そのものを返す（少しずつ届く入口を1行ずつ読むため） */
+  open(method: string, path: string, body?: unknown, init?: RequestInit): Promise<Response>;
   cookie: string | null;
+  /** この呼び出し口の接続元（cf-connecting-ip） */
+  ip: string;
 };
 const setCookiesOf = (headers: Headers): string[] => {
   const h = headers as Headers & { getSetCookie?: () => string[] };
@@ -306,8 +548,12 @@ const nextIp = () => {
   const n = ++ipSeq;
   return `10.${(n >> 16) & 255}.${(n >> 8) & 255}.${n & 255}`;
 };
-export const apiClient = (app: { fetch(req: Request): Promise<Response> }, cookie: string | null = null): Api => {
-  const ip = nextIp();
+/**
+ * 入口を呼ぶ口。接続元は既定で呼び出し口ごとに別（`opts.ip` で指定できる——同じ接続元から
+ * 何人もが送る場面や、連打の抑止を接続元で数える検査のため・2026-09-25 設計-04）。
+ */
+export const apiClient = (app: { fetch(req: Request): Promise<Response> }, cookie: string | null = null, opts: { ip?: string } = {}): Api => {
+  const ip = opts.ip ?? nextIp();
   const raw = async (req: Request): Promise<ApiResult> => {
     const res = await app.fetch(req);
     const text = await res.text();
@@ -319,16 +565,29 @@ export const apiClient = (app: { fetch(req: Request): Promise<Response> }, cooki
     }
     return { status: res.status, json, text, headers: res.headers, setCookies: setCookiesOf(res.headers) };
   };
-  const call = (method: string) => (p: string, body?: unknown, init?: RequestInit) => {
+  const request = (method: string, p: string, body?: unknown, init?: RequestInit): Request => {
     const headers = new Headers(init?.headers ?? {});
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
     if (body !== undefined && !isForm && !headers.has("content-type")) headers.set("content-type", "application/json");
     if (method !== "GET" && !headers.has("origin")) headers.set("origin", ORIGIN);
     if (cookie && !headers.has("cookie")) headers.set("cookie", cookie);
     if (!headers.has("cf-connecting-ip")) headers.set("cf-connecting-ip", ip);
-    return raw(new Request(ORIGIN + p, { ...init, method, headers, body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body) }));
+    return new Request(ORIGIN + p, { ...init, method, headers, body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body) });
   };
-  return { get: (p, init) => call("GET")(p, undefined, init), post: call("POST"), put: call("PUT"), patch: call("PATCH"), del: call("DELETE"), raw, cookie };
+  const call = (method: string): Send => (p, body, init) => raw(request(method, p, body, init));
+  const del = call("DELETE");
+  return {
+    get: (p, init) => call("GET")(p, undefined, init),
+    post: call("POST"),
+    put: call("PUT"),
+    patch: call("PATCH"),
+    del,
+    delete: del,
+    raw,
+    open: (method, p, body, init) => app.fetch(request(method, p, body, init)),
+    cookie,
+    ip,
+  };
 };
 
 // ---------- 場面（コンテキスト） ----------
@@ -338,14 +597,20 @@ export type Ctx = {
   db: Db;
   clock: FakeClock;
   ai: FakeAi;
+  pitch: FakePitch;
   geocoder: FakeGeocoder;
+  storeImage: FakeStoreImage;
   push: FakePush;
   card: FakeCard;
   human: FakeHuman;
   files: FakeFiles;
   logger: FakeLogger;
-  api: (cookie?: string | null) => Api;
-  /** 一部の差し替え口を替えた別の app（同じ D1） */
+  api: (cookie?: string | null, opts?: { ip?: string }) => Api;
+  /**
+   * 一部の差し替え口を替えた別の app（同じ D1）。替えなかった口は**親と同じ偽物**で、
+   * `next.geocoder === next.deps.geocoder` のように、場面の手元の偽物と app に渡る偽物が常に同じ物になる。
+   * 替えた口は、渡した物がそのまま `next.<名前>` になる（偽物でない物を渡したら、偽物の道具は無い）。
+   */
   withDeps: (over: Partial<Deps>) => Promise<Ctx>;
   dispose: () => Promise<void>;
   admin: { cookie: string; api: Api; email: string; password: string } | null;
@@ -356,46 +621,49 @@ export const makeCtx = async (opts: { clockStart?: string; deps?: Partial<Deps> 
   return buildCtx(db, dispose, opts);
 };
 
+/**
+ * 場面を組む。渡された口（opts.deps）があればそれを使い、無い口だけ新しい偽物を作る。
+ * **場面の手元の偽物（ctx.geocoder など）と、app に渡る偽物（ctx.deps.geocoder）は常に同じ物**
+ * （2026-09-25 設計-02。以前は withDeps が新しい偽物を ctx に置きながら app には親の偽物を渡していて、
+ * `ctx.geocoder.set(…)` がどこにも繋がらず d01 の場面が作れなかった）。
+ */
 const buildCtx = async (db: Db, dispose: () => Promise<void>, opts: { clockStart?: string; deps?: Partial<Deps> }): Promise<Ctx> => {
-  const clock = (opts.deps?.clock as FakeClock) ?? fakeClock(opts.clockStart);
-  const ai = fakeAi();
-  const geocoder = fakeGeocoder();
-  const push = fakePush();
-  const card = fakeCard();
-  const human = fakeHuman();
-  const files = fakeFiles();
-  const logger = fakeLogger();
+  const given = opts.deps ?? {};
   const webcrypto = await loadWeb("lib/adapters/webcrypto");
   const deps: Deps = {
     db,
-    files,
-    ai,
-    geocoder,
-    push,
-    card,
-    human,
-    logger,
-    clock,
-    rng: webcrypto.createRng(),
-    hasher: webcrypto.createHasher(),
-    config: { turnstileSiteKey: "site-key-test", vapidPublicKey: "vapid-public-test", contactEmail: null, orcarouterModel: "orcarouter/auto" },
-    ...opts.deps,
+    files: given.files ?? fakeFiles(),
+    ai: given.ai ?? fakeAi(),
+    pitch: "pitch" in given ? given.pitch : fakePitch(),
+    geocoder: given.geocoder ?? fakeGeocoder(),
+    storeImage: "storeImage" in given ? given.storeImage : fakeStoreImage(),
+    push: given.push ?? fakePush(),
+    card: given.card ?? fakeCard(),
+    human: given.human ?? fakeHuman(),
+    logger: given.logger ?? fakeLogger(),
+    clock: given.clock ?? fakeClock(opts.clockStart),
+    rng: given.rng ?? webcrypto.createRng(),
+    hasher: given.hasher ?? webcrypto.createHasher(),
+    config: given.config ?? { turnstileSiteKey: "site-key-test", vapidPublicKey: "vapid-public-test", contactEmail: null, orcarouterModel: "orcarouter/auto" },
   };
   const { createApp } = await loadWeb("lib/http/app");
   const app = createApp(deps);
+  // 手元の偽物は、app に渡した物そのもの（替えられた口が偽物でなければ、偽物の道具は無い＝型の上だけ偽物）
   const ctx: Ctx = {
     app,
     deps,
     db,
-    clock,
-    ai,
-    geocoder,
-    push,
-    card,
-    human,
-    files,
-    logger,
-    api: (cookie = null) => apiClient(app, cookie),
+    clock: deps.clock as FakeClock,
+    ai: deps.ai as FakeAi,
+    pitch: deps.pitch as FakePitch,
+    geocoder: deps.geocoder as FakeGeocoder,
+    storeImage: deps.storeImage as FakeStoreImage,
+    push: deps.push as FakePush,
+    card: deps.card as FakeCard,
+    human: deps.human as FakeHuman,
+    files: deps.files as FakeFiles,
+    logger: deps.logger as FakeLogger,
+    api: (cookie = null, apiOpts = {}) => apiClient(app, cookie, apiOpts),
     withDeps: async (over) => {
       const next = await buildCtx(db, async () => {}, { deps: { ...deps, ...over } });
       next.admin = ctx.admin;
@@ -463,14 +731,36 @@ export const uploadLicense = async (api: Api, bytes: Uint8Array, name = "license
   return api.post("/api/store/license", fd);
 };
 
-export const registerCard = async (api: Api) => {
+/**
+ * 店がカードを登録する——**画面と同じ道**: 開始 → Stripe の画面で入力を終える → 戻り先（success_url）へ戻る
+ * → 画面が確かめを送る。戻り先に `session_id` が載っていればそれを送り、無ければ本文なしで送る
+ * （サーバーが控えた番号で確かめる形）。番号を URL から切り出すような、画面にできないことはしない。
+ */
+export const registerCardAsPage = async (api: Api) => {
   const setup = await api.post("/api/store/card/setup", {});
   if (setup.status !== 200) throw new Error(`カードの登録の開始に失敗: ${setup.status} ${setup.text}`);
-  const url: string = setup.json.url;
-  const sessionId = url.split("/").pop()!;
-  const confirm = await api.post("/api/store/card/confirm", { sessionId });
-  if (confirm.status !== 200) throw new Error(`カードの登録の確かめに失敗: ${confirm.status} ${confirm.text}`);
-  return confirm;
+  const checkoutUrl: string = setup.json.url;
+  const back = cardOfCheckout(checkoutUrl).complete(checkoutUrl);
+  const sessionId = new URL(back, ORIGIN).searchParams.get("session_id");
+  const confirm = await api.post("/api/store/card/confirm", sessionId ? { sessionId } : {});
+  return { checkoutUrl, back, confirm };
+};
+
+/**
+ * 場面づくりのカードの登録。まず画面と同じ道（registerCardAsPage）を歩く。
+ *
+ * ⚠️ **既知の不具合（不具合-01）の迂回**: 今の実装は、戻り先に番号を載せず、控えた番号で確かめる入口も無いので、
+ *    画面の道では登録済みにならない。承認済みの店を作れないと、ほかの全部の場面が作れなくなるため、
+ *    その時だけ Stripe の側の控え（偽物の sessions）から番号を取って確かめる。画面の道が直ったかどうかは、
+ *    r13 の「既知の不具合（不具合-01）」の検査が見る。**不具合-01 を直してその検査を it に戻すとき、この迂回も消す。**
+ */
+export const registerCard = async (api: Api) => {
+  const { checkoutUrl, confirm } = await registerCardAsPage(api);
+  if (confirm.status === 200) return confirm;
+  const sessionId = cardOfCheckout(checkoutUrl).sessionIdOf(checkoutUrl);
+  const bypass = await api.post("/api/store/card/confirm", { sessionId });
+  if (bypass.status !== 200) throw new Error(`カードの登録の確かめに失敗: ${bypass.status} ${bypass.text}`);
+  return bypass;
 };
 
 /** 承認済みの店を1つ作る（登録→店の情報→許可書→カード→運営が承認） */
@@ -504,37 +794,184 @@ export const publishOffer = async (api: Api, over: { couponIds?: string[]; capac
   return r.json.offer as { id: string; capacity: number; remaining: number; partyMax: number; untilAt: string; publishedAt: string };
 };
 
-export const fetchOffers = async (api: Api, over: { lat?: number; lng?: number; place?: string; party?: number; genres?: string[]; budgetMax?: number | null } = {}) => {
+const fetchBody = (over: { lat?: number; lng?: number; place?: string; party?: number; genres?: string[]; budgetMax?: number | null } = {}) => {
   const body: any = { party: 2, genres: [], budgetMax: null, ...over };
   if (!over.place) {
     body.lat = over.lat ?? SHIBUYA.lat;
     body.lng = over.lng ?? SHIBUYA.lng;
   }
-  return api.post("/api/customer/fetch", body);
+  return body;
+};
+/** 場面の道具で行った取得 → その結果に出たオファー（受け取りの道具が、結果に出たものだけを受け取るよう見張る） */
+const shownByFetch = new Map<string, string[]>();
+const rememberShown = (fetchId: unknown, items: unknown) => {
+  if (typeof fetchId === "string" && Array.isArray(items)) shownByFetch.set(fetchId, items.map((i: { offerId: string }) => i.offerId));
+};
+export const fetchOffers = async (api: Api, over: Parameters<typeof fetchBody>[0] = {}) => {
+  const r = await api.post("/api/customer/fetch", fetchBody(over));
+  if (r.status === 200) rememberShown(r.json?.fetchId, r.json?.items);
+  return r;
 };
 
-export const receive = async (api: Api, input: { offerId: string; party: number; fetchId: string }) => api.post("/api/customer/reservations", input);
+/**
+ * 受け取り（客の画面と同じ要求）。**その取得の結果に出たオファーだけ**を受け取る——場面の道具で取得した
+ * fetchId に、結果に出ていないオファーを組み合わせたら、要求を送らずに落とす（2026-09-25 設計-03）。
+ * 結果に無い店の受け取りの件（不具合-12）を確かめる検査のように、わざと組み合わせるときは入口を直に呼ぶ。
+ */
+export const receive = async (api: Api, input: { offerId: string; party: number; fetchId: string }) => {
+  const shown = shownByFetch.get(input.fetchId);
+  if (shown && !shown.includes(input.offerId)) {
+    throw new Error(`場面の近道: 取得 ${input.fetchId} の結果に出ていないオファー ${input.offerId} を受け取ろうとしました（出たもの: ${shown.join(", ") || "なし"}）。店の場所（spot）で探してから受け取る`);
+  }
+  return api.post("/api/customer/reservations", input);
+};
 
-/** 客1人が受け取りまで済ませた場面 */
+let spotSeq = 0;
+/**
+ * 場面ごとに別の場所（隣とは約3km＝探す範囲 800m より十分に離す）。同じ ctx に店が溜まっても、
+ * その場所で探せば、その場面の店だけが候補になる（結果の順に場面が左右されない・2026-09-25 設計-03）。
+ */
+export const spot = (): { lat: number; lng: number } => {
+  const n = ++spotSeq;
+  return { lat: SHIBUYA.lat + 0.03 * ((n % 20) + 1), lng: SHIBUYA.lng + 0.03 * (Math.floor(n / 20) + 1) };
+};
+
+/** 取得の結果にそのオファーが出ていること（受け取れるのは、その取得で見せた店だけ——結果に無い店の受け取りの件（不具合-12）） */
+export const requireInResults = (fetched: ApiResult, offerId: string): void => {
+  if (fetched.status !== 200) throw new Error(`取得に失敗: ${fetched.status} ${fetched.text}`);
+  const shown = (fetched.json.items ?? []).map((i: { offerId: string }) => i.offerId);
+  if (!shown.includes(offerId)) throw new Error(`受け取るオファー ${offerId} が取得の結果に出ていません（出たもの: ${shown.join(", ") || "なし"}）。場面は結果に出たオファーだけを受け取る`);
+};
+
+/**
+ * 客1人が受け取りまで済ませた場面。店は場面ごとに別の場所（spot）に置き、客はそこで探して、
+ * **結果に出たことを確かめてから**受け取る（本番の客と同じ順）。`at` はその場所（続けて探す検査が使う）。
+ */
 export const receivedScene = async (ctx: Ctx, over: { capacity?: number; partyMax?: number; party?: number; coupons?: Array<{ name: string; note: string }>; storeName?: string } = {}) => {
-  const store = await approvedStore(ctx, { name: over.storeName ?? "受け取りの店", coupons: over.coupons ?? [] });
+  const at = spot();
+  const store = await approvedStore(ctx, { name: over.storeName ?? "受け取りの店", coupons: over.coupons ?? [], ...at });
   const offer = await publishOffer(store.api, { capacity: over.capacity ?? 3, partyMax: over.partyMax ?? 4, couponIds: store.coupons.map((c) => c.id) });
   const customer = await registerCustomer(ctx);
-  const f = await fetchOffers(customer.api, { party: over.party ?? 2 });
-  if (f.status !== 200) throw new Error(`取得に失敗: ${f.status} ${f.text}`);
+  const f = await fetchOffers(customer.api, { party: over.party ?? 2, ...at });
+  requireInResults(f, offer.id);
   const r = await receive(customer.api, { offerId: offer.id, party: over.party ?? 2, fetchId: f.json.fetchId });
   if (r.status !== 200) throw new Error(`受け取りに失敗: ${r.status} ${r.text}`);
-  return { store, offer, customer, reservation: r.json.reservation as { id: string; code: string }, fetchId: f.json.fetchId as string };
+  return { store, offer, customer, at, reservation: r.json.reservation as { id: string; code: string }, fetchId: f.json.fetchId as string };
+};
+
+/**
+ * 少しずつ届く取得の入口（本番の客の画面が使う道・NDJSON）を最後まで読む。
+ * 紹介文の着手のずらしと全体の蓋は `deps.clock` で待つので、届き終わるまで偽の時計を少しずつ進める
+ * （進めた分は最大で全体の蓋の 25 秒）。
+ */
+export const fetchOffersStream = async (ctx: Ctx, api: Api, over: Parameters<typeof fetchBody>[0] = {}) => {
+  const res = await api.open("POST", "/api/customer/fetch/stream", fetchBody(over));
+  if (!(res.headers.get("content-type") ?? "").includes("ndjson") || !res.body) {
+    const text = await res.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+    return { status: res.status, json, lines: [] as any[] };
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const lines: any[] = [];
+  let buffer = "";
+  let finished = false;
+  const pump = (async () => {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const parts = buffer.split("\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) if (part.trim()) lines.push(JSON.parse(part));
+    }
+    finished = true;
+  })();
+  void pump.then(() => {
+    const init = lines.find((l) => l.type === "init");
+    if (init) rememberShown(init.fetchId, init.items);
+  });
+  for (let i = 0; i < 200 && !finished; i++) await ctx.clock.advance(150);
+  await pump;
+  return { status: res.status, json: null, lines };
 };
 
 // ---------- 画面の検査（jsdom）用の偽の fetch ----------
-export type FakeRoute = (input: { method: string; path: string; body: any; url: URL }) => { status?: number; json?: unknown } | Promise<{ status?: number; json?: unknown }>;
+/**
+ * 少しずつ届く応答（NDJSON）。`lines` を1行ずつ送る。`holdAfter` 行を送ったら `release` を待ってから残りを送る
+ * （紹介文が後から届く・遅れて届く形）。`end` は終わり方: "close"（既定）／"cut"（途中で通信が切れる）／"hang"（閉じない）。
+ */
+export type FakeStream = { lines: unknown[]; holdAfter?: number; release?: Promise<void>; end?: "close" | "cut" | "hang" };
+export type FakeReply = { status?: number; json?: unknown; stream?: FakeStream };
+export type FakeRoute = (input: { method: string; path: string; body: any; url: URL }) => FakeReply | Promise<FakeReply>;
 export type FakeApi = { calls: Array<{ method: string; path: string; body: any }>; on: (method: string, path: string, handler: FakeRoute) => void; restore: () => void };
-/** 画面の部品の検査で、client/api が呼ぶ fetch を偽物にする */
+
+const FETCH_PATH = "/api/customer/fetch";
+const FETCH_STREAM_PATH = "/api/customer/fetch/stream";
+/** 取得の要求か（普通の入口と少しずつ届く入口のどちらでも1回と数える） */
+export const isFetchCall = (c: { method: string; path: string }): boolean => c.method === "POST" && (c.path === FETCH_PATH || c.path === FETCH_STREAM_PATH);
+
+/** 取得の結果を、本番の少しずつ届く入口と同じ行に直す（init → 店ごとの紹介文 → done） */
+export const streamOfResult = (result: { fetchId: string; items: Array<{ storeId: string; reason: string }> }, opts: Omit<FakeStream, "lines"> = {}): FakeStream => ({
+  lines: [
+    { type: "init", fetchId: result.fetchId, items: result.items },
+    ...result.items.map((item) => ({ type: "pitch", storeId: item.storeId, reason: item.reason, source: "persona" })),
+    { type: "done" },
+  ],
+  ...opts,
+});
+
+const jsonResponse = (status: number, json: unknown) => new Response(JSON.stringify(json), { status, headers: { "content-type": "application/json" } });
+const ndjsonResponse = (s: FakeStream): Response => {
+  const encoder = new TextEncoder();
+  const hold = s.holdAfter ?? s.lines.length;
+  let sent = 0;
+  // 読む側が求めたときに1行ずつ渡す（先に全部積んでから切ると、切った時に積んだ行ごと捨てられるため）
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull: async (controller) => {
+        if (sent === hold && sent < s.lines.length) await s.release;
+        if (sent < s.lines.length) {
+          controller.enqueue(encoder.encode(`${JSON.stringify(s.lines[sent++])}\n`));
+          return;
+        }
+        if (s.end === "cut") controller.error(new TypeError("network connection was lost"));
+        else if (s.end === "hang") await new Promise<never>(() => {});
+        else controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return new Response(body, { status: 200, headers: { "content-type": "application/x-ndjson; charset=utf-8" } });
+};
+
+/**
+ * 画面の部品の検査で、client/api が呼ぶ fetch を偽物にする。
+ *
+ * **取得は、少しずつ届く入口を既定にする**（2026-09-25 設計-03。本番の画面は
+ * `POST /api/customer/fetch/stream` を先に使い、普通の入口へは倒れたときだけ行く）。
+ * 検査が普通の入口 `POST /api/customer/fetch` の返し方だけを決めた場合は、その結果を本番と同じ行
+ * （init → 紹介文 → done）にして少しずつ届く入口からも返す。普通の入口へ倒れる道を見たい検査は、
+ * 少しずつ届く入口に 404 を返すよう明示する。
+ */
 export const installFakeApi = (routes: Record<string, FakeRoute> = {}): FakeApi => {
   const table = new Map<string, FakeRoute>(Object.entries(routes));
   const prev = globalThis.fetch;
   const calls: FakeApi["calls"] = [];
+  const find = (method: string, pathname: string): FakeRoute | undefined => table.get(`${method} ${pathname}`) ?? [...table.entries()].find(([k]) => matchRoute(k, method, pathname))?.[1];
+  const derivedStream: FakeRoute = async (input) => {
+    const plain = find("POST", FETCH_PATH);
+    if (!plain) return { status: 404, json: { ok: false, error: { kind: "not_found" } } };
+    const out = await plain({ ...input, path: FETCH_PATH });
+    const json = out.json as { ok?: boolean; fetchId?: string; items?: Array<{ storeId: string; reason: string }> } | undefined;
+    if ((out.status ?? 200) !== 200 || !json?.ok || !json.fetchId || !Array.isArray(json.items)) return out;
+    return { stream: streamOfResult({ fetchId: json.fetchId, items: json.items }) };
+  };
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://localhost");
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
@@ -548,10 +985,11 @@ export const installFakeApi = (routes: Record<string, FakeRoute> = {}): FakeApi 
       }
     } else if (raw) body = raw;
     calls.push({ method, path: url.pathname, body });
-    const handler = table.get(`${method} ${url.pathname}`) ?? [...table.entries()].find(([k]) => matchRoute(k, method, url.pathname))?.[1];
-    if (!handler) return new Response(JSON.stringify({ ok: false, error: { kind: "not_found" } }), { status: 404, headers: { "content-type": "application/json" } });
+    const handler = find(method, url.pathname) ?? (method === "POST" && url.pathname === FETCH_STREAM_PATH ? derivedStream : undefined);
+    if (!handler) return jsonResponse(404, { ok: false, error: { kind: "not_found" } });
     const out = await handler({ method, path: url.pathname, body, url });
-    return new Response(JSON.stringify(out.json ?? { ok: true }), { status: out.status ?? 200, headers: { "content-type": "application/json" } });
+    if (out.stream) return ndjsonResponse(out.stream);
+    return jsonResponse(out.status ?? 200, out.json ?? { ok: true });
   }) as typeof fetch;
   return {
     calls,
@@ -571,6 +1009,12 @@ const matchRoute = (key: string, method: string, pathname: string) => {
 };
 
 export const invalidInput = (fields: Array<{ name: string; reason: string }>) => ({ status: 400, json: { ok: false, error: { kind: "invalid_input", fields } } });
+/**
+ * 見分けの断り（401 未ログイン・ログイン切れ／403 役割違い）の応答。**形はここ1か所**（2026-09-25 設計-04。
+ * 以前は入口の検査と画面の検査で3通りに食い違っていた）。入口の実物（web/lib/http/defineRoute.ts）と同じ形。
+ */
+export const unauthorized = () => ({ status: 401, json: { ok: false, error: { kind: "invalid_input" } } });
+export const forbidden = () => ({ status: 403, json: { ok: false, error: { kind: "invalid_input" } } });
 export const refusal = (kind: string, extra: Record<string, unknown> = {}) => ({ status: 409, json: { ok: false, error: { kind, ...extra } } });
 
 export const homeFetch = (over: Partial<import("./_types").HomeDto> = {}): import("./_types").HomeDto => ({ kind: "fetch", profile: { ...CUSTOMER }, ...over });

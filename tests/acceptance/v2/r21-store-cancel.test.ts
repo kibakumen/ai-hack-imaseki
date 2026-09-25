@@ -15,7 +15,7 @@ describeTask("18", "店の取り消し", () => {
   it("21.1・21.4 確保中を1件ずつ取り消せ、コードが使えなくなる。ほかの確保は残る", async () => {
     const s = await receivedScene(ctx, { capacity: 3 });
     const other = await registerCustomer(ctx, { nickname: "もうひとり", phone: "08066660001" });
-    const f = await fetchOffers(other.api, { party: 2 });
+    const f = await fetchOffers(other.api, { party: 2, ...s.at });
     const r2 = await receive(other.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId });
     expect(r2.status).toBe(200);
     const r = await s.store.api.post(`/api/store/reservations/${s.reservation.id}/cancel`, {});

@@ -22,10 +22,10 @@ afterAll(async () => {
 });
 
 /** そのオファーをもう1人が受け取る（同じ店に確保中の確保を2件作るため）。 */
-const anotherReceive = async (offerId: string) => {
+const anotherReceive = async (offerId: string, at: { lat: number; lng: number }) => {
   seq += 1;
   const customer = await registerCustomer(ctx, { nickname: `ふたりめ${seq}`, phone: `0805000${String(seq).padStart(4, "0")}` });
-  const fetched = await fetchOffers(customer.api, { party: 2 });
+  const fetched = await fetchOffers(customer.api, { party: 2, ...at });
   const received = await receive(customer.api, { offerId, party: 2, fetchId: fetched.json.fetchId });
   expect(received.status, received.text).toBe(200);
   return received.json.reservation as { id: string };
@@ -34,7 +34,7 @@ const anotherReceive = async (offerId: string) => {
 describe("banStore", () => {
   it("25.6・25.7・25.8・27.4 止めると状況が変わり、オファーが終わり、確保中の確保が全部取り消されて記録が1件ずつ付く", async () => {
     const scene = await receivedScene(ctx, { capacity: 3 });
-    const second = await anotherReceive(scene.offer.id);
+    const second = await anotherReceive(scene.offer.id, scene.at);
     expect(await banStore(ctx.deps, scene.store.id)).toEqual({ ok: true });
 
     expect(await one(ctx.db, "SELECT status FROM stores WHERE id = ?", scene.store.id)).toMatchObject({ status: "banned" });
@@ -55,7 +55,7 @@ describe("banStore", () => {
   it("25.8 期限切れの確保は止めても変わらない（店はまだ完了済みにできる・基準 20.23 の前提）", async () => {
     const scene = await receivedScene(ctx, { capacity: 3 });
     ctx.clock.set(new Date(ctx.clock.now().getTime() + 25 * MIN).toISOString());
-    const fresh = await anotherReceive(scene.offer.id);
+    const fresh = await anotherReceive(scene.offer.id, scene.at);
     await banStore(ctx.deps, scene.store.id);
     expect(await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", scene.reservation.id)).toMatchObject({ status: "active" });
     expect(await rows(ctx.db, "SELECT status FROM reservation_events WHERE reservation_id = ? AND status = 'admin_cancelled'", scene.reservation.id)).toEqual([]);

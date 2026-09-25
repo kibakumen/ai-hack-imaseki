@@ -102,9 +102,14 @@ describeTask("11", "AI の呼び出し（手続き）と OrcaRouter の口", () 
     expect(log.ai_used).toBe(0);
 
     ctx.ai.respond(() => "hang");
+    // 手続きが打ち切りの合図を作ってから進める（作る前に進めると、実時計の6秒で緑になる・設計-19）
+    const armed = ctx.clock.armed();
     const pending = fetchOffers(c.api, { party: 2, genres: ["和食"] });
+    await armed;
+    const startedAt = performance.now();
     await ctx.clock.advance(6_100);
     const slow = await pending;
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
     expect(slow.status).toBe(200);
     expect(slow.json.items.map((i: any) => i.storeId)).toEqual(failed.json.items.map((i: any) => i.storeId));
     for (const i of slow.json.items) expect(i.reason).toBe(TEXTS.fallbackReason);

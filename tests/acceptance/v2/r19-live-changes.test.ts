@@ -1,7 +1,7 @@
 // 要件19 公開中の変更（手続き・純粋 domain/until）。画面は r19-live-changes.ui.test.tsx。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { approvedStore, fetchOffers, loadWeb, makeCtx, one, publishOffer, receive, receivedScene, registerCustomer, type Ctx } from "./_fakes";
+import { approvedStore, fetchOffers, loadWeb, makeCtx, one, publishOffer, receive, receivedScene, registerCustomer, requireInResults, spot, type Ctx } from "./_fakes";
 
 const JST = (hhmm: string, dayOffset = 0) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -51,18 +51,22 @@ describeTask("20", "公開中の変更", () => {
   });
 
   it("19.6・19.7 「何名まで」を1〜10へ上げ下げでき、そのあとの取得と受け取りは変えたあとの値と比べる", async () => {
-    const s = await approvedStore(ctx);
+    const at = spot();
+    const s = await approvedStore(ctx, at);
     const offer = await publishOffer(s.api, { capacity: 5, partyMax: 4 });
     for (const partyMax of [0, 11]) expect((await s.api.post("/api/store/offers/current/party-max", { partyMax })).status).toBe(400);
-    expect((await s.api.post("/api/store/offers/current/party-max", { partyMax: 2 })).status).toBe(200);
     const c = await registerCustomer(ctx, { nickname: "さんにん", phone: "08088880001" });
-    let f = await fetchOffers(c.api, { party: 3 });
+    // 客が3名で探して結果に出た（何名まで4）あとに、店が2名へ下げる。本番の客と同じ順で、結果に出たオファーを押す
+    const seen = await fetchOffers(c.api, { party: 3, ...at });
+    requireInResults(seen, offer.id);
+    expect((await s.api.post("/api/store/offers/current/party-max", { partyMax: 2 })).status).toBe(200);
+    let f = await fetchOffers(c.api, { party: 3, ...at });
     expect(f.json.items.map((i: any) => i.offerId)).not.toContain(offer.id);
-    let r = await receive(c.api, { offerId: offer.id, party: 3, fetchId: f.json.fetchId });
+    let r = await receive(c.api, { offerId: offer.id, party: 3, fetchId: seen.json.fetchId });
     expect(r.status).toBe(409);
     expect(r.json.refusal).toMatchObject({ kind: "party_over_max", partyMax: 2 });
     expect((await s.api.post("/api/store/offers/current/party-max", { partyMax: 10 })).status).toBe(200);
-    f = await fetchOffers(c.api, { party: 3 });
+    f = await fetchOffers(c.api, { party: 3, ...at });
     expect(f.json.items.map((i: any) => i.offerId)).toContain(offer.id);
     r = await receive(c.api, { offerId: offer.id, party: 3, fetchId: f.json.fetchId });
     expect(r.status).toBe(200);

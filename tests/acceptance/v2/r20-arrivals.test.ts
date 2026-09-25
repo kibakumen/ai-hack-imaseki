@@ -27,7 +27,7 @@ describeTask("17", "向かっている客の一覧と完了済み", () => {
     expect(rows[0].expiresAt).toBe(new Date(T0 + 20 * MIN).toISOString());
     at(ctx, 5);
     const later = await anotherCustomer({ nickname: "あとから" });
-    const f = await fetchOffers(later.api, { party: 3 });
+    const f = await fetchOffers(later.api, { party: 3, ...s.at });
     await receive(later.api, { offerId: s.offer.id, party: 3, fetchId: f.json.fetchId });
     await s.customer.api.post(`/api/customer/reservations/${s.reservation.id}/party`, { party: 4 });
     rows = await arrivals(s.store.api);

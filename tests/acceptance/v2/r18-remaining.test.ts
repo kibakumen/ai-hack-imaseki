@@ -84,7 +84,7 @@ describeTask("17", "完了済みと残り（18.7・18.8・18.9・18.14）", () =
     const s = await receivedScene(ctx, { capacity: 1 });
     ctx.clock.set("2026-09-22T06:25:00.000Z");
     const other = await registerCustomer(ctx, { nickname: "あとから", phone: "08077770001" });
-    const f = await fetchOffers(other.api, { party: 2 });
+    const f = await fetchOffers(other.api, { party: 2, ...s.at });
     expect((await receive(other.api, { offerId: s.offer.id, party: 2, fetchId: f.json.fetchId })).status).toBe(200);
     expect(await remainingOf(ctx, s.store.api)).toBe(0);
     expect((await s.store.api.post(`/api/store/reservations/${s.reservation.id}/complete`, {})).status).toBe(200);
@@ -125,11 +125,11 @@ describeTask("20", "同時の受け取り・減らす・期限切れの完了済
     ctx.clock.set("2026-09-22T06:25:00.000Z");
     expect(await remainingOf(ctx, s.store.api)).toBe(2);
     const takerA = await registerCustomer(ctx, { nickname: "A", phone: "08077770002" });
-    const fa = await fetchOffers(takerA.api, { party: 2 });
+    const fa = await fetchOffers(takerA.api, { party: 2, ...s.at });
     expect((await receive(takerA.api, { offerId: s.offer.id, party: 2, fetchId: fa.json.fetchId })).status).toBe(200);
     expect(await remainingOf(ctx, s.store.api)).toBe(1);
     const takerB = await registerCustomer(ctx, { nickname: "B", phone: "08077770003" });
-    const fb = await fetchOffers(takerB.api, { party: 2 });
+    const fb = await fetchOffers(takerB.api, { party: 2, ...s.at });
     const results = await Promise.all([
       receive(takerB.api, { offerId: s.offer.id, party: 2, fetchId: fb.json.fetchId }),
       s.store.api.post("/api/store/offers/current/reduce", { count: 1 }),

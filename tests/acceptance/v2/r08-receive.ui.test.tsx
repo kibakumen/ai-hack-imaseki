@@ -4,7 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
-import { componentOf, homeFetch, installFakeApi, loadWeb, reservationDto, type FakeApi } from "./_fakes";
+import { componentOf, homeFetch, installFakeApi, loadWeb, reservationDto, streamOfResult, type FakeApi } from "./_fakes";
 import { TID, type HomeDto, type ResultItem } from "./_types";
 
 const item = (over: Partial<ResultItem> = {}): ResultItem => ({ offerId: "o1", storeId: "s1", storeName: "店A", walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, reason: "合います", partyMax: 4, coupons: [], storeUrl: null, ...over });
@@ -91,6 +91,32 @@ describeTask("14", "受け取りの画面と断りの表示", () => {
     refusal = { kind: "has_active_reservation", nextStep: "back_to_reservation" };
     fireEvent.click(within(screen.getByTestId(TID.card("o1"))).getByTestId(TID.btn("receive")));
     await screen.findByTestId(TID.view("active"));
+  });
+
+  // 紹介文の行が届くたびに断りの知らせを消さない（消すのは探し始めたときと、取得が変わったときだけ）。
+  it.fails("既知の不具合（不具合-06）: 紹介文が後から届いても、押したカードの断りの知らせは消えない", async () => {
+    const { TEXTS } = await loadWeb("lib/domain/texts");
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    installGeo();
+    api = installFakeApi({
+      "GET /api/config/public": publicConfig,
+      "GET /api/customer/home": () => ({ json: homeFetch() }),
+      "POST /api/customer/fetch/stream": () => ({ stream: streamOfResult({ fetchId: "f1", items: [item(), item({ offerId: "o2", storeId: "s2", storeName: "店B" })] }, { holdAfter: 1, release: released }) }),
+      "POST /api/customer/reservations": () => ({ status: 409, json: { ok: false, refusal: { kind: "sold_out", nextStep: "search_again" }, home: homeFetch() } }),
+    });
+    const CustomerApp = await componentOf("components/customer/CustomerApp", "CustomerApp");
+    render(<CustomerApp />);
+    await screen.findByTestId(TID.btn("fetch"));
+    fireEvent.change(screen.getByTestId(TID.field("party")), { target: { value: "2" } });
+    fireEvent.click(screen.getByTestId(TID.btn("fetch")));
+    const card = await screen.findByTestId(TID.card("o1"));
+    fireEvent.click(within(card).getByTestId(TID.btn("receive")));
+    await waitFor(() => expect(within(screen.getByTestId(TID.card("o1"))).getByTestId("refusal-notice").textContent).toContain(TEXTS.receiveRefusal("sold_out")));
+    release();
+    // 紹介文が届き切る（待機の見た目が消える）のを待ってから見る
+    await waitFor(() => expect(screen.getByTestId(TID.card("o2")).querySelector('[aria-busy="true"]')).toBeNull());
+    expect(within(screen.getByTestId(TID.card("o1"))).queryByTestId("refusal-notice")).toBeTruthy();
   });
 
   it("RefusalNotice は nextStep を自分で決めない（同じ kind でも渡した nextStep が違えば違うボタンが出る）", async () => {
