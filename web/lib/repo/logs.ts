@@ -26,6 +26,11 @@ export type FetchLogRecord = {
   customerId: string;
   originLat: number;
   originLng: number;
+  /**
+   * 起点の種類（migrations/0006・2026-09-25 監査の指摘 客-11）。here＝端末の現在地・place＝客が打った場所。
+   * 確保の応答が経路の出発地を付けるか（打った場所のときだけ）を、これで決める。
+   */
+  originKind: "here" | "place";
   party: number;
   /** その回の好みのジャンルを JSON の文字列にしたもの */
   genres: string;
@@ -72,8 +77,8 @@ export type AiCallRecord = {
 };
 
 const INSERT_FETCH_LOG = `
-  INSERT INTO fetch_logs (id, customer_id, origin_lat, origin_lng, party, genres, budget_max, candidate_count, returned_count, ai_used, duration_ms, at)
-  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+  INSERT INTO fetch_logs (id, customer_id, origin_lat, origin_lng, party, genres, budget_max, candidate_count, returned_count, ai_used, duration_ms, at, origin_kind)
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
 `;
 
 const INSERT_FETCH_ITEM = `INSERT INTO fetch_items (id, fetch_id, store_id, rank, score, reason) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`;
@@ -87,7 +92,7 @@ const INSERT_AI_CALL = `
 export const fetchLogStatement = (db: Db, log: FetchLogRecord): D1PreparedStatement =>
   db
     .prepare(INSERT_FETCH_LOG)
-    .bind(log.id, log.customerId, log.originLat, log.originLng, log.party, log.genres, log.budgetMax, log.candidateCount, log.returnedCount, log.aiUsed, log.durationMs, log.at);
+    .bind(log.id, log.customerId, log.originLat, log.originLng, log.party, log.genres, log.budgetMax, log.candidateCount, log.returnedCount, log.aiUsed, log.durationMs, log.at, log.originKind);
 
 /** 返した店1件の記録を足す文。 */
 export const fetchItemStatement = (db: Db, item: FetchItemRecord): D1PreparedStatement =>

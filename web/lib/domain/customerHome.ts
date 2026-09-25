@@ -34,7 +34,9 @@ export const CANCELLED_VIEW_MS = 3 * 60 * 60 * 1000;
  * `fetch` だと決めている**（同ファイル 67〜69行）ので、3時間では通らない。60分より短い値が
  * 要るので、境界ぴったりで通す形（ちょうど60分）を避けて30分にした。
  * **どちらが本当かは設計者の判断**——3時間へ戻すなら r20 のその行も直す必要がある。
- * 3時間を過ぎても、次の確保を作るまでは取得の画面から完了済みの表示を開ける（基準 9.4・タスク14）。
+ * この幅を過ぎても、次の確保を作るまでは取得の画面から完了済みの表示を開ける（基準 9.4）——
+ * 取得の画面の応答に `previousCompleted` として載せ、画面が「前回: ◯◯（完了済み）を開く」を出す
+ * （2026-09-25 監査の指摘 不具合-18 の案A・AI判断。それまでは入口が無く、この注だけが「開ける」と書いていた）。
  */
 export const COMPLETED_VIEW_MS = 30 * 60 * 1000;
 
@@ -100,6 +102,11 @@ export type CustomerHomeView = {
   kind: CustomerHomeKind;
   reservation?: ReservationView;
   expired?: ExpiredView;
+  /**
+   * 既定の幅（`COMPLETED_VIEW_MS`）を過ぎた、いちばん新しい完了済みの確保（基準 9.4）。取得の画面のときだけ載る。
+   * いちばん新しい確保がこれなので、次の確保を作れば載らなくなる。
+   */
+  previousCompleted?: ReservationView;
 };
 
 const toView = (row: HomeReservationRow, state: EffectiveState, showCode: boolean): ReservationView => ({
@@ -138,10 +145,16 @@ export const customerHomeView = (input: CustomerHomeInput, now: Date): CustomerH
   if (state === "active") return { kind: "active", reservation: toView(row, state, true) };
 
   const sinceChange = now.getTime() - row.statusAt.getTime();
-  // 4 の「そのあと1回も取得を押していない」（状態が変わったあとに押していれば、客は探しに来ている）
-  const fetchedSince = input.lastFetchAt !== null && input.lastFetchAt.getTime() > row.statusAt.getTime();
+  /**
+   * 4 の「そのあと1回も取得を押していない」（状態が変わったあとに押していれば、客は探しに来ている）。
+   * 状態が変わった時刻は、期限切れなら**期限の時刻**——期限切れは書き込みが起きないので、status_at は
+   * 受け取った時刻のまま残る。status_at と比べると、確保中に「ほかの店を探す」で押した取得まで
+   * 「変わったあとに押した」と読み、期限切れの表示を黙って飛ばしていた（2026-09-25 監査の指摘 不具合-19）。
+   */
+  const changedAt = state === "expired" ? row.expiresAt : row.statusAt;
+  const fetchedSince = input.lastFetchAt !== null && input.lastFetchAt.getTime() > changedAt.getTime();
 
-  // 3・4 の期限切れ（変化の時刻は期限の時刻。書き込みは起きないので status_at は受け取った時刻のまま）
+  // 3・4 の期限切れ（変化の時刻は期限の時刻。上の `changedAt`）
   if (state === "expired") {
     const withinGrace = isWithinExpiredGrace(row, now);
     if (withinGrace) {
@@ -161,9 +174,10 @@ export const customerHomeView = (input: CustomerHomeInput, now: Date): CustomerH
     return { kind: "fetch" };
   }
 
-  // 5. 完了済み
-  if (state === "completed" && sinceChange < COMPLETED_VIEW_MS) {
-    return { kind: "completed", reservation: toView(row, state, true) };
+  // 5. 完了済み。幅を過ぎたら取得の画面を出し、そこから開けるように載せておく（基準 9.4）
+  if (state === "completed") {
+    if (sinceChange < COMPLETED_VIEW_MS) return { kind: "completed", reservation: toView(row, state, true) };
+    return { kind: "fetch", previousCompleted: toView(row, state, true) };
   }
 
   // 6. 客が取り消したあと（基準 9.5）と、上の幅を過ぎたもの

@@ -76,6 +76,8 @@ const customerHome = object({
   reservation: optional(reservationView),
   expired: optional(object({ showCode: boolean(), canRetry: boolean(), partyMax: optional(number()) })),
   pushPromptDue: optional(boolean()),
+  /** 既定の幅を過ぎた完了済みの確保（取得の画面のときだけ・基準 9.4・不具合-18） */
+  previousCompleted: optional(reservationView),
 });
 
 /** 取得の結果の1件（usecases/fetchOffers の FetchResultItem）。 */

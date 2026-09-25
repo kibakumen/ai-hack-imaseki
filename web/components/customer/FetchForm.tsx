@@ -141,9 +141,12 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
     void search(async () => {
       const from = await origin();
       if (isFailure(from)) return from;
-      // 経路の出発地に使うので、そのタブの中で覚えておく（読み直しても残るように）。
-      rememberOrigin(from);
-      return { payload: { ...from, party: partyToSend(party), genres, budgetMax: budgetToSend(budgetMax) }, party: Number(party), from };
+      // 経路の出発地は、打った場所で探したときだけ（2026-09-25 監査の指摘 客-11）。現在地で探したときは付けない
+      // ——探した時点の座標を固定の出発地にすると、歩き出したあとの経路が探した場所から引かれる。
+      // そのタブの中で覚えておく（読み直しても残るように）。現在地のときは前に覚えた場所も消す。
+      const routeFrom = "place" in from ? from : null;
+      rememberOrigin(routeFrom);
+      return { payload: { ...from, party: partyToSend(party), genres, budgetMax: budgetToSend(budgetMax) }, party: Number(party), from: routeFrom };
     });
   };
 

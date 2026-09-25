@@ -5,7 +5,7 @@
 // 識別子が無い・受け付けられない（見分けの断り）なら登録の入力を出し、取得の画面は出さない
 // （基準 1.10・1.11）。登録が済んだ客には取得の画面を出す（基準 1.8）。
 //
-// この入れ物が持っているのは、表示の種類に**含まれない6つ**だけ:
+// この入れ物が持っているのは、表示の種類に**含まれない8つ**だけ:
 //   1. 取得の結果と人数（取得の画面の続き。人数は結果の側から入れ替わるので外に置く）
 //   2. 受け取り・受け取り直しが断られた1件（どのカードの中に出すか・基準 8.6）
 //   3. 確保を持ったまま「ほかの店を探す」を押したか（基準 8.10。サーバーは確保中のままを返す）
@@ -14,16 +14,22 @@
 //   5. 開いている脇の画面（最近行った店・基準 26.14）と、登録を消したばかりか（基準 28.11 の知らせ）。
 //      「この端末の登録を消す」は画面の下端に常に置く（基準 28.4・2026-09-25 監査の指摘 安全-15 で戻した）
 //   6. 通報が指している店（基準 26.1・26.17。断られても元の表示のままにするため外に置く）
+//   7. 取得の画面から前回の完了済みを開いているか（基準 9.4・2026-09-25 監査の指摘 不具合-18）
+//   8. 読み上げの領域へ入れる1文（結果の件数・確保の成立・状態の変化・2026-09-25 監査の指摘 客-08）
+//
+// 取り直しは `usePolling` が回し、操作の応答で作り直したときは古い取り直しの応答を捨てる（不具合-17）。
+// 端末の「戻る」は、上に重ねたもの（探している取得の画面・演出・脇の画面）を閉じる（`useBackLayer`・客-03）。
 //
 // 受け取り・受け取り直しの応答は、通っても断られても**新しいホームを連れてくる**ので、それで
 // 表示を作り直す（設計書「受け取りが断られたとき」の4）。確保への操作（取り消し・人数の変更）も
 // 同じで、応答の `home` をそのまま使う（`applyHome`）。次の一手をどこへ繋ぐかはここが決め、
 // 断りの文とボタンの文は `RefusalNotice` が `domain/texts` から引く。
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { callApi, isFailure, isTransientFailure, type ApiFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
-import { usePolling } from "../../lib/client/usePolling";
+import { usePolling, type PollTicket } from "../../lib/client/usePolling";
+import { useBackLayer } from "../../lib/client/useBackLayer";
 import { AdminCancelledView } from "./AdminCancelledView";
 import { recallOrigin } from "../../lib/client/lastOrigin";
 import { ClaimedCelebration } from "./ClaimedCelebration";
@@ -31,13 +37,18 @@ import { EraseRegistration } from "./EraseRegistration";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
 import { FetchForm, type FetchResult } from "./FetchForm";
-import type { HomeDto, ReceiveRefusal } from "./home";
+import { HomeScreenHint } from "./HomeScreenHint";
+import { changedMessage, claimedMessage, resultsMessage } from "./liveMessages";
+import type { HomeDto, ReceiveRefusal, ReservationDto } from "./home";
+import { PreviousCompletedEntry } from "./PreviousCompleted";
+import { History } from "./History";
 import { RecentStores } from "./RecentStores";
 import { RegisterForm } from "./RegisterForm";
 import { ReportForm, type ReportTarget } from "./ReportForm";
-import { ReservationView } from "./ReservationView";
+import { RESERVATION_CODE_ID, ReservationView } from "./ReservationView";
 import { ResultList, type ResultItem } from "./ResultList";
 import { StoreCancelledView } from "./StoreCancelledView";
+import { useMeServiceWorker } from "./useMeServiceWorker";
 import { CustomerRefusals } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
 
@@ -110,6 +121,29 @@ const CustomerScreens = () => {
   const [unreachable, setUnreachable] = useState<ApiFailure | null>(null);
   /** この端末の登録を消したばかりか（登録の入力の上に「消しました」を出す・基準 28.11） */
   const [erased, setErased] = useState(false);
+  /** 取得の画面から、前回の完了済み（応答の `previousCompleted`）を開いているか（基準 9.4・不具合-18） */
+  const [previousOpen, setPreviousOpen] = useState(false);
+  /**
+   * 読み上げの領域（main の先頭の role=status）へ入れる1文（2026-09-25 監査の指摘 客-08）。結果の件数・確保の成立と
+   * 番号・確保の状態の変化を入れる。以前は aria-live がどこにも無く、画面を見られない客には何も伝わらなかった。
+   */
+  const [announcement, setAnnouncement] = useState("");
+  /** 結果の一覧の見出し（結果が届いたら焦点を移す先。押した「今すぐ探す」は条件ごと畳まれて消えるため） */
+  const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
+
+  /**
+   * 確保を持ったまま探している間に、その確保が確保中でなくなった（店・運営の取り消し・期限切れ・完了）ら、
+   * 探すのをやめて変化の表示を出す（2026-09-25 監査の指摘 客-03——以前は取り直しが searching を戻さず、
+   * 「今の確保を取り消すと受け取れます」の案内が黙って消えるだけで、取り消されたことが出なかった）。
+   * 確保中でなくなった確保の演出も閉じる（あとで別の確保中が来ても、古い演出を出し直さない）。
+   */
+  const followReservationChange = (next: HomeDto) => {
+    if (home?.kind !== "active" || next.kind === "active") return;
+    setCelebrating(false);
+    if (next.kind !== "fetch") setSearching(false);
+    const message = changedMessage(next.kind);
+    if (message !== null) setAnnouncement(message);
+  };
 
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
@@ -117,11 +151,17 @@ const CustomerScreens = () => {
     else saveCachedHome(next);
   };
 
-  /** ホームを取り直して表示を決める（開いた時と10秒ごと・基準 9.8・9.9）。 */
-  const refresh = async (): Promise<void> => {
+  /**
+   * ホームを取り直して表示を決める（開いた時と10秒ごと・基準 9.8・9.9）。呼ぶのは `usePolling` だけ——
+   * 読み直しのボタンや操作のあとは `polling.refreshNow()` を通す。そうすると、それより前に送った取り直しの
+   * 応答（古い状態）は `ticket.isCurrent()` が false になって捨てられる（2026-09-25 監査の指摘 不具合-17）。
+   */
+  const refresh = async (ticket: PollTicket): Promise<void> => {
     const result = await callApi("GET /api/customer/home");
+    if (!ticket.isCurrent()) return;
     setLoaded(true);
     if (!isFailure(result)) {
+      followReservationChange(result);
       setHome(result);
       setStale(false);
       setUnreachable(null);
@@ -144,7 +184,29 @@ const CustomerScreens = () => {
     setUnreachable(null);
   };
 
-  usePolling(refresh);
+  const polling = usePolling(refresh);
+  // 開いたら Service Worker を /me の範囲で登録し、許可済みの端末の購読を作り直す（不具合-05・不具合-11）
+  useMeServiceWorker(home?.pushPromptDue === true);
+
+  /** 受け取った直後の演出を閉じ、焦点を確保中の表示の確保番号へ移す（客-08。閉じたボタンと一緒に焦点が消えないように） */
+  const closeCelebration = () => {
+    setCelebrating(false);
+    document.getElementById(RESERVATION_CODE_ID)?.focus();
+  };
+
+  // 結果が1件以上届いたら、焦点を結果の見出しへ移す（押した「今すぐ探す」は条件ごと畳まれて消える・客-08）
+  const focusedFetchId = fetchResult !== null && fetchResult.items.length > 0 ? fetchResult.fetchId : null;
+  useEffect(() => {
+    if (focusedFetchId !== null) resultsHeadingRef.current?.focus();
+  }, [focusedFetchId]);
+
+  // 端末の「戻る」で、上に重ねたものを閉じる（客-03。客の画面は1つの URL なので、以前は /me の外へ出ていた）。
+  // 確保を持ったまま探している取得の画面・受け取った直後の演出・前回の完了済み・最近行った店・通報の欄の5つ。
+  useBackLayer(searching && home?.reservation !== undefined, () => setSearching(false));
+  useBackLayer(celebrating && home?.kind === "active", closeCelebration);
+  useBackLayer(previousOpen && home?.kind === "fetch" && home.previousCompleted !== undefined, () => setPreviousOpen(false));
+  useBackLayer(panel !== "none", () => setPanel("none"));
+  useBackLayer(reportTarget !== null, () => setReportTarget(null));
 
   /**
    * 出している結果を片づけ、その取得から後で届く結果も受け取らない（`dismissedFetchIdRef`）。
@@ -165,6 +227,8 @@ const CustomerScreens = () => {
     // 応答に `home` が無い形でも表示を消さない（今の表示のまま、断りだけを出す）
     const responded = (failure === null ? (result as { home?: HomeDto }).home : (failure.home as HomeDto | undefined)) ?? home;
     if (responded !== null) {
+      // この応答より前に送った取り直し（押す前の状態）が後から届いても映さない（不具合-17）
+      polling.invalidate();
       setHome(responded);
       setLoaded(true);
       setStale(false);
@@ -176,7 +240,10 @@ const CustomerScreens = () => {
     // 通ったときは結果の一覧を片づける（確保中の表示へ移る・基準 8.5）
     if (failure === null) dismissResults();
     // 通って確保中になったときだけ、受け取りの演出を前面に出す（断りでは出さない）
-    if (failure === null && responded !== null && responded.reservation !== undefined && responded.kind === "active") setCelebrating(true);
+    if (failure === null && responded !== null && responded.reservation !== undefined && responded.kind === "active") {
+      setCelebrating(true);
+      setAnnouncement(claimedMessage(responded.reservation.code));
+    }
   };
 
   /**
@@ -186,10 +253,12 @@ const CustomerScreens = () => {
    */
   const applyHome = (next?: unknown) => {
     if (next === undefined || next === null) {
-      void refresh();
+      polling.refreshNow();
       return;
     }
     const responded = next as HomeDto;
+    // この応答より前に送った取り直し（操作の前の状態）が後から届いても映さない（不具合-17）
+    polling.invalidate();
     setHome(responded);
     setLoaded(true);
     setStale(false);
@@ -239,6 +308,8 @@ const CustomerScreens = () => {
     // 紹介文が届くたびに同じ取得の結果が入れ直されるので、そのたびに消すと断りの文とボタンが読めないうちに消える。
     const nextFetchId = result?.fetchId ?? null;
     if (result === null || nextFetchId !== shownFetchIdRef.current) setRefused(null);
+    // 新しい取得の結果が届いたら件数を読み上げる（同じ取得の紹介文の差し込みでは言い直さない・客-08）
+    if (result !== null && nextFetchId !== shownFetchIdRef.current && result.items.length > 0) setAnnouncement(resultsMessage(result.items.length));
     shownFetchIdRef.current = nextFetchId;
     setFetchResult(result);
     // 探し始め（`FetchForm` は探す前に必ず null を渡す）で閉じ直す。少しずつ届く結果の更新では触らない
@@ -254,6 +325,9 @@ const CustomerScreens = () => {
   const searchAgain = () => {
     setRefused(null);
     dismissResults();
+    // 期限切れで「何名まで」が下がっていたら、その人数で探す（同じ人数ではその店に入れない・客-06）
+    const partyMax = home?.kind === "expired" ? home.expired?.partyMax : undefined;
+    if (partyMax !== undefined) setParty(String(partyMax));
     setSearching(true);
   };
   const togglePanel = (next: Panel) => setPanel((current) => (current === next ? "none" : next));
@@ -263,7 +337,7 @@ const CustomerScreens = () => {
   if (home === null && unreachable !== null) {
     return (
       <main>
-        <LoadView state={{ status: "failed", failure: unreachable }} onRetry={() => void refresh()}>
+        <LoadView state={{ status: "failed", failure: unreachable }} onRetry={polling.refreshNow}>
           {() => null}
         </LoadView>
       </main>
@@ -278,14 +352,19 @@ const CustomerScreens = () => {
             この端末の登録を消しました。
           </p>
         ) : null}
-        <RegisterForm onRegistered={() => void refresh()} />
+        <RegisterForm onRegistered={polling.refreshNow} />
       </main>
     );
   }
 
   const reservation = home.reservation;
+  /** 確保中の確保を持ったまま探しているか（基準 8.10。受け取りの操作を選べない形にし、戻る道を常に出す） */
+  const holding = searching && home.kind === "active";
+  /** 既定の幅を過ぎた完了済み（取得の画面のときだけ載る・基準 9.4）。開いていればその表示を出す */
+  const previous = home.kind === "fetch" ? home.previousCompleted : undefined;
+  const showingPrevious = previousOpen && previous !== undefined;
   // 確保が載っていない表示の種類（応答の形は検査していない）でも、取得の画面なら出せる
-  const onFetchScreen = home.kind === "fetch" || searching || reservation === undefined;
+  const onFetchScreen = !showingPrevious && (home.kind === "fetch" || searching || reservation === undefined);
   // 結果が1件以上あるときだけ条件を畳む（断られたとき・0件のときは畳まない——入れ直したい人が欄にたどり着けるように）
   const hasItems = fetchResult !== null && fetchResult.items.length > 0;
   const collapsed = hasItems && !conditionsOpen;
@@ -294,12 +373,12 @@ const CustomerScreens = () => {
    * 部品（`ReservationView`・`CompletedView`）の中身として渡す——囲い（`view-active`・
    * `view-completed`）はその部品が持っている。
    */
-  const reportEntry =
-    reservation !== undefined && REPORT_VIEW_KINDS.includes(home.kind) ? (
-      <button type="button" data-testid="btn-report" onClick={() => setReportTarget({ storeId: reservation.storeId, storeName: reservation.storeName })}>
-        このお店を通報する
-      </button>
-    ) : null;
+  const reportButton = (target: ReservationDto) => (
+    <button type="button" data-testid="btn-report" onClick={() => setReportTarget({ storeId: target.storeId, storeName: target.storeName })}>
+      このお店を通報する
+    </button>
+  );
+  const reportEntry = reservation !== undefined && REPORT_VIEW_KINDS.includes(home.kind) ? reportButton(reservation) : null;
 
   /**
    * 経路の出発地（探したときの起点）。確保中の画面と確定の演出の**両方が同じ値**を使う。
@@ -311,11 +390,21 @@ const CustomerScreens = () => {
    *   3. そのタブで覚えた起点（`sessionStorage`）。新しいタブ・別のタブ・保存を止めた端末では空——
    *      2回目の直しがチームの環境で効かなかった理由。
    * どれも無ければ null＝渡さない（嘘の起点を付けるより、マップに現在地から引かせる方がまし）。
+   * **現在地で探したときは3つとも空**（サーバーは出発地を返さず、画面も覚えない・2026-09-25 監査の指摘 客-11）
+   * ——探した時点の座標を固定の出発地にすると、歩き出したあとの経路が探した場所から引かれる。
    */
   const routeFrom = reservation === undefined ? null : (reservation.origin ?? fetchResult?.from ?? recallOrigin());
 
   /** 確保を持つ客の表示（優先の順の2〜5）。種類ごとに部品が1つ。 */
   const reservationView = () => {
+    // 取得の画面から開いた前回の完了済み（基準 9.4）。「ほかの店を探す」で取得の画面へ戻る
+    if (showingPrevious) {
+      return (
+        <CompletedView reservation={previous} onSearchAgain={() => setPreviousOpen(false)}>
+          {reportButton(previous)}
+        </CompletedView>
+      );
+    }
     if (reservation === undefined) return null;
     if (home.kind === "active") {
       return (
@@ -333,6 +422,7 @@ const CustomerScreens = () => {
           onRetry={() => void retry()}
           onNextStep={takeNextStep}
           onSearchAgain={searchAgain}
+          from={routeFrom}
         />
       );
     }
@@ -363,11 +453,15 @@ const CustomerScreens = () => {
       // ⚠️ 探したときの起点を経路の出発地へ渡す（2026-09-22 本人の指摘・3回——現在地と違う場所で
       // 探したのに、マップの開始地点が現在地になり徒歩7時間と出た）。渡さないとマップが現在地から引く。
       // 出どころと順は上の `routeFrom` の注。
-      <ClaimedCelebration reservation={reservation} from={routeFrom} onClose={() => setCelebrating(false)} />
+      <ClaimedCelebration reservation={reservation} from={routeFrom} onClose={closeCelebration} />
     ) : null;
 
   return (
     <main>
+      {/* 読み上げの領域（目には見えない）。中身が変わると読み上げられる（客-08） */}
+      <p className="visually-hidden" role="status" data-testid="live-status">
+        {announcement}
+      </p>
       {celebration}
       {stale ? (
         <p className="msg" role="status" data-testid="stale-notice">
@@ -377,6 +471,18 @@ const CustomerScreens = () => {
 
       {onFetchScreen ? (
         <section ref={fetchScreenRef} className={hasItems ? "fetch-screen fetch-screen--with-fab" : "fetch-screen"}>
+          {previous !== undefined && fetchResult === null ? <PreviousCompletedEntry reservation={previous} onOpen={() => setPreviousOpen(true)} /> : null}
+          {/* ホーム画面への追加は、確保を持っていないときだけ勧める（客-04 の案A） */}
+          {reservation === undefined ? <HomeScreenHint /> : null}
+          {/* 確保を持ったまま探している間は、条件の上に戻る道を常に出す（客-03。条件を畳んでも隠れない位置） */}
+          {holding ? (
+            <p className="hold-banner" data-testid="hold-banner">
+              <span>今の確保はそのままです。</span>
+              <button type="button" data-testid="btn-back-to-reservation" onClick={() => setSearching(false)}>
+                確保中の表示へ戻る
+              </button>
+            </p>
+          ) : null}
           <FetchForm
             profile={home.profile}
             party={party}
@@ -397,7 +503,7 @@ const CustomerScreens = () => {
               refusal={refused !== null && refused.offerId !== null ? { offerId: refused.offerId, body: refused.body } : null}
               onNextStep={takeNextStep}
               holding={home.kind === "active"}
-              onBackToReservation={() => setSearching(false)}
+              headingRef={resultsHeadingRef}
             />
           )}
         </section>
@@ -413,14 +519,25 @@ const CustomerScreens = () => {
         </nav>
       ) : null}
 
-      {panel === "recent" ? <RecentStores onReport={setReportTarget} /> : null}
+      {/* 最近行った店（通報の入口）の下に、過去の受け取りの見返し（住所・ホームページ・もう一度探す・客-13 の案A） */}
+      {panel === "recent" ? (
+        <>
+          <RecentStores onReport={setReportTarget} />
+          <History
+            onSearchAgain={() => {
+              setPanel("none");
+              searchAgain();
+            }}
+          />
+        </>
+      ) : null}
       {reportTarget !== null ? <ReportForm storeId={reportTarget.storeId} storeName={reportTarget.storeName} onClose={() => setReportTarget(null)} /> : null}
 
       {/* 下端に1つだけ（基準 28.4）。どの表示でも置く——確保中なら入口が断り、先に取り消すよう出す（基準 28.5） */}
       <EraseRegistration
         onDeleted={() => {
           setErased(true);
-          void refresh();
+          polling.refreshNow();
         }}
       />
     </main>

@@ -7,6 +7,11 @@ import "./site-footer.css";
 export const metadata: Metadata = {
   title: "イマセキ",
   description: "近くのお店の空席を見つけるサービス",
+  // ホーム画面に追加したときのアプリとしての記述（2026-09-25 監査の指摘 客-04 の案C）。manifest は app/manifest.ts が出す。
+  // `appleWebApp.capable` は新しい名前（mobile-web-app-capable）だけを出すので、古い iOS が読む名前も並べて出す。
+  appleWebApp: { capable: true, title: "イマセキ", statusBarStyle: "default" },
+  icons: { icon: "/icon.svg", apple: "/apple-touch-icon.png" },
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 type RootLayoutProps = Readonly<{ children: ReactNode }>;

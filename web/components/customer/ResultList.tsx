@@ -22,6 +22,7 @@
 // 色の値はここに持たない（要件32の基準 32.3）——形と動きだけを class 名で指し、色は
 // `app/globals.css` の変数と `app/me/me.css` が持つ。
 
+import type { Ref } from "react";
 import type { FetchResultItemDto } from "../../lib/client/api";
 import type { ReceiveRefusal } from "./home";
 import { OfferReveal } from "./OfferReveal";
@@ -57,7 +58,8 @@ type ResultListProps = {
   onNextStep?: () => void;
   /** 確保中の確保を持ったまま探しているか（基準 8.10）。受け取りの操作を選べない形にする。 */
   holding?: boolean;
-  onBackToReservation?: () => void;
+  /** 見出し（結果が届いたら入れ物がここへ焦点を移す・2026-09-25 監査の指摘 客-08） */
+  headingRef?: Ref<HTMLHeadingElement>;
 };
 
 /** 金額は3桁ごとに区切って出す（読み違えを減らすための表示だけの整形）。 */
@@ -183,28 +185,29 @@ const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holdin
   </li>
 );
 
-/** 確保を持ったまま探しているときの案内（基準 8.10）。取り消せば受け取れることと、戻る入口。 */
-const HoldNotice = ({ onBackToReservation }: { onBackToReservation?: () => void }) => (
+/**
+ * 確保を持ったまま探しているときの案内（基準 8.10）。取り消せば受け取れること。
+ * 確保中の表示へ戻るボタンは、入れ物（`CustomerApp`）が条件の上に常に出す（2026-09-25 監査の指摘 客-03——
+ * 以前はここにしか無く、探す前と、結果が0件のときには戻る道が無かった）。
+ */
+const HoldNotice = () => (
   <p className="offer-hold" data-testid="result-hold-notice">
     今の確保を取り消すと受け取れます。
-    <button type="button" data-testid="btn-back-to-reservation" onClick={() => onBackToReservation?.()}>
-      確保中の表示へ戻る
-    </button>
   </p>
 );
 
-export const ResultList = ({ items, onReceive, refusal = null, onNextStep, holding = false, onBackToReservation }: ResultListProps) => (
+export const ResultList = ({ items, onReceive, refusal = null, onNextStep, holding = false, headingRef }: ResultListProps) => (
   <section className="offer-list" data-testid="result-list">
     {/* 描かれた時に1回だけ出る宝くじの札（探し直すたびにこの部品ごと作り直されるので、
         出す・消すの状態を入れ物へ増やさずに済む）。 */}
     <OfferReveal count={items.length} />
 
-    <h2 className="offer-list__head">
+    <h2 className="offer-list__head" ref={headingRef} tabIndex={-1}>
       今入れるお店
       {items.length === 0 ? null : <span className="offer-list__count">{items.length}件</span>}
     </h2>
 
-    {holding ? <HoldNotice onBackToReservation={onBackToReservation} /> : null}
+    {holding ? <HoldNotice /> : null}
     {/* 0件の文は `FetchForm` が「今すぐ探す」のすぐ下に出す（`EMPTY_RESULT_TEXT`）。ここには何も置かない */}
     {items.length === 0 ? null : (
       <ul className="offer-cards">

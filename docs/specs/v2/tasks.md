@@ -217,12 +217,12 @@ phase: tasks
 
 ### 【最終日】（9/23 の会場まで）
 
-- [ ] 29. 客の登録の変更: `PATCH /api/customer/profile`・`usecases/updateCustomerProfile`・`components/customer/ProfileSettings`
+- [ ] 29. 客の登録の変更: `PATCH /api/customer/profile`・`usecases/updateCustomerProfile`・`components/customer/PhoneField`（取得の画面の電話番号の欄。登録の4項目を変える画面 `ProfileSettings` は 2026-09-25 監査の指摘 客-13 で消した）
   - _要件: 1.9_
   - _受け入れ検査: tests/acceptance/v2/r01-customer-register.test.ts_
   - _担当: AI_
 
-- [ ] 30. 過去の受け取りの見返し: `GET /api/customer/history`・`usecases/customerHistory`・`components/customer/History`
+- [ ] 30. 過去の受け取りの見返し: `GET /api/customer/history`・`usecases/customerHistory`・`components/customer/History`（「最近行った店」の脇の画面に出す・2026-09-25 監査の指摘 客-13 の案A）
   - _要件: 8.11_
   - _受け入れ検査: tests/acceptance/v2/r08-receive.test.ts_
   - _担当: AI_

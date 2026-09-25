@@ -58,6 +58,9 @@ export type ReservationOffer = { endedAt: Date | null; untilAt: Date; remaining:
  * 客の画面が「Googleマップで経路を開く」の出発地に使う（2026-09-22 の本人の指摘・3回目——画面の状態や
  * `sessionStorage` に頼ると、タブが変わる・読み直す・保存を止めた端末で出発地が現在地へ戻る）。
  * 記録が読めなければ null（外部の鍵で必ず在るはずだが、無いことを理由に確保を描けなくしない）。
+ * **現在地で探した取得なら null**（`fetch_logs.origin_kind = 'here'`・2026-09-25 監査の指摘 客-11）——探した時点の
+ * 座標を固定の出発地にすると、歩き出した客の経路が探した場所から引かれる。付けなければマップが今の現在地から引く。
+ * 種類の無い古い行（migrations/0006 より前）は、今までどおり座標を返す。
  */
 export type ReservationOrigin = { lat: number; lng: number } | null;
 
@@ -88,7 +91,7 @@ const CONTEXT_SQL = (where: string): string =>
   `SELECT ${RESERVATION_COLUMNS},` +
   ` s.name AS store_name, s.address AS store_address, s.url AS store_url, s.status AS store_status,` +
   ` o.ended_at, o.until_at, o.party_max, ${remainingExpression("o", "?2")} AS remaining,` +
-  ` f.origin_lat, f.origin_lng` +
+  ` f.origin_lat, f.origin_lng, f.origin_kind` +
   ` FROM reservations res` +
   ` JOIN stores s ON s.id = res.store_id` +
   ` JOIN offers o ON o.id = res.offer_id` +
@@ -112,7 +115,7 @@ const toContext = (row: Record<string, unknown>): ReservationContext => ({
     remaining: Number(row.remaining ?? 0),
     partyMax: Number(row.party_max ?? 0),
   },
-  origin: typeof row.origin_lat === "number" && typeof row.origin_lng === "number" ? { lat: row.origin_lat, lng: row.origin_lng } : null,
+  origin: row.origin_kind !== "here" && typeof row.origin_lat === "number" && typeof row.origin_lng === "number" ? { lat: row.origin_lat, lng: row.origin_lng } : null,
 });
 
 /** その客のいちばん新しい確保と、その店・そのオファーの今。1件も無ければ null。 */

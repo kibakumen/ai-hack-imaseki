@@ -11,9 +11,16 @@
 // 取れたあとの取り直し（開きっぱなしの画面の定期の取り直し・操作のあとの取り直し）が失敗したときは、
 // 前の中身を残したまま `refreshFailure` を立てる——一覧が空に落ちて向かっている客が消えるのを避けつつ、
 // 「更新できていない」ことは画面に出せるようにする（「最終更新 HH:MM・更新できていません」の帯）。
+//
+// 送る順と映す順（2026-09-25 監査の指摘 不具合-17 とそのレビュー）:
+//   - 定期の取り直しは、前の回が返るまで次を送らない。返らないまま止まった回だけ、間隔の2回ぶんで見切る
+//     （客の側の `usePolling` と同じ決め）。
+//   - 読み直し（開いた時・操作のあと）は待たずにすぐ送り、それより前に送った回の答えは捨てる。
+//   - 定期の回同士は、新しい答えを映したあとに届いた古い答えだけを捨てる（遅れて届いた答えは映す）。
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isFailure, type ApiFailure } from "./api";
+import { STUCK_INTERVALS } from "./usePolling";
 
 export type LoadState<T> =
   | { status: "loading" }
@@ -35,6 +42,9 @@ export type UseLoadOptions<T> = {
   /** 定期の取り直しの間隔（ミリ秒）。渡さなければ開いた時の1回だけ */
   pollMs?: number;
 };
+
+/** 送った回が読み直し（開いた時・操作のあと）か、定期の取り直しか */
+type RequestKind = "reload" | "poll";
 
 /** 前の状態と今回の結果から、次の状態を決める（純粋）。 */
 export const nextLoadState = <T>(prev: LoadState<T>, result: T | ApiFailure, now: number, isEmpty?: (data: T) => boolean): LoadState<T> => {
@@ -66,16 +76,47 @@ export const useLoad = <T>(load: () => Promise<T | ApiFailure>, options: UseLoad
   });
   /** 何回目の読み込みの系列か。`load` が変わるたびに進め、前の系列の答えを捨てる */
   const generation = useRef(0);
+  /** 送った回の通し番号（1から） */
+  const requestSeq = useRef(0);
+  /**
+   * いちばん新しい読み直し（開いた時・操作のあと）の番号。これより前に送った回の答えは、後から届いても捨てる
+   * （2026-09-25 監査の指摘 不具合-17）。店のホームでは、「完了」のあとの読み直しより先に送った定期の取り直し
+   * （押す前の一覧）が後から届き、完了にした行が確保中に戻って「新しい客」の音まで鳴っていた。
+   */
+  const reloadSeq = useRef(0);
+  /**
+   * 画面へ映した回の番号。これより前に送った回の答えは捨てる（追い越された古い答えで戻さない）。
+   * **定期の回同士は、送った順ではなく映した順で比べる**（不具合-17 のレビュー）——以前は「あとから送った回が
+   * あれば捨てる」だったので、応答が毎回間隔より遅い回線では、どの答えも次の定期の回に追い越されて捨てられ、
+   * 一覧が黙って固まり、失敗の帯（横断-01）も出なかった。
+   */
+  const appliedSeq = useRef(0);
+  /** 送って答えをまだ受け取っていない、いちばん新しい回を送った時刻（無ければ null） */
+  const inFlightSince = useRef<number | null>(null);
   const mounted = useRef(false);
 
-  const reload = useCallback(async () => {
+  const send = useCallback(async (kind: RequestKind): Promise<void> => {
     const mine = generation.current;
-    const result = await latest.current.load();
-    // 画面を離れたあと・別のものを読み始めたあとに返ってきた答えは捨てる。
-    if (!mounted.current || mine !== generation.current) return;
+    requestSeq.current += 1;
+    const seq = requestSeq.current;
+    if (kind === "reload") reloadSeq.current = seq;
+    inFlightSince.current = Date.now();
+    let result: T | ApiFailure;
+    try {
+      result = await latest.current.load();
+    } finally {
+      // 見切られた古い回は、あとから送った回の「送っている最中」を解かない
+      if (requestSeq.current === seq) inFlightSince.current = null;
+    }
+    // 画面を離れたあと・別のものを読み始めたあと・あとの読み直しを送ったあと・新しい答えを映したあとに届いた答えは捨てる。
+    if (!mounted.current || mine !== generation.current || seq < reloadSeq.current || seq <= appliedSeq.current) return;
+    appliedSeq.current = seq;
     if (!isFailure(result)) latest.current.options.onLoaded?.(result);
     setState((prev) => nextLoadState(prev, result, Date.now(), latest.current.options.isEmpty));
   }, []);
+
+  /** 読み直し（開いた時・操作のあと・「もう一度読み込む」）。前の回を待たずにすぐ送る */
+  const reload = useCallback(() => send("reload"), [send]);
 
   useEffect(() => {
     mounted.current = true;
@@ -91,10 +132,13 @@ export const useLoad = <T>(load: () => Promise<T | ApiFailure>, options: UseLoad
   useEffect(() => {
     if (!pollMs) return;
     const timer = setInterval(() => {
-      void reload();
+      // 前の回がまだ返っていなければ送らない。返らないまま止まった回だけ、間隔の2回ぶんで見切る（usePolling と同じ決め）
+      const since = inFlightSince.current;
+      if (since !== null && Date.now() - since < pollMs * STUCK_INTERVALS) return;
+      void send("poll");
     }, pollMs);
     return () => clearInterval(timer);
-  }, [reload, pollMs]);
+  }, [send, pollMs]);
 
   return { state, reload };
 };

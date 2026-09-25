@@ -24,8 +24,8 @@ export type FetchOrigin = { lat: number; lng: number } | { place: string };
 /** 取得が通ったときに親へ渡すもの（受け取りの入口が `fetchId` と人数を要るため）。 */
 export type FetchResult = { fetchId: string; items: ResultItem[]; party: number; from: FetchOrigin | null };
 
-/** 探すのに要るもの（起点が決まったあとに `FetchForm` が組む）。 */
-export type SearchRequest = { payload: Record<string, unknown>; party: number; from: FetchOrigin };
+/** 探すのに要るもの（起点が決まったあとに `FetchForm` が組む）。`from` は経路の出発地（現在地で探したときは null・客-11）。 */
+export type SearchRequest = { payload: Record<string, unknown>; party: number; from: FetchOrigin | null };
 
 const STREAM_PATH = "/api/customer/fetch/stream";
 
