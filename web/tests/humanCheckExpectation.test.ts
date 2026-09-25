@@ -24,8 +24,8 @@ afterAll(async () => {
 const recordingHuman = () => {
   const seen: Array<Omit<HumanCheckOptions, "signal">> = [];
   const human: HumanCheck = {
-    verify: async (_token, { signal: _signal, ...rest }) => {
-      seen.push(rest);
+    verify: async (_token, opts) => {
+      seen.push({ expectedAction: opts.expectedAction, expectedHostname: opts.expectedHostname, remoteIp: opts.remoteIp });
       return { ok: true, human: true };
     },
   };
