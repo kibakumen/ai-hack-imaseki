@@ -1,27 +1,28 @@
-// reservations の表への読み書き（設計書「ファイル構成の計画」: lib/repo は D1 の SQL）。
-// 「公開中」「枠を押さえている確保」「残り」の条件は repo/sqlFragments.ts のただ1つの置き場から組む。
+// reservations の表への読み書きのうち、客の確保そのもの（設計書「ファイル構成の計画」: lib/repo は D1 の SQL）。
+// 確保1行の形と列（`RESERVATION_COLUMNS`・`toReservationRow`）、客のホーム／受け取り直しが読む確保と店とオファーの今、
+// 客の取り消しと人数の変更。「公開中」「枠を押さえている確保」「残り」の条件は repo/sqlFragments.ts のただ1つの置き場から組む。
 // 時刻の比較は、手続きが束縛した「今」を引数で受ける（SQLite の datetime('now') は使わない）。
 //
 // ⚠️ 確保の表の別名は **`res`** で固定する（`r` は使わない）——`remainingExpression` の中の
 //    副問い合わせが `reservations r` を使うので、外側でも `r` を使うと読む人が取り違える。
 //
-// ⚠️ **このファイルは受け取り系のタスクが順に育てる**（2026-09-21 の並列の実装）。
-//    タスク13（ここ）が受け取りの1文の INSERT と、客のホーム／受け取り直しが要る読みを置いた。
-//    タスク15（客の取り消し・人数の変更）・タスク17（向かっている客・完了済み）・タスク18（店の
-//    取り消し）・タスク21（運営の停止）・タスク23（店の実績）・タスク30（過去の受け取り）は、
-//    **状態を変える1つの UPDATE（前の状態を WHERE に入れる）** をここへ足す形で書く。
-//    `RESERVATION_COLUMNS` と `toReservationRow` を使い回せば、列の名前を写さずに済む。
+// 2026-09-25 監査の指摘 設計-16 で3つに分けた（6つのタスクが順に継ぎ足して 569 行になっていた）。SQL は変えていない:
+//   repo/reservations.ts         … ここ（確保の形・客の確保の読み・客の取り消しと人数の変更）
+//   repo/reservationReceive.ts   … 受け取り（受け取りの1文の INSERT と、その判断に要る読み）
+//   repo/reservationsOfStore.ts  … 店の側（向かっている客の一覧・完了済み・店の取り消し・運営の取り消し）
+// 状態を変える操作は、どれも **1つの UPDATE（前の状態を WHERE に入れる）** で書く。列の名前は写さず、
+// `RESERVATION_COLUMNS` と `toReservationRow` を使い回す。
 
 import type { ReservationStateRow } from "../domain/reservation";
 import type { Deps } from "../ports";
 import { changedRows, parseJsonArray } from "./d1";
-import { reservationEventStatement, selectionStatement } from "./logs";
-import { activeReservationCondition, expiredWithinGraceCondition, publishingOfferCondition, remainingExpression } from "./sqlFragments";
+import { reservationEventStatement } from "./logs";
+import { activeReservationCondition, remainingExpression } from "./sqlFragments";
 
 type Db = Deps["db"];
 
 /** 壊れた JSON は「1つも無い」として読む（画面が止まらないようにする）。 */
-const parseCoupons = (raw: unknown): Array<{ name: string; note: string }> =>
+export const parseCoupons = (raw: unknown): Array<{ name: string; note: string }> =>
   parseJsonArray(raw).flatMap((value) => {
     if (typeof value !== "object" || value === null) return [];
     const coupon = value as { name?: unknown; note?: unknown };
@@ -130,28 +131,6 @@ export const findReservationOfCustomer = async (db: Db, reservationId: string, c
   return row ? toContext(row as Record<string, unknown>) : null;
 };
 
-/** 断りの理由の読み直しに使う、オファーの今と店の状況。オファーが無ければ null。 */
-export const findOfferForReceive = async (db: Db, offerId: string, nowIso: string): Promise<{ offer: ReservationOffer; storeBanned: boolean } | null> => {
-  const row = await db
-    .prepare(
-      `SELECT o.ended_at, o.until_at, o.party_max, ${remainingExpression("o", "?2")} AS remaining, s.status AS store_status` +
-        ` FROM offers o JOIN stores s ON s.id = o.store_id WHERE o.id = ?1`,
-    )
-    .bind(offerId, nowIso)
-    .first();
-  if (!row) return null;
-  const r = row as Record<string, unknown>;
-  return {
-    offer: {
-      endedAt: r.ended_at ? new Date(r.ended_at as string) : null,
-      untilAt: new Date(r.until_at as string),
-      remaining: Number(r.remaining ?? 0),
-      partyMax: Number(r.party_max ?? 0),
-    },
-    storeBanned: r.store_status === "banned",
-  };
-};
-
 /** その客が確保中の確保を持っているか（基準 8.8。期限切れは数えない・基準 8.9）。 */
 export const hasActiveReservation = async (db: Db, customerId: string, nowIso: string): Promise<boolean> => {
   const row = await db
@@ -173,350 +152,6 @@ export const listReservationStatesOfCustomer = async (db: Db, customerId: string
     expiresAt: new Date(row.expires_at as string),
   }));
 };
-
-/** そのコードが既に使われているか（完了済み・取り消された確保のものも含む・基準 8.3）。 */
-export const isCodeTaken = async (db: Db, code: string): Promise<boolean> => {
-  const row = await db.prepare(`SELECT 1 AS found FROM reservations WHERE code = ?1 LIMIT 1`).bind(code).first();
-  return row !== null;
-};
-
-/**
- * 受け取る前に読む、そのオファーの店と「見せているクーポン」の写し（基準 16.6・4.8 の並び）。
- * 確保が写しを持つので、あとで店がクーポンを編集・削除しても確保の中身は変わらない。
- * オファーが無ければ null（受け取りの断りへ倒す）。
- */
-export const findOfferSnapshot = async (db: Db, offerId: string): Promise<{ storeId: string; coupons: Array<{ name: string; note: string }> } | null> => {
-  const offer = await db.prepare(`SELECT store_id FROM offers WHERE id = ?1`).bind(offerId).first();
-  if (!offer) return null;
-  const result = await db
-    .prepare(
-      `SELECT c.name, c.note FROM coupons c` +
-        ` WHERE c.store_id = (SELECT o.store_id FROM offers o WHERE o.id = ?1)` +
-        ` AND EXISTS (SELECT 1 FROM json_each((SELECT o.coupon_ids FROM offers o WHERE o.id = ?1)) WHERE json_each.value = c.id)` +
-        ` ORDER BY c.created_at, c.rowid`,
-    )
-    .bind(offerId)
-    .all();
-  return {
-    storeId: (offer as { store_id: string }).store_id,
-    coupons: ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({
-      name: (row.name as string | null) ?? "",
-      note: (row.note as string | null) ?? "",
-    })),
-  };
-};
-
-/**
- * その客が最後に取得を押した時刻（要件27の記録から）。1度も押していなければ null。
- *
- * ⚠️ 読むのは記録の表（fetch_logs）だが、repo/logs.ts には**追加の文しか置かない**と決めてある
- * （基準 27.7・構造の検査）ので、読み口はこちらに置いた。使うのは客のホームの優先の順の4
- * （取り消しの表示は、そのあと取得を押していないときだけ出す・設計書「客の画面」）。
- */
-/**
- * その客の取得の記録の時刻。在らない・別の客のものなら null（受け取りの `fetchId` の確かめ）。
- *
- * `reservations.fetch_id` は取得の記録を指す（外部の鍵）ので、在らない番号で受け取ろうとすると
- * INSERT が落ちる。落ちる前に入力の断りへ倒すために見る（要件29——どんな入力でも落ちない）。
- * 取得から一定時間を過ぎた結果からは新しく受け取らせない（安全-06）ので、時刻まで返す。
- */
-export const findFetchLogAt = async (db: Db, fetchId: string, customerId: string): Promise<Date | null> => {
-  const row = await db.prepare(`SELECT at FROM fetch_logs WHERE id = ?1 AND customer_id = ?2 LIMIT 1`).bind(fetchId, customerId).first();
-  const at = (row as { at?: unknown } | null)?.at;
-  return typeof at === "string" ? new Date(at) : null;
-};
-
-/**
- * その取得の結果に、そのオファーの店が出たか（結果に無い店の受け取りの件（不具合-12）・安全-06 の案B）。
- * 取得の記録 `fetch_items` はどのオファーだったかを持たないので、店で突き合わせる。記録は追加だけの表なので、
- * ここで見てから INSERT するまでの間に答えが変わることはない（INSERT の WHERE にも同じ条件を入れてある）。
- */
-export const fetchShowsOffer = async (db: Db, input: { fetchId: string; offerId: string }): Promise<boolean> => {
-  const row = await db
-    .prepare(`SELECT 1 AS found FROM fetch_items fi JOIN offers o ON o.store_id = fi.store_id WHERE fi.fetch_id = ?1 AND o.id = ?2 LIMIT 1`)
-    .bind(input.fetchId, input.offerId)
-    .first();
-  return row !== null;
-};
-
-/**
- * その客が、そのオファーを押さえた件数（受け取りと受け取り直しを合わせて・取得をまたいで・状態を問わない）。
- * 押さえられる件数の上限（安全-06 の案A と案C）の判断と、期限切れの表示で受け取り直しを勧めるかに使う。
- */
-export const countReceivesOfOffer = async (db: Db, input: { customerId: string; offerId: string }): Promise<number> => {
-  const row = await db.prepare(`SELECT COUNT(*) AS n FROM reservations WHERE customer_id = ?1 AND offer_id = ?2`).bind(input.customerId, input.offerId).first();
-  return Number((row as { n?: unknown } | null)?.n ?? 0);
-};
-
-export const findLastFetchAt = async (db: Db, customerId: string): Promise<Date | null> => {
-  const row = await db.prepare(`SELECT MAX(at) AS last_at FROM fetch_logs WHERE customer_id = ?1`).bind(customerId).first();
-  const value = (row as { last_at?: unknown } | null)?.last_at;
-  return typeof value === "string" && value !== "" ? new Date(value) : null;
-};
-
-// ---------- 書く（受け取り・受け取り直し） ----------
-
-export type NewReservation = {
-  id: string;
-  offerId: string;
-  customerId: string;
-  fetchId: string;
-  party: number;
-  code: string;
-  nowIso: string;
-  expiresAtIso: string;
-  /** 受け取った時点のクーポンの写し（JSON の文字列） */
-  couponsJson: string;
-  /** 同じ客が同じオファーを押さえられる件数（取得をまたいで・安全-06。値の正本は schemas/limits の RECEIVES_PER_OFFER_MAX） */
-  receivesPerOfferMax: number;
-  /**
-   * 受け取り直しなら元の確保の番号（基準 11.10）。受け取りなら null。
-   * 元の確保が**この文が走る時点でも**「期限切れで、期限から20分以内」のままであることを条件に入れる（不具合-14）。
-   */
-  retryOf: string | null;
-  /** 「今 − 20分」（受け取り直しの条件の境目。引き算は手続きが済ませる） */
-  expiredGraceFromIso: string;
-  /** 選択の記録（基準 27.3）の番号 */
-  selectionId: string;
-};
-
-/**
- * 受け取りの1文の INSERT（設計書「確保の状態と、残りの数え方」の「受け取り」の行）と、その記録。入ったら true。
- *
- * 条件を**1つの文の WHERE に全部入れる**ので、読んでから書くまでの隙に別の要求が入っても、
- * 残りを超えて確保が作られることはない（基準 8.7・18.11）:
- *   ①そのオファーが受け取れる状態（店が承認済み・公開中・残りが1以上）
- *   ②人数がその時点の「何名まで」以下（基準 8.6。取得のあとに店が下げていることがある）
- *   ③その客に確保中の確保が無い（基準 8.8。期限切れ・完了済み・取り消された確保は数えない・8.9）
- *   ④その客がそのオファーを押さえた件数が、取得をまたいで上限未満（受け取り直しは1回まで・安全-06 の案A と案C）
- *   ⑤その取得の結果に、そのオファーの店が出ている（結果に無い店の受け取りの件（不具合-12）・安全-06 の案B）
- *   ⑥その客の登録が消えていない（登録の消去と受け取りが同時に来たとき、名無しの確保を作らない・不具合-15）
- *   ⑦受け取り直しなら、元の確保がまだ「期限切れで、期限から20分以内」のまま（店の完了済みと同時に来たとき、
- *     1組が2枠を押さえない・不具合-14。完了済みが先に入っていれば元の確保はもう `active` でない）
- * 距離と予算は見ない（基準 8.6 の補足——結果に出た時点で通っており、歩いた客を断る理由が無い）。
- *
- * 店の状況も見る（止められている店から受け取らせない）。運営が店を止めるとオファーも終わるので、
- * これは受け取れる状態の判断を二重に持つものではない（設計書「オファーの状態」）。
- *
- * 客の電話番号は**受け取った時点の値を確保の行に写す**（`customer_phone`・安全-17 の案1）。店の一覧はこの写しを
- * 読むので、あとから客が番号を入れ直しても、前に受け取った店へは渡らない。仮の番号かどうかは写したあとで
- * `domain/storeHome` が見る（判断を SQL に置かない）。
- *
- * 選択の記録（基準 27.3）と状態の変化の記録（基準 27.4）は**同じ `db.batch` の並び**で書く（不具合-16）——
- * どちらの文も確保の行が在るときだけ足すので、確保を作らなかったまとまりでは何も残らない。
- */
-export const receiveReservation = async (db: Db, input: NewReservation): Promise<boolean> => {
-  const insert = db
-    .prepare(
-      `INSERT INTO reservations (id, offer_id, store_id, customer_id, fetch_id, party, code, created_at, expires_at, status, status_at, holds_slot, completed_after_expiry, coupons_json, customer_phone)` +
-        ` SELECT ?1, o.id, o.store_id, ?2, ?3, ?4, ?5, ?6, ?7, 'active', ?6, 1, 0, ?8, c.phone` +
-        ` FROM offers o JOIN stores s ON s.id = o.store_id JOIN customers c ON c.id = ?2` +
-        ` WHERE o.id = ?9` +
-        ` AND s.status = 'approved'` +
-        ` AND c.deleted_at IS NULL` +
-        ` AND ${publishingOfferCondition("o", "?6")}` +
-        ` AND ${remainingExpression("o", "?6")} >= 1` +
-        ` AND ?4 <= o.party_max` +
-        ` AND NOT EXISTS (SELECT 1 FROM reservations ar WHERE ar.customer_id = ?2 AND ${activeReservationCondition("ar", "?6")})` +
-        ` AND (SELECT COUNT(*) FROM reservations pr WHERE pr.customer_id = ?2 AND pr.offer_id = ?9) < ?10` +
-        ` AND EXISTS (SELECT 1 FROM fetch_items fi WHERE fi.fetch_id = ?3 AND fi.store_id = o.store_id)` +
-        ` AND (?11 IS NULL OR EXISTS (SELECT 1 FROM reservations prev WHERE prev.id = ?11 AND prev.customer_id = ?2 AND ${expiredWithinGraceCondition("prev", "?6", "?12")}))`,
-    )
-    .bind(
-      input.id,
-      input.customerId,
-      input.fetchId,
-      input.party,
-      input.code,
-      input.nowIso,
-      input.expiresAtIso,
-      input.couponsJson,
-      input.offerId,
-      input.receivesPerOfferMax,
-      input.retryOf,
-      input.expiredGraceFromIso,
-    );
-  const [inserted] = await db.batch([
-    insert,
-    selectionStatement(db, { id: input.selectionId, reservationId: input.id, at: input.nowIso }),
-    reservationEventStatement(db, { reservationId: input.id, status: "active", at: input.nowIso }),
-  ]);
-  return changedRows(inserted) > 0;
-};
-
-// ---------- 読む（向かっている客の一覧・完了済みの断りの理由。タスク17） ----------
-
-/** 一覧の行1つぶん（`domain/storeHome` の `ArrivalRowInput` と同じ形。時刻は Date に直してある）。 */
-export type ArrivalReservationRow = {
-  reservationId: string;
-  status: string;
-  expiresAt: Date;
-  statusAt: Date;
-  nickname: string;
-  /** 受け取った時点の電話番号の写し（安全-17）。写しが無い（写す前の行・消去した客）なら空 */
-  phone: string;
-  party: number;
-  code: string;
-  hasNewerReservation: boolean;
-};
-
-/**
- * その客が、この確保より後に別の確保を作ったか（基準 20.12・20.7）。
- * 同じ時刻に2件入ったときは、あとから入った行（`rowid` が大きい方）を「後」とする。
- */
-const HAS_NEWER_RESERVATION = (alias: string): string =>
-  `EXISTS (SELECT 1 FROM reservations n WHERE n.customer_id = ${alias}.customer_id` +
-  ` AND (n.created_at > ${alias}.created_at OR (n.created_at = ${alias}.created_at AND n.rowid > ${alias}.rowid)))`;
-
-/**
- * 一覧に出しうる確保を読む（要件20の基準 20.1・20.5・20.14〜20.16）。
- *
- * **どの行を出すか・どう見せるかは決めない**——それは `domain/storeHome` の `arrivalRows`。
- * ここでやるのは3つだけ: ①自分の店の確保に絞る ②出す見込みの無い状態を落とす（運営に取り消された・
- * 基準 20.15。客が取り消した行は10分だけ出すので読む・横断-08）③読む幅を `sinceIso` で切る（残り方の
- * いちばん長い24時間ぶん。これが無いと店の一覧が日ごとに重くなる）。①と③は索引
- * `idx_reservations_store_status_at`（migrations/0004）で引く（設計-08）。
- *
- * 電話番号は**確保の行の写し**（`res.customer_phone`・受け取った時点の値）を読み、客の今の番号は読まない
- * （安全-17 の案1: あとから入れた番号が、前に受け取った店の「済んだぶん」に出ていた）。呼び名は客の今の値。
- */
-export const listStoreArrivals = async (db: Db, storeId: string, sinceIso: string): Promise<ArrivalReservationRow[]> => {
-  const result = await db
-    .prepare(
-      `SELECT ${RESERVATION_COLUMNS}, c.nickname AS customer_nickname, res.customer_phone AS customer_phone,` +
-        ` ${HAS_NEWER_RESERVATION("res")} AS has_newer` +
-        ` FROM reservations res` +
-        ` JOIN customers c ON c.id = res.customer_id` +
-        ` WHERE res.store_id = ?1 AND res.status <> 'admin_cancelled'` +
-        ` AND res.status_at >= ?2`,
-    )
-    .bind(storeId, sinceIso)
-    .all();
-  return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => {
-    const reservation = toReservationRow(row);
-    return {
-      reservationId: reservation.id,
-      status: reservation.status,
-      expiresAt: reservation.expiresAt,
-      statusAt: reservation.statusAt,
-      nickname: (row.customer_nickname as string | null) ?? "",
-      phone: (row.customer_phone as string | null) ?? "",
-      party: reservation.party,
-      code: reservation.code,
-      hasNewerReservation: Number(row.has_newer ?? 0) === 1,
-    };
-  });
-};
-
-/** 完了済みにできるかの判断と、断りの理由の読み直しに要るぶん。別の店の確保なら null（基準 14.9）。 */
-export type StoreReservationRow = { status: string; expiresAt: Date; hasNewerReservation: boolean };
-
-export const findStoreReservation = async (db: Db, reservationId: string, storeId: string): Promise<StoreReservationRow | null> => {
-  const row = await db
-    .prepare(`SELECT res.status, res.expires_at, ${HAS_NEWER_RESERVATION("res")} AS has_newer FROM reservations res WHERE res.id = ?1 AND res.store_id = ?2`)
-    .bind(reservationId, storeId)
-    .first();
-  if (!row) return null;
-  const r = row as Record<string, unknown>;
-  return { status: r.status as string, expiresAt: new Date(r.expires_at as string), hasNewerReservation: Number(r.has_newer ?? 0) === 1 };
-};
-
-// ---------- 書く（完了済みにする。タスク17） ----------
-
-/**
- * 完了済みにする1文の UPDATE（設計書「確保の状態と、残りの数え方」の「完了済み」の行）と、その記録。変わったら true。
- *
- * **できる条件を全部この1つの文の WHERE に入れる**ので、読んでから書くまでの隙に別の出来事
- * （客の取り消し・店の取り消し・もう1人の店員の完了済み）が入っても、状態が二重に変わることは
- * ない（基準 20.22・18.11）。判断の正本は `domain/reservation` の `canComplete` で、この WHERE は
- * その SQL 版——**どちらかを直したら両方直す**（突き合わせは受け入れ検査 r20）:
- *   ①確保中（`status='active'` で期限より前・基準 20.6）
- *   ②期限切れで、期限から20分以内（`expires_at > 今-20分`・基準 20.7・20.13）で、
- *     客が新しい確保を作っていない（基準 20.12）
- *   ③どちらの場合も、店が運営に止められていない（基準 20.24）
- *
- * 枠の押さえ方（残り）は要件18の基準 18.7〜18.9:
- *   確保中からの完了済み  … 押さえたまま（`holds_slot` は 1 のまま）＝残りは動かない（18.9）
- *   期限切れからの完了済み … 残りが1以上なら押さえ直して1減らし（18.7）、0なら押さえずに0のまま（18.8）
- *
- * 状態の変化の記録（基準 27.4）は同じ `db.batch` の並びで書く（不具合-16）。
- */
-export const completeReservationIfAllowed = async (
-  db: Db,
-  input: { reservationId: string; storeId: string; nowIso: string; expiredGraceFromIso: string },
-): Promise<boolean> => {
-  const remainingOfOffer = `(SELECT ${remainingExpression("o", "?3")} FROM offers o WHERE o.id = reservations.offer_id)`;
-  const update = db
-    .prepare(
-      `UPDATE reservations SET` +
-        ` status = 'completed',` +
-        ` status_at = ?3,` +
-        ` completed_after_expiry = CASE WHEN reservations.expires_at > ?3 THEN 0 ELSE 1 END,` +
-        ` holds_slot = CASE WHEN reservations.expires_at > ?3 THEN 1 WHEN ${remainingOfOffer} >= 1 THEN 1 ELSE 0 END` +
-        ` WHERE reservations.id = ?1 AND reservations.store_id = ?2` +
-        ` AND ((${activeReservationCondition("reservations", "?3")})` +
-        ` OR (${expiredWithinGraceCondition("reservations", "?3", "?4")} AND NOT ${HAS_NEWER_RESERVATION("reservations")}))` +
-        ` AND NOT EXISTS (SELECT 1 FROM stores s WHERE s.id = reservations.store_id AND s.status = 'banned')`,
-    )
-    .bind(input.reservationId, input.storeId, input.nowIso, input.expiredGraceFromIso);
-  const [updated] = await db.batch([update, reservationEventStatement(db, { reservationId: input.reservationId, status: "completed", at: input.nowIso })]);
-  return changedRows(updated) > 0;
-};
-// ---------- 店が取り消す（タスク18・要件21） ----------
-
-/**
- * 番号で1件。**その店のものでなければ null**（別の店の確保は触れない・入口は 404 に倒す）。
- * 残りは見ないので、`findReservationOfCustomer` と違ってオファーとも店とも繋がない。
- */
-export const findReservationOfStore = async (db: Db, reservationId: string, storeId: string): Promise<ReservationRow | null> => {
-  const row = await db.prepare(`SELECT ${RESERVATION_COLUMNS} FROM reservations res WHERE res.id = ?1 AND res.store_id = ?2`).bind(reservationId, storeId).first();
-  return row ? toReservationRow(row as Record<string, unknown>) : null;
-};
-
-/**
- * 店が取り消す（基準 21.1・21.4）と、その記録。入ったら true。
- *
- * **前の状態（確保中で期限より前）を WHERE に全部入れた1つの UPDATE** なので、同じ確保へ
- * 完了済み・客の取り消し・店の取り消しが同時に来ても、状態が2回変わることはない（基準 20.22）。
- *
- * `holds_slot` は触らない——店が取り消した確保は枠を押さえたままで、残りも募集する組数も
- * 戻らない（基準 18.4・18.5。押さえている条件の3つ目は `sqlFragments.holdsSlotCondition`）。
- * 状態の変化の記録（基準 27.4）は同じ `db.batch` の並びで書く（不具合-16）。
- */
-export const cancelReservationByStore = async (db: Db, input: { reservationId: string; storeId: string; nowIso: string }): Promise<boolean> => {
-  const update = db
-    .prepare(
-      // 別名を付けずに表の名前で条件を書く（`endPublishedOffersStatement` と同じ形。UPDATE の
-      // 別名は SQLite の版に依るので、確実な側に寄せた）。
-      `UPDATE reservations SET status = 'store_cancelled', status_at = ?3` +
-        ` WHERE reservations.id = ?1 AND reservations.store_id = ?2 AND ${activeReservationCondition("reservations", "?3")}`,
-    )
-    .bind(input.reservationId, input.storeId, input.nowIso);
-  const [updated] = await db.batch([update, reservationEventStatement(db, { reservationId: input.reservationId, status: "store_cancelled", at: input.nowIso })]);
-  return changedRows(updated) > 0;
-};
-
-// ---------- 運営が店を止める（タスク21・要件25の基準 25.8） ----------
-
-/**
- * その店の確保中の確保を全部「運営に取り消された」にする1つの UPDATE（基準 25.8・25.11）。
- * `db.batch` の並びに入れて、状況の書き換えとオファーの終わりと同じまとまりで流す。
- *
- * 期限切れの確保は変えない（枠をもう押さえておらず、店はまだ完了済みにできる・基準 20.7）。
- * `holds_slot` は触らないが、押さえている条件に `admin_cancelled` は無いので残りは1戻る（基準 18.6）。
- *
- * **取り消した確保の番号と客の番号を返す**（`RETURNING`・不具合-13）。知らせの相手（基準 22.2）は、
- * 取り消す前に読んでおくのではなく、この文が実際に取り消した行から決める——前に読む形では、読んでから
- * 止めるまでの間に受け取った客へ知らせが届かなかった。
- */
-export const adminCancelReservationsStatement = (db: Db, storeId: string, nowIso: string) =>
-  db
-    .prepare(
-      `UPDATE reservations SET status = 'admin_cancelled', status_at = ?2` +
-        ` WHERE reservations.store_id = ?1 AND ${activeReservationCondition("reservations", "?2")}` +
-        ` RETURNING reservations.id AS id, reservations.customer_id AS customer_id`,
-    )
-    .bind(storeId, nowIso);
 
 // ---------- 書く（客の取り消しと人数の変更・タスク15） ----------
 

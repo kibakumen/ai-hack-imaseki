@@ -11,7 +11,8 @@ import { distanceMeters, searchBounds, SEARCH_RADIUS_METERS } from "../lib/domai
 import { listStoresForAdmin } from "../lib/repo/adminStores";
 import { findFetchCandidates } from "../lib/repo/fetchCandidates";
 import { insertExpiredEvents } from "../lib/repo/logs";
-import { findLastFetchAt, listStoreArrivals } from "../lib/repo/reservations";
+import { findLastFetchAt } from "../lib/repo/reservationReceive";
+import { listStoreArrivals } from "../lib/repo/reservationsOfStore";
 import { listOfferShownCounts, listOfferTrendCounts, listReservationStatesOfStore } from "../lib/repo/storeResults";
 import { interleaved } from "./_interleavedDb";
 

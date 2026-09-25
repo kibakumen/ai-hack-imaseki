@@ -16,7 +16,7 @@ import type { AdminStoreFilter } from "../schemas/admin";
 import { insertAdminActionIfChangedStatement, insertAdminActionWithSqlDetailIfChangedStatement, type NewAdminAction } from "./adminActions";
 import { changedRows, parseStringList } from "./d1";
 import { adminCancelledEventsStatement } from "./logs";
-import { adminCancelReservationsStatement } from "./reservations";
+import { adminCancelReservationsStatement } from "./reservationsOfStore";
 import { activeReservationCondition, publishingOfferCondition, remainingExpression } from "./sqlFragments";
 import type { StoreStatus } from "./stores";
 
