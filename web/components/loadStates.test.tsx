@@ -11,11 +11,12 @@
 import React from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { installFakeApi, storeHomeDto, type FakeApi } from "../../tests/acceptance/v2/_fakes";
+import { installFakeApi, PROFILE, storeHomeDto, type FakeApi } from "../../tests/acceptance/v2/_fakes";
 import { TEXTS } from "../lib/domain/texts";
 import { ReportList } from "./admin/ReportList";
 import { CouponEditor } from "./store/CouponEditor";
 import { DocumentsPanel } from "./store/DocumentsPanel";
+import { ProfileForm } from "./store/ProfileForm";
 import { StoreHome } from "./store/StoreHome";
 import { SessionExpiredNotice } from "./ui/SessionExpired";
 
@@ -102,6 +103,35 @@ describe("読み込めなかったときは0件と区別する", () => {
     const failed = await screen.findByTestId("load-failed");
     expect(failed.textContent).toContain(TEXTS.inputRefusal("internal"));
     expect(failed.textContent).not.toContain(TEXTS.inputRefusal("network"));
+  });
+
+  // 空の欄を出すと、店は「消えた」と思って入れ直し、入れ直さなかった URL やおすすめメニューを
+  // 空で上書きしてしまう（2026-09-25 レビューの指摘）。読めたときだけ、値の入った欄を出す。
+  it("店の情報は、読めなかったときに空の欄を出さず、断りの文と読み直す道を出す。読み直して取れれば値の入った欄が出る", async () => {
+    let down = true;
+    api = installFakeApi({ "GET /api/store/profile": () => (down ? NETWORK_DOWN() : { json: { ok: true, profile: PROFILE } }) });
+    render(<ProfileForm />);
+    const failed = await screen.findByTestId("load-failed");
+    expect(failed.textContent).toContain(TEXTS.inputRefusal("network"));
+    expect(screen.queryByTestId("form-profile")).toBeNull();
+    down = false;
+    await act(async () => {
+      screen.getByTestId("btn-retry").click();
+    });
+    const name = (await screen.findByTestId("field-name")) as HTMLInputElement;
+    expect(name.value).toBe(PROFILE.name);
+    expect((screen.getByTestId("field-url") as HTMLInputElement).value).toBe(PROFILE.url);
+    expect(screen.getByTestId("form-profile").textContent).toContain(PROFILE.menus[0]);
+    expect(screen.queryByTestId("load-failed")).toBeNull();
+  });
+
+  it("店の情報は、サーバーの不具合（500・internal）でも空の欄を出さない", async () => {
+    api = installFakeApi({ "GET /api/store/profile": () => ({ status: 500, json: { ok: false, error: { kind: "internal" } } }) });
+    render(<ProfileForm />);
+    const failed = await screen.findByTestId("load-failed");
+    expect(failed.textContent).toContain(TEXTS.inputRefusal("internal"));
+    expect(screen.queryByTestId("form-profile")).toBeNull();
+    expect(screen.queryByTestId("btn-save-profile")).toBeNull();
   });
 });
 
