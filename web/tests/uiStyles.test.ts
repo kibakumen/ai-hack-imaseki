@@ -250,6 +250,16 @@ describe("指で押す部品の大きさ（横断-13）", () => {
     expect(parseFloat(gap!)).toBeGreaterThanOrEqual(0.75);
   });
 
+  // 2026-09-26 のレビュー: 向かっている客のカードは格子（人数の札 auto・中身 minmax(0,1fr)・コードとボタン auto）で、
+  // カードの中の断りの文（RefusalMessage の p.msg）には置き場所が無かった。自動の配置で2段目の1列目（人数の札の auto の列）へ
+  // 入り、その列が文の幅まで広がって、呼び名・期限・電話番号の列が幅0に潰れた（幅375px で人数の札 w=325・呼び名 w=0）。
+  it("向かっている客のカードの中の断りの文は、格子の全列にまたがる（人数の札の列へ入って呼び名の列を潰さない）", () => {
+    const msg = STORE_RULES.filter((r) => r.selector === ".store-arrival > .msg");
+    expect(msg.length, ".store-arrival > .msg の規則が無い").toBeGreaterThan(0);
+    expect(msg.every((r) => r.at.length === 0)).toBe(true);
+    expect(declOf(msg[0], "grid-column")).toBe("1 / -1");
+  });
+
   it("明暗の切り替えは --theme-toggle-size の四角で、置く画面では main の上をその分あける（タブ・見出しに重ねない）", () => {
     const globals = RULES;
     const toggle = globals.find((r) => r.selector === ".theme-toggle");
