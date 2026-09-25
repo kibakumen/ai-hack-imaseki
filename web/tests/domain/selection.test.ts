@@ -55,6 +55,38 @@ describe("AI の出力の検査", () => {
   });
 });
 
+describe("店が自分で書いたメニュー名を引いた理由（不具合-07 のレビュー）", () => {
+  // 選定の指示は「その店のジャンルかおすすめメニューに触れる」と求めているので、AI はメニュー名をそのまま引く
+  const MENUS = new Map<string, readonly string[]>([
+    ["s1", ["名物もつ煮", "焼き鳥"]],
+    ["s2", ["刺身盛り"]],
+  ]);
+  const check = (items: Array<{ storeId: string; reason: string }>) => validateSelection(body(items), IDS, MENUS);
+
+  it("その店のメニュー名に禁止語が入っていても、引いただけの理由は通り、選定ごと点数順に倒れない", () => {
+    const result = check([
+      { storeId: "s1", reason: "名物もつ煮を出している居酒屋です" },
+      { storeId: "s2", reason: "刺身盛りのある和食です" },
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      items: [
+        { storeId: "s1", reason: "名物もつ煮を出している居酒屋です" },
+        { storeId: "s2", reason: "刺身盛りのある和食です" },
+      ],
+    });
+  });
+
+  it("ほかの店のメニュー名は言い訳にならない（s2 の理由に s1 のメニュー名を書けば落ちる）", () => {
+    const result = check([{ storeId: "s2", reason: "名物もつ煮もある和食です" }]);
+    expect(result).toEqual({ ok: false, rejection: "reason_unfounded_claim" });
+  });
+
+  it("メニュー名の外で断定した理由は落ちる", () => {
+    expect(check([{ storeId: "s1", reason: "名物もつ煮が絶品です" }])).toEqual({ ok: false, rejection: "reason_unfounded_claim" });
+  });
+});
+
 describe("点数順への倒し方", () => {
   it("上位5件までに決まった文が入り、渡された配列は書き換わらない", () => {
     const ranked = [...IDS];

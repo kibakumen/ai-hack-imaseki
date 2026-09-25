@@ -14,6 +14,9 @@ export const FALLBACK_MAX = 5;
 
 export type Selection = { storeId: string; reason: string };
 
+/** 店の番号ごとの、その店が自分で書いた語（AI に渡したメニュー名） */
+export type StoreWords = ReadonlyMap<string, readonly string[]>;
+
 /**
  * 検査に落ちた訳（機械が読む語）。記録の `ai_calls.validation_failed` に添えるためのもので、
  * 客には見せない（倒れたときの文は基準 7.8 の決まった文ひとつ）。
@@ -56,8 +59,10 @@ export const stripCodeFence = (text: string): string => {
  * 語と連絡先は**紹介文と同じ domain/claims の1つ**で見る（不具合-07）——理由の文は紹介文より先に客へ出る
  * （待ちの表示・紹介文を諦めたときの確定の表示・普通の入口の結果）ので、ここを素通しすると、本人が直した
  * 「ステマ臭い」文が別の経路から出る。当たれば選定ごと点数順に倒す（ほかの理由の検査と同じ扱い）。
+ * `storeWords` はその店が自分で書いたメニュー名。語の検査の前に理由から外す（不具合-07 のレビュー:
+ * 「名物もつ煮」を引いただけで選定の全件が倒れていた）。**ほかの店の語は外さない**——店ごとに渡す。
  */
-const reasonRejection = (reason: unknown): SelectionRejection | null => {
+const reasonRejection = (reason: unknown, storeWords: readonly string[]): SelectionRejection | null => {
   if (typeof reason !== "string") return "empty_reason";
   if (/[\r\n]/.test(reason)) return "reason_has_newline";
   const trimmed = reason.trim();
@@ -65,20 +70,20 @@ const reasonRejection = (reason: unknown): SelectionRejection | null => {
   if ([...trimmed].length > REASON_MAX_LENGTH) return "reason_too_long";
   // 1文＝終わりの印が末尾にしか無い。末尾の1つを外しても残っていれば2文以上。
   if (SENTENCE_END.test(trimmed.replace(TRAILING_SENTENCE_END, ""))) return "reason_multi_sentence";
-  const problem = claimProblem(trimmed);
+  const problem = claimProblem(trimmed, storeWords);
   if (problem === "contact") return "reason_has_contact";
   if (problem) return "reason_unfounded_claim";
   return null;
 };
 
 /** 1件ぶんの検査。通れば整えた値、落ちれば訳を返す */
-const selectionOf = (raw: unknown, allowed: ReadonlySet<string>, seen: ReadonlySet<string>): Selection | SelectionRejection => {
+const selectionOf = (raw: unknown, allowed: ReadonlySet<string>, seen: ReadonlySet<string>, storeWords: StoreWords): Selection | SelectionRejection => {
   const entry = raw as { storeId?: unknown; reason?: unknown } | null;
   const storeId = entry?.storeId;
   if (typeof storeId !== "string" || storeId.length === 0) return "bad_shape";
   if (!allowed.has(storeId)) return "unknown_store"; // 基準 7.3（渡していない店）
   if (seen.has(storeId)) return "duplicate_store"; // 基準 7.3（同じ店が2回）
-  const rejection = reasonRejection(entry?.reason);
+  const rejection = reasonRejection(entry?.reason, storeWords.get(storeId) ?? []);
   if (rejection) return rejection;
   return { storeId, reason: String(entry?.reason).trim() };
 };
@@ -89,8 +94,9 @@ const selectionOf = (raw: unknown, allowed: ReadonlySet<string>, seen: ReadonlyS
  *
  * @param text AI が返した本文（コードフェンスつきでも受ける）
  * @param allowedIds 渡した店の番号（点数順の上位10件）
+ * @param storeWords 店の番号ごとの、AI に渡したその店のメニュー名（店が自分で書いた語。語の検査の前に理由から外す）
  */
-export const validateSelection = (text: string, allowedIds: readonly string[]): SelectionResult => {
+export const validateSelection = (text: string, allowedIds: readonly string[], storeWords: StoreWords = new Map()): SelectionResult => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripCodeFence(text));
@@ -105,7 +111,7 @@ export const validateSelection = (text: string, allowedIds: readonly string[]): 
   const seen = new Set<string>();
   const items: Selection[] = [];
   for (const raw of selections) {
-    const result = selectionOf(raw, allowed, seen);
+    const result = selectionOf(raw, allowed, seen, storeWords);
     if (typeof result === "string") return { ok: false, rejection: result };
     seen.add(result.storeId);
     items.push(result);

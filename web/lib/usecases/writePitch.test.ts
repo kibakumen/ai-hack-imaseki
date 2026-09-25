@@ -77,6 +77,17 @@ describe("紹介文の層", () => {
     expect(written).toEqual({ storeId: "store-1", reason: "近くて好みに合います", source: "fallback" });
   });
 
+  it("店が自分で書いた語（店名・メニュー名・クーポン名）を引いた文は、決定論のガードで落とさずに検査官へ送る（不具合-07 のレビュー）", async () => {
+    const store = { ...STORE, name: "人気屋", menus: ["名物もつ煮"], couponName: "自慢の一品無料" };
+    const { deps, rows } = makeDeps({
+      write: async () => ok("人気屋の名物もつ煮と自慢の一品無料で一杯どう？"),
+      judge: async () => ok('{"ok":true,"reason":""}'),
+    });
+    const written = await writePitch(deps, { fetchId: "f1", party: 2, genres: [], budgetMax: null, target: { ...TARGET, store } });
+    expect(written).toEqual({ storeId: "store-1", reason: "人気屋の名物もつ煮と自慢の一品無料で一杯どう？", source: "persona" });
+    expect(purposesOf(rows)).toEqual(["pitch", "pitch_eval"]);
+  });
+
   it("上限で切れた文（truncated）は字数を満たしていても落とす", async () => {
     const { deps } = makeDeps({
       write: async () => ({ ok: true, text: "歩いて4分、今日は刺身盛りを出して", costUsd: 0.0001, truncated: true }),

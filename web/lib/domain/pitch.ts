@@ -53,12 +53,15 @@ export type PitchCheck = { ok: true; text: string } | { ok: false; critique: str
 /**
  * 紹介文1本の検査。落ちた訳（critique）は**書き直しの指示として AI へ返す**ので、
  * 機械の語ではなく短い日本語で書く。
+ *
+ * @param storeWords その店が自分で書いた語（店名・メニュー名・クーポン名）。書き手に渡しているので、紹介文が
+ *   そのまま引くのは店の事実の写し。語の検査の前に文から外す（不具合-07 のレビュー・domain/claims）。
  */
-export const checkPitch = (raw: string): PitchCheck => {
+export const checkPitch = (raw: string, storeWords: readonly string[] = []): PitchCheck => {
   const text = unwrapQuotes(raw.trim());
   if (text.length === 0) return { ok: false, critique: "空文だった" };
   if ([...text].length > PITCH_CHAR_LIMIT) return { ok: false, critique: `${PITCH_CHAR_LIMIT}字を超えていた` };
-  const problem = claimProblem(text);
+  const problem = claimProblem(text, storeWords);
   if (problem) return { ok: false, critique: CRITIQUE_OF[problem] };
   return { ok: true, text };
 };
@@ -87,6 +90,10 @@ export const readJudgement = (text: string): Judgement | null => {
 
 /** 紹介文の元になる店の姿（lib/ports の PitchStore と同じ形。domain は外の型を読まないので写す）。 */
 export type PitchStoreFacts = { name: string; genres: string[]; menus: string[]; couponName: string | null; couponNote: string | null };
+
+/** 書き手に渡している、店が自分で書いた語（checkPitch の `storeWords` に渡す） */
+export const storeWordsOf = (store: PitchStoreFacts): string[] =>
+  [store.name, ...store.menus, store.couponName ?? "", store.couponNote ?? ""].filter((word) => word.trim().length > 0);
 
 /** どの店にも当てはまる最後の1文（クーポンもメニューも無い店のため） */
 const LAST_RESORT = "近くの気になる一軒です";

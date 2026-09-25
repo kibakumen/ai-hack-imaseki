@@ -13,7 +13,7 @@
 //  ②検査官に生のモデル名を名指しすると本番の鍵の scope で 403 → Named Router 経由（adapters/orcarouter）
 //  ③指示に「評価」と書いたら検査官が褒め言葉を落とした → 落とす条件を3つに限定（adapters/orcarouter）
 
-import { checkPitch, fallbackPitch, PITCH_CHAR_LIMIT, readJudgement } from "../domain/pitch";
+import { checkPitch, fallbackPitch, PITCH_CHAR_LIMIT, readJudgement, storeWordsOf } from "../domain/pitch";
 import { SELECTION_MAX } from "../domain/selection";
 import { tokenFromBytes } from "../domain/token";
 import type { Deps, PitchResult, PitchStore } from "../ports";
@@ -109,7 +109,7 @@ const writeOnce = async (deps: Deps, writer: NonNullable<Deps["pitch"]>, input: 
     return { critique: "生成が時間切れか失敗だった" };
   }
   // 上限で打ち切られた文は途中で切れている。字数の検査は通ってしまうのでここで落とす。
-  const checked = result.truncated ? ({ ok: false, critique: "文が最後まで書かれなかった" } as const) : checkPitch(result.text);
+  const checked = result.truncated ? ({ ok: false, critique: "文が最後まで書かれなかった" } as const) : checkPitch(result.text, storeWordsOf(input.target.store));
   await record(deps, { fetchId: input.fetchId, purpose: "pitch", result, durationMs, validationFailed: !checked.ok });
   return checked.ok ? { text: checked.text } : { critique: checked.critique };
 };

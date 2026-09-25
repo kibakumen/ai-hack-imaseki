@@ -147,3 +147,17 @@ describe("起点の出どころを記録に残す（設計-20: Google の中身�
     await Promise.all(kept);
   });
 });
+
+describe("店が自分で書いたメニュー名を引いた選定の理由（不具合-07 のレビュー）", () => {
+  it("メニュー名「名物もつ煮」をそのまま引いた理由で、選定の全件が点数順に倒れない", async () => {
+    const store = await approvedStore(ctx, { name: "もつ煮の店", genres: ["居酒屋"], menus: ["名物もつ煮"] });
+    await publishOffer(store.api, { capacity: 3, partyMax: 4 });
+    const reason = "名物もつ煮を出している居酒屋です";
+    const ai: AiSelector = { select: async () => ({ ok: true, text: selectionText([{ storeId: store.id, reason }]), costUsd: 0.001 }) };
+    const result = await fetchOffers({ ...ctx.deps, ai }, customerId, { party: 2, lat: SHIBUYA.lat, lng: SHIBUYA.lng });
+
+    expect(result.ok).toBe(true);
+    const items = result.ok ? result.items : [];
+    expect(items.map((item) => ({ storeId: item.storeId, reason: item.reason }))).toEqual([{ storeId: store.id, reason }]);
+  });
+});

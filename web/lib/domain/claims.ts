@@ -16,9 +16,13 @@ export type ClaimProblem = "contact" | "nonexistent_data" | "unfounded_praise";
  *   「AIの紹介文が**絶品だよなど根拠のない感想**を述べていて、**ステマ臭い**です」
  *
  * `word` は指示に並べる形、`stem` は活用しても当たるように縮めた照合の形（無ければ `word` のまま照らす）。
- * ⚠️ 入れるのは**誤って落とす余地がまず無い語だけ**。「近い」「好みに合いそう」「クーポンが使える」
+ * ⚠️ 入れるのは**AI 自身の評価として書かれたら落としてよい語だけ**。「近い」「好みに合いそう」「クーポンが使える」
  * のような**状況の言い換えは1語も入れない**——そこを混ぜると、通すべき文まで落ちる。
- * ⚠️ 広げすぎると書き直しと点数順への倒れが増える。語を足すときは実際に回して、倒れる率が上がらないことを確かめる。
+ * ⚠️ 2026-09-25 に「最高」「人気」「美味い」「旨い」を足し、照らし方を広げた（最高級→最高・大人気→人気。監査の指摘
+ * 不具合-07 が、指示では禁じているのに検査をすり抜けた語として名指しした）。これらは**店の名前やメニュー名にも入る**
+ * （「名物もつ煮」「人気の唐揚げ定食」）ので、店が自分で書いた語は照らす前に文から外す（`claimProblem` の `storeWords`）。
+ * ⚠️ 広げすぎると書き直しと点数順への倒れが増える。語を足したら、本番の `ai_calls.validation_failed` の率
+ * （選定は purpose='select'）で倒れる率が上がっていないかを見る。
  */
 export const UNFOUNDED_PRAISE_TERMS: readonly { word: string; stem?: string }[] = [
   { word: "絶品" },
@@ -72,14 +76,48 @@ const HYPHENATED_TRIPLE = /\d{2,4}-\d{2,4}-\d{3,4}/;
 const hasPhone = (text: string): boolean =>
   HYPHENATED_TRIPLE.test(text) || [...text.matchAll(PHONE_CANDIDATE)].some((match) => match[0].replace(/\D/g, "").length >= PHONE_MIN_DIGITS);
 
+/** 店の語を外したあとに置く1字（どの禁止語の一部にもならない字） */
+const STORE_WORD_MARK = "〇";
+/**
+ * 店の語のうち、断定と無いデータの語と記号・空白を除いて、これだけの字が残るものだけを外す。
+ * 外すのは店の語**そのもの**の現れだけなので、1字でも残れば（店名「人気屋」）断定の語だけを通すことにはならない
+ * （「人気屋」を外しても「人気店」は残って落ちる）。
+ */
+const STORE_WORD_MIN_SUBSTANCE = 1;
+
+const UNFOUNDED_PRAISE_ALL = new RegExp(UNFOUNDED_PRAISE.source, "g");
+const NONEXISTENT_DATA_ALL = new RegExp(NONEXISTENT_DATA.source, "g");
+
+/** 断定と無いデータの語、記号と空白を除いて残る字数（「絶品」「★4」のような語だけの店の語は 0） */
+const substanceOf = (word: string): number =>
+  [...word.replace(UNFOUNDED_PRAISE_ALL, "").replace(NONEXISTENT_DATA_ALL, "").replace(/[\s\p{P}\p{S}]/gu, "")].length;
+
+/**
+ * 店が自分で書いた語（メニュー名・店名・クーポン名）を、語の検査の前に文から外す（2026-09-25 不具合-07 のレビュー）。
+ * AI がそれをそのまま引くのは「店の書いた事実を写す」ことで、AI 自身の評価の断定ではない。外さないと、選定の指示が
+ * 「おすすめメニューに触れる」と求めている以上、メニュー名「名物もつ煮」を引くたびに選定の全件が点数順に倒れる。
+ * 長い語から外す（「名物もつ煮定食」を「名物もつ煮」より先に）。禁止語だけでできた語（メニュー名「絶品」）は外さない
+ * ——店の語を言い訳に、AI の断定を通さないため。
+ */
+const withoutStoreWords = (normalized: string, storeWords: readonly string[]): string =>
+  storeWords
+    .map((word) => word.normalize("NFKC").trim())
+    .filter((word) => substanceOf(word) >= STORE_WORD_MIN_SUBSTANCE)
+    .sort((a, b) => b.length - a.length)
+    .reduce((text, word) => text.split(word).join(STORE_WORD_MARK), normalized);
+
 /**
  * 1本の文の、語と連絡先の問題を返す（無ければ null）。見る順は 連絡先 → 無いデータ → 根拠のない断定。
  * 全角の英数字・記号は NFKC で半角へ寄せてから見る（「０３－１２３４－５６７８」「ｗｗｗ．」をすり抜けさせない）。
+ *
+ * @param storeWords その文が指す店が自分で書いた語（メニュー名・店名・クーポン名）。語の検査の前に文から外す。
+ *   連絡先の検査には使わない——店の書いた語でも、電話番号と URL は客の画面へ出さない。
  */
-export const claimProblem = (text: string): ClaimProblem | null => {
+export const claimProblem = (text: string, storeWords: readonly string[] = []): ClaimProblem | null => {
   const normalized = text.normalize("NFKC");
   if (URL_OR_MAIL.test(normalized) || hasPhone(normalized)) return "contact";
-  if (NONEXISTENT_DATA.test(normalized)) return "nonexistent_data";
-  if (UNFOUNDED_PRAISE.test(normalized)) return "unfounded_praise";
+  const ownWordsRemoved = withoutStoreWords(normalized, storeWords);
+  if (NONEXISTENT_DATA.test(ownWordsRemoved)) return "nonexistent_data";
+  if (UNFOUNDED_PRAISE.test(ownWordsRemoved)) return "unfounded_praise";
   return null;
 };

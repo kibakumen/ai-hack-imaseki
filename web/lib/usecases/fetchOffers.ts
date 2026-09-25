@@ -118,7 +118,8 @@ const askAi = async (deps: Deps, input: FetchInput, ranked: readonly Candidate[]
       call: { costUsd: result?.costUsd ?? null, durationMs, succeeded: 0, validationFailed: 0, resolvedModel: null, requestId: null, fallbackLevel: null },
     };
   }
-  const checked = validateSelection(result.text, ranked.map((row) => row.id));
+  // AI に渡したメニュー名（店が自分で書いた語）は、理由の語の検査の前に外す（不具合-07 のレビュー・domain/selection）
+  const checked = validateSelection(result.text, ranked.map((row) => row.id), new Map(ranked.map((row) => [row.id, row.menus])));
   const call = {
     costUsd: result.costUsd,
     durationMs,
