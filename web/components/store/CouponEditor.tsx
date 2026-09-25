@@ -9,7 +9,7 @@
 // ⚠️ 断りは一度に1か所にだけ出す（作る側か、どれか1つの行か）。同じ `msg-name` が2か所に
 //    同時に出ると、どちらの操作の話なのかが読めなくなる。
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { COUPON_TEXTS } from "../../lib/domain/texts";
@@ -29,7 +29,29 @@ const NOTE_CTX = { field: "特記事項", min: 0, max: COUPON_NOTE_MAX };
 /** 断りと、それがどの操作のものか。 */
 type ScopedFailure = { scope: string; failure: ApiFailure };
 
-const draftsOf = (list: Coupon[]): Record<string, Draft> => Object.fromEntries(list.map((coupon) => [coupon.id, { name: coupon.name, note: coupon.note ?? "" }]));
+const draftOf = (coupon: Coupon): Draft => ({ name: coupon.name, note: coupon.note ?? "" });
+
+const sameDraft = (a: Draft, b: Draft): boolean => a.name === b.name && a.note === b.note;
+
+/**
+ * 取り直した一覧から書きかけを作り直す（2026-09-25 監査の指摘 店-19）。**書きかけ（前に取れた値から直した行）は残し**、
+ * 今の操作で保存・削除した行（`reset`）と、直していない行と、新しい行だけをサーバーの値にする。消えた行は落とす。
+ * それまでは全部の行を作り直していたので、A を直している途中で B を保存すると A の書きかけが黙って元に戻った。
+ */
+const mergeDrafts = (
+  previous: Record<string, Draft>,
+  previousServer: Record<string, Draft>,
+  list: Coupon[],
+  reset: ReadonlySet<string>,
+): Record<string, Draft> =>
+  Object.fromEntries(
+    list.map((coupon) => {
+      const draft = previous[coupon.id];
+      const server = previousServer[coupon.id];
+      const editing = draft !== undefined && server !== undefined && !sameDraft(draft, server) && !reset.has(coupon.id);
+      return [coupon.id, editing ? draft : draftOf(coupon)];
+    }),
+  );
 
 /**
  * 一覧を取る。取れなかったときは断りをそのまま返す——読み込みの部品（useLoad）が、1度も取れていなければ
@@ -59,6 +81,8 @@ type CouponRowProps = {
   coupon: Coupon;
   draft: Draft;
   failure: ApiFailure | null;
+  /** この行の保存が通った直後か（「保存しました」を出す・店-19） */
+  saved: boolean;
   onChange: (values: Draft) => void;
   onSave: () => void;
   onDelete: () => void;
@@ -88,7 +112,7 @@ const DeleteConfirm = ({ name, onConfirm, onCancel }: { name: string; onConfirm:
  * 上段が券面（客に見える名前と特記事項・客の画面の `.offer-coupon` と同じ点線の縁の語彙）、
  * 下段が直す欄と、離して置いた2つのボタン。「削除」は確かめを1段挟む（店-03）。
  */
-const CouponRow = ({ coupon, draft, failure, onChange, onSave, onDelete }: CouponRowProps) => {
+const CouponRow = ({ coupon, draft, failure, saved, onChange, onSave, onDelete }: CouponRowProps) => {
   const [askingDelete, setAskingDelete] = useState(false);
   return (
     <li className="store-coupon-card" data-testid={`row-${coupon.id}`}>
@@ -149,6 +173,11 @@ const CouponRow = ({ coupon, draft, failure, onChange, onSave, onDelete }: Coupo
         />
       ) : null}
       <CouponFormMessage failure={failure} />
+      {saved ? (
+        <p className="store-note" role="status" data-testid="msg-saved">
+          保存しました。
+        </p>
+      ) : null}
     </li>
   );
 };
@@ -208,18 +237,34 @@ export const CouponEditor = () => {
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [refused, setRefused] = useState<ScopedFailure | null>(null);
+  /** 保存が通った直後の行（その行に「保存しました」を出す。その行を直し始めたら消す・店-19） */
+  const [savedId, setSavedId] = useState<string | null>(null);
+  /** 前に取れたサーバーの値（書きかけかどうかを見分けるため） */
+  const serverDrafts = useRef<Record<string, Draft>>({});
+  /** 次に取れたときにサーバーの値へ戻す行（今の操作で保存・削除した行） */
+  const resetIds = useRef<Set<string>>(new Set());
 
-  // 画面を開いた時に一度だけ取る（離れたあとに返ってきた答えは useLoad が捨てる）。取れたたびに下書きを作り直す。
-  const { state, reload } = useLoad(fetchCoupons, { onLoaded: (list) => setDrafts(draftsOf(list)) });
+  // 画面を開いた時に一度だけ取る（離れたあとに返ってきた答えは useLoad が捨てる）。取れたたびに、書きかけを残して
+  // 下書きを作り直す（店-19）。
+  const absorb = (list: Coupon[]) => {
+    const previousServer = serverDrafts.current;
+    const reset = resetIds.current;
+    serverDrafts.current = Object.fromEntries(list.map((coupon) => [coupon.id, draftOf(coupon)]));
+    resetIds.current = new Set();
+    setDrafts((prev) => mergeDrafts(prev, previousServer, list, reset));
+  };
+  const { state, reload } = useLoad(fetchCoupons, { onLoaded: absorb });
 
   /** 断られたらその場に文を出して終わる。通ったら一覧を取り直す（一覧の正本は入口の側）。 */
   const apply = async (scope: string, call: () => Promise<unknown>, onDone: () => void) => {
     const result = await call();
     if (isFailure(result)) {
       setRefused({ scope, failure: result });
+      setSavedId(null);
       return;
     }
     setRefused(null);
+    if (scope !== CREATE_SCOPE) resetIds.current = new Set([...resetIds.current, scope]);
     onDone();
     await reload();
   };
@@ -229,6 +274,7 @@ export const CouponEditor = () => {
     await apply(CREATE_SCOPE, () => callApi("POST /api/store/coupons", { body: { name, note } }), () => {
       setName("");
       setNote("");
+      setSavedId(null);
     });
   };
 
@@ -246,13 +292,17 @@ export const CouponEditor = () => {
             coupon={coupon}
             draft={drafts[coupon.id] ?? { name: coupon.name, note: coupon.note ?? "" }}
             failure={failureOf(coupon.id)}
-            onChange={(values) => setDrafts((prev) => ({ ...prev, [coupon.id]: values }))}
+            saved={savedId === coupon.id}
+            onChange={(values) => {
+              if (savedId === coupon.id) setSavedId(null);
+              setDrafts((prev) => ({ ...prev, [coupon.id]: values }));
+            }}
             onSave={() => {
-              const draft = drafts[coupon.id] ?? { name: coupon.name, note: coupon.note ?? "" };
-              void apply(coupon.id, () => callApi("PUT /api/store/coupons/:id", { params: { id: coupon.id }, body: draft }), () => undefined);
+              const draft = drafts[coupon.id] ?? draftOf(coupon);
+              void apply(coupon.id, () => callApi("PUT /api/store/coupons/:id", { params: { id: coupon.id }, body: draft }), () => setSavedId(coupon.id));
             }}
             onDelete={() => {
-              void apply(coupon.id, () => callApi("DELETE /api/store/coupons/:id", { params: { id: coupon.id } }), () => undefined);
+              void apply(coupon.id, () => callApi("DELETE /api/store/coupons/:id", { params: { id: coupon.id } }), () => setSavedId(null));
             }}
           />
         ))}
