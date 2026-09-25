@@ -72,6 +72,34 @@ describe("取得の画面の入れ物", () => {
     expect((screen.getByTestId("field-party") as HTMLInputElement).value).toBe("1");
   });
 
+  // 客-07: 人数が「入れなくても探せます」の中に既定1で置かれ、増減のボタンも無く、4人連れでも1名のまま確保しやすかった
+  it("人数は「今すぐ探す」の直前（こだわり条件の外）に −/＋ つきで置かれ、ボタンの文言に今の人数が載る", async () => {
+    await renderApp([]);
+    const party = screen.getByTestId("field-party") as HTMLInputElement;
+    const button = screen.getByTestId("btn-fetch");
+    const form = screen.getByTestId("form-fetch");
+    expect(form.querySelector(".fetch-options")!.contains(party)).toBe(false);
+    expect(party.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(button.textContent).toBe("1名で今すぐ探す");
+
+    const minus = screen.getByTestId("btn-party-minus") as HTMLButtonElement;
+    const plus = screen.getByTestId("btn-party-plus") as HTMLButtonElement;
+    expect(minus.disabled).toBe(true);
+    fireEvent.click(plus);
+    fireEvent.click(plus);
+    fireEvent.click(plus);
+    expect(party.value).toBe("4");
+    expect(button.textContent).toBe("4名で今すぐ探す");
+    fireEvent.click(minus);
+    expect(party.value).toBe("3");
+
+    fireEvent.change(party, { target: { value: "10" } });
+    expect(plus.disabled).toBe(true);
+    // 数にならない値のときは人数を載せない（断りは入口が返す）
+    fireEvent.change(party, { target: { value: "" } });
+    expect(button.textContent).toBe("今すぐ探す");
+  });
+
   it("0件なら、文は「今すぐ探す」のすぐ下（こだわり条件より上）に断りの体裁で出て、条件は畳まない", async () => {
     await renderApp([]);
     fireEvent.change(screen.getByTestId("field-place"), { target: { value: "渋谷" } });

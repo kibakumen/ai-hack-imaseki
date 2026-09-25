@@ -1132,3 +1132,37 @@
 .claimed-celebration .coupon-pick-note {
   text-align: center;
 }
+
+/* 人数（2026-09-25 客-07）。「今すぐ探す」の直前に −/＋ つきで横1列に並べる。欄は数字だけが入る幅にする */
+.party-stepper {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+}
+.party-stepper > label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.party-stepper__row {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+.party-stepper__step {
+  border-radius: var(--radius-pill, 999px);
+  font-size: 1.25rem;
+  font-weight: 800;
+  height: 2.75rem;
+  line-height: 1;
+  padding: 0;
+  width: 2.75rem;
+}
+.party-stepper__value {
+  font-size: 1.125rem;
+  font-weight: 800;
+  text-align: center;
+  width: 4.5rem;
+}
+.party-stepper__unit {
+  font-weight: 700;
+}

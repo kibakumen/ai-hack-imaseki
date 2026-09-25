@@ -17,6 +17,7 @@
 // 2026-09-22 の本人の指摘（第3回）で足した3つ:
 //   5. 場所の欄に**打っている最中の候補**を出す（`client/placeSuggest`・`PlaceField`）。
 //   6. こだわり条件の並びは **予算 → ジャンル**（「予算は好みよりも重要な情報なので、人数のすぐ下に」）。
+//      人数は「今すぐ探す」の直前に −/＋ つきで出した（2026-09-25 監査の指摘 客-07・`PartyStepper`）。
 //   7. こだわり条件の**いちばん下に電話番号（任意）**（`PhoneField`）。
 //
 // 現在地が取れなくても押せる（取れなければ押した時に場所を求める・基準 3.7・3.8）。
@@ -28,8 +29,9 @@ import { useCallback, useState, type FormEvent } from "react";
 import { isFailure, type ApiFailure } from "../../lib/client/api";
 import { rememberOrigin } from "../../lib/client/lastOrigin";
 import { TEXTS } from "../../lib/domain/texts";
-import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, PARTY_MAX, PARTY_MIN } from "../../lib/schemas/limits";
+import { BUDGET_MAX_MAX, BUDGET_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { fetchButtonText, PartyStepper } from "./PartyStepper";
 import { PhoneField, useOptionalPhone } from "./PhoneField";
 import { PlaceField } from "./PlaceField";
 import { EMPTY_RESULT_TEXT } from "./ResultList";
@@ -141,9 +143,12 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
 
       <PlaceField place={place} onPlaceChange={setPlace} locate={location.locate} hereLabel={hereLabel} away={away} onUseLocation={backToHere} failure={failure} />
 
+      {/* 人数は「今すぐ探す」の直前（客-07）。ボタンの文言にも今の人数を載せ、1名のまま押したことに気づけるようにする */}
+      <PartyStepper party={party} onPartyChange={onPartyChange} failure={failure} />
+
       {/* 場所のすぐ下（本人の指摘）。ここから下は全部「こだわり条件」＝入れなくても探せる。 */}
       <button type="submit" className="fetch-submit" data-testid="btn-fetch" disabled={pending}>
-        {pending ? "探しています…" : "今すぐ探す"}
+        {pending ? "探しています…" : fetchButtonText(party)}
       </button>
       {/* 0件の文は押した人の目にまず入る位置（ボタンのすぐ下）に、断りと同じ体裁で出す */}
       {noResults ? (
@@ -156,20 +161,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       <div className="fetch-options">
         <p className="fetch-options-title">こだわり条件（入れなくても探せます）</p>
 
-        <label htmlFor="fetch-party">人数</label>
-        <input
-          id="fetch-party"
-          data-testid="field-party"
-          type="number"
-          inputMode="numeric"
-          min={PARTY_MIN}
-          max={PARTY_MAX}
-          value={party}
-          onChange={(event) => onPartyChange(event.target.value)}
-        />
-        <FieldMessage name="party" failure={failure} ctx={{ field: "人数", min: PARTY_MIN, max: PARTY_MAX }} />
-
-        {/* 予算は好みより効く情報なので、人数のすぐ下（本人の指摘・2026-09-22） */}
+        {/* 予算は好みより効く情報なので、こだわり条件のいちばん上（本人の指摘・2026-09-22「人数のすぐ下に」） */}
         <label htmlFor="fetch-budget">1人あたりの予算の上限（この回だけ・空なら上限なし）</label>
         <input
           id="fetch-budget"

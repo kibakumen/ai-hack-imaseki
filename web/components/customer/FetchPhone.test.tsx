@@ -8,7 +8,7 @@
 // 引くだけ）ので、並びと電話番号の振る舞いはこの検査が固定する。
 //
 // 見るのは5つ:
-//   1. 並びは 人数 → 予算 → ジャンル → 電話番号
+//   1. こだわり条件の並びは 予算 → ジャンル → 電話番号（人数は「今すぐ探す」の直前へ移した・2026-09-25 客-07）
 //   2. 登録が仮の番号（自動の登録）のままなら欄は空で見せ、本物が登録されていればそれを見せる
 //   3. 入れて欄を離れると、登録の変更の入口へ4項目まとめて送る（呼び名・ジャンル・予算は登録の値）
 //   4. 空のままでも「今すぐ探す」が押せ、そのときは登録の変更を送らない
@@ -64,10 +64,10 @@ describe("こだわり条件の並びと電話番号", () => {
     return render(<FetchForm profile={profile} party="2" onPartyChange={vi.fn()} onResults={vi.fn()} />);
   };
 
-  it("並びは 人数 → 予算 → ジャンル → 電話番号。電話番号は必須でなく、電話の入力に向く属性を持つ", () => {
+  it("こだわり条件の並びは 予算 → ジャンル → 電話番号（人数は「今すぐ探す」の直前・客-07）。電話番号は必須でなく、電話の入力に向く属性を持つ", () => {
     const { container } = renderForm();
     const order = [...container.querySelectorAll<HTMLElement>('.fetch-options [data-testid^="field-"]')].map((el) => el.dataset.testid);
-    expect(order).toEqual(["field-party", "field-budgetMax", "field-genres", "field-phone"]);
+    expect(order).toEqual(["field-budgetMax", "field-genres", "field-phone"]);
 
     const phone = screen.getByTestId("field-phone") as HTMLInputElement;
     expect(phone.required).toBe(false);
