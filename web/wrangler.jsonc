@@ -3,6 +3,11 @@
   "name": "ai-hack-v2",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-09-21",
+  // 公開は 2026-09-25 から止めてある（README の「6.1 今は止めてある」・2026-09-26 の本人の依頼）。
+  // workers.dev の公開の道と、版ごとの下見の URL を出さない。これが無いと、次の wrangler deploy で公開が黙って戻る。
+  // 再開するときは README 6.2 の手順で、公開の道（workers_dev を true に戻すか独自のドメイン）を決めてから変える。
+  "workers_dev": false,
+  "preview_urls": false,
   // enable_request_signal: 客が接続を切ったときに request.signal を鳴らす（2026-09-25 監査の指摘 設計-18）。
   // 取得のストリームは、切断（とストリームの cancel）で書きかけの紹介文の AI を止める（lib/usecases/streamOffers）。
   // ⚠️ OpenNext を通した Next の req.signal へこの合図が届くかは未実測。届かなくても、ストリームの cancel の側で止まる。
@@ -14,7 +19,14 @@
   "placement": { "mode": "smart" },
   // 記録（Workers Logs）を有効にする（2026-09-25 監査の指摘 安全-03・設計-01）。本番の500や連打・AI の1日の上限に
   // 届いたこと（ai_daily_budget_reached）を、後からダッシュボードで追えるようにする。記録に個人データは載せない（要件27）。
-  "observability": { "enabled": true },
+  // 残すのはアプリの記録（lib/adapters/logger が決まった形で書く1行）だけ。呼び出しごとの記録（invocation logs）は切り、
+  // URL の問い合わせ文字列も伏せる——`/api/customer/place?lat=…&lng=…` の客の座標と `/api/customer/place-suggest?q=…`
+  // の打った場所の文字が、要求の URL ごと Workers Logs に残っていた（2026-09-26 のレビュー）。
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "invocation_logs": false }
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
