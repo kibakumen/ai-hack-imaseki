@@ -9,14 +9,25 @@ import { TID } from "./_types";
 
 const publicConfig = () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } });
 
-type Geo = { mode: "ok" | "deny" | "hang"; coords?: { latitude: number; longitude: number } };
+/**
+ * ブラウザの位置の仕組みの偽物。**実物と同じく、打ち切り（options.timeout）は許可が出てから数える**
+ * （2026-09-25 監査の指摘 客-09 で実物に揃えた。以前の偽物は timeout を受け取らず、画面の側の自前の
+ * タイマーだけが打ち切っていた——許可のダイアログを読む時間まで数える不具合を、検査が固めていた）。
+ *   ok     … すぐ取れる
+ *   deny   … 許可を断られる（code 1）
+ *   hang   … 許可は出ているが位置が決まらない（timeout で打ち切られる・code 3）
+ *   prompt … 許可のダイアログに `promptMs` かけてから許可し、すぐ取れる（許可を待つ間は数えない）
+ */
+type Geo = { mode: "ok" | "deny" | "hang" | "prompt"; coords?: { latitude: number; longitude: number }; promptMs?: number };
 const installGeolocation = (geo: Geo) => {
   Object.defineProperty(navigator, "geolocation", {
     configurable: true,
     value: {
-      getCurrentPosition: (ok: (p: any) => void, err: (e: any) => void) => {
+      getCurrentPosition: (ok: (p: any) => void, err: (e: any) => void, options?: { timeout?: number }) => {
         if (geo.mode === "ok") ok({ coords: geo.coords });
         else if (geo.mode === "deny") err({ code: 1, message: "denied" });
+        else if (geo.mode === "hang" && options?.timeout !== undefined) setTimeout(() => err({ code: 3, message: "timeout" }), options.timeout);
+        else if (geo.mode === "prompt") setTimeout(() => ok({ coords: geo.coords }), geo.promptMs ?? 0);
       },
     },
   });
@@ -90,6 +101,20 @@ describeTask("12", "取得の画面", () => {
     await vi.advanceTimersByTimeAsync(1_500);
     await waitFor(() => expect(screen.getByTestId(TID.msg("place"))).toBeTruthy());
     expect(fetchCalls()).toHaveLength(0);
+  });
+
+  // 客-09: 以前は呼んだ瞬間から5秒を数えていたので、初めての客が許可のダイアログを6秒読んでから「許可」を
+  // 押すと、届いた位置を捨てて「取れませんでした」と出していた。
+  it("3.8 許可のダイアログを読んでいる時間は数えない（6秒後に許可されても、その現在地で探す）", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    installGeolocation({ mode: "prompt", promptMs: 6_000, coords: { latitude: 35.3, longitude: 139.3 } });
+    await renderApp();
+    fireEvent.change(screen.getByTestId(TID.field("party")), { target: { value: "2" } });
+    fireEvent.click(screen.getByTestId(TID.btn("fetch")));
+    await vi.advanceTimersByTimeAsync(6_500);
+    await waitFor(() => expect(fetchCalls()).toHaveLength(1));
+    expect(fetchCalls()[0].body).toMatchObject({ lat: 35.3, lng: 139.3 });
+    expect(screen.queryByTestId(TID.msg("place"))).toBeNull();
   });
 
   it("3.3〜3.6・3.11 断りの応答（place too_long／party required・out_of_range・not_integer／place_unresolved）で、場所か人数の欄の直下に文が出て、入れた内容が残り、取得の画面のまま、結果の一覧は出ない。fields と kind を変えると出る欄と文が変わる", async () => {

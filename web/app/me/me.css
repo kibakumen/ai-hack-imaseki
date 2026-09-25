@@ -773,6 +773,12 @@
   color: var(--color-accent);
   font-weight: 700;
 }
+/* 押す前に、押すと何がどこへ送られるかを添える（2026-09-25 安全-18）。案内より一段小さく淡く */
+.locate-note {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: 0;
+}
 
 /* 場所の候補（2026-09-22 本人の指摘「打っても候補がでません」）。欄の直下に重ねて出す。
    `.place-suggest-anchor` が欄と一覧の共通の親——一覧は欄の幅に揃い、下の要素を押し下げない */

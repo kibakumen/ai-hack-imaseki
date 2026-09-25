@@ -4,56 +4,42 @@
 //
 // **開いた瞬間に押せる画面**にしてある（2026-09-22 の本人の指摘「理想は…その気になれば画面を
 // 開いた瞬間に今すぐ探すボタンを押せること」）。そのための決めが4つ:
-//   1. 画面が出た時点で現在地を取りに行き、取れたら**地名に直して場所の欄へ入れておく**
-//      （客は欄に書かれている場所を「自分が発信する場所」として読む・基準 3.1 の既定を目に見せる）。
+//   1. 現在地が取れたら**地名に直して場所の欄へ入れておく**（客は欄に書かれている場所を「自分が発信する
+//      場所」として読む・基準 3.1 の既定を目に見せる）。⚠️ 取りに行くのは、客が一度「現在地を使う」を
+//      押した端末だけ（2026-09-25 監査の指摘 安全-18。初めての客には押す前に何も送らない・`useHereLocation`）。
 //   2. 欄の中身が**現在地の地名そのまま**なら、送るのは地名ではなく**座標**（地名を送り直すと
 //      地図の丸めが1回増えて、ずれる）。客が書き換えたときだけ文字を送る（基準 3.2）。
 //   3. 「現在地を使う」を常に置き、**欄の中身が現在地から離れたらそのボタンを強調**する
-//      （いつでも現在地に戻せることを見せる）。
+//      （いつでも現在地に戻せることを見せる・`PlaceField`）。
 //   4. 「今すぐ探す」は**場所の欄のすぐ下**。こだわり条件は**その下に常時展開**して
 //      「オプション感」を出す（畳まないので、入れたい客はそのまま入れられる）。
 //
 // 2026-09-22 の本人の指摘（第3回）で足した3つ:
-//   5. 場所の欄に**打っている最中の候補**を出す（`client/placeSuggest`）。候補は補助で、出なくても
-//      今までどおり文字のまま「今すぐ探す」が押せる。↑↓ と Enter で選べ、Esc で閉じる。
-//   6. こだわり条件の並びは **人数 → 予算 → ジャンル**（「予算は好みよりも重要な情報なので、人数のすぐ下に」）。
-//   7. こだわり条件の**いちばん下に電話番号（任意）**。自動の登録は仮の番号（`GUEST_PHONE_PLACEHOLDER`）で
-//      済ませてあるので、仮のままなら欄は空で見せ、入れられたら登録の変更の入口（`PATCH /api/customer/profile`）
-//      で本物に差し替える。空のままで「今すぐ探す」が押せる（必須にしない）。
+//   5. 場所の欄に**打っている最中の候補**を出す（`client/placeSuggest`・`PlaceField`）。
+//   6. こだわり条件の並びは **予算 → ジャンル**（「予算は好みよりも重要な情報なので、人数のすぐ下に」）。
+//   7. こだわり条件の**いちばん下に電話番号（任意）**（`PhoneField`）。
 //
 // 現在地が取れなくても押せる（取れなければ押した時に場所を求める・基準 3.7・3.8）。
 // 送る前に自分では検査せず、入口が返した断りを InputRefusal に描かせる（設計書「入力の誤りの出し方」
 // の規則5）。入力欄の属性（maxLength・min・max）は打ち間違いを減らす補助で、正本ではない。
+// 取得の走らせ方（前の取得を止める・紹介文を確定させる）は `useOfferSearch` が持つ。
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
-import { currentLocation, type CurrentLocation } from "../../lib/client/geolocation";
+import { useCallback, useState, type FormEvent } from "react";
+import { isFailure, type ApiFailure } from "../../lib/client/api";
 import { rememberOrigin } from "../../lib/client/lastOrigin";
-import { usePlaceSuggestions } from "../../lib/client/placeSuggest";
 import { TEXTS } from "../../lib/domain/texts";
-import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, GUEST_PHONE_PLACEHOLDER, PARTY_MAX, PARTY_MIN, PHONE_MAX_LENGTH, PLACE_MAX } from "../../lib/schemas/limits";
+import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, PARTY_MAX, PARTY_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { PhoneField, useOptionalPhone } from "./PhoneField";
+import { PlaceField } from "./PlaceField";
 import { EMPTY_RESULT_TEXT } from "./ResultList";
+import { useHereLocation, type Point } from "./useHereLocation";
 import { useOfferSearch, type FetchResult } from "./useOfferSearch";
 
 export type { FetchOrigin, FetchResult } from "./useOfferSearch";
+export { phoneToShow, phoneToStore } from "./PhoneField";
 
 const FIELD_NAMES = ["place", "party", "genres", "budgetMax"];
-/**
- * 場所の欄の直下に出す、規則の断りの語（理由だけでは何が起きたか伝わらないもの）。
- * `location_required` は現在地が取れなかった（`client/geolocation` が返す・基準 3.7・3.8）、
- * `place_unresolved` は入れた文字が位置に直せなかった（基準 3.4〜3.6）。
- * 語から文を選ぶのは部品 `InputRefusal` の仕事で、ここは項目との結びつきだけを渡す。
- */
-const PLACE_KINDS = ["location_required", "place_unresolved"];
-const PHONE_HINT = "数字10桁か11桁";
-const SUGGEST_LIST_ID = "fetch-place-suggestions";
-
-/** 現在地の座標。地名に直せたかどうかとは別に持つ（直せなくても座標で探せる）。 */
-type Point = { lat: number; lng: number };
-
-/** 現在地を取りに行った結果の見せ方（欄の直下の断りとは別物——押す前の案内なので責めない）。 */
-type LocateState = "locating" | "located" | "failed";
 
 /** 数にならない文字はそのまま送り、判定は入口の検査に任せる（画面は送る前に自分で検査しない）。 */
 const toNumber = (raw: string): number | string => {
@@ -70,15 +56,6 @@ export const partyToSend = (raw: string): number | string | undefined => (raw.tr
 
 /** 空欄の予算は「上限なし」（`null`）。登録の予算が未指定の客と同じ扱い。 */
 export const budgetToSend = (raw: string): number | string | null => (raw.trim() === "" ? null : toNumber(raw));
-
-/**
- * 登録されている電話番号を、欄に見せる形へ直す。仮の番号（自動の登録が入れたもの）は**空**で見せる
- * ——客に「0000000000」を見せると自分の番号だと誤読するため。
- */
-export const phoneToShow = (stored: string | undefined | null): string => (typeof stored !== "string" || stored === GUEST_PHONE_PLACEHOLDER ? "" : stored);
-
-/** 欄の値を、登録へ送る形へ直す。空欄は仮の番号へ戻す（＝番号を消したことになる）。 */
-export const phoneToStore = (raw: string): string => (raw.trim() === "" ? GUEST_PHONE_PLACEHOLDER : raw.trim());
 
 type FetchFormProps = {
   /**
@@ -114,127 +91,25 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
   const [genres, setGenres] = useState<string[]>(profile?.genres ?? []);
   const [budgetMax, setBudgetMax] = useState(profile?.budgetMax == null ? "" : String(profile.budgetMax));
   const { pending, failure, search } = useOfferSearch(onResults);
-  // 現在地。座標（探すときに送るもの）と地名（欄に見せるもの）を別に持つ——地名に直せない場所でも
-  // 座標で探せるようにするため。`hereLabel` は「欄の中身がまだ現在地のままか」の見分けにも使う。
-  const [here, setHere] = useState<Point | null>(null);
-  const [hereLabel, setHereLabel] = useState<string | null>(null);
-  // 初めの値が「取得中」なのは、下の effect が**描かれた直後に必ず取りに行く**から
-  // （effect の中で state を立てると lint `react-hooks/set-state-in-effect` が止める）。
-  const [locate, setLocate] = useState<LocateState>("locating");
-
-  // 場所の候補。`typing` は客が自分で打っている最中か（現在地の地名を自動で入れた直後や候補を選んだ
-  // 直後は false＝聞きに行かない）。`suggestOpen` は一覧を見せているか、`activeIndex` はキーボードで
-  // 選んでいる行（-1 は無し）。
-  const [typing, setTyping] = useState(false);
-  const [suggestOpen, setSuggestOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const suggestions = usePlaceSuggestions(place, typing);
-  const listVisible = suggestOpen && suggestions.length > 0;
-
-  // 電話番号（任意）。欄の値・登録されている値（仮の番号を含む）・送っている最中の値・断りを別に持つ。
-  // 登録されている値と送っている最中の値は ref——欄を離れた直後に「今すぐ探す」を押されても、
-  // 同じ値を2度送らないため（state だと更新が描き直しまで届かない）。
-  const [phone, setPhone] = useState(phoneToShow(profile?.phone));
-  const [phoneFailure, setPhoneFailure] = useState<ApiFailure | null>(null);
-  const [phoneSaved, setPhoneSaved] = useState(false);
-  const storedPhoneRef = useRef<string | null>(typeof profile?.phone === "string" ? profile.phone : null);
-  const savingPhoneRef = useRef<string | null>(null);
+  const phone = useOptionalPhone(profile);
+  // 地名が取れたら欄へ入れる。客がもう自分で書き換えていたら上書きしない（書きかけを消さない）。
+  const fillHereLabel = useCallback((label: string) => setPlace((current) => (current.trim() === "" ? label : current)), []);
+  const location = useHereLocation(fillHereLabel);
+  const { hereLabel } = location;
 
   const toggleGenre = (genre: string) =>
     setGenres((current) => (current.includes(genre) ? current.filter((g) => g !== genre) : [...current, genre]));
 
-  /**
-   * 現在地を取り、取れたら地名へ直して場所の欄に入れる。
-   * 地名に直せなかったときは欄を空のままにする（座標で探せるので、客には何も求めない）。
-   * 取れなかったときはここでは責めず、案内だけを出す（押した時に改めて場所を求める・基準 3.7）。
-   */
-  const applyLocated = useCallback(async (located: CurrentLocation | ApiFailure): Promise<void> => {
-    if (isFailure(located)) {
-      setLocate("failed");
-      return;
-    }
-    const point = { lat: located.lat, lng: located.lng };
-    setHere(point);
-    setLocate("located");
-    const answer = await callApi("GET /api/customer/place", { query: { lat: point.lat, lng: point.lng } });
-    const label = !isFailure(answer) && typeof answer.label === "string" && answer.label !== "" ? answer.label : null;
-    setHereLabel(label);
-    // 客がもう自分で書き換えていたら上書きしない（書きかけを消さない）。
-    if (label !== null) setPlace((current) => (current.trim() === "" ? label : current));
-  }, []);
-
-  // 開いた瞬間に現在地を取りに行く（押す前から既定の場所を見せる）。
-  // 取得の間もボタンは押せる——待たせないことがこの画面の値打ちなので、押されたら押された側で起点を決める。
-  // ⚠️ 現在地の答えを**待ってから** state を変える。effect の本体から直に変える形は
-  //    lint（`react-hooks/set-state-in-effect`）が止める（`RegisterForm` の公開値の取り方と同じ形）。
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const located = await currentLocation();
-      if (alive) await applyLocated(located);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [applyLocated]);
-
   /** 欄の中身が現在地から離れたか（離れている間は「現在地を使う」を強調する）。 */
   const away = hereLabel !== null && place.trim() !== "" && place.trim() !== hereLabel;
 
-  /** 候補を1つ選ぶ: 欄にその文字を入れ、一覧を閉じる（選んだ文字を打ち直すまで、また聞きに行かない）。 */
-  const chooseSuggestion = (text: string) => {
-    setPlace(text);
-    setTyping(false);
-    setSuggestOpen(false);
-    setActiveIndex(-1);
-  };
-
-  /** 場所の欄のキー操作。一覧が出ている間だけ ↑↓・Enter・Esc を取る（出ていなければ Enter は「今すぐ探す」）。 */
-  const onPlaceKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (!listVisible) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIndex((current) => (current + 1) % suggestions.length);
+  /** 「現在地を使う」: 取り直さずに済むなら、持っている現在地の地名をそのまま欄へ戻す。 */
+  const backToHere = () => {
+    if (location.here !== null && hereLabel !== null) {
+      setPlace(hereLabel);
       return;
     }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveIndex((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
-      return;
-    }
-    if (event.key === "Enter" && activeIndex >= 0 && activeIndex < suggestions.length) {
-      event.preventDefault();
-      chooseSuggestion(suggestions[activeIndex]);
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setSuggestOpen(false);
-      setActiveIndex(-1);
-    }
-  };
-
-  /**
-   * 電話番号を登録へ保存する（欄を離れたとき・「今すぐ探す」を押したとき）。
-   * 登録されている値と同じなら送らない。登録の変更の入口は4項目まとめて受けるので、呼び名・ジャンル・予算は
-   * **登録の値**（この回の好みではない）をそのまま添える。呼び名が読めない応答では保存できないので何もしない。
-   */
-  const persistPhone = async (): Promise<void> => {
-    const nickname = profile?.nickname;
-    if (typeof nickname !== "string") return;
-    const next = phoneToStore(phone);
-    if (next === storedPhoneRef.current || next === savingPhoneRef.current) return;
-    savingPhoneRef.current = next;
-    const result = await callApi("PATCH /api/customer/profile", { body: { nickname, phone: next, genres: profile?.genres ?? [], budgetMax: profile?.budgetMax ?? null } });
-    if (savingPhoneRef.current === next) savingPhoneRef.current = null;
-    if (isFailure(result)) {
-      setPhoneFailure(result);
-      setPhoneSaved(false);
-      return;
-    }
-    storedPhoneRef.current = next;
-    setPhoneFailure(null);
-    setPhoneSaved(next !== GUEST_PHONE_PLACEHOLDER);
+    location.locateNow();
   };
 
   /**
@@ -243,18 +118,14 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
    */
   const origin = async (): Promise<{ place: string } | Point | ApiFailure> => {
     const trimmed = place.trim();
-    const useHere = trimmed === "" || (hereLabel !== null && trimmed === hereLabel);
-    if (!useHere) return { place: trimmed };
-    if (here !== null) return { lat: here.lat, lng: here.lng };
-    const located = await currentLocation();
-    return isFailure(located) ? located : { lat: located.lat, lng: located.lng };
+    const useCoordinates = trimmed === "" || (hereLabel !== null && trimmed === hereLabel);
+    return useCoordinates ? location.pointForSearch() : { place: trimmed };
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSuggestOpen(false);
     // 電話番号は探すのと並行して保存する（保存の断りは電話番号の欄の直下に出て、探すのは止めない）。
-    void persistPhone();
+    void phone.persist();
     void search(async () => {
       const from = await origin();
       if (isFailure(from)) return from;
@@ -268,89 +139,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
     <form data-testid="form-fetch" className={collapsed ? "fetch-form fetch-form--collapsed" : "fetch-form"} noValidate onSubmit={handleSubmit}>
       <h2>今入れるお店を探す</h2>
 
-      <div className="fetch-place">
-        <label htmlFor="fetch-place">いる場所</label>
-        <button
-          type="button"
-          data-testid="btn-use-location"
-          className={away ? "use-location use-location-away" : "use-location"}
-          disabled={locate === "locating"}
-          onClick={() => {
-            setTyping(false);
-            setSuggestOpen(false);
-            // 取り直さずに済むなら、持っている現在地をそのまま欄へ戻す。
-            if (here !== null && hereLabel !== null) {
-              setPlace(hereLabel);
-              return;
-            }
-            setLocate("locating");
-            void (async () => applyLocated(await currentLocation()))();
-          }}
-        >
-          {locate === "locating" ? "現在地を取得中…" : "現在地を使う"}
-        </button>
-        <p className="locate-status" data-testid="locate-status">
-          {locate === "locating" ? "現在地を取得しています…" : null}
-          {locate === "located" && hereLabel !== null ? `現在地: ${hereLabel}` : null}
-          {locate === "located" && hereLabel === null ? "現在地は取れました（地名にはできませんでした）。そのまま探せます。" : null}
-          {locate === "failed" ? "現在地が取れませんでした。下の欄に場所を入れてください。" : null}
-        </p>
-        {away ? <p className="locate-away">現在地とは別の場所を指しています。上のボタンでいつでも現在地に戻せます。</p> : null}
-        <div className="place-suggest-anchor">
-          <input
-            id="fetch-place"
-            data-testid="field-place"
-            type="text"
-            placeholder="駅名や住所（空のままなら今いる場所で探します）"
-            value={place}
-            maxLength={PLACE_MAX}
-            autoComplete="off"
-            role="combobox"
-            aria-autocomplete="list"
-            aria-controls={SUGGEST_LIST_ID}
-            aria-expanded={listVisible}
-            aria-activedescendant={listVisible && activeIndex >= 0 ? `${SUGGEST_LIST_ID}-${activeIndex}` : undefined}
-            onChange={(event) => {
-              setPlace(event.target.value);
-              setTyping(true);
-              setSuggestOpen(true);
-              setActiveIndex(-1);
-            }}
-            onKeyDown={onPlaceKeyDown}
-            onFocus={() => {
-              if (typing) setSuggestOpen(true);
-            }}
-            onBlur={() => setSuggestOpen(false)}
-          />
-          {listVisible ? (
-            <ul
-              id={SUGGEST_LIST_ID}
-              className="place-suggest"
-              role="listbox"
-              aria-label="場所の候補"
-              data-testid="place-suggestions"
-              // 行を押した瞬間に欄がフォーカスを失って一覧が閉じないよう、押し始めの既定の動きを止める
-              onMouseDown={(event) => event.preventDefault()}
-            >
-              {suggestions.map((text, index) => (
-                <li
-                  key={text}
-                  id={`${SUGGEST_LIST_ID}-${index}`}
-                  className="place-suggest__item"
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  data-testid="place-suggestion"
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => chooseSuggestion(text)}
-                >
-                  {text}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-        <FieldMessage name="place" failure={failure} kinds={PLACE_KINDS} ctx={{ field: "場所", min: 1, max: PLACE_MAX }} />
-      </div>
+      <PlaceField place={place} onPlaceChange={setPlace} locate={location.locate} hereLabel={hereLabel} away={away} onUseLocation={backToHere} failure={failure} />
 
       {/* 場所のすぐ下（本人の指摘）。ここから下は全部「こだわり条件」＝入れなくても探せる。 */}
       <button type="submit" className="fetch-submit" data-testid="btn-fetch" disabled={pending}>
@@ -406,30 +195,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
         <FieldMessage name="genres" failure={failure} ctx={{ field: "ジャンル" }} />
 
         {/* いちばん下に電話番号（任意・本人の指摘「こだわり条件の下に任意で電話番号を登録できるように」） */}
-        <label htmlFor="fetch-phone">電話番号（任意）</label>
-        <p className="fetch-phone-note">お店が緊急時に連絡できるようにするためのものです。入れなくても探せます。</p>
-        <input
-          id="fetch-phone"
-          data-testid="field-phone"
-          type="tel"
-          inputMode="numeric"
-          autoComplete="tel"
-          placeholder="09012345678"
-          value={phone}
-          maxLength={PHONE_MAX_LENGTH}
-          onChange={(event) => {
-            setPhone(event.target.value);
-            setPhoneSaved(false);
-          }}
-          onBlur={() => void persistPhone()}
-        />
-        <FieldMessage name="phone" failure={phoneFailure} ctx={{ field: "電話番号", hint: PHONE_HINT }} />
-        <FormMessage failure={phoneFailure} fieldNames={["phone"]} />
-        {phoneSaved ? (
-          <p className="fetch-phone-status" data-testid="phone-saved">
-            電話番号を登録しました。
-          </p>
-        ) : null}
+        <PhoneField {...phone} />
       </div>
     </form>
   );
