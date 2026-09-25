@@ -220,7 +220,6 @@ export const RESPONSES = {
   "PATCH /api/customer/profile": object({ ok, profile: customerProfile }),
   "GET /api/customer/place": object({ label: nullable(string()) }),
   "GET /api/customer/place-suggest": object({ suggestions: array(string()) }),
-  "GET /api/customer/store-image": object({ imageUrl: nullable(string()) }),
   "POST /api/customer/fetch": object({ ok, fetchId: string(), items: array(fetchResultItem) }),
   "POST /api/customer/reservations": object({ ok, reservation: reservationView, home: customerHome }),
   "POST /api/customer/reservations/:id/cancel": object({ ok, home: customerHome }),
@@ -277,7 +276,7 @@ export type ResponseOf<K extends RouteKey> = output<(typeof RESPONSES)[K]>;
  * JSON でない本文（ファイル・少しずつ届く本文）を返す入口。表に載らないことを検査が確かめる
  * （載せ忘れと、わざと載せていないものを見分けるため）。
  */
-export const NON_JSON_ROUTES = ["GET /api/store/license", "GET /api/admin/stores/:id/license", "POST /api/customer/fetch/stream"] as const;
+export const NON_JSON_ROUTES = ["GET /api/store/license", "GET /api/admin/stores/:id/license", "POST /api/customer/fetch/stream", "GET /api/customer/store-image"] as const;
 
 /**
  * 少しずつ届く取得（`POST /api/customer/fetch/stream`・NDJSON）の1行の形（usecases/streamOffers の StreamLine）。

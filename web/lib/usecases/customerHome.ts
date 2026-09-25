@@ -9,17 +9,19 @@
 //    出すのは確保中の表示だけで、ほかの表示のために購読の有無を読む理由が無い。
 
 import { customerHomeView, type CustomerHomeView } from "../domain/customerHome";
+import { effectiveState } from "../domain/reservation";
 import type { Deps } from "../ports";
 import { findCustomerProfile } from "../repo/customers";
 import { insertExpiredEvents } from "../repo/logs";
-import { findLastFetchAt, findLatestReservation, type ReservationContext } from "../repo/reservations";
+import { countReceivesOfOffer, findLastFetchAt, findLatestReservation, type ReservationContext } from "../repo/reservations";
+import { RECEIVES_PER_OFFER_MAX } from "../schemas/limits";
 import type { CustomerProfile } from "../schemas/customer";
 import { pushPromptDue } from "./pushMessage";
 
 export type CustomerHome = CustomerHomeView & { profile: CustomerProfile; pushPromptDue?: boolean };
 
 /** 確保の行・店・オファーを、判断の関数が読む形へ（時刻は Date のまま渡す）。 */
-const toViewInput = (context: ReservationContext | null, lastFetchAt: Date | null) => {
+const toViewInput = (context: ReservationContext | null, lastFetchAt: Date | null, retryUsedUp: boolean) => {
   if (!context) return { reservation: null, offer: null, lastFetchAt };
   const { reservation, store, offer } = context;
   return {
@@ -39,7 +41,15 @@ const toViewInput = (context: ReservationContext | null, lastFetchAt: Date | nul
     },
     offer,
     lastFetchAt,
+    retryUsedUp,
   };
+};
+
+/** 期限切れの確保について、そのオファーを押さえられる件数を使い切ったか（取得をまたいで・安全-06）。期限切れでなければ見ない。 */
+const retryUsedUpFor = async (deps: Deps, context: ReservationContext | null, now: Date): Promise<boolean> => {
+  if (!context || effectiveState(context.reservation, now) !== "expired") return false;
+  const { customerId, offerId } = context.reservation;
+  return (await countReceivesOfOffer(deps.db, { customerId, offerId })) >= RECEIVES_PER_OFFER_MAX;
 };
 
 /** 登録が見つからなければ null（入口が見分けの断り 401 に倒す）。 */
@@ -57,7 +67,7 @@ export const customerHome = async (deps: Deps, customerId: string): Promise<Cust
   // 確保が1件も無い客のために取得の記録を読まない（優先の順の4にしか要らない）
   const lastFetchAt = context ? await findLastFetchAt(deps.db, customerId) : null;
 
-  const view = customerHomeView(toViewInput(context, lastFetchAt), now);
+  const view = customerHomeView(toViewInput(context, lastFetchAt, await retryUsedUpFor(deps, context, now)), now);
   // まだ通知を許可していない客にだけ、確保中の表示で説明を出す（基準 22.8・22.11）。
   if (view.kind !== "active") return { profile, ...view };
   return { profile, ...view, pushPromptDue: await pushPromptDue(deps, customerId) };

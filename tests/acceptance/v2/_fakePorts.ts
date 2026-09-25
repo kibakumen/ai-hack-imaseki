@@ -253,12 +253,14 @@ export const fakePitch = (): FakePitch => {
   return markFake(p);
 };
 
-/** 偽の店の画像の口（本番の `deps.storeImage`）。呼ばれた URL を控える */
-export type FakeStoreImage = StoreImageFetcher & { calls: string[]; result: { ok: true; imageUrl: string } | { ok: false } };
+/** 偽の店の画像の口（本番の `deps.storeImage`）。呼ばれた URL を控える。既定は小さな PNG を返す */
+export type FakeStoreImage = StoreImageFetcher & { calls: string[]; result: { ok: true; image: { body: Uint8Array; contentType: string } } | { ok: false } };
+/** 先頭の8バイトが PNG の印（種類は先頭のバイトで決まる・domain/imageType） */
+export const FAKE_STORE_IMAGE_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 export const fakeStoreImage = (): FakeStoreImage => {
   const s: FakeStoreImage = {
     calls: [],
-    result: { ok: true, imageUrl: "https://images.example.com/store.jpg" },
+    result: { ok: true, image: { body: FAKE_STORE_IMAGE_PNG, contentType: "image/png" } },
     fetch: async (homepageUrl) => {
       s.calls.push(homepageUrl);
       return s.result;

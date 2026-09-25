@@ -5,6 +5,7 @@
 import { confirmCardSetup, startCardSetup } from "../../usecases/card";
 import { readLicense, uploadLicense, type LicenseContent } from "../../usecases/license";
 import { cardConfirmSchema, licenseUploadSchema } from "../../schemas/documents";
+import { LICENSE_UPLOAD_MAX_BODY_BYTES } from "../../schemas/limits";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition, type RouteHandlerResult } from "../defineRoute";
 import { notFound, refusal } from "../refusals";
@@ -34,6 +35,8 @@ const uploadLicenseRoute = defineRoute({
   path: "/api/store/license",
   auth: "store",
   input: licenseUploadSchema,
+  // ファイルを受け取る唯一の入口。10MB のファイルが multipart の包みごと入る大きさまで広げる（安全-13）。
+  maxBodyBytes: LICENSE_UPLOAD_MAX_BODY_BYTES,
   handler: async ({ input, deps, ctx }) => {
     const bytes = new Uint8Array(await input.file.arrayBuffer());
     const result = await uploadLicense(deps, ctx.storeId, { bytes, declaredSize: input.file.size });

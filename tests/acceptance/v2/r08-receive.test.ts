@@ -198,7 +198,7 @@ describeTask("13", "受け取りと確保", () => {
   });
 
   // 受け取りは、その取得で見せたオファーだけ（距離・予算・人数の絞り込みを通ったもの）。
-  it.fails("既知の不具合（不具合-12）: その取得の結果に出ていないオファーは受け取れず、確保も選択の記録も増えない", async () => {
+  it("不具合-12: その取得の結果に出ていないオファーは受け取れず、確保も選択の記録も増えない", async () => {
     const near = await storeWithOffer(ctx, { name: "近くの店" });
     const far = await storeWithOffer(ctx, { name: "遠くの店" });
     const c = await customer(ctx);

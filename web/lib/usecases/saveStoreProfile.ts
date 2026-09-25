@@ -11,6 +11,7 @@ import type { Deps } from "../ports";
 import { findStoreProfile, updateStoreProfile } from "../repo/stores";
 import { GEOCODE_TIMEOUT_MS, MENUS_MAX } from "../schemas/limits";
 import type { StoreProfile, StoreProfileInput } from "../schemas/store";
+import { refreshStoreImage } from "./storeImage";
 
 export type FieldRefusal = { name: string; reason: FieldReason };
 
@@ -75,6 +76,10 @@ export const saveStoreProfile = async (deps: Deps, storeId: string, input: Store
     budgetMax: input.budgetMax,
   };
 
+  const previousUrl = (await findStoreProfile(deps.db, storeId))?.url ?? null;
   await updateStoreProfile(deps.db, storeId, { ...record, lat: location.lat, lng: location.lng });
+  // 店の雰囲気画像は、ここで1回だけ取り直して置き場に置く（客の要求のたびに外へ取りに行かない・安全-12・安全-19）。
+  // 画像は飾りなので、取れなくても保存は成り立つ（refreshStoreImage は例外を外へ出さない）。
+  await refreshStoreImage(deps, storeId, { url, previousUrl });
   return { ok: true, profile: record };
 };

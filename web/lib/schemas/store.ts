@@ -11,6 +11,7 @@ import {
   HTTP_URL_PATTERN,
   MENU_NAME_MAX,
   MENU_NAME_MIN,
+  MENUS_INPUT_MAX,
   STORE_ADDRESS_MAX,
   STORE_ADDRESS_MIN,
   STORE_GENRES_MAX,
@@ -42,8 +43,9 @@ const genresSchema = z
  * おすすめメニュー（基準 15.6）。**1件の長さだけ**をここで見る。
  * ⚠️ 件数の上限（基準 15.7）は usecases/saveStoreProfile が見る——zod の too_big は
  * defineRoute が「長すぎる（too_long）」へ直すので、「上限に達した（too_many）」を返せない。
+ * ここの `.max(MENUS_INPUT_MAX)` はそれより十分に広い、大きすぎる並びを早く切るためだけの上限（安全-13）。
  */
-const menusSchema = z.array(z.string().min(MENU_NAME_MIN).max(MENU_NAME_MAX));
+const menusSchema = z.array(z.string().min(MENU_NAME_MIN).max(MENU_NAME_MAX)).max(MENUS_INPUT_MAX);
 
 /** 1人あたりの予算（基準 15.8）。範囲は客の予算の上限と同じ。最低が最高以下かは手続きが見る。 */
 const budgetSchema = z.int().min(BUDGET_MAX_MIN).max(BUDGET_MAX_MAX);

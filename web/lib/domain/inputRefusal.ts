@@ -47,6 +47,8 @@ export const INPUT_REFUSAL_KINDS = [
   "not_found",
   // 想定外の例外を入口が受け止めたときの 500（2026-09-25 監査の指摘 設計-15）。画面は network と分けて出す。
   "internal",
+  // 要求の本文が大きすぎる 413（2026-09-25 監査の指摘 安全-13）。本文を読み切る前に断る。
+  "body_too_large",
   // 画面の側だけで作る2つ（client/geolocation・client/api が返す）
   "location_required",
   "network",

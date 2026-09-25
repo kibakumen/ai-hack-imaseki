@@ -41,6 +41,7 @@ const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   store_banned: () => "運営に止められているため、完了済みにできません。",
   human_check_failed: () => "人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください。",
   rate_limited: () => "しばらく待ってからお試しください。",
+  body_too_large: () => "送る内容が大きすぎます。短くしてからお試しください。",
   // 横断-01・設計-15（2026-09-25）。ログインへ戻る道は、店と運営の画面が文の下に出す。
   unauthenticated: () => "ログインが切れました。もう一度ログインしてください。",
   forbidden: () => "この操作はできません。ログインし直してからお試しください。",
@@ -85,13 +86,15 @@ const FIELD_REASON_TEXTS: Record<string, (ctx: Ctx) => string> = {
   over_window: () => "公開から12時間以内の時刻にしてください。それより先まで出すときは、公開を止めて新しく公開し直してください。",
 };
 
-// ---------- 受け取りの断り（domain/receiveRefusal.ts の閉じた5種） ----------
+// ---------- 受け取りの断り（domain/receiveRefusal.ts の閉じた7種） ----------
 const RECEIVE_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   sold_out: () => "この店は今、満席になりました。",
   offer_ended: () => "この店の受け付けは終わりました。",
   party_over_max: (ctx) => `この店は今、${str(ctx.partyMax, "")}名までになりました。`,
   has_active_reservation: () => "今の確保があります。",
   store_banned: () => "このお店は運営により停止されました。",
+  results_stale: () => "この検索の結果からは、もう受け取れません。もう一度探してください。",
+  receives_used_up: () => "このお店の今回の受け付けは、受け取れる回数を使い切りました。ほかのお店を探してください。",
 };
 
 // ---------- 次の一手（domain/receiveRefusal.nextStep の閉じた4種） ----------

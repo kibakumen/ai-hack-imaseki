@@ -24,7 +24,8 @@ const ok = (text: string): PitchResult => ({ ok: true, text, costUsd: 0.0001, tr
 
 const makeDeps = (pitch: Deps["pitch"]): Deps =>
   ({
-    db: { prepare: () => ({ bind: () => ({ run: async () => {} }) }), batch: async () => [] },
+    // 読むのはその日の AI の呼び出しの合計だけ（安全-03 のアプリ全体の上限）。0回・0ドル＝まだ呼べる
+    db: { prepare: () => ({ bind: () => ({ run: async () => {}, first: async () => ({ calls: 0, cost: 0 }) }) }), batch: async () => [] },
     pitch,
     logger: { log: () => {} },
     // 打ち切りの合図は鳴らさない（この検査で見たいのは行の並びで、時間切れの筋ではない）

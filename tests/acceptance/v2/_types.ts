@@ -61,8 +61,11 @@ export type PitchWriter = {
   write(input: PitchInput, opts: { signal?: AbortSignal }): Promise<PitchResult>;
   judge(input: PitchJudgeInput, opts: { signal?: AbortSignal }): Promise<PitchResult>;
 };
-/** 店のホームページから画像の URL を取る口（任意の口。本番は持つ） */
-export type StoreImageFetcher = { fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; imageUrl: string } | { ok: false }> };
+/**
+ * 店のホームページの画像を1枚、バイトまで取る口（任意の口。本番は持つ）。店が情報を保存したときに1回だけ呼ばれる
+ * （2026-09-25 監査の指摘 安全-12・安全-19 で、URL を返して客の端末に直接読ませる形から変えた）。
+ */
+export type StoreImageFetcher = { fetch(homepageUrl: string, opts: { signal?: AbortSignal }): Promise<{ ok: true; image: { body: Uint8Array; contentType: string } } | { ok: false }> };
 /**
  * Web プッシュの送信。`signal` は打ち切りの合図（任意）——応答しない配信先で呼ぶ側の応答が止まらないよう、
  * 手続きは送信を打ち切れる（通知の送信の打ち切りの件（不具合-08）。ほかの外向きの口と同じ形）。

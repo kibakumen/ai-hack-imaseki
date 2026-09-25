@@ -11,6 +11,7 @@
 //   4. 既に識別子を持っていれば、登録は送らない
 //   5. ホームが読めなかった（500・internal／通信の失敗）だけなら、登録は送らない（2026-09-25 レビューの指摘）
 //      ——登録すると新しい識別子の Cookie が今の Cookie を上書きし、確保中の客が店で見せるコードへ戻れなくなる
+//   6. 確かめの値が無いなら登録を送らない／混み合って断られたら「混み合っています」を出す（2026-09-25 不具合-04）
 
 import React from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -143,6 +144,37 @@ describe("客の画面の入口（登録を客に見せない）", () => {
     render(<GuestEntry />);
     await screen.findByTestId("field-nickname");
     expect(screen.queryByTestId("btn-fetch")).toBeNull();
+  });
+
+  // 不具合-04: 値の無い登録は必ず断られるうえ、以前は接続元の登録の回数を1回減らしていた。送らずに手の登録の入力を出す。
+  it("人かどうかの確かめの値が無いなら、登録を送らずに手で入れる登録の入力を出す", async () => {
+    fake = installFetch((method, path) => {
+      if (path === "/api/config/public") return { json: { turnstileSiteKey: "", vapidPublicKey: "v", contactEmail: null } };
+      if (path === "/api/customer/home") return unauthorized;
+      if (method === "POST" && path === "/api/register/customer") return { status: 400, json: { ok: false, error: { kind: "human_check_failed" } } };
+      return { status: 404, json: { ok: false } };
+    });
+
+    render(<GuestEntry />);
+    await screen.findByTestId("field-nickname");
+    expect(registerCalls(fake!.calls)).toHaveLength(0);
+  });
+
+  // 不具合-04: 同じ回線の客が多いと登録が 429 になる。手の登録の入力へ落とすと、客はもう一度送って同じ断りを受ける。
+  it("登録が混み合って断られたら（429・rate_limited）、手の登録の入力へ落とさず「混み合っています」を出す", async () => {
+    installTurnstile();
+    fake = installFetch((method, path) => {
+      if (path === "/api/config/public") return publicConfig;
+      if (path === "/api/customer/home") return unauthorized;
+      if (method === "POST" && path === "/api/register/customer") return { status: 429, json: { ok: false, error: { kind: "rate_limited" } } };
+      return { status: 404, json: { ok: false } };
+    });
+
+    render(<GuestEntry />);
+    const busy = await screen.findByTestId("guest-entry-busy");
+    expect(busy.textContent).toContain("混み合っています");
+    expect(screen.queryByTestId("field-nickname")).toBeNull();
+    expect(registerCalls(fake!.calls)).toHaveLength(1);
   });
 
   it("既に識別子を持っていれば、登録は送らずそのまま取得の画面を出す", async () => {

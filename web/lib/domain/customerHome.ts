@@ -66,6 +66,11 @@ export type CustomerHomeInput = {
   offer: HomeOfferRow;
   /** その客が最後に取得を押した時刻（要件27の記録から）。1度も押していなければ null */
   lastFetchAt: Date | null;
+  /**
+   * その確保の取得の結果から、同じオファーを受け取り直しまで使い切った（安全-06: 受け取り直しは1回まで）。
+   * 使い切っていれば、期限切れの表示で受け取り直しを勧めない。省けば false。
+   */
+  retryUsedUp?: boolean;
 };
 
 /** 応答に載る確保（受け入れ検査の契約 `ReservationDto`）。時刻は ISO 8601 の文字列。 */
@@ -140,7 +145,8 @@ export const customerHomeView = (input: CustomerHomeInput, now: Date): CustomerH
   if (state === "expired") {
     const withinGrace = isWithinExpiredGrace(row, now);
     if (withinGrace) {
-      return { kind: "expired", reservation: toView(row, state, true), expired: { showCode: true, ...retryability(input.offer, row.party, now) } };
+      const retry = input.retryUsedUp ? { canRetry: false } : retryability(input.offer, row.party, now);
+      return { kind: "expired", reservation: toView(row, state, true), expired: { showCode: true, ...retry } };
     }
     const sinceExpiry = now.getTime() - row.expiresAt.getTime();
     if (sinceExpiry < CANCELLED_VIEW_MS && !fetchedSince) {

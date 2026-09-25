@@ -72,18 +72,18 @@ export const EMPTY_RESULT_TEXT = "今の条件で入れるお店は見つかり�
 
 /**
  * 店の雰囲気の面（第1回の指摘「お店の画像もほしい」・第2回の指摘で実装。2026-09-22 移植）。
- * ホームページの URL があれば `StoreImage` が og:image / twitter:image を取りに行き、取れれば
- * それを見せる。取れない・URL が無い・まだ届いていない間は、下の飾りの地（絵文字＋グラデーション）
- * がそのまま見える——**画像は飾りなので、落ちても本文は出る**。
+ * ホームページの URL がある店は、`StoreImage` が自分のオリジンの画像（店が情報を保存したときにサーバーが
+ * 1回だけ取って置いたもの・安全-19）を読み、読めればそれを見せる。読めない・URL が無い・まだ届いていない間は、
+ * 下の飾りの地（絵文字＋グラデーション）がそのまま見える——**画像は飾りなので、落ちても本文は出る**。
  * 店ごとに地の傾きを変えて、同じ絵が並んで見えないようにする（番号ではなく店の名前から決めるので、
  * 並びが変わっても同じ店は同じ地になる）。
  */
-const OfferArt = ({ storeName, storeUrl }: { storeName: string; storeUrl: string | null }) => {
+const OfferArt = ({ storeName, storeId, hasHomepage }: { storeName: string; storeId: string; hasHomepage: boolean }) => {
   const tilt = [...storeName].reduce((sum, ch) => sum + ch.codePointAt(0)!, 0) % 4;
   return (
     <div aria-hidden className="offer-card__art" data-tilt={tilt}>
       <span className="offer-card__art-glyph">🍴</span>
-      <StoreImage url={storeUrl} />
+      <StoreImage storeId={hasHomepage ? storeId : null} />
     </div>
   );
 };
@@ -126,7 +126,7 @@ type ResultCardProps = {
 
 const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holding = false }: ResultCardProps) => (
   <li className="offer-card" data-testid={`result-${item.offerId}`} style={{ animationDelay: `${index * 70}ms` }}>
-    <OfferArt storeName={item.storeName} storeUrl={item.storeUrl} />
+    <OfferArt storeName={item.storeName} storeId={item.storeId} hasHomepage={item.storeUrl !== null} />
 
     <p className="offer-card__meta">
       <span>徒歩{item.walkMinutes}分</span>

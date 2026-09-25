@@ -83,12 +83,14 @@ describe("ログインの入口で例外が起きても、失敗の回数を数�
   it("落ちた要求は 500 で、上限を超えた次の要求は 429 になる（例外で数え上げが飛ばない）", async () => {
     const { LOGIN_FAILURE_LIMIT } = await import("../schemas/limits");
     const body = { email: "locked@example.com", password: "password-1234", humanToken: "tok" };
+    // 締め出しは「メールアドレス × 接続元」で数える（安全-10）ので、同じ接続元から送る
+    const api = () => ctx.api(null, { ip: "203.0.113.20" });
     for (let i = 0; i < LOGIN_FAILURE_LIMIT; i++) {
-      const res = await ctx.api().post("/api/auth/login", body);
+      const res = await api().post("/api/auth/login", body);
       expect(res.status, `${i + 1}回目`).toBe(500);
       expect(res.json).toEqual({ ok: false, error: { kind: "internal" } });
     }
-    const locked = await ctx.api().post("/api/auth/login", body);
+    const locked = await api().post("/api/auth/login", body);
     expect(locked.status).toBe(429);
     expect((ctx.logger.entries as Array<{ event?: string }>).filter((e) => e.event === "unhandled_error")).toHaveLength(LOGIN_FAILURE_LIMIT);
   });

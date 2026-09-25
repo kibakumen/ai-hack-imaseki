@@ -5,8 +5,10 @@
 import type { ZodType } from "zod";
 import type { FieldReason } from "../domain/inputRefusal";
 import type { Deps } from "../ports";
+import { DEFAULT_MAX_BODY_BYTES } from "../schemas/limits";
+import { LOGIN_DEVICE_COOKIE_NAME, parseCookies } from "./cookies";
 import { checkOrigin, identifyCustomer, identifySession, renewSession } from "./guards";
-import { passRateLimit, rateKeyFor, rateRuleFor, recordRateOutcome } from "./rateLimits";
+import { admitRequest, rateRulesFor, settleCharges } from "./rateLimits";
 import { forbidden, refusal, unauthenticated } from "./refusals";
 import { internalError } from "./unhandled";
 
@@ -50,6 +52,11 @@ export type RouteConfig<TInput, TAuth extends RouteAuth> = {
   human?: boolean;
   /** 入力のスキーマ。無ければ検査はしない（GET で入力を持たない入口など）。 */
   input?: ZodType<TInput>;
+  /**
+   * 本文の大きさの上限（バイト）。無ければ既定の DEFAULT_MAX_BODY_BYTES（16KB・安全-13）。
+   * 超えた本文は読み切る前に 413 body_too_large で断る。広げるのはファイルを受け取る入口（営業許可書）だけ。
+   */
+  maxBodyBytes?: number;
   handler: (args: RouteHandlerArgs<TInput, TAuth>) => Promise<RouteHandlerResult>;
 };
 
@@ -58,6 +65,8 @@ export type RouteDefinition = {
   path: string;
   auth: RouteAuth;
   human: boolean;
+  /** 本文の大きさの上限（バイト）。構造の検査が、広げた入口を見張る */
+  maxBodyBytes: number;
   handle: (req: Request, deps: Deps, params?: Record<string, string>) => Promise<Response>;
 };
 
@@ -105,25 +114,62 @@ const reasonFromIssue = (issue: { code: string; origin?: string; expected?: stri
 
 /** 本文がそもそも読めなかった印（multipart が壊れている・本文が途中で切れた）。入力の断り 400 へ倒す。 */
 const UNREADABLE_BODY = Symbol("unreadable-body");
+/** 本文が上限を超えた印（安全-13）。413 body_too_large へ倒す。 */
+const BODY_TOO_LARGE = Symbol("body-too-large");
 
-const parseBody = async (req: Request): Promise<unknown> => {
+/** 名乗った大きさ（content-length）が上限を超えているか。名乗りが無い・読めないときは、読みながら数える側に任せる。 */
+const declaresTooLarge = (req: Request, maxBytes: number): boolean => {
+  const declared = Number(req.headers.get("content-length") ?? Number.NaN);
+  return Number.isFinite(declared) && declared > maxBytes;
+};
+
+/**
+ * 本文を上限まで読む。上限を超えたらその場で読むのをやめる（残りは読まない）。
+ * content-length を名乗らない本文（chunked）も、ここで数えて打ち切る——名乗りだけを見ると、名乗らずに送れば素通りする。
+ */
+const readLimitedBytes = async (req: Request, maxBytes: number): Promise<Uint8Array | typeof BODY_TOO_LARGE | typeof UNREADABLE_BODY> => {
+  if (!req.body) return new Uint8Array();
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return BODY_TOO_LARGE;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return UNREADABLE_BODY;
+  }
+  const merged = new Uint8Array(total);
+  chunks.reduce((offset, chunk) => {
+    merged.set(chunk, offset);
+    return offset + chunk.byteLength;
+  }, 0);
+  return merged;
+};
+
+const parseBody = async (req: Request, maxBytes: number): Promise<unknown> => {
   if (req.method === "GET" || req.method === "DELETE") {
     return Object.fromEntries(new URL(req.url).searchParams.entries());
   }
+  const bytes = await readLimitedBytes(req, maxBytes);
+  if (typeof bytes === "symbol") return bytes;
   const contentType = req.headers.get("content-type") ?? "";
   if (contentType.includes("multipart/form-data")) {
     try {
-      return Object.fromEntries((await req.formData()).entries());
+      // 上限まで読んだ中身を、同じ content-type（境界の文字列を含む）で multipart として読み直す。
+      return Object.fromEntries((await new Response(bytes, { headers: { "content-type": contentType } }).formData()).entries());
     } catch {
       return UNREADABLE_BODY;
     }
   }
-  let text: string;
-  try {
-    text = await req.text();
-  } catch {
-    return UNREADABLE_BODY;
-  }
+  const text = new TextDecoder().decode(bytes);
   if (!text) return {};
   try {
     // JSON になっていない本文は「項目が何も無い」として扱い、スキーマの検査に判定を任せる。
@@ -187,9 +233,10 @@ const identify = async (auth: RouteAuth, req: Request, deps: Deps): Promise<Iden
   return { ok: true, ctx, renewCookies: await renewSession(deps, session) };
 };
 
-/** 本文を読んでスキーマで確かめる。落ちたら入力の断り（400）。 */
-const readInput = async <TInput>(schema: ZodType<TInput> | undefined, req: Request): Promise<{ ok: true; raw: unknown; input: TInput } | { ok: false; result: RouteHandlerResult }> => {
-  const raw = await parseBody(req);
+/** 本文を読んでスキーマで確かめる。落ちたら入力の断り（400）。上限を超えたら 413。 */
+const readInput = async <TInput>(schema: ZodType<TInput> | undefined, req: Request, maxBytes: number): Promise<{ ok: true; raw: unknown; input: TInput } | { ok: false; result: RouteHandlerResult }> => {
+  const raw = await parseBody(req, maxBytes);
+  if (raw === BODY_TOO_LARGE) return { ok: false, result: refusal("body_too_large") };
   if (raw === UNREADABLE_BODY) return { ok: false, result: invalidInput([{ name: "body", reason: "bad_format" }]) };
   if (!schema) return { ok: true, raw, input: raw as TInput };
   const parsed = schema.safeParse(raw);
@@ -228,26 +275,42 @@ const handleRoute = async <TInput, TAuth extends RouteAuth>(config: RouteConfig<
 
   if (req.method !== "GET" && !checkOrigin(req)) return toResponse(forbidden());
 
+  // 本文の大きさ（安全-13）。名乗った大きさが上限を超えていれば、見分け（D1 を読む）より前に断る。
+  // 名乗らない本文は、下で読みながら数えて打ち切る。
+  const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+  if (declaresTooLarge(req, maxBodyBytes)) return toResponse(refusal("body_too_large"));
+
   const identified = await identify(config.auth, req, deps);
   if (!identified.ok) return toResponse(identified.result);
   const { ctx, renewCookies } = identified;
 
-  const read = await readInput(config.input, req);
+  const read = await readInput(config.input, req, maxBodyBytes);
   if (!read.ok) return toResponse(read.result, renewCookies);
   const { raw, input } = read;
 
-  // 【最終日】連打の抑止（要件30）。見分けと入力の検査が済んだ時点で数え、手続きより手前で断る
-  // ——断った取得では AI も地図も呼ばれない（基準 30.5）。どの入口を数えるかは rateLimits.ts の表。
-  const rateRule = rateRuleFor(config.method, config.path);
-  const rateKey = rateRule ? rateKeyFor(rateRule, { ip: req.headers.get("cf-connecting-ip"), customerId: ctx.auth === "customer" ? ctx.customerId : null, input }) : null;
-  if (rateRule && rateKey && !(await passRateLimit(deps, rateRule, rateKey))) return toResponse(refusal("rate_limited"), renewCookies);
-
   if (humanDeadline && !(await passHumanCheck(deps, raw, humanDeadline))) return toResponse(refusal("human_check_failed"));
 
+  // 【最終日】連打の抑止（要件30）。見分け・入力の検査・人かどうかの確かめが済んだ時点で数え、手続きより
+  // 手前で断る——断った取得では AI も地図も呼ばれない（基準 30.5）。どの入口を数えるかは rateLimits.ts の表。
+  // 人かどうかの確かめより後で数えるのは、確かめに落ちた空振りで回数を減らさないため（不具合-04）——
+  // 先に数えると、同じ回線にいる人が確かめを解かずに送るだけで、その回線の全員の登録やログインを止められた。
+  const rateRules = rateRulesFor(config.method, config.path);
+  const admission =
+    rateRules.length === 0
+      ? null
+      : await admitRequest(deps, rateRules, {
+          ip: req.headers.get("cf-connecting-ip"),
+          customerId: ctx.auth === "customer" ? ctx.customerId : null,
+          accountId: ctx.auth === "store" || ctx.auth === "admin" ? ctx.accountId : null,
+          input,
+          loginDevice: parseCookies(req.headers.get("cookie"))[LOGIN_DEVICE_COOKIE_NAME] ?? null,
+        });
+  if (admission?.refused) return toResponse(refusal("rate_limited"), renewCookies);
+
   const result = await runHandler(config, { input, params, req, deps, ctx: ctx as RouteAuthContextFor<TAuth> });
-  // 落ちた要求だけを数える規則（ログインの失敗・基準 30.4）は、結果が出てからでないと数えられない。
-  // 例外で終わった要求（500）も「落ちた」として数える（受け止めたので、ここまで必ず来る）。
-  if (rateRule && rateKey && rateRule.counts === "failures") await recordRateOutcome(deps, rateRule, rateKey, result.status < 400);
+  // 落ちた要求だけを数える規則（ログインの失敗・基準 30.4 など）は、先に数えた1回ぶんを、通ったときだけ取り消す。
+  // 例外で終わった要求（500）も「落ちた」として数えたまま（受け止めたので、ここまで必ず来る）。
+  if (admission) await settleCharges(deps, admission.charges, result.status < 400);
   return toResponse(result, renewCookies);
 };
 
@@ -256,6 +319,7 @@ export const defineRoute = <TInput, TAuth extends RouteAuth>(config: RouteConfig
   path: config.path,
   auth: config.auth,
   human: config.human ?? false,
+  maxBodyBytes: config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
   handle: async (req, deps, params = {}) => {
     // 見分け・連打の抑止・記録の読み書きで起きた想定外の例外も、ここで受け止める（設計-15）。
     try {

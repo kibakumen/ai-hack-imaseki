@@ -14,6 +14,7 @@ import { findCouponsForStores, findFetchCandidates, type CandidateRow } from "..
 import { insertAiCall, insertFetchItems, insertFetchLog, type AiCallRecord } from "../repo/logs";
 import type { FetchInput } from "../schemas/fetch";
 import { ID_BYTES } from "../schemas/limits";
+import { aiBudgetLeft } from "./aiBudget";
 import { raceDeadline } from "./deadline";
 import type { PitchTarget } from "./writePitch";
 
@@ -174,8 +175,10 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   const ranked = rankStores(candidates, genres);
   const rankedIds = ranked.map((row) => row.id);
 
-  // 候補が0件なら AI を呼ばない（基準 7.11・6.6）
-  const outcome: AiOutcome = ranked.length === 0 ? { selections: [], aiUsed: false, call: null } : await askAi(deps, input, ranked, aiDeadline);
+  // 候補が0件なら AI を呼ばない（基準 7.11・6.6）。アプリ全体のその日の AI の予算が尽きていても呼ばない（安全-03）
+  // ——どちらも AI が落ちたときと同じく点数順に倒す。
+  const askable = ranked.length > 0 && (await aiBudgetLeft(deps));
+  const outcome: AiOutcome = askable ? await askAi(deps, input, ranked, aiDeadline) : { selections: [], aiUsed: false, call: null };
   const selections = outcome.aiUsed ? inScoreOrder(outcome.selections, rankedIds) : fallbackResult(rankedIds);
   const coupons = await findCouponsForStores(deps.db, selections.map((selection) => selection.storeId));
   const items = buildItems(selections, ranked, coupons);

@@ -1,47 +1,34 @@
 "use client";
 
 // 店の雰囲気画像（第2回の指摘「お店の画像もほしい」・2026-09-22 速成版 `sprint/app/me/page.tsx`
-// の `StoreImage` を移植）。ホームページの URL から入口（GET /api/customer/store-image）へ問い合わせ、
-// 取れれば画像を、取れなければ何も出さない（呼び出し側の `OfferArt` が飾りの地をそのまま見せる——
+// の `StoreImage` を移植）。取れなければ何も出さない（呼び出し側の `OfferArt` が飾りの地をそのまま見せる——
 // **画像は飾りなので、落ちても本文は出る**）。
 //
-// 店ごとに問い合わせが要るので、この部品だけが `callApi` を直接呼ぶ（`FetchForm` の地名の問い合わせ
-// `/api/customer/place` と同じ置き方——画面が fetch を直接呼ばないのは client/api.ts の役目で、
-// `callApi` を経由する呼び方は許される・基準 29.4）。
+// 2026-09-25 監査の指摘 安全-12・安全-19 で、画像は**自分のオリジンから**読む形にした
+// （GET /api/customer/store-image?storeId=…・店が情報を保存したときにサーバーが1回だけ取って置いたもの）。
+// 以前は店のサーバーの画像を客の端末が直接読んでいて、結果に出るたびに客の接続元と時刻が店側に渡った。
+// 同じオリジンの画像なので、客の Cookie が付いて見分けが通る（`callApi` を経由しない読み込みはこの1つだけ）。
 
-import { useEffect, useState } from "react";
-import { callApi, isFailure } from "../../lib/client/api";
+import { useState } from "react";
 
 export type StoreImageProps = {
-  /** 店のホームページの URL。無ければ問い合わせない。 */
-  url: string | null;
+  /** 店の番号。ホームページの URL が無い店は null（問い合わせない）。 */
+  storeId: string | null;
   /** 装飾画像の alt。地の div が aria-hidden なので空でよいが、将来の再利用に備えて渡せるようにする。 */
   alt?: string;
 };
 
-export const StoreImage = ({ url, alt = "" }: StoreImageProps) => {
-  // どの URL の答えなのかを一緒に持つ。`url` が変わった瞬間は「まだ答えが無い」を
-  // **描くときに** 導けるので、効果の中で同期的に状態を捨てる必要がない
-  // （同期の setState は連鎖した描き直しを起こすので lint が止める）。
-  const [answered, setAnswered] = useState<{ url: string | null; src: string | null }>({ url: null, src: null });
+/** 客の画面が読む店の画像の場所（自分のオリジン）。 */
+export const storeImageSrc = (storeId: string): string => `/api/customer/store-image?storeId=${encodeURIComponent(storeId)}`;
 
-  useEffect(() => {
-    let alive = true;
-    if (!url) return;
-    void (async () => {
-      const answer = await callApi("GET /api/customer/store-image", { query: { url } });
-      if (!alive) return;
-      setAnswered({ url, src: !isFailure(answer) && typeof answer.imageUrl === "string" ? answer.imageUrl : null });
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [url]);
-
-  const src = answered.url === url ? answered.src : null;
-  if (!src) return null;
-  // eslint-disable-next-line @next/next/no-img-element -- 店ごとに違う外部ドメインの画像なので、next/image の許可リスト設定を要しない img を使う
-  return <img src={src} alt={alt} loading="lazy" className="offer-card__art-img" />;
+export const StoreImage = ({ storeId, alt = "" }: StoreImageProps) => {
+  // 読めなかった店の番号を覚える（404＝画像の無い店・読み込みの失敗）。番号が変われば描き直して読み直す。
+  const [failedFor, setFailedFor] = useState<string | null>(null);
+  if (!storeId || failedFor === storeId) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- 自分の入口が返す画像で、next/image の変換を通す必要が無い
+    <img src={storeImageSrc(storeId)} alt={alt} loading="lazy" className="offer-card__art-img" onError={() => setFailedFor(storeId)} />
+  );
 };
 
 export default StoreImage;

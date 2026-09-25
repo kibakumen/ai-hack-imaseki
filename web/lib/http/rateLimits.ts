@@ -1,74 +1,148 @@
 // 連打の抑止の規則と判定（要件30【最終日】）。掛ける場所は defineRoute のただ1か所で、
-// ここは「どの入口を、何で、何回まで数えるか」と「窓の中かどうか」だけを持つ。
+// ここは「どの入口を、何で、何回まで数えるか」と「数えて断るか」だけを持つ。
 //
 // 入口ごとの指定（defineRoute の config）ではなく **method と path で引く表** にしてある理由:
 // 抑止はどの入口にも掛かりうるので、入口の定義に書く形だと「指定を書き忘れた入口だけ守られていない」
 // が起き、しかも黙って起きる（AI判断）。表にしておけば、守る入口の一覧が1か所で読める。
-// ⚠️ 取得（POST /api/customer/fetch）と通報（POST /api/customer/reports）は別のタスクが作る入口で、
-// 経路が出来た時点でこの表から自動で抑止が掛かる（表の鍵が経路そのものなので、向こうの実装は要らない）。
+// 外のサービス（地図・AI・外への取得・Stripe）を呼ぶ入口が全部この表に載っていることは、構造の検査
+// （rateLimits.test.ts）が入口の定義から辿って見張る（2026-09-25 監査の指摘 安全-03）。
+//
+// **数えは先に1回ぶんを足す**（2026-09-25 監査の指摘 安全-02）。数えは repo の1つの文で原子的に足され、
+// 足したあとの回数が上限を超えていれば断る。以前の「見てから書く」形は、同時に送った要求が全部通った。
+// 落ちた要求だけを数える規則（ログインなど）も、試行を先に数え、通ったら取り消す形にした。
 
+import { ipCountingUnit } from "../domain/clientAddress";
+import { isLoginDeviceValue, normalizeLoginEmail } from "../domain/loginDevice";
 import type { Deps } from "../ports";
-import { deleteRateCounter, findRateCounter, saveRateCounter, type RateCounterRow } from "../repo/rateCounters";
+import { isKnownLoginDevice } from "../repo/loginDevices";
+import { deleteRateCounter, hitRateCounter, refundRateCounter } from "../repo/rateCounters";
 import {
+  ACCOUNT_SECRET_FAILURE_LIMIT,
+  ACCOUNT_SECRET_WINDOW_MS,
+  CARD_RATE_LIMIT,
+  CARD_RATE_WINDOW_MS,
+  CUSTOMER_REGISTER_RATE_LIMIT,
   FETCH_RATE_LIMIT,
   FETCH_RATE_WINDOW_MS,
+  LOGIN_DEVICE_TRUST_MS,
   LOGIN_FAILURE_LIMIT,
+  LOGIN_IP_FAILURE_LIMIT,
   LOGIN_LOCK_WINDOW_MS,
+  PLACE_RATE_LIMIT,
+  PLACE_RATE_WINDOW_MS,
   PLACE_SUGGEST_RATE_LIMIT,
   PLACE_SUGGEST_RATE_WINDOW_MS,
+  RECEIVE_RATE_LIMIT,
+  RECEIVE_RATE_WINDOW_MS,
   REGISTER_RATE_LIMIT,
   REGISTER_RATE_WINDOW_MS,
   REPORT_RATE_LIMIT,
   REPORT_RATE_WINDOW_MS,
   STORE_IMAGE_RATE_LIMIT,
   STORE_IMAGE_RATE_WINDOW_MS,
+  STORE_PROFILE_RATE_LIMIT,
+  STORE_PROFILE_RATE_WINDOW_MS,
 } from "../schemas/limits";
 
-/** 何で数えるか。客の番号（基準 30.1・30.3）・接続元（基準 30.2）・入力のメールアドレス（基準 30.4）。 */
-export type RateCountedBy = "customer" | "ip" | "loginEmail";
+/**
+ * 何で数えるか。
+ * - `customer`: 客の番号（基準 30.1・30.3）
+ * - `ip`: 接続元（基準 30.2。IPv6 は /64 に丸める・不具合-04）
+ * - `loginEmailAndIp`: 入力のメールアドレス × 接続元（基準 30.4・安全-10 の案1）
+ * - `account`: 店・運営のアカウント（セッションから・安全-03・安全-22）
+ */
+export type RateCountedBy = "customer" | "ip" | "loginEmailAndIp" | "account";
 
 /**
- * 何を数えるか。
- * - `requests`: 通った要求を1つずつ。手続きより手前で足すので、断った回では手続きが動かない（基準 30.5）
- * - `failures`: 落ちた要求だけ。通ったら数を消す＝「失敗が続く」を数える（基準 30.4）
+ * 何を数えるか。どちらも手続きより前に1回ぶんを足す（断った回では手続きが動かない・基準 30.5）。
+ * - `requests`: 通った要求を1つずつ。あとで取り消さない
+ * - `failures`: 落ちた要求だけ。通った要求は `onSuccess` のとおり取り消す
  */
 export type RateCountedWhat = "requests" | "failures";
 
 export type RateRule = {
-  /** 数の鍵の前半。同じ名前を持つ入口は**合わせて**数える（客の登録と店の登録・基準 30.2） */
+  /** 数の鍵の前半。同じ名前を持つ入口は**合わせて**数える（カードの開始と確かめなど） */
   name: string;
   limit: number;
   windowMs: number;
   by: RateCountedBy;
   counts: RateCountedWhat;
+  /**
+   * 落ちた要求だけを数える規則で、通った要求をどう取り消すか。
+   * - `reset`: 数を消す＝失敗の続きが切れる（基準 30.4 の「10回続く」）
+   * - `refund`: その1回ぶんだけ返す＝窓の中の失敗の数は残る（成功を挟んで数を戻す手を塞ぐ）
+   */
+  onSuccess?: "reset" | "refund";
+  /**
+   * 前にこの端末でそのアカウントに通った要求（端末の印の Cookie を持つ）では、この規則を数えない（断りもしない）。
+   * ログインの接続元ごとの上限だけが使う（安全-10 のレビュー）——同じ回線の他人の失敗で、店と運営を締め出さないため。
+   */
+  skipForKnownLoginDevice?: boolean;
 };
 
 const FETCH_RULE: RateRule = { name: "fetch", limit: FETCH_RATE_LIMIT, windowMs: FETCH_RATE_WINDOW_MS, by: "customer", counts: "requests" };
-const REGISTER_RULE: RateRule = { name: "register", limit: REGISTER_RATE_LIMIT, windowMs: REGISTER_RATE_WINDOW_MS, by: "ip", counts: "requests" };
+// 客の登録と店の登録は別に数える（不具合-04 で要件30.2 の「合わせて」を変えた・AI判断）。
+const CUSTOMER_REGISTER_RULE: RateRule = { name: "registerCustomer", limit: CUSTOMER_REGISTER_RATE_LIMIT, windowMs: REGISTER_RATE_WINDOW_MS, by: "ip", counts: "requests" };
+const STORE_REGISTER_RULE: RateRule = { name: "registerStore", limit: REGISTER_RATE_LIMIT, windowMs: REGISTER_RATE_WINDOW_MS, by: "ip", counts: "requests" };
 const REPORT_RULE: RateRule = { name: "report", limit: REPORT_RATE_LIMIT, windowMs: REPORT_RATE_WINDOW_MS, by: "customer", counts: "requests" };
-const LOGIN_RULE: RateRule = { name: "login", limit: LOGIN_FAILURE_LIMIT, windowMs: LOGIN_LOCK_WINDOW_MS, by: "loginEmail", counts: "failures" };
-// 店の画像の取得（2026-09-22 追加）。ここだけ**客の渡した URL へ Worker が自分から出ていく**ので、
-// 抑止が無いと外向きの取得を好きな回数踏ませられる。要件には無い（AI判断・要確認）。
+const LOGIN_RULE: RateRule = { name: "login", limit: LOGIN_FAILURE_LIMIT, windowMs: LOGIN_LOCK_WINDOW_MS, by: "loginEmailAndIp", counts: "failures", onSuccess: "reset" };
+// 接続元ごとの上限は正しいパスワードも断る（上限を超えても照合が通れば通す形にすると、200 と 429 で当たり外れが
+// 分かり続け、スプレーの上限そのものが無くなる）。同じ回線の店と運営を巻き込まないよう、端末の印を持つ要求は数えない。
+const LOGIN_IP_RULE: RateRule = {
+  name: "loginIp",
+  limit: LOGIN_IP_FAILURE_LIMIT,
+  windowMs: LOGIN_LOCK_WINDOW_MS,
+  by: "ip",
+  counts: "failures",
+  onSuccess: "refund",
+  skipForKnownLoginDevice: true,
+};
+// 店の画像（2026-09-22 追加）。2026-09-25 の直し（安全-12・安全-19）で、客の要求のたびに外へ取りに行くことは
+// 無くなった（保存のときに1回だけ取って置き場に置く）。置き場を読むだけになったが、数え続ける（AI判断）。
+// まだ置いていない店だけは、店ごとに1日1回まで店の登録の URL へ取りに行く（埋め戻し・usecases/storeImage）。
 const STORE_IMAGE_RULE: RateRule = { name: "storeImage", limit: STORE_IMAGE_RATE_LIMIT, windowMs: STORE_IMAGE_RATE_WINDOW_MS, by: "customer", counts: "requests" };
-// 場所の候補（2026-09-22 追加）。打つたびに呼ぶ入口で、1回ごとに地図のサービスを呼ぶので、
-// 抑止が無いと客1人が外向きの問い合わせを好きな回数踏ませられる。要件には無い（AI判断・要確認）。
+// 場所の候補（2026-09-22 追加）。打つたびに呼ぶ入口で、1回ごとに地図のサービスを呼ぶ。
 const PLACE_SUGGEST_RULE: RateRule = { name: "placeSuggest", limit: PLACE_SUGGEST_RATE_LIMIT, windowMs: PLACE_SUGGEST_RATE_WINDOW_MS, by: "customer", counts: "requests" };
+// 現在地を地名に直す（安全-03）。1回ごとに地図のサービスを呼ぶのに、表から漏れていた。
+const PLACE_RULE: RateRule = { name: "place", limit: PLACE_RATE_LIMIT, windowMs: PLACE_RATE_WINDOW_MS, by: "customer", counts: "requests" };
+// 店の情報の保存（安全-03）。保存のたびに住所を地図へ問い合わせる。
+const STORE_PROFILE_RULE: RateRule = { name: "storeProfile", limit: STORE_PROFILE_RATE_LIMIT, windowMs: STORE_PROFILE_RATE_WINDOW_MS, by: "account", counts: "requests" };
+// カードの登録の開始と確かめ（Stripe を呼ぶ）。2つを合わせて数える。
+const CARD_RULE: RateRule = { name: "card", limit: CARD_RATE_LIMIT, windowMs: CARD_RATE_WINDOW_MS, by: "account", counts: "requests" };
+// 今のパスワードを確かめる操作（安全-22）。失敗だけを数え、通ったらその1回ぶんを返す。
+const ACCOUNT_SECRET_RULE: RateRule = { name: "accountSecret", limit: ACCOUNT_SECRET_FAILURE_LIMIT, windowMs: ACCOUNT_SECRET_WINDOW_MS, by: "account", counts: "failures", onSuccess: "refund" };
+// 受け取り・受け取り直し（安全-06 の案A）。
+const RECEIVE_RULE: RateRule = { name: "receive", limit: RECEIVE_RATE_LIMIT, windowMs: RECEIVE_RATE_WINDOW_MS, by: "customer", counts: "requests" };
 
-/** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則）。ここに無い入口には1度も表を引かない。 */
-const RULES_BY_ROUTE: ReadonlyMap<string, RateRule> = new Map([
-  ["POST /api/customer/fetch", FETCH_RULE],
+/** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則。1つの入口に複数あれば全部で数える）。ここに無い入口には1度も表を引かない。 */
+const RULES_BY_ROUTE: ReadonlyMap<string, readonly RateRule[]> = new Map([
+  ["POST /api/customer/fetch", [FETCH_RULE]],
   // 少しずつ届ける入口（NDJSON）も同じ規則・同じ鍵（客ごと）で数える。別扱いにすると、
   // そちらから同じ回数だけ AI を呼べてしまい、抑止が黙って外れる。
-  ["POST /api/customer/fetch/stream", FETCH_RULE],
-  ["POST /api/register/customer", REGISTER_RULE],
-  ["POST /api/register/store", REGISTER_RULE],
-  ["POST /api/customer/reports", REPORT_RULE],
-  ["POST /api/auth/login", LOGIN_RULE],
-  ["GET /api/customer/store-image", STORE_IMAGE_RULE],
-  ["GET /api/customer/place-suggest", PLACE_SUGGEST_RULE],
+  ["POST /api/customer/fetch/stream", [FETCH_RULE]],
+  ["POST /api/register/customer", [CUSTOMER_REGISTER_RULE]],
+  ["POST /api/register/store", [STORE_REGISTER_RULE]],
+  ["POST /api/customer/reports", [REPORT_RULE]],
+  ["POST /api/auth/login", [LOGIN_RULE, LOGIN_IP_RULE]],
+  ["GET /api/customer/store-image", [STORE_IMAGE_RULE]],
+  ["GET /api/customer/place-suggest", [PLACE_SUGGEST_RULE]],
+  ["GET /api/customer/place", [PLACE_RULE]],
+  ["PUT /api/store/profile", [STORE_PROFILE_RULE]],
+  ["POST /api/store/card/setup", [CARD_RULE]],
+  ["POST /api/store/card/confirm", [CARD_RULE]],
+  ["POST /api/store/email", [ACCOUNT_SECRET_RULE]],
+  ["POST /api/admin/email", [ACCOUNT_SECRET_RULE]],
+  ["POST /api/admin/password", [ACCOUNT_SECRET_RULE]],
+  // 店のパスワードの変更も、今のパスワードを確かめる形になれば同じ総当たりの的になる（安全-07 と揃える）。
+  ["POST /api/store/password", [ACCOUNT_SECRET_RULE]],
+  ["POST /api/customer/reservations", [RECEIVE_RULE]],
 ]);
 
-export const rateRuleFor = (method: string, path: string): RateRule | null => RULES_BY_ROUTE.get(`${method} ${path}`) ?? null;
+/** その入口に掛かる規則（無ければ空）。 */
+export const rateRulesFor = (method: string, path: string): readonly RateRule[] => RULES_BY_ROUTE.get(`${method} ${path}`) ?? [];
+
+/** その入口の最初の規則（無ければ null）。検査が1つの規則を見るための近道。 */
+export const rateRuleFor = (method: string, path: string): RateRule | null => rateRulesFor(method, path)[0] ?? null;
 
 /** 抑止を掛ける入口の一覧（`<METHOD> <path>`）。表の経路が実在の入口と一致するかを検査が見張る */
 export const rateLimitedRoutes = (): string[] => [...RULES_BY_ROUTE.keys()];
@@ -79,16 +153,50 @@ export type RateKeySource = {
   ip: string | null;
   /** 客の入口なら客の番号。それ以外の入口では null */
   customerId: string | null;
+  /** 店・運営の入口ならアカウントの番号。それ以外の入口では null */
+  accountId?: string | null;
   /** 検査を通った入力（ログインの入口のメールアドレスだけを見る） */
   input: unknown;
+  /** 端末の印の Cookie の値（無ければ null）。`skipForKnownLoginDevice` の規則だけが見る */
+  loginDevice?: string | null;
 };
 
-/** ログインの入口の入力からメールアドレスを取る。大小の違いで鍵が分かれないよう小文字へ揃える。 */
+/** ログインの入口の入力からメールアドレスを取る。大小の違いで鍵が分かれないよう揃える（domain/loginDevice）。 */
 const loginEmailOf = (input: unknown): string => {
   const value = (input as { email?: unknown } | null | undefined)?.email;
-  // 大文字の別名で数を分けられると、抑止そのものが無いのと同じになる（accounts の引き当ては大小を区別
-  // するので、揃えたことで別のアカウントの数に混ざることはない）。
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
+  return typeof value === "string" ? normalizeLoginEmail(value) : "";
+};
+
+/** 前にこの端末で、入力のメールアドレスのアカウントに通ったか（端末の印・安全-10 のレビュー）。 */
+const fromKnownLoginDevice = async (deps: Deps, source: RateKeySource): Promise<boolean> => {
+  const email = loginEmailOf(source.input);
+  if (!email || !isLoginDeviceValue(source.loginDevice)) return false;
+  const now = deps.clock.now();
+  return isKnownLoginDevice(deps.db, {
+    email,
+    tokenHash: await deps.hasher.sha256Hex(source.loginDevice),
+    sinceIso: new Date(now.getTime() - LOGIN_DEVICE_TRUST_MS).toISOString(),
+    nowIso: now.toISOString(),
+  });
+};
+
+/** 接続元の見出しが無いときの印（ログインの鍵だけが使う）。 */
+const UNKNOWN_IP = "-";
+
+const keyMaterial = (rule: RateRule, source: RateKeySource): string | null => {
+  switch (rule.by) {
+    case "customer":
+      return source.customerId;
+    case "account":
+      return source.accountId ?? null;
+    case "ip":
+      return source.ip ? ipCountingUnit(source.ip) : null;
+    case "loginEmailAndIp": {
+      const email = loginEmailOf(source.input);
+      // 接続元が無い要求も、メールアドレスごとには数える（同じアドレスへの試行が数から漏れないように）。
+      return email ? `${email}|${source.ip ? ipCountingUnit(source.ip) : UNKNOWN_IP}` : null;
+    }
+  }
 };
 
 /**
@@ -97,58 +205,51 @@ const loginEmailOf = (input: unknown): string => {
  * 関係のない利用者どうしが1つの数を分け合うので、数えない側へ倒す（AI判断）。
  */
 export const rateKeyFor = (rule: RateRule, source: RateKeySource): string | null => {
-  const value = rule.by === "customer" ? source.customerId : rule.by === "ip" ? source.ip : loginEmailOf(source.input);
-  return value ? `${rule.name}:${value}` : null;
+  const material = keyMaterial(rule, source);
+  return material ? `${rule.name}:${material}` : null;
 };
 
-/** 判定の結果。断らないときは、次に置く数え（窓の始まりと回数）を一緒に返す。 */
-export type RateDecision = { refused: true } | { refused: false; next: RateCounterRow };
+/** 数えた1つぶん（あとで取り消すために、どの窓で数えたかも持つ）。 */
+export type RateCharge = { rule: RateRule; key: string; windowStartIso: string };
+
+/** 数えた結果。断るなら断った印、通すなら数えた分の控え（落ちた要求だけを数える規則が、あとで取り消す）。 */
+export type RateAdmission = { refused: true } | { refused: false; charges: RateCharge[] };
 
 /**
- * 今の数えを見て、断るかどうかと、次に置く数えを決める（純粋な関数・時刻は呼ぶ側が渡す）。
- *
- * 窓は**固定**で、始まりは「その窓の最初の1回」。上限に届いた回だけ、窓の始まりをその時刻へ
- * 貼り直す——こうすると、上限に届いてから窓の長さのぶんきっちり断る（基準 30.4 の「15分間」が、
- * 10回目の失敗から15分になる）。断った回は数えない（断りで窓が延びると、いつまでも明けない）。
- *
- * ⚠️ 窓の始まりが日付として読めないとき（表が壊れた）は**新しい窓として数え直す**
- * （フェイルオープン・AI判断）。ここを断る側へ倒すと、壊れた1行でそのアカウントが永久に入れず、
- * 直す手が画面の側に無い。見分け（guards.ts）が期限をフェイルクローズにしているのと向きが逆だが、
- * あちらは「通してはいけないものを通す」危険、こちらは「通すべきものを断り続ける」危険で、重さが違う。
+ * その入口に掛かる規則を全部数える（手続きの前に呼ぶ）。1つでも上限を超えたら断り、
+ * そのとき先に数えたほかの規則の分は返す（手続きが動いていない要求で、ほかの数えを減らさないため）。
  */
-export const decideRate = (rule: RateRule, counter: RateCounterRow | null, nowIso: string): RateDecision => {
-  const nowMs = Date.parse(nowIso);
-  const startMs = counter ? Date.parse(counter.windowStartIso) : Number.NaN;
-  // NaN との比較は必ず false なので、壊れた値・行が無い場合はそのまま「窓の外」へ倒れる。
-  const alive = counter !== null && startMs > nowMs - rule.windowMs ? counter : null;
-  const count = alive?.count ?? 0;
-  if (count >= rule.limit) return { refused: true };
-  const next = count + 1;
-  const windowStartIso = alive !== null && next < rule.limit ? alive.windowStartIso : nowIso;
-  return { refused: false, next: { windowStartIso, count: next } };
-};
-
-/**
- * 手続きへ進めてよいか（手続きの前に呼ぶ）。
- * 要求を数える規則なら、ここで1回ぶんを足す——足すのが手続きより前なので、断った取得では
- * AI も地図も呼ばれない（基準 30.5）。落ちた要求だけを数える規則（ログイン）では、見るだけ。
- */
-export const passRateLimit = async (deps: Deps, rule: RateRule, key: string): Promise<boolean> => {
-  const decision = decideRate(rule, await findRateCounter(deps.db, key), deps.clock.now().toISOString());
-  if (decision.refused) return false;
-  if (rule.counts === "requests") await saveRateCounter(deps.db, key, decision.next);
-  return true;
-};
-
-/**
- * 手続きの結果を数える（落ちた要求だけを数える規則のために、手続きの後に呼ぶ）。
- * 通ったら数を消す＝失敗の続きが切れる（基準 30.4 の「10回続く」）。
- */
-export const recordRateOutcome = async (deps: Deps, rule: RateRule, key: string, succeeded: boolean): Promise<void> => {
-  if (succeeded) {
-    await deleteRateCounter(deps.db, key);
-    return;
+export const admitRequest = async (deps: Deps, rules: readonly RateRule[], source: RateKeySource): Promise<RateAdmission> => {
+  const skipKnownDevice = rules.some((rule) => rule.skipForKnownLoginDevice) && (await fromKnownLoginDevice(deps, source));
+  const applicable = skipKnownDevice ? rules.filter((rule) => !rule.skipForKnownLoginDevice) : rules;
+  const keyed = applicable.flatMap((rule) => {
+    const key = rateKeyFor(rule, source);
+    return key ? [{ rule, key }] : [];
+  });
+  // 数える材料が1つも無い要求（見出しの無い接続元など）では、時計も表も触らない
+  if (keyed.length === 0) return { refused: false, charges: [] };
+  const nowIso = deps.clock.now().toISOString();
+  const charges: RateCharge[] = [];
+  for (const { rule, key } of keyed) {
+    const counted = await hitRateCounter(deps.db, key, { nowIso, windowMs: rule.windowMs, limit: rule.limit });
+    if (counted.count > rule.limit) {
+      await Promise.all(charges.map((charge) => refundRateCounter(deps.db, charge.key, charge.windowStartIso)));
+      return { refused: true };
+    }
+    charges.push({ rule, key, windowStartIso: counted.windowStartIso });
   }
-  const decision = decideRate(rule, await findRateCounter(deps.db, key), deps.clock.now().toISOString());
-  if (!decision.refused) await saveRateCounter(deps.db, key, decision.next);
+  return { refused: false, charges };
+};
+
+/**
+ * 手続きの結果で、落ちた要求だけを数える規則の分を片付ける（手続きの後に呼ぶ）。
+ * 通ったら `onSuccess` のとおり取り消す。落ちたら数えたまま（先に足してある）。
+ */
+export const settleCharges = async (deps: Deps, charges: readonly RateCharge[], succeeded: boolean): Promise<void> => {
+  if (!succeeded) return;
+  for (const { rule, key, windowStartIso } of charges) {
+    if (rule.counts !== "failures") continue;
+    if (rule.onSuccess === "refund") await refundRateCounter(deps.db, key, windowStartIso);
+    else await deleteRateCounter(deps.db, key);
+  }
 };

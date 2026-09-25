@@ -4,7 +4,15 @@
 
 import { login, logout } from "../../usecases/login";
 import { loginSchema } from "../../schemas/account";
-import { SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, expireCookie, parseCookies, serializeCookie } from "../cookies";
+import {
+  LOGIN_DEVICE_COOKIE_MAX_AGE_SECONDS,
+  LOGIN_DEVICE_COOKIE_NAME,
+  SESSION_COOKIE_MAX_AGE_SECONDS,
+  SESSION_COOKIE_NAME,
+  expireCookie,
+  parseCookies,
+  serializeCookie,
+} from "../cookies";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { refusal } from "../refusals";
@@ -15,12 +23,14 @@ const loginRoute = defineRoute({
   auth: "public",
   human: true,
   input: loginSchema,
-  handler: async ({ input, deps }) => {
-    const result = await login(deps, input);
+  handler: async ({ input, deps, req }) => {
+    const result = await login(deps, input, parseCookies(req.headers.get("cookie"))[LOGIN_DEVICE_COOKIE_NAME] ?? null);
     // どちらが違うかは言わない（基準 14.2）。状態も本文も1通りだけ。
     if (!result.ok) return refusal(result.kind);
+    // セッションを先に置く（端末の印は2つ目。ログアウトでは消さない・安全-10 のレビュー）
     return respond("POST /api/auth/login", { ok: true, role: result.role, mustChangePassword: result.mustChangePassword }, 200, [
       serializeCookie(SESSION_COOKIE_NAME, result.session.token, SESSION_COOKIE_MAX_AGE_SECONDS),
+      serializeCookie(LOGIN_DEVICE_COOKIE_NAME, result.loginDevice, LOGIN_DEVICE_COOKIE_MAX_AGE_SECONDS),
     ]);
   },
 });
