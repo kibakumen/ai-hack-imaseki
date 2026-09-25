@@ -14,11 +14,11 @@ import { tokenFromBytes } from "../domain/token";
 import { JST_OFFSET_MINUTES } from "../domain/until";
 import { findAccountByEmail, updateAccountPassword } from "../repo/accounts";
 import { approvePendingStore, restoreBannedStore } from "../repo/adminStores";
-import { insertCoupon, listCoupons } from "../repo/coupons";
+import { insertCouponWithinLimit, listCoupons } from "../repo/coupons";
 import { insertOfferIfNone } from "../repo/offers";
 import { deleteSessionsByAccount } from "../repo/sessions";
 import { insertStoreWithAccount, updateStoreProfile } from "../repo/stores";
-import { ID_BYTES } from "../schemas/limits";
+import { COUPON_MAX, ID_BYTES } from "../schemas/limits";
 import { hashPassword } from "./credentials";
 import { seedAdmin, type SeedAdminInput, type SeedAdminResult } from "./seedAdmin";
 
@@ -87,7 +87,8 @@ const approveDemoStore = async (deps: Deps, storeId: string): Promise<void> => {
 
 /**
  * クーポンが1枚も無ければ入れる。⚠️ 挿した直後に読み直さない——--print の集める役の db は読み取りを常に
- * 「無い」で返すので、挿した値をその場で使う。
+ * 「無い」で返すので、挿した値をその場で使う。入れる文は店の画面と同じ「3つまで」の1文（不具合-13）を使い、
+ * 入らなかったものは数えない。
  */
 const ensureCoupons = async (deps: Deps, storeId: string, spec: DemoStoreSpec): Promise<Array<{ id: string }>> => {
   const existing = await listCoupons(deps.db, storeId);
@@ -95,8 +96,7 @@ const ensureCoupons = async (deps: Deps, storeId: string, spec: DemoStoreSpec): 
   const inserted: Array<{ id: string }> = [];
   for (const coupon of spec.coupons) {
     const row = { id: newId(deps), storeId, name: coupon.name, note: coupon.note ?? "", createdAtIso: deps.clock.now().toISOString() };
-    await insertCoupon(deps.db, row);
-    inserted.push(row);
+    if (await insertCouponWithinLimit(deps.db, row, COUPON_MAX)) inserted.push(row);
   }
   return inserted;
 };
@@ -109,7 +109,8 @@ const seedDemoStore = async (deps: Deps, spec: DemoStoreSpec, passwordHash: stri
   await approveDemoStore(deps, storeId);
   const coupons = await ensureCoupons(deps, storeId, spec);
   const now = deps.clock.now();
-  const offerInserted = await insertOfferIfNone(deps.db, {
+  // 入らなかった（公開中が既に在る）なら null（不具合-13 で真偽から「付けたクーポン」へ変わった）
+  const offer = await insertOfferIfNone(deps.db, {
     id: newId(deps),
     storeId,
     capacity: spec.offer.capacity,
@@ -118,7 +119,7 @@ const seedDemoStore = async (deps: Deps, spec: DemoStoreSpec, passwordHash: stri
     untilAtIso: demoClosingTime(now).toISOString(),
     couponIds: coupons.map((c) => c.id),
   });
-  return { email: spec.email, storeId, created, couponCount: coupons.length, offerInserted };
+  return { email: spec.email, storeId, created, couponCount: coupons.length, offerInserted: offer !== null };
 };
 
 /**

@@ -34,11 +34,17 @@ const shellWord = (text) => `'${text.replace(/'/g, `'\\''`)}'`;
 /** 本番の D1 へ1つのコマンドとして流す形（bash にそのまま貼る。ここでは実行しない）。 */
 export const remoteCommand = (sql) => `pnpm --dir web exec wrangler d1 execute ${DATABASE} --remote --command ${shellWord(sql)}`;
 
+/** 書き込みの文か（`first` で書く repo の文を、読み取りと分けて集めるため）。 */
+const WRITE_SQL = /^\s*(INSERT|UPDATE|DELETE)\b/i;
+
 /**
  * `--print` のときの D1 の代わり。書き込みの文を `statements` に集め、読み取りは「まだ無い」を返す。
  * ただし `knownAdminId`（`--account-id` で指した番号）だけは「その番号の運営が在る」と答える（取り返しの文を
  * 組むため。在るかどうかは、先頭に出す一覧の文で人が確かめる）。
  * `run` は変わった行を1で返す（条件つきの1文の当たり外れを見て分岐する repo があるため）。
+ * `first` でも、書き込みの文（`INSERT … RETURNING` など）は集める。repo には `run` でなく `first` で書いて、
+ * 返ってきた行を読むものがある（オファーの公開は、実際に付けたクーポンを返す・不具合-13）。返す行は組めないので
+ * null（読み取りと同じ「無い」）を返す——呼ぶ側の結果は捨てられ、ここで要るのは出す文だけ。
  * `batch` の文は1つのコマンドへ `; ` でつなぐ（まとまりで書く文を、貼る側で別々のコマンドに分けない）。
  */
 export const collectingDb = (statements, knownAdminId) => {
@@ -47,10 +53,15 @@ export const collectingDb = (statements, knownAdminId) => {
     prepare: (sql) => ({
       bind: (...args) => ({
         sql: inlined(sql, args),
-        first: async () =>
-          knownAdminId && /WHERE id = \?1/.test(sql) && args[0] === knownAdminId
+        first: async () => {
+          if (WRITE_SQL.test(sql)) {
+            statements.push(inlined(sql, args));
+            return null;
+          }
+          return knownAdminId && /WHERE id = \?1/.test(sql) && args[0] === knownAdminId
             ? { id: knownAdminId, email: "", password_hash: "", role: "admin", store_id: null, must_change_password: 0 }
-            : null,
+            : null;
+        },
         run: async () => {
           statements.push(inlined(sql, args));
           return changedOne;
