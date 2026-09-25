@@ -67,6 +67,13 @@
   --hover-soft-bg: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
   --hover-soft-border: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   --hover-soft-text: var(--color-text);
+
+  /* ---- 指で押す部品の大きさ（2026-09-25 監査の指摘 横断-13）----
+     ボタン・タブ・候補の行・チップの最小の高さ（44px）。明暗の切り替えは右上に固定する四角で、
+     置く画面は main の上をこの分あける（店の画面ではタブの右端に重なり、タブを押したつもりで明暗が変わった）。 */
+  --tap-min: 2.75rem;
+  --theme-toggle-size: 2.75rem;
+  --theme-toggle-top: max(0.75rem, env(safe-area-inset-top, 0px));
 }
 
 /* ---- 色（暗い設定） ----
@@ -149,6 +156,11 @@ body:has([data-testid="admin-nav"]) main {
   max-width: 72rem;
 }
 
+/* 明暗の切り替え（右上に固定）の下に部品を置かない（横断-13）。運営の画面は殻のナビの段に置くので除く */
+body:has(> .theme-toggle):not(:has([data-testid="admin-nav"])) main {
+  padding-top: calc(var(--theme-toggle-top) + var(--theme-toggle-size) + 0.75rem);
+}
+
 /* ---------- 文字 ---------- */
 
 h1,
@@ -206,6 +218,9 @@ nav {
 
 /* 素のリンクが並ぶだけの案内（入口・運営の殻）は、押せる面に見せる */
 nav > a {
+  align-items: center;
+  display: inline-flex;
+  min-height: var(--tap-min);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
@@ -213,6 +228,18 @@ nav > a {
   font-weight: 700;
   padding: 0.5rem 1rem;
   text-decoration: none;
+}
+
+/* 運営の殻のナビ（2026-09-25 監査の指摘 横断-12・横断-13）。画面の左上の角に張り付かないよう main と同じ幅と余白に
+   揃え、右端は明暗の切り替え（右上に固定）の分をあけて同じ段に置く。 */
+[data-testid="admin-nav"] {
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  margin: 0 auto;
+  max-width: 72rem;
+  padding-block: var(--theme-toggle-top) 0.75rem;
+  padding-inline-end: calc(var(--theme-toggle-size) + 1.25rem);
+  padding-inline-start: 1rem;
 }
 
 /* 今いる画面（運営の殻のナビ・運営-11）。押せる面のまま、塗りで「ここ」を示す */
@@ -396,6 +423,7 @@ fieldset:has(input[type="checkbox"]) > legend {
 
 fieldset:has(input[type="checkbox"]) > label {
   align-items: center;
+  min-height: var(--tap-min);
   background: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
@@ -425,6 +453,7 @@ button {
   cursor: pointer;
   font: inherit;
   font-weight: 700;
+  min-height: var(--tap-min);
   padding: 0.5625rem 1rem;
   transition: filter 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
@@ -563,10 +592,10 @@ form > button[type="submit"] {
 }
 
 /* ---------- 明暗の切り替えボタン（`components/ui/ThemeToggle.tsx`）----------
-   3画面（客・店・運営）の殻（layout.tsx）から届く固定位置の小さな丸ボタン。
-   本人が客の画面の演出にこだわっているので、主役を食わない大きさ・控えめな色にする
-   （地は surface、縁は border、差し色のオレンジは使わない）。
-   宝くじの演出（.offer-reveal, z-index 50）とファンファーレ（.claim-celebration, z-index 60）
+   3画面（客・店・運営）の殻（layout.tsx）から届く固定位置の丸ボタン。
+   本人が客の画面の演出にこだわっているので、控えめな色にする（地は surface、縁は border、差し色のオレンジは使わない）。
+   大きさは指で押せる 44px（36px だった・横断-13）。置く画面では main の上をこの分あける（上の `body:has(> .theme-toggle)`）。
+   宝くじの演出（.offer-reveal）と確定の演出（.claimed-celebration・どちらも z-index 50）
    より低い z-index にして、演出中は自然に隠れる（動きの主役を譲る）。 */
 .theme-toggle {
   align-items: center;
@@ -576,14 +605,14 @@ form > button[type="submit"] {
   box-shadow: var(--shadow-sm);
   display: flex;
   font-size: 0.9375rem;
-  height: 2.25rem;
+  height: var(--theme-toggle-size);
   justify-content: center;
   padding: 0;
   position: fixed;
   right: max(0.75rem, env(safe-area-inset-right, 0px));
-  top: max(0.75rem, env(safe-area-inset-top, 0px));
+  top: var(--theme-toggle-top);
   transition: filter 140ms ease, transform 140ms ease;
-  width: 2.25rem;
+  width: var(--theme-toggle-size);
   z-index: 40;
 }
 
@@ -599,12 +628,6 @@ form > button[type="submit"] {
 
 .theme-toggle:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
-}
-
-/* 運営の画面はいちばん上に横並びの入口（admin-nav）が在るので、その邪魔にならないよう
-   少し下げる（`app/admin/layout.tsx` の nav の高さぶん）。 */
-body:has([data-testid="admin-nav"]) .theme-toggle {
-  top: max(3.25rem, calc(env(safe-area-inset-top, 0px) + 3.25rem));
 }
 
 /* ---------- 表（運営の数字・店の結果） ---------- */

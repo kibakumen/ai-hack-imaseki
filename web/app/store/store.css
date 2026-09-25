@@ -113,7 +113,11 @@
 }
 
 .store-tab {
+  align-items: center;
   border-radius: 0.75rem;
+  display: inline-flex;
+  justify-content: center;
+  min-height: var(--tap-min);
   color: var(--color-text-muted);
   flex: 1 0 auto;
   font-size: 0.875rem;
@@ -416,10 +420,11 @@
   margin: 0;
 }
 
+/* 「完了」と、その真下の「取り消す」は離す（6px だったので押し損ねた・横断-13） */
 .store-arrival__actions {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 1rem;
 }
 
 .store-past {
@@ -544,7 +549,8 @@
   border-radius: 999px;
   color: var(--color-accent-strong);
   font-size: 0.75rem;
-  height: 1.75rem;
+  /* 指で押せる高さ（28px だった・横断-13）。中央の帯の位置（.store-dial__marker の top）も同じ数から計算する */
+  height: var(--tap-min);
   line-height: 1;
   padding: 0;
   width: var(--store-dial-width);
@@ -629,8 +635,8 @@
   pointer-events: none;
   position: absolute;
   right: 0;
-  /* 上の矢印（1.75rem）＋隙間（0.25rem）＋レールの上1行ぶん */
-  top: calc(2rem + var(--store-dial-item));
+  /* 上の矢印（--tap-min）＋隙間（0.25rem）＋レールの上1行ぶん */
+  top: calc(var(--tap-min) + 0.25rem + var(--store-dial-item));
   width: var(--store-dial-width);
   z-index: 2;
 }
@@ -707,6 +713,7 @@
 
 .store-chip {
   align-items: center;
+  min-height: var(--tap-min);
   background: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: 999px;

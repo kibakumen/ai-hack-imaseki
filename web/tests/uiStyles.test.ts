@@ -174,3 +174,69 @@ describe("焦点の輪（横断-06）", () => {
     expect(declOf(dialRing!, "outline")).toMatch(/^(2|3)px solid /);
   });
 });
+
+// ---------- 指で押す部品の大きさ（横断-13） ----------
+// ボタン・タブ・候補の行・チップは最小の高さ 2.75rem（44px）。ダイヤルの▲▼は 2.75rem の四角に近い形。
+// 明暗の切り替えは右上に固定するので、その下に部品を置かない（店の画面ではタブの右端に重なっていた）。
+
+const TAP_MIN = "var(--tap-min)";
+
+/** 押す部品の規則と、そこで最小の高さを決めているか。 */
+const TAP_TARGETS: Array<[string, string]> = [
+  ["globals.css", "button"],
+  ["globals.css", "nav > a"],
+  ["globals.css", 'fieldset:has(input[type="checkbox"]) > label'],
+  ["store.css", ".store-tab"],
+  ["store.css", ".store-chip"],
+  ["me.css", ".place-suggest__item"],
+  ["me.css", ".budget-chip"],
+];
+
+describe("指で押す部品の大きさ（横断-13）", () => {
+  const rules = allRules();
+
+  it("--tap-min は 2.75rem（44px）", () => {
+    const root = parseCss(GLOBALS).find((r) => r.selector === ":root" && r.at.length === 0);
+    expect(root && declOf(root, "--tap-min")).toBe("2.75rem");
+  });
+
+  for (const [file, selector] of TAP_TARGETS) {
+    it(`${selector}（${file}）は min-height が --tap-min`, () => {
+      const rule = rules.find((r) => path.basename(r.file) === file && r.selector === selector && r.at.length === 0);
+      expect(rule, `${file} に ${selector} の規則が無い`).toBeDefined();
+      expect(declOf(rule!, "min-height")).toBe(TAP_MIN);
+    });
+  }
+
+  it("ダイヤルの▲▼は高さ --tap-min（28px だった）。中央の帯の位置も同じ数から計算する", () => {
+    const store = parseCss(path.join(WEB, "app", "store", "store.css"));
+    const step = store.find((r) => r.selector === ".store-dial__step");
+    expect(step && declOf(step, "height")).toBe(TAP_MIN);
+    const marker = store.find((r) => r.selector === ".store-dial__marker");
+    expect(marker && declOf(marker, "top")).toContain(TAP_MIN);
+  });
+
+  it("「完了」と、その真下の「取り消す」のすき間は 0.75rem 以上（6px だった）", () => {
+    const actions = parseCss(path.join(WEB, "app", "store", "store.css")).find((r) => r.selector === ".store-arrival__actions");
+    const gap = actions && declOf(actions, "gap");
+    expect(gap).toMatch(/^\d+(\.\d+)?rem$/);
+    expect(parseFloat(gap!)).toBeGreaterThanOrEqual(0.75);
+  });
+
+  it("明暗の切り替えは --theme-toggle-size の四角で、置く画面では main の上をその分あける（タブ・見出しに重ねない）", () => {
+    const globals = parseCss(GLOBALS);
+    const toggle = globals.find((r) => r.selector === ".theme-toggle");
+    expect(toggle && declOf(toggle, "height")).toBe("var(--theme-toggle-size)");
+    expect(toggle && declOf(toggle, "width")).toBe("var(--theme-toggle-size)");
+    const root = globals.find((r) => r.selector === ":root" && r.at.length === 0)!;
+    expect(parseFloat(declOf(root, "--theme-toggle-size") ?? "0")).toBeGreaterThanOrEqual(2.75);
+    const reserve = globals.find((r) => r.selector.includes(".theme-toggle") && /\bmain$/.test(r.selector));
+    expect(reserve, "明暗の切り替えがある画面の main の上をあける規則が無い").toBeDefined();
+    const top = declOf(reserve!, "padding-top") ?? "";
+    expect(top).toContain("var(--theme-toggle-top)");
+    expect(top).toContain("var(--theme-toggle-size)");
+    // 運営の画面は、殻のナビの右端をあけて同じ段に置く（ナビの下へずらすと、今度は一覧の右上に重なる）
+    const adminNav = globals.find((r) => r.selector === '[data-testid="admin-nav"]');
+    expect(adminNav && declOf(adminNav, "padding-inline-end")).toContain("var(--theme-toggle-size)");
+  });
+});
