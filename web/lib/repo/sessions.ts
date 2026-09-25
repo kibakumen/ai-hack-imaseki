@@ -82,6 +82,15 @@ export const deleteOtherSessionsOfAccount = async (db: Db, accountId: string, ke
   await db.prepare(`DELETE FROM sessions WHERE account_id = ?1 AND token_hash <> ?2`).bind(accountId, keepTokenHash).run();
 };
 
+/**
+ * メールアドレスで指した店のアカウントのセッションを全部切る（デモ店の鍵の入れ替え・README 5.3・2026-09-26 のレビュー）。
+ * 読み取りを挟まない1文なので、`--print` で本番へ貼る文にそのままなる。
+ */
+export const deleteSessionsOfStoreAccountsByEmail = async (db: Db, emails: readonly string[]): Promise<void> => {
+  const placeholders = emails.map((_, i) => `?${i + 1}`).join(", ");
+  await db.prepare(`DELETE FROM sessions WHERE account_id IN (SELECT id FROM accounts WHERE role = 'store' AND email IN (${placeholders}))`).bind(...emails).run();
+};
+
 /** そのアカウントのセッションを全部切る文（流さずに返す・仮のパスワードの発行が `db.batch` に入れる）。 */
 export const deleteSessionsByAccountStatement = (db: Db, accountId: string): D1PreparedStatement =>
   db.prepare(`DELETE FROM sessions WHERE account_id = ?1`).bind(accountId);

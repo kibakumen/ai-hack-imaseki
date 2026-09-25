@@ -46,6 +46,15 @@ describe("README とアカウントの守り", () => {
     expect(section).toMatch(/セッションを全部切/);
   });
 
+  // 2026-09-26 のレビュー: デモ店の入れ替えの文を README に二重引用で書いていたので、貼った bash が保存の値の `$` を
+  // 展開して壊れた値が本番に入った。保存の値を運ぶ文は、手で書かずにスクリプトの `--print`（単一引用）から出す。
+  it("README は、パスワードの保存の値を二重引用の --command で流させない。デモ店の入れ替えは seed-demo の --rotate-stores から出す", () => {
+    expect(README).not.toMatch(/--command "[^"\n]*password_hash/);
+    const section = sectionOf(README, "#### 本番のデモ店のパスワードを入れ替えるとき");
+    expect(section).toContain("--rotate-stores");
+    expect(section).toContain("--print");
+  });
+
   // 秘密鍵の名前そのものは adapters の外に書かない（structure.test.ts の約束）ので、名前の後ろ半分で見る。
   it("README に、Turnstile の試験用の鍵を本番の秘密鍵に入れない、と書いてある", () => {
     expect(README).toMatch(/試験用の鍵[^\n]*本番の[^\n]*_SECRET_KEY`?[^\n]*入れない/);

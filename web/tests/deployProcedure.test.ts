@@ -99,8 +99,11 @@ describe("公開の手順（設計-01）", () => {
 const DEPLOY_GUARD_STEP = "node scripts/deploy-guard.mjs";
 
 describe("公開を止めている間（2026-09-26）", () => {
-  const runGuard = (env: Record<string, string>) =>
-    spawnSync(process.execPath, [path.join(WEB, "scripts", "deploy-guard.mjs")], { env: { PATH: process.env.PATH ?? "", ...env }, encoding: "utf8" });
+  // 走らせている側の環境に ALLOW_DEPLOY が立っていても見えないよう、渡す環境は PATH と指定の値だけにする
+  const runGuard = (env: Record<string, string>) => {
+    const only: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH ?? "", ...env };
+    return spawnSync(process.execPath, [path.join(WEB, "scripts", "deploy-guard.mjs")], { env: only, encoding: "utf8" });
+  };
 
   it("wrangler.jsonc は workers.dev と版ごとの下見の URL を出さない（次の wrangler deploy で公開が黙って戻らない）", () => {
     expect(wranglerConfig.workers_dev).toBe(false);

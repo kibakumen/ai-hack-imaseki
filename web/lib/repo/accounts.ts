@@ -103,6 +103,21 @@ export const updateAccountPassword = async (db: Db, accountId: string, passwordH
 export const updateAccountPasswordStatement = (db: Db, accountId: string, passwordHash: string, mustChangePassword: boolean): D1PreparedStatement =>
   db.prepare(`UPDATE accounts SET password_hash = ?2, must_change_password = ?3 WHERE id = ?1`).bind(accountId, passwordHash, mustChangePassword ? 1 : 0);
 
+/** `?<first>`, `?<first+1>`, … の並び（メールアドレスの一覧を IN へ渡す）。 */
+const placeholdersFrom = (first: number, count: number): string => Array.from({ length: count }, (_, i) => `?${first + i}`).join(", ");
+
+/**
+ * 店のアカウントのパスワードを、メールアドレスで指して入れ替え、仮のパスワードの印を外す（デモ店の鍵の入れ替え・
+ * README 5.3・2026-09-26 のレビュー）。読み取りを挟まない1文なので、`--print` で本番へ貼る文にそのままなる。
+ * 役割が店の行だけを書き換える（運営のアカウントを巻き込まない）。
+ */
+export const updateStorePasswordsByEmail = async (db: Db, emails: readonly string[], passwordHash: string): Promise<void> => {
+  await db
+    .prepare(`UPDATE accounts SET password_hash = ?1, must_change_password = 0 WHERE role = 'store' AND email IN (${placeholdersFrom(2, emails.length)})`)
+    .bind(passwordHash, ...emails)
+    .run();
+};
+
 /**
  * 店の番号からその店のアカウントを引く（【最終日】仮のパスワードの発行）。
  * 役割が店のものだけを見る——運営のアカウントは対象にしない（要件14の基準 14.8・14.10 の補足）。

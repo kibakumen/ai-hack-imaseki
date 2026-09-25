@@ -136,15 +136,13 @@ node web/scripts/seed-admin.mjs --email <運営のメールアドレス> --passw
 
 #### 本番のデモ店のパスワードを入れ替えるとき
 
-運営の画面の「仮のパスワードの発行」は、発行された店がログインの直後に新しいパスワードを決めるまでほかの操作を断られる（2026-09-25 の監査の指摘 安全-21）ので、審査員が共用するデモ店には向かない。代わりに、保存の値だけを作って本番へ流す:
-
-1. `node web/scripts/seed-demo.mjs … --store-password '<新しい共通のパスワード>' --print` を手元で流し、出た文のうち店のアカウントの INSERT 文から `password_hash` の値を写す（`--print` の文そのものは本番に流さない。デモ店が既に在る本番では店が二重にできる・5.6）。
-2. 次の2つを本番へ流す（`<その値>` は1で写した値。`$` を含むので単一引用のまま）:
+運営の画面の「仮のパスワードの発行」は、発行された店がログインの直後に新しいパスワードを決めるまでほかの操作を断られる（2026-09-25 の監査の指摘 安全-21）ので、審査員が共用するデモ店には向かない。代わりに、`seed-demo.mjs` の `--rotate-stores` で入れ替えの文だけを出して本番へ流す:
 
 ```bash
-pnpm --dir web exec wrangler d1 execute ai-hack-v2 --remote --command "UPDATE accounts SET password_hash = '<その値>', must_change_password = 0 WHERE role = 'store' AND email LIKE 'demo-store-%@example.com'"
-pnpm --dir web exec wrangler d1 execute ai-hack-v2 --remote --command "DELETE FROM sessions WHERE account_id IN (SELECT id FROM accounts WHERE email LIKE 'demo-store-%@example.com')"
+node web/scripts/seed-demo.mjs --rotate-stores --store-password '<新しい共通のパスワード>' --print
 ```
+
+出るのは2つのコマンド（デモ店6軒のパスワードの入れ替えと仮のパスワードの印の解除 → そのセッションの削除）で、店・オファー・運営には触れない。この順に本番で流す。コマンドは運営の `--print` と同じく単一引用で出る——保存の値は `$` を含むので、手で写して二重引用の `--command "…"` に書き換えない（`$1…` や `$<塩>` を bash が変数として展開し、壊れた値が入って誰もデモ店に入れなくなる・2026-09-26 のレビュー）。`seed-demo.mjs … --print`（店を入れる文）はデモ店が既に在る本番には流さない（店が二重にできる・5.6）。
 
 手元の D1 なら `seed-demo.mjs` を流し直すだけで、既にあるデモ店のパスワードを `--store-password` の値に入れ替えてセッションを全部切る（5.6）。
 

@@ -15,7 +15,10 @@
 //       → 本番（--remote）用に、そのまま貼れる wrangler のコマンドを出す（ここでは実行しない）。
 //         本番の D1 を、確かめの無いスクリプトから黙って書き換えないため。
 //         ⚠️ --print は本番の D1 を読めないので、店は「まだ無い」前提の文になる。デモ店が既に在る本番には流さない
-//         （運営の取り返しは seed-admin.mjs、既に在るデモ店の鍵の入れ替えは運営の画面の仮のパスワードで行う・README 5.3）。
+//         （運営の取り返しは seed-admin.mjs、既に在るデモ店の鍵の入れ替えは下の --rotate-stores・README 5.3）。
+//   node web/scripts/seed-demo.mjs --rotate-stores --store-password '<新しい共通のパスワード>' [--print]
+//       → デモ店（demo-store-*）のパスワードだけを入れ替え、そのセッションを全部切る（店・オファー・運営には触れない）。
+//         --print を付けると本番へ貼る2つのコマンドを出す（単一引用。保存の値の `$` を bash に展開させない・2026-09-26 のレビュー）。
 //
 // 運営の扱いは seed-admin.mjs と同じ（安全-01）:
 //   - 書く前に、今いる運営の一覧を出す。同じメールアドレスが在ればパスワードを入れ替え、セッションを全部切る
@@ -36,9 +39,10 @@ register(new URL("./ts-resolve.mjs", import.meta.url));
 const WEB = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const parseArgs = (argv) => {
-  const args = { print: false, add: false };
+  const args = { print: false, add: false, rotateStores: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--print") args.print = true;
+    else if (argv[i] === "--rotate-stores") args.rotateStores = true;
     else if (argv[i] === "--add") args.add = true;
     else if (argv[i] === "--admin-email") args.adminEmail = argv[++i];
     else if (argv[i] === "--admin-password") args.adminPassword = argv[++i];
@@ -143,8 +147,10 @@ const STORES = [
   },
 ];
 
-const USAGE =
-  "使い方: node web/scripts/seed-demo.mjs --admin-email <メールアドレス> --admin-password <パスワード> --store-password <パスワード> [--admin-account-id <運営の番号>] [--add] [--print]";
+const USAGE = [
+  "使い方: node web/scripts/seed-demo.mjs --admin-email <メールアドレス> --admin-password <パスワード> --store-password <パスワード> [--admin-account-id <運営の番号>] [--add] [--print]",
+  "        node web/scripts/seed-demo.mjs --rotate-stores --store-password <パスワード> [--print]",
+].join("\n");
 
 const adminsLine = (admins) => `書く前にいた運営: ${admins.length === 0 ? "なし" : admins.map((a) => `${a.email} [${a.id}]`).join(", ")}`;
 
@@ -176,8 +182,49 @@ const reportLocal = (result) => {
   }
 };
 
+/** 手元の D1（wrangler の local state）を開いて渡し、終わったら閉じる。 */
+const withLocalDb = async (work) => {
+  const { getPlatformProxy } = await import("wrangler");
+  const proxy = await getPlatformProxy({
+    configPath: path.join(WEB, "wrangler.jsonc"),
+    persist: { path: path.join(WEB, ".wrangler", "state", "v3") },
+  });
+  try {
+    await work(proxy.env.DB);
+  } finally {
+    await proxy.dispose();
+  }
+};
+
+/** デモ店のパスワードだけを入れ替える（--rotate-stores）。 */
+const rotateStores = async (args, base) => {
+  const { rotateDemoStorePasswords } = await import("../lib/usecases/seedDemo.ts");
+  const input = { storePassword: args.storePassword, emails: STORES.map((s) => s.email) };
+  if (args.print) {
+    const statements = [];
+    await rotateDemoStorePasswords({ ...base, db: collectingDb(statements) }, input);
+    console.log("# デモ店のパスワードを入れ替え、そのセッションを全部切ります（店・オファー・運営には触れません）。この順に流してください");
+    for (const sql of statements) console.log(remoteCommand(sql));
+    return;
+  }
+  await withLocalDb(async (db) => {
+    await rotateDemoStorePasswords({ ...base, db }, input);
+    console.log(`デモ店${STORES.length}軒のパスワードを入れ替え、そのセッションを全部切りました（手元の D1）`);
+  });
+};
+
 const main = async () => {
   const args = parseArgs(process.argv.slice(2));
+  if (args.rotateStores) {
+    if (!args.storePassword) {
+      console.error(USAGE);
+      process.exitCode = 1;
+      return;
+    }
+    const { createHasher, createRng } = await import("../lib/adapters/webcrypto.ts");
+    await rotateStores(args, { rng: createRng(), hasher: createHasher(), clock: { now: () => new Date(), after: () => Promise.resolve() } });
+    return;
+  }
   if (!args.adminEmail || !args.adminPassword || !args.storePassword) {
     console.error(USAGE);
     process.exitCode = 1;
@@ -201,21 +248,16 @@ const main = async () => {
     return;
   }
 
-  const { getPlatformProxy } = await import("wrangler");
-  const proxy = await getPlatformProxy({
-    configPath: path.join(WEB, "wrangler.jsonc"),
-    persist: { path: path.join(WEB, ".wrangler", "state", "v3") },
+  await withLocalDb(async (db) => {
+    try {
+      reportLocal(await seedDemo({ ...base, db }, input));
+    } catch (error) {
+      if (!(error instanceof OtherAdminsExistError)) throw error;
+      console.error(`${error.message}。何も書いていません。`);
+      console.error("メールアドレスを変えられた運営を取り返すなら --admin-account-id <番号>、2人目を足すなら --add を付けてください。");
+      process.exitCode = 1;
+    }
   });
-  try {
-    reportLocal(await seedDemo({ ...base, db: proxy.env.DB }, input));
-  } catch (error) {
-    if (!(error instanceof OtherAdminsExistError)) throw error;
-    console.error(`${error.message}。何も書いていません。`);
-    console.error("メールアドレスを変えられた運営を取り返すなら --admin-account-id <番号>、2人目を足すなら --add を付けてください。");
-    process.exitCode = 1;
-  } finally {
-    await proxy.dispose();
-  }
 };
 
 await main();

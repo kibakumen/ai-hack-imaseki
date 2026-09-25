@@ -12,13 +12,13 @@
 import type { Deps } from "../ports";
 import { tokenFromBytes } from "../domain/token";
 import { JST_OFFSET_MINUTES } from "../domain/until";
-import { findAccountByEmail, updateAccountPassword } from "../repo/accounts";
+import { findAccountByEmail, updateAccountPassword, updateStorePasswordsByEmail } from "../repo/accounts";
 import { approvePendingStore, findStoreReview, restoreBannedStore } from "../repo/adminStoreActions";
 import { insertCouponWithinLimit, listCoupons } from "../repo/coupons";
 import { insertOfferIfNone } from "../repo/offers";
-import { deleteSessionsByAccount } from "../repo/sessions";
+import { deleteSessionsByAccount, deleteSessionsOfStoreAccountsByEmail } from "../repo/sessions";
 import { insertStoreWithAccount, updateStoreProfile } from "../repo/stores";
-import { COUPON_MAX, ID_BYTES } from "../schemas/limits";
+import { COUPON_MAX, ID_BYTES, PASSWORD_MIN } from "../schemas/limits";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { hashPassword } from "./credentials";
 import { seedAdmin, type SeedAdminInput, type SeedAdminResult } from "./seedAdmin";
@@ -147,4 +147,19 @@ export const seedDemo = async (deps: Deps, input: SeedDemoInput): Promise<SeedDe
   const stores: DemoStoreResult[] = [];
   for (const spec of input.stores) stores.push(await seedDemoStore(deps, spec, passwordHash, { accountId: admin.accountId }));
   return { admin, stores };
+};
+
+/**
+ * 本番のデモ店のパスワードだけを入れ替え、そのセッションを全部切る（README 5.3「本番のデモ店のパスワードを入れ替えるとき」・
+ * 2026-09-26 のレビュー）。店・オファー・運営には触れない。メールアドレスで指す2文だけを流し、読み取りを挟まないので、
+ * `--print` の集める役の db でもそのまま本番へ貼る文になる（デモ店が既に在る本番に seedDemo の --print を流すと店が二重にできる）。
+ * 入れ替えてから切る（先に切ると、入れ替えまでの間に古いパスワードで入り直された画面が残る）。
+ */
+export const rotateDemoStorePasswords = async (deps: Deps, input: { storePassword: string; emails: readonly string[] }): Promise<void> => {
+  // ログインの入口は8字未満を断るので、短い値に入れ替えると誰もデモ店に入れなくなる
+  if (input.storePassword.length < PASSWORD_MIN) throw new Error(`店のパスワードは${PASSWORD_MIN}字以上にしてください`);
+  if (input.emails.length === 0) return;
+  const passwordHash = await hashPassword(deps, input.storePassword);
+  await updateStorePasswordsByEmail(deps.db, input.emails, passwordHash);
+  await deleteSessionsOfStoreAccountsByEmail(deps.db, input.emails);
 };

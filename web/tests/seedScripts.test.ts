@@ -60,6 +60,42 @@ describe("seed-demo.mjs --print", () => {
   );
 });
 
+// 2026-09-26 のレビュー: README の「本番のデモ店のパスワードを入れ替えるとき」は、保存の値を手で写して
+// `--command "UPDATE … '<その値>' …"` と二重引用で流す形だった。貼った bash が `$1…` や `$<塩>` を展開して
+// `pbkdf2-sha25600000…` のような壊れた値が入り、審査員がデモ店に入れなくなる。文を出すのもスクリプトに任せ、
+// 運営の側と同じ単一引用の形（print-sql の remoteCommand）を通す。
+describe("seed-demo.mjs --rotate-stores --print", () => {
+  const rotateArgs = ["--rotate-stores", "--store-password", PASSWORD];
+  const DEMO_EMAILS = [1, 2, 3, 4, 5, 6].map((n) => `demo-store-${n}@example.com`);
+
+  it(
+    "デモ店のパスワードの入れ替えとセッションの削除の2文だけを出す（店・オファー・運営には触れない）",
+    async () => {
+      const commands = sqlsOf(await print("seed-demo.mjs", rotateArgs));
+      expect(commands).toHaveLength(2);
+      const [update, remove] = commands;
+      expect(update).toMatch(/^UPDATE accounts SET password_hash = 'pbkdf2-sha256\$100000\$[^']+', must_change_password = 0 WHERE role = 'store' AND email IN \(/);
+      expect(remove).toMatch(/^DELETE FROM sessions WHERE account_id IN \(SELECT id FROM accounts WHERE role = 'store' AND email IN \(/);
+      for (const email of DEMO_EMAILS) {
+        expect(update).toContain(`'${email}'`);
+        expect(remove).toContain(`'${email}'`);
+      }
+      expect(commands.some((c) => /INSERT|stores|offers|'admin'/.test(c))).toBe(false);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "出したコマンドを bash に貼っても、パスワードの保存の値（$ を含む）が崩れずに wrangler へ渡る",
+    async () => {
+      const update = commandsOf(await print("seed-demo.mjs", rotateArgs)).find((c) => c.includes("UPDATE accounts"))!;
+      const { stdout } = await run("bash", ["-c", `printf '%s' ${update.slice(PREFIX.length)}`], { timeout: TIMEOUT_MS });
+      expect(stdout).toMatch(/password_hash = 'pbkdf2-sha256\$100000\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+'/);
+    },
+    TIMEOUT_MS,
+  );
+});
+
 describe("seed-admin.mjs --print", () => {
   // パスワードの保存の形は `pbkdf2-sha256$100000$<塩>$<値>`。二重引用で出すと、貼った bash が `$1…` や `$<塩>` を
   // 変数として展開し、壊れた値が本番に入る（取り返したつもりの運営に、誰も入れなくなる）。

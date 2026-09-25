@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cookieOf, makeCtx, one, rows, snapshot, type Ctx } from "../../../tests/acceptance/v2/_fakes";
 import { hashPassword } from "./credentials";
 import { OtherAdminsExistError } from "./seedAdmin";
-import { seedDemo, type DemoStoreSpec, type SeedDemoInput } from "./seedDemo";
+import { rotateDemoStorePasswords, seedDemo, type DemoStoreSpec, type SeedDemoInput } from "./seedDemo";
 
 const STORE: DemoStoreSpec = {
   email: "demo-a@example.com",
@@ -144,5 +144,35 @@ describe("seedDemo", () => {
     const run = seedDemo(ctx.deps, input({ stores: [{ ...STORE, email: ADMIN.email }] }));
     await expect(run).rejects.toThrow(/店のアカウントに使われていません/);
     expect((await one<{ role: string }>(ctx.db, "SELECT role FROM accounts WHERE email = ?", ADMIN.email))!.role).toBe("admin");
+  });
+});
+
+// 本番のデモ店のパスワードの入れ替え（README 5.3・2026-09-26 のレビュー）。seed-demo.mjs の --rotate-stores の中身。
+describe("rotateDemoStorePasswords", () => {
+  it("指したデモ店だけのパスワードを入れ替えて仮のパスワードの印を外し、そのセッションを全部切る。運営と店の中身には触れない", async () => {
+    await seedDemo(ctx.deps, input());
+    const storeSession = ctx.api(cookieOf(await login(STORE.email, STORE_PASSWORD))!);
+    const adminSession = ctx.api(cookieOf(await login(ADMIN.email, ADMIN.password))!);
+    await ctx.db.prepare("UPDATE accounts SET must_change_password = 1 WHERE email = ?1").bind(STORE.email).run();
+    const storesBefore = await rows(ctx.db, "SELECT * FROM stores");
+
+    await rotateDemoStorePasswords(ctx.deps, { storePassword: "rotated-pass-5678", emails: [STORE.email, ADMIN.email] });
+
+    expect((await storeSession.get("/api/store/home")).status).toBe(401);
+    expect((await login(STORE.email, STORE_PASSWORD)).status).not.toBe(200);
+    const relogin = await login(STORE.email, "rotated-pass-5678");
+    expect(relogin.status).toBe(200);
+    expect(relogin.json.mustChangePassword).toBe(false);
+    // 運営のアドレスを混ぜても、役割が店の行しか書き換えない
+    expect((await adminSession.get("/api/admin/stores")).status).toBe(200);
+    expect((await login(ADMIN.email, ADMIN.password)).status).toBe(200);
+    expect(await rows(ctx.db, "SELECT * FROM stores")).toEqual(storesBefore);
+  });
+
+  it("ログインの入口が断る短さのパスワードには入れ替えない（何も書かない）", async () => {
+    await seedDemo(ctx.deps, input());
+    const before = await snapshot(ctx.db);
+    await expect(rotateDemoStorePasswords(ctx.deps, { storePassword: "short", emails: [STORE.email] })).rejects.toThrow();
+    expect(await snapshot(ctx.db)).toBe(before);
   });
 });
