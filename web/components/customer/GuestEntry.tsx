@@ -22,7 +22,7 @@
 // どちらも「客が入れなくても探し始められる」ことを優先した結果で、要件の項目自体は減らしていない。
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { callApi, getPublicConfig, isFailure } from "../../lib/client/api";
+import { callApi, getPublicConfig, isFailure, isUnauthenticated } from "../../lib/client/api";
 import { GUEST_PHONE_PLACEHOLDER } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { CustomerApp } from "./CustomerApp";
@@ -82,10 +82,14 @@ export const GuestEntry = () => {
     let alive = true;
 
     void (async () => {
-      // 1. 識別子を持っているか（持っていれば何もしない）。
+      // 1. 識別子を持っているか。**登録へ進むのは「識別子が無い・受け付けられない」（401・unauthenticated）
+      //    ときだけ**（設計書「客の画面」の優先の順の1）。サーバーの不具合（500・internal）・通信の失敗・
+      //    応答の形の崩れで登録すると、新しい識別子の Cookie が今の Cookie を上書きし、確保中の客が店で見せる
+      //    コードへ二度と戻れなくなる（2026-09-25 レビューの指摘）。それ以外は `CustomerApp` に任せる
+      //    ——端末に残した確保と「確かめられていません」を出す（基準 9.10・9.11）。
       const home = await callApi("GET /api/customer/home");
       if (!alive) return;
-      if (!isFailure(home)) {
+      if (!isUnauthenticated(home)) {
         setPhase("ready");
         return;
       }

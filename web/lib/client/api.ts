@@ -62,6 +62,7 @@ export const isFailure = (value: unknown): value is ApiFailure => typeof value =
  * ログインが切れた・していない断り（401・unauthenticated）かどうか（2026-09-25 監査の指摘 横断-01）。
  * ログインの失敗（login_failed）と役割違い（forbidden）は含めない——入り直しても直らない・別の断り。
  * 店と運営の画面は、これを受けたら「ログインが切れました」と /login への道を出す（client/session の知らせ）。
+ * 客の画面の入口（GuestEntry）は、ホームがこれを返したときだけ識別子を作り直す（ほかの失敗では作り直さない）。
  */
 export const isUnauthenticated = (value: unknown): value is ApiFailure => isFailure(value) && value.error?.kind === "unauthenticated";
 
