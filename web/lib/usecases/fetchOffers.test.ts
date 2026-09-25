@@ -130,3 +130,20 @@ describe("取得1回の記録は1つのまとまりで書く（不具合-08 の�
     expect((await one<{ n: number }>(ctx.db, "SELECT COUNT(*) AS n FROM fetch_items WHERE fetch_id = ?1", fetchId))?.n).toBeGreaterThan(0);
   });
 });
+
+describe("起点の出どころを記録に残す（設計-20: Google の中身かどうかで、30日の手入れの対象を分ける）", () => {
+  it("場所の文字を位置に直した起点は 'place'、端末の現在地は 'device' として残り、応答のあとの手入れを預ける", async () => {
+    const kept: Array<Promise<unknown>> = [];
+    const deps: Deps = { ...ctx.deps, defer: (task) => kept.push(task) };
+    ctx.geocoder.set("渋谷駅", SHIBUYA);
+    const byPlace = await fetchOffers(deps, customerId, { party: 2, place: "渋谷駅" });
+    const byDevice = await fetchOffers(deps, customerId, { party: 2, lat: SHIBUYA.lat, lng: SHIBUYA.lng });
+    const sourceOf = async (result: typeof byPlace) =>
+      (await one<{ origin_source: string | null }>(ctx.db, "SELECT origin_source FROM fetch_logs WHERE id = ?1", result.ok ? result.fetchId : ""))?.origin_source;
+    expect(await sourceOf(byPlace)).toBe("place");
+    expect(await sourceOf(byDevice)).toBe("device");
+    // 取得ごとに手入れを1つ預ける（走るのは1時間に1回まで・usecases/googleUpkeep）
+    expect(kept).toHaveLength(2);
+    await Promise.all(kept);
+  });
+});

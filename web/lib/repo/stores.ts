@@ -69,11 +69,15 @@ export const findStoreProfile = async (db: Db, storeId: string): Promise<StorePr
   };
 };
 
-/** 店の情報と位置を1度に書き換える（住所と位置がずれた形を残さない・基準 15.9）。 */
-export const updateStoreProfile = async (db: Db, storeId: string, profile: StoreProfileRecord): Promise<void> => {
+/**
+ * 店の情報と位置を1度に書き換える（住所と位置がずれた形を残さない・基準 15.9）。
+ * `geocodedAt` は位置を Google で直した時刻（migration 0009・設計-20）。手で置いた位置（デモの店）は渡さない＝NULL
+ * ——Google の利用条件の30日の手入れ（usecases/googleUpkeep）は、時刻のある座標だけを取り直す。
+ */
+export const updateStoreProfile = async (db: Db, storeId: string, profile: StoreProfileRecord & { geocodedAt?: string | null }): Promise<void> => {
   await db
     .prepare(
-      `UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8, lat = ?9, lng = ?10 WHERE id = ?1`,
+      `UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8, lat = ?9, lng = ?10, geocoded_at = ?11 WHERE id = ?1`,
     )
     .bind(
       storeId,
@@ -86,6 +90,7 @@ export const updateStoreProfile = async (db: Db, storeId: string, profile: Store
       profile.budgetMax,
       profile.lat,
       profile.lng,
+      profile.geocodedAt ?? null,
     )
     .run();
 };

@@ -828,6 +828,24 @@
   }
 }
 
+/* Google の地図サービスの帰属の表示（2026-09-25 監査の指摘 設計-20）。候補の一覧の下端と、現在地の地名の横に出す。
+   Google の指定（Roboto かその代わりの sans-serif・太さ 400・12〜16px・読める濃さ）に合わせ、いつも見えるようにする */
+.google-attribution {
+  color: var(--color-text-muted);
+  font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 400;
+  margin-left: 0.5rem;
+  white-space: nowrap;
+}
+.place-suggest__attribution {
+  cursor: default;
+  display: block;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem 0.75rem;
+  text-align: right;
+}
+
 /* 電話番号（任意・こだわり条件のいちばん下）。注記は本文より小さく淡く */
 .fetch-phone-note {
   color: var(--color-text-muted);
