@@ -163,6 +163,8 @@ export type OfferDto = {
   coupons: Array<{ id: string; name: string; note: string }>;
   /** 公開から12時間の時刻（ISO）。「何時まで」の上限として画面が使う */
   latestUntil: string;
+  /** 店が「何時まで」（終了タイマー）を入れたか。入れずに公開したら false で、公開から12時間で自動で終わる（2026-09-25 店-05） */
+  untilSet: boolean;
 };
 export type ArrivalRow = {
   reservationId: string;

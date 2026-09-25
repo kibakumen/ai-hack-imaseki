@@ -17,7 +17,7 @@ export type StoreHomeOfferPart = {
 };
 
 const toOfferView = (
-  offer: { id: string; capacity: number; remaining: number; partyMax: number; publishedAt: string; untilAt: string; couponIds: string[] },
+  offer: { id: string; capacity: number; remaining: number; partyMax: number; publishedAt: string; untilAt: string; untilSet: boolean; couponIds: string[] },
   coupons: readonly CouponRow[],
 ): OfferView => ({
   id: offer.id,
@@ -30,6 +30,7 @@ const toOfferView = (
   // 見せているクーポンは、店のクーポンの並び（作った順）で出す。削除されたものは落ちる。
   coupons: coupons.filter((coupon) => offer.couponIds.includes(coupon.id)).map(({ id, name, note }) => ({ id, name, note })),
   latestUntil: latestUntilOf(new Date(offer.publishedAt)).toISOString(),
+  untilSet: offer.untilSet,
 });
 
 /**

@@ -50,6 +50,8 @@ export type OfferRow = {
   partyMax: number;
   publishedAt: string;
   untilAt: string;
+  /** 店が「何時まで」（終了タイマー）を入れたか。入れずに公開したら false（公開から12時間で自動で終わる・店-05） */
+  untilSet: boolean;
   couponIds: string[];
 };
 
@@ -62,10 +64,12 @@ const toOfferRow = (row: Record<string, unknown>): OfferRow => ({
   partyMax: row.party_max as number,
   publishedAt: row.published_at as string,
   untilAt: row.until_at as string,
+  // 列を足す前の行（migrations/0007 より前）は全部、店が入れた時刻（それまでは必須だった）
+  untilSet: Number(row.until_set ?? 1) === 1,
   couponIds: parseStringList(row.coupon_ids),
 });
 
-const OFFER_COLUMNS = `o.id, o.capacity, o.initial_capacity, o.party_max, o.published_at, o.until_at, o.coupon_ids`;
+const OFFER_COLUMNS = `o.id, o.capacity, o.initial_capacity, o.party_max, o.published_at, o.until_at, o.until_set, o.coupon_ids`;
 
 /** 今そのお店が公開中のオファー（残りつき）。無ければ null（要件17の基準 17.13・17.14）。 */
 export const findLiveOffer = async (db: Db, storeId: string, nowIso: string): Promise<LiveOfferRow | null> => {
@@ -98,6 +102,8 @@ export type NewOffer = {
   partyMax: number;
   publishedAtIso: string;
   untilAtIso: string;
+  /** 店が「何時まで」を入れたか（false なら untilAtIso は公開から12時間の自動の終わり・店-05） */
+  untilSet: boolean;
   couponIds: string[];
 };
 
@@ -126,13 +132,13 @@ const keptCouponIdsJson = (storePlaceholder: string, idsPlaceholder: string): st
 export const insertOfferIfNone = async (db: Db, offer: NewOffer): Promise<{ couponIds: string[] } | null> => {
   const row = await db
     .prepare(
-      `INSERT INTO offers (id, store_id, capacity, initial_capacity, party_max, published_at, until_at, coupon_ids)` +
-        ` SELECT ?1, ?2, ?3, ?3, ?4, ?5, ?6, ${keptCouponIdsJson("?2", "?7")}` +
+      `INSERT INTO offers (id, store_id, capacity, initial_capacity, party_max, published_at, until_at, coupon_ids, until_set)` +
+        ` SELECT ?1, ?2, ?3, ?3, ?4, ?5, ?6, ${keptCouponIdsJson("?2", "?7")}, ?8` +
         ` WHERE EXISTS (SELECT 1 FROM stores s WHERE s.id = ?2 AND s.status = 'approved')` +
         ` AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.store_id = ?2 AND ${publishingOfferCondition("o", "?5")})` +
         ` RETURNING coupon_ids`,
     )
-    .bind(offer.id, offer.storeId, offer.capacity, offer.partyMax, offer.publishedAtIso, offer.untilAtIso, JSON.stringify(offer.couponIds))
+    .bind(offer.id, offer.storeId, offer.capacity, offer.partyMax, offer.publishedAtIso, offer.untilAtIso, JSON.stringify(offer.couponIds), offer.untilSet ? 1 : 0)
     .first();
   return row ? { couponIds: parseStringList((row as { coupon_ids?: unknown }).coupon_ids) } : null;
 };
@@ -204,9 +210,10 @@ export const updateLiveOfferPartyMax = async (db: Db, input: OfferChange & { par
 /**
  * 「何時まで」を変える（要件19の基準 19.8）。変えられたら true。
  * 延ばすことも早めることもできる。時分を時点へ直す判断は `domain/until.ts` が済ませてある。
+ * 入れた時刻は店が決めた終了タイマーになる（`until_set = 1`・自動の終わりから切り替わる・店-05）。
  */
 export const updateLiveOfferUntil = async (db: Db, input: OfferChange & { untilAtIso: string }): Promise<boolean> => {
-  const result = await db.prepare(`UPDATE offers SET until_at = ?3 WHERE ${LIVE_OFFER_OF_STORE}`).bind(input.storeId, input.nowIso, input.untilAtIso).run();
+  const result = await db.prepare(`UPDATE offers SET until_at = ?3, until_set = 1 WHERE ${LIVE_OFFER_OF_STORE}`).bind(input.storeId, input.nowIso, input.untilAtIso).run();
   return changedRows(result) > 0;
 };
 

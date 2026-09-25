@@ -40,6 +40,8 @@ const offerView = object({
   publishedAt: string(),
   coupons: array(coupon),
   latestUntil: string(),
+  /** 店が「何時まで」（終了タイマー）を入れたか。false なら公開から12時間の自動の終わり（2026-09-25 店-05） */
+  untilSet: boolean(),
 });
 
 const storeStatus = oneOf(["pending", "approved", "banned"]);
