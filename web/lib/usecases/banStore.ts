@@ -8,7 +8,6 @@
 
 import type { Deps } from "../ports";
 import { banApprovedStore, findStoreStatus } from "../repo/adminStores";
-import { listActiveReservationsOfStore } from "../repo/reservations";
 import type { StoreStatus } from "../repo/stores";
 import { sendCancellationPushes } from "./pushMessage";
 
@@ -30,22 +29,21 @@ export const banStore = async (deps: Deps, storeId: string): Promise<BanStoreRes
   if (status !== "approved") return { ok: false, kind: "state", state: status };
 
   const nowIso = deps.clock.now().toISOString();
-  // 知らせの相手は**取り消す前に**読む（取り消したあとでは「確保中だった客」を選べない・基準 22.2）。
-  const affected = await listActiveReservationsOfStore(deps.db, storeId, nowIso);
-
   // 同時に来た操作に負けた・変わった行の数が分からないときは「当たらなかった」側へ倒す（repo/d1 の changedRows）。
-  if (!(await banApprovedStore(deps.db, storeId, nowIso))) return { ok: false, kind: "state", state: status };
+  const banned = await banApprovedStore(deps.db, storeId, nowIso);
+  if (!banned) return { ok: false, kind: "state", state: status };
 
   deps.logger.log({ event: "ban_store", id: storeId });
   // 取り消した確保を1件ずつ残す（`id` は確保の番号。客を指す値は載せない・基準 27.6）。
-  for (const reservation of affected) deps.logger.log({ event: "admin_cancel", id: reservation.id });
+  for (const reservation of banned.cancelled) deps.logger.log({ event: "admin_cancel", id: reservation.reservationId });
 
   // 取り消された客へ「運営の都合で取り消された」を知らせる（基準 22.2・22.6・22.7）。
-  // 相手は上で**取り消す前に**読んである。購読のある客に1人1回ずつ・購読の無い客には送らない・
+  // 相手は**停止のまとまりが実際に取り消した行**から決める（不具合-13。先に読む形では、読んでから止めるまでに
+  // 受け取った客へ届かなかった）。購読のある客に1人1回ずつ・購読の無い客には送らない・
   // 送信の失敗は飲み込む——全部 `sendCancellationPushes` の側。停止はもう成立している。
   await sendCancellationPushes(
     deps,
-    affected.map((reservation) => reservation.customerId),
+    banned.cancelled.map((reservation) => reservation.customerId),
   );
 
   return { ok: true };

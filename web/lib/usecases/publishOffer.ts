@@ -2,11 +2,12 @@
 // 断り方は設計書「入力の断りの応答の形」に揃える——語は domain/inputRefusal、人が読む文は載せない。
 
 import type { FieldReason, ServerRefusalKind } from "../domain/inputRefusal";
-import { missingStoreProfile } from "../domain/storeHome";
+import { missingProfileFields } from "../domain/storeHome";
 import { latestUntilOf, resolveUntil } from "../domain/until";
 import { tokenFromBytes } from "../domain/token";
 import type { Deps } from "../ports";
-import { findStorePublishState, insertOfferIfNone, listStoreCoupons } from "../repo/offers";
+import { listCoupons } from "../repo/coupons";
+import { findStorePublishState, insertOfferIfNone } from "../repo/offers";
 import { ID_BYTES } from "../schemas/limits";
 import type { OfferPublishInput, OfferView } from "../schemas/offer";
 
@@ -28,7 +29,8 @@ export const publishOffer = async (deps: Deps, storeId: string, input: OfferPubl
   if (!store || store.status !== "approved") return { ok: false, kind: "approval_missing" };
 
   // 店名・住所・ジャンル・予算の幅のどれかが空なら、足りない項目を返す（基準 17.11）。
-  const missing = missingStoreProfile(store);
+  // 店のホームの `missingProfile` と同じ1本を通す（2026-09-25 監査の指摘 設計-10: 予算を2通りの名前で返していた）。
+  const missing = missingProfileFields(store);
   if (missing.length > 0) {
     return { ok: false, kind: "profile_incomplete", fields: missing.map((name) => ({ name, reason: "required" as FieldReason })) };
   }
@@ -39,7 +41,7 @@ export const publishOffer = async (deps: Deps, storeId: string, input: OfferPubl
   if (resolved.kind !== "ok") return untilRefusal(resolved.kind);
 
   // 店のものでないクーポンの番号は黙って落とす（並びは店のクーポンの順＝作った順）。
-  const coupons = await listStoreCoupons(deps.db, storeId);
+  const coupons = await listCoupons(deps.db, storeId);
   const chosen = coupons.filter((coupon) => input.couponIds.includes(coupon.id));
 
   const id = tokenFromBytes(deps.rng.bytes(ID_BYTES));
@@ -55,6 +57,8 @@ export const publishOffer = async (deps: Deps, storeId: string, input: OfferPubl
   });
   // 入らなかった＝その店に公開中のオファーがもう在る（基準 17.9）。
   if (!inserted) return { ok: false, kind: "offer_exists" };
+  // 応答のクーポンは、実際に付いたものだけ（読んでから入れるまでに消されたものは付いていない・不具合-13）
+  const attached = chosen.filter((coupon) => inserted.couponIds.includes(coupon.id)).map(({ id, name, note }) => ({ id, name, note }));
 
   return {
     ok: true,
@@ -66,7 +70,7 @@ export const publishOffer = async (deps: Deps, storeId: string, input: OfferPubl
       partyMax: input.partyMax,
       untilAt: resolved.at.toISOString(),
       publishedAt: publishedAtIso,
-      coupons: chosen,
+      coupons: attached,
       latestUntil: latestUntilOf(now).toISOString(),
     },
   };

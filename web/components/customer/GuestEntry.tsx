@@ -23,15 +23,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { callApi, getPublicConfig, isFailure, isUnauthenticated } from "../../lib/client/api";
-import { GUEST_PHONE_PLACEHOLDER, HUMAN_CHECK_ACTIONS } from "../../lib/schemas/limits";
+import { GUEST_NICKNAME_PREFIX, GUEST_PHONE_PLACEHOLDER, HUMAN_CHECK_ACTIONS } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { CustomerApp } from "./CustomerApp";
 
-/** 自動で作る呼び名。`guest-` ＋ 6字（呼び名の上限20字に収まる）。 */
-const guestNickname = (): string => `guest-${Math.random().toString(36).slice(2, 8)}`;
+/**
+ * 自動で作る呼び名。`guest-` ＋ 6字（呼び名の上限20字に収まる）。頭は `GUEST_NICKNAME_PREFIX` から組む
+ * ——店の一覧はこの頭で「客が決めていない呼び名」を見分けて「お客さま」と出す（`domain/guest`・横断-02）。
+ * 頭を手で書くと、片方だけ変わったときに仮の呼び名が店の一覧へ黙って出る（2026-09-25 のレビュー）。
+ */
+export const guestNickname = (): string => `${GUEST_NICKNAME_PREFIX}${Math.random().toString(36).slice(2, 8)}`;
 /**
  * 仮の電話番号（形の正本は `schemas/limits.ts` の `PHONE_PATTERN`＝0 で始まる10〜11桁。値は
- * `GUEST_PHONE_PLACEHOLDER`——取得の画面の電話番号の欄が「仮のまま」を見分けるのに同じ値を読む）。
+ * `GUEST_PHONE_PLACEHOLDER`——正本は `domain/guest`。取得の画面の電話番号の欄と店の一覧が「仮のまま」を
+ * 見分けるのに同じ値を読む）。
  * 実在しない番号を入れるのは、**客に聞かずに登録を済ませる**ため。店が本当に連絡したい場面は
  * 「来ない客への確認」で、そこは照合コードと来店の記録で足りる（本人の指摘）。
  * 本物の番号は、取得の画面のこだわり条件のいちばん下から任意で入れられる（2026-09-22 本人の指摘）。

@@ -29,6 +29,31 @@ export const distanceMeters = (a: Point, b: Point): number => {
 /** 起点が探す範囲（800m）の内か（基準 5.1）。境界のちょうど800m は内 */
 export const withinSearchRadius = (origin: Point, target: Point): boolean => distanceMeters(origin, target) <= SEARCH_RADIUS_METERS;
 
+/** 緯度経度の四角形（両端を含む）。 */
+export type GeoBounds = { latMin: number; latMax: number; lngMin: number; lngMax: number };
+
+/** 四角形を円より少しだけ広げる割合（浮動小数の丸めで、ちょうど800m の店を四角形の外へ落とさないため） */
+const BOUNDS_MARGIN = 1.01;
+const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
+
+/**
+ * 起点から探す範囲（800m）の円を**必ず含む**緯度経度の四角形（2026-09-25 監査の指摘 設計-08）。
+ *
+ * 取得の候補を D1 から読むときの前段の絞りに使う——それまでは全国の受け取れるオファーを読んでから
+ * 800m 以内に絞っていた。四角形は円より広いので、ここで残った店のうち範囲の内かを決めるのは、これまで
+ * どおり `withinSearchRadius`（基準 5.1・境界のちょうど800m は内）。
+ *
+ * 経度の幅は、その緯度で円に接する経線までの角度（`asin(sin δ / cos φ)`）。極に近すぎて円が極を含む
+ * ときは、経度で絞らない（日本の範囲では起きない）。
+ */
+export const searchBounds = (origin: Point, meters: number = SEARCH_RADIUS_METERS): GeoBounds => {
+  const angular = (meters / EARTH_RADIUS_METERS) * BOUNDS_MARGIN;
+  const dLat = toDegrees(angular);
+  const ratio = Math.sin(angular) / Math.cos(toRadians(origin.lat));
+  const dLng = ratio >= 1 || !Number.isFinite(ratio) ? 180 : toDegrees(Math.asin(ratio));
+  return { latMin: origin.lat - dLat, latMax: origin.lat + dLat, lngMin: origin.lng - dLng, lngMax: origin.lng + dLng };
+};
+
 /** 直線距離を分速80m で割って切り上げた分数（基準 4.9）。0m はそのまま0分 */
 export const walkMinutes = (meters: number): number => Math.ceil(Math.max(0, meters) / WALK_METERS_PER_MINUTE);
 

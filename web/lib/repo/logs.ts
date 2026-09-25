@@ -7,13 +7,16 @@
 //
 // ⚠️ 並行作業の申し送り: selections（タスク13）と reservation_events（タスク13）の追加も、
 // このファイルに同じ形で足すこと（記録の入口を1つにするため）。
-// → 2026-09-21 タスク13 が足した（このファイルの下半分）。**確保の状態が変わるたびに
-//   `insertReservationEvent` を呼ぶ**のが基準 27.4 の唯一の置き場所。タスク15（客の取り消し）・
-//   17（完了済み）・18（店の取り消し）・21（運営の停止）も、状態を変える1文が通った直後に
-//   これを呼ぶこと（呼ばないと、自動で取り消された割合〔要件33〕が後から数えられない）。
+// → 2026-09-21 タスク13 が足した（このファイルの下半分）。
+// → 2026-09-25 監査の指摘 不具合-16 で、選択と状態の変化の記録は**文（statement）を返す形**にした。
+//   状態を変える1文と同じ `db.batch` の並びに入れて一度に書く（repo/reservations が組む）——別々の往復で
+//   書いていた頃は、状態を変えたあとで落ちると記録だけが欠け、選ばれた店（基準 27.3）が少なく数えられた。
+//   記録の文は「状態が本当にその値へ変わったとき」だけ行を足す条件つきの追加なので、状態の文が当たらな
+//   かったまとまりでは何も足さない。
 
 import type { Deps } from "../ports";
-import { activeReservationCondition } from "./sqlFragments";
+import type { D1PreparedStatement } from "./d1";
+import { activeReservationCondition, expiredReservationCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -102,23 +105,35 @@ export const insertAiCall = async (db: Db, call: AiCallRecord): Promise<void> =>
 
 // ---------- 選択と、確保の状態の変化（タスク13が足した・要件27の基準 27.3・27.4） ----------
 
-/** 客が受け取った時に「どの取得のどの店が選ばれたか」を1件足す（基準 27.3）。 */
-export type SelectionRecord = { id: string; fetchId: string; storeId: string; at: string };
+/**
+ * 客が受け取った時に「どの取得のどの店が選ばれたか」を1件足す文（基準 27.3）。
+ *
+ * 取得と店は**確保の行から写す**——受け取りの1文が確保を作らなかったまとまりでは、行が無いので何も足さない
+ * （不具合-16。受け取りの文と同じ `db.batch` に並べる）。
+ */
+export const selectionStatement = (db: Db, record: { id: string; reservationId: string; at: string }): D1PreparedStatement =>
+  db
+    .prepare(`INSERT INTO selections (id, fetch_id, store_id, at) SELECT ?1, res.fetch_id, res.store_id, ?3 FROM reservations res WHERE res.id = ?2`)
+    .bind(record.id, record.reservationId, record.at);
 
-/** 確保の状態が変わった時に「どの確保がどの状態へいつ変わったか」を1件足す（基準 27.4）。 */
-export type ReservationEventRecord = { id: string; reservationId: string; status: string; at: string };
+/** 状態の変化の記録の番号は「確保の番号:状態」（同じ確保が同じ状態へ2度変わることは無いので、`OR IGNORE` で2件目を落とせる）。 */
+const EVENT_ID_SEPARATOR = ":";
 
-const INSERT_SELECTION = `INSERT INTO selections (id, fetch_id, store_id, at) VALUES (?1, ?2, ?3, ?4)`;
-
-const INSERT_RESERVATION_EVENT = `INSERT INTO reservation_events (id, reservation_id, status, at) VALUES (?1, ?2, ?3, ?4)`;
-
-export const insertSelection = async (db: Db, record: SelectionRecord): Promise<void> => {
-  await db.prepare(INSERT_SELECTION).bind(record.id, record.fetchId, record.storeId, record.at).run();
-};
-
-export const insertReservationEvent = async (db: Db, record: ReservationEventRecord): Promise<void> => {
-  await db.prepare(INSERT_RESERVATION_EVENT).bind(record.id, record.reservationId, record.status, record.at).run();
-};
+/**
+ * 確保の状態が変わった時に「どの確保がどの状態へいつ変わったか」を1件足す文（基準 27.4）。
+ *
+ * **その確保が今この時刻にこの状態へ変わっていたときだけ**足す（`status` と `status_at` を見る）。状態を
+ * 変える文と同じ `db.batch` の並びで、その**後ろ**に置く——状態の文が当たらなかった（同時に来た操作に
+ * 負けた）まとまりでは、何も足さない（不具合-16）。番号を確保と状態から決めるので、同じ時刻に2つの要求が
+ * 同じ状態へ変えようとしても記録は1件に留まる。
+ */
+export const reservationEventStatement = (db: Db, record: { reservationId: string; status: string; at: string }): D1PreparedStatement =>
+  db
+    .prepare(
+      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, at)` +
+        ` SELECT res.id || ?4 || ?2, res.id, ?2, ?3 FROM reservations res WHERE res.id = ?1 AND res.status = ?2 AND res.status_at = ?3`,
+    )
+    .bind(record.reservationId, record.status, record.at, EVENT_ID_SEPARATOR);
 
 /** 期限切れの記録の番号は確保の番号から決める（同じ確保に2件付かないので `OR IGNORE` が効く）。 */
 const EXPIRED_EVENT_ID_SUFFIX = ":expired";
@@ -132,17 +147,25 @@ const EXPIRED_EVENT_ID_SUFFIX = ":expired";
  *
  * 番号を確保の番号から決めているので、何度呼んでも増えない（`OR IGNORE` が2件目を落とす）。
  * 行を書き換えず・消さずに冪等にするための形（基準 27.7）。
+ *
+ * ⚠️ **店の側は読む幅に下限を置く**（2026-09-25 監査の指摘 設計-08）。期限切れの確保は状態の列が
+ *    `active` のまま残り続けるので、下限が無いと店のホームを開くたびに（30秒ごと）その店の全期間の
+ *    期限切れを読み直していた。店の側は `sinceIso`（店の一覧が読む幅と同じ・受け取った時刻で比べる）より
+ *    前の確保を見ない。客の側は下限を置かない——その客が次にホームを開けば、店が見落とした古い期限切れも
+ *    そこで足される（客の確保は索引で引けて、件数も客1人ぶんしかない）。
  */
-export const insertExpiredEvents = async (db: Db, scope: { kind: "customer" | "store"; id: string }, nowIso: string): Promise<void> => {
-  const where = scope.kind === "customer" ? "res.customer_id = ?1" : "res.store_id = ?1";
-  await db
-    .prepare(
-      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, at)` +
-        ` SELECT res.id || ?3, res.id, 'expired', res.expires_at FROM reservations res` +
-        ` WHERE ${where} AND res.status = 'active' AND res.expires_at <= ?2`,
-    )
-    .bind(scope.id, nowIso, EXPIRED_EVENT_ID_SUFFIX)
-    .run();
+export const insertExpiredEvents = async (
+  db: Db,
+  scope: { kind: "customer"; id: string } | { kind: "store"; id: string; sinceIso: string },
+  nowIso: string,
+): Promise<void> => {
+  const where = scope.kind === "customer" ? "res.customer_id = ?1" : "res.store_id = ?1 AND res.status_at >= ?4";
+  const statement = db.prepare(
+    `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, at)` +
+      ` SELECT res.id || ?3, res.id, 'expired', res.expires_at FROM reservations res` +
+      ` WHERE ${where} AND ${expiredReservationCondition("res", "?2")}`,
+  );
+  await (scope.kind === "customer" ? statement.bind(scope.id, nowIso, EXPIRED_EVENT_ID_SUFFIX) : statement.bind(scope.id, nowIso, EXPIRED_EVENT_ID_SUFFIX, scope.sinceIso)).run();
 };
 
 /** 運営の停止で取り消された確保の記録の番号も、確保の番号から決める（下の注と同じ理由）。 */

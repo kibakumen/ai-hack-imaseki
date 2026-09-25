@@ -30,7 +30,7 @@ import { apiStream, callApi, isFailure, STREAM_UNAVAILABLE, type ApiFailure, typ
 import { currentLocation, type CurrentLocation } from "../../lib/client/geolocation";
 import { rememberOrigin } from "../../lib/client/lastOrigin";
 import { usePlaceSuggestions } from "../../lib/client/placeSuggest";
-import { TEXTS } from "../../lib/domain/texts";
+import { PERSONAL_DATA_TEXTS, TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, GUEST_PHONE_PLACEHOLDER, PARTY_MAX, PARTY_MIN, PHONE_MAX_LENGTH, PLACE_MAX } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 import { EMPTY_RESULT_TEXT, type ResultItem } from "./ResultList";
@@ -77,6 +77,9 @@ export const budgetToSend = (raw: string): number | string | null => (raw.trim()
 /**
  * 登録されている電話番号を、欄に見せる形へ直す。仮の番号（自動の登録が入れたもの）は**空**で見せる
  * ——客に「0000000000」を見せると自分の番号だと誤読するため。
+ * 「仮かどうか」の正本は `domain/guest` の `isPlaceholderPhone`（店の一覧が使う）。部品はそれを値として
+ * 読めない（依存の向き）ので `schemas/limits` の写しの定数で比べ、答えが正本と同じことは
+ * `tests/domain/guest.test.ts` が場合を並べて固定する。
  */
 export const phoneToShow = (stored: string | undefined | null): string => (typeof stored !== "string" || stored === GUEST_PHONE_PLACEHOLDER ? "" : stored);
 
@@ -460,7 +463,8 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
 
         {/* いちばん下に電話番号（任意・本人の指摘「こだわり条件の下に任意で電話番号を登録できるように」） */}
         <label htmlFor="fetch-phone">電話番号（任意）</label>
-        <p className="fetch-phone-note">お店が緊急時に連絡できるようにするためのものです。入れなくても探せます。</p>
+        {/* どの店にいつまで見えるかも書く（2026-09-25 監査の指摘 安全-17 の案3） */}
+        <p className="fetch-phone-note">{PERSONAL_DATA_TEXTS.fetchPhoneNote}</p>
         <input
           id="fetch-phone"
           data-testid="field-phone"

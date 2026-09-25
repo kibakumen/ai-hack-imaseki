@@ -2,21 +2,15 @@
 // 形と長さの検査は入口のスキーマ（schemas/coupon.ts）が済ませている。ここが見るのは規則の2つだけ——
 // 3つまで（16.2）と、公開中のオファーが見せているものは変えられない（16.5）。
 //
+// ⚠️ 規則は**書く文の中で**確かめる（2026-09-25 監査の指摘 不具合-13・repo/coupons）。当たらなかったときだけ
+//    読み直して、断りの理由（見つからない／公開中が見せている）を決める。
+//
 // ⚠️ 確保が持つクーポンの写し（基準 16.6）はここでは作らない。受け取りの手続き（タスク13）が
 //    reservations.coupons_json に写すので、ここでの編集・削除は確保に触らない。
 
 import type { Deps } from "../ports";
 import { tokenFromBytes } from "../domain/token";
-import {
-  countCoupons,
-  deleteCoupon as deleteCouponRow,
-  findCoupon,
-  insertCoupon,
-  isCouponShownByPublishingOffer,
-  listCoupons as listCouponRows,
-  updateCoupon as updateCouponRow,
-  type CouponRow,
-} from "../repo/coupons";
+import { deleteCouponIfNotShown, findCoupon, insertCouponWithinLimit, listCoupons as listCouponRows, updateCouponIfNotShown, type CouponRow } from "../repo/coupons";
 import type { CouponInput } from "../schemas/coupon";
 import { COUPON_MAX, ID_BYTES } from "../schemas/limits";
 
@@ -31,42 +25,33 @@ export type CouponDeleteResult = { ok: true } | { ok: false; kind: CouponRefusal
 export const listCoupons = async (deps: Deps, storeId: string): Promise<Coupon[]> => listCouponRows(deps.db, storeId);
 
 export const createCoupon = async (deps: Deps, storeId: string, input: CouponInput): Promise<CouponResult> => {
-  if ((await countCoupons(deps.db, storeId)) >= COUPON_MAX) return { ok: false, kind: "limit_reached" };
-
   const coupon: Coupon = {
     id: tokenFromBytes(deps.rng.bytes(ID_BYTES)),
     name: input.name,
     note: input.note ?? "",
     createdAt: deps.clock.now().toISOString(),
   };
-  await insertCoupon(deps.db, { ...coupon, storeId, createdAtIso: coupon.createdAt });
-  return { ok: true, coupon };
+  // 数えることと入れることは1つの文（3つを超えない・基準 16.2）
+  const inserted = await insertCouponWithinLimit(deps.db, { ...coupon, storeId, createdAtIso: coupon.createdAt }, COUPON_MAX);
+  return inserted ? { ok: true, coupon } : { ok: false, kind: "limit_reached" };
 };
 
 /**
- * 変えてよいかを確かめる。見つからない（別の店のものを含む）か、公開中のオファーが見せているなら断る。
- * 編集と削除で同じ順に確かめる（基準 16.4・16.5）。
+ * 書く文が当たらなかった理由を読み直して決める（編集と削除で同じ順・基準 16.4・16.5）。
+ * 見つからない（別の店のものを含む）なら `not_found`。在るなら、書く文の条件で落ちたのは公開中のオファーが
+ * 見せていたから（読み直すまでに公開が終わっていても、書かなかった理由はそれ）。
  */
-const guardChange = async (deps: Deps, storeId: string, couponId: string): Promise<{ ok: true; coupon: Coupon } | { ok: false; kind: CouponRefusalKind }> => {
-  const coupon = await findCoupon(deps.db, storeId, couponId);
-  if (!coupon) return { ok: false, kind: "not_found" };
-  const inUse = await isCouponShownByPublishingOffer(deps.db, storeId, couponId, deps.clock.now().toISOString());
-  return inUse ? { ok: false, kind: "coupon_in_use" } : { ok: true, coupon };
-};
+const refusalAfterMiss = async (deps: Deps, storeId: string, couponId: string): Promise<{ ok: false; kind: CouponRefusalKind }> =>
+  (await findCoupon(deps.db, storeId, couponId)) ? { ok: false, kind: "coupon_in_use" } : { ok: false, kind: "not_found" };
 
 export const updateCoupon = async (deps: Deps, storeId: string, couponId: string, input: CouponInput): Promise<CouponResult> => {
-  const guard = await guardChange(deps, storeId, couponId);
-  if (!guard.ok) return guard;
-
-  const next: Coupon = { ...guard.coupon, name: input.name, note: input.note ?? "" };
-  await updateCouponRow(deps.db, storeId, couponId, { name: next.name, note: next.note });
-  return { ok: true, coupon: next };
+  const nowIso = deps.clock.now().toISOString();
+  const updated = await updateCouponIfNotShown(deps.db, { storeId, couponId, name: input.name, note: input.note ?? "", nowIso });
+  return updated ? { ok: true, coupon: updated } : refusalAfterMiss(deps, storeId, couponId);
 };
 
 export const deleteCoupon = async (deps: Deps, storeId: string, couponId: string): Promise<CouponDeleteResult> => {
-  const guard = await guardChange(deps, storeId, couponId);
-  if (!guard.ok) return guard;
-
-  await deleteCouponRow(deps.db, storeId, couponId);
-  return { ok: true };
+  const nowIso = deps.clock.now().toISOString();
+  const deleted = await deleteCouponIfNotShown(deps.db, { storeId, couponId, nowIso });
+  return deleted ? { ok: true } : refusalAfterMiss(deps, storeId, couponId);
 };

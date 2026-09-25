@@ -17,7 +17,8 @@ const domainBoundary = {
       {
         patterns: [
           {
-            group: ["**/adapters/**", "**/usecases/**", "**/repo/**", "**/http/**", "**/client/**", "**/components/**", "next", "next/**", "node:*"],
+            // `**/schemas/**` は 2026-09-25 のレビューで足した（domain/storeHome が schemas/limits を読んでいたのを lint が止めなかった）
+            group: ["**/adapters/**", "**/usecases/**", "**/repo/**", "**/http/**", "**/client/**", "**/components/**", "**/schemas/**", "next", "next/**", "node:*"],
             message: "lib/domain は自分だけを読めます（依存の向き）。",
           },
         ],

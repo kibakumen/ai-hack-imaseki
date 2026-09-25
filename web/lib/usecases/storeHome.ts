@@ -6,11 +6,9 @@
 //    **タスク9 が `offer` と `publishPrefill`**、**タスク17 が `arrivals`** を埋める。
 //    下の3か所の ⚠️ が、その差し込み口（ほかの行は触らずに済む形にしてある）。
 
-// `EMPTY_PUBLISH_PREFILL` の読み込みは、タスク9 が `publishPrefill` を `storeHomeOffer` の側で
-// 組むようにしたあとの置き忘れで、lint の警告として残っていた。2026-09-22 タスク25 が外した。
 import { arrivalRows, ARRIVALS_WINDOW_MS, missingProfileFields, type ArrivalView, type OfferView, type PublishPrefillView, type StoreStatusView } from "../domain/storeHome";
 import type { Deps } from "../ports";
-import { listCouponsByStore, type CouponRow } from "../repo/coupons";
+import { listCoupons, type CouponRow } from "../repo/coupons";
 import { insertExpiredEvents } from "../repo/logs";
 import { listStoreArrivals } from "../repo/reservations";
 import { findStoreHomeRow } from "../repo/stores";
@@ -29,36 +27,46 @@ export type StoreHome = {
   arrivals: ArrivalView[];
 };
 
+/** 一覧と期限切れの記録が読む幅の下限（残り方のいちばん長い24時間・設計-08）。 */
+const arrivalsSinceIso = (now: Date): string => new Date(now.getTime() - ARRIVALS_WINDOW_MS).toISOString();
+
 /**
  * 「向かっている客」の一覧（要件20の基準 20.1〜20.5・20.14〜20.16）。
  * どの行を出すか・できる操作の判断は `domain/storeHome` の `arrivalRows`（純粋）が持ち、
  * ここは読む幅（残り方のいちばん長い24時間）を決めて渡すだけ。
  */
-const storeArrivals = async (deps: Deps, storeId: string, storeBanned: boolean): Promise<ArrivalView[]> => {
-  const now = deps.clock.now();
-  const rows = await listStoreArrivals(deps.db, storeId, new Date(now.getTime() - ARRIVALS_WINDOW_MS).toISOString());
+const storeArrivals = async (deps: Deps, storeId: string, storeBanned: boolean, now: Date): Promise<ArrivalView[]> => {
+  const rows = await listStoreArrivals(deps.db, storeId, arrivalsSinceIso(now));
   return arrivalRows(rows, now, { storeBanned });
 };
 
-/** 見分けの直後に店が消えた場合だけ null（入口が 401 に倒す）。 */
+/**
+ * 見分けの直後に店が消えた場合だけ null（入口が 401 に倒す）。
+ *
+ * 店の行とクーポンは**1回ずつ**読み、オファーの部分へ渡す（2026-09-25 監査の指摘 設計-10: それまでオファーの部分が
+ * 同じ2つを読み直し、30秒ごとに D1 を2往復余計に呼んでいた）。足りない店の情報は `missingProfileFields` 1本
+ * （公開の断り `profile_incomplete` の `fields` と同じ答え）。
+ */
 export const storeHome = async (deps: Deps, storeId: string): Promise<StoreHome | null> => {
   const store = await findStoreHomeRow(deps.db, storeId);
   if (!store) return null;
+  const now = deps.clock.now();
 
   // 期限切れの記録（要件27の基準 27.4）は、読む側の手続きの先頭で足す（設計書「期限切れの記録」）。
   // 期限切れは書き込みを伴わないので、客のホームと店のホームのどちらかが読んだ時に記録が付く。
   // 何度呼んでも増えない（タスク13が足した `insertExpiredEvents` が番号で重なりを落とす）。
-  await insertExpiredEvents(deps.db, { kind: "store", id: storeId }, deps.clock.now().toISOString());
+  // 店の側は一覧と同じ幅だけを見る（全期間を30秒ごとに読み直さない・設計-08）。
+  await insertExpiredEvents(deps.db, { kind: "store", id: storeId, sinceIso: arrivalsSinceIso(now) }, now.toISOString());
 
-  const coupons = await listCouponsByStore(deps.db, storeId);
+  const coupons = await listCoupons(deps.db, storeId);
 
   return {
     id: store.id,
     status: store.status,
-    ...(await storeHomeOfferPart(deps, storeId)),
+    ...(await storeHomeOfferPart(deps, storeId, coupons)),
     checklist: { license: store.licenseKey !== null, card: store.cardRegisteredAt !== null },
     missingProfile: missingProfileFields(store),
     coupons,
-    arrivals: await storeArrivals(deps, storeId, store.status === "banned"),
+    arrivals: await storeArrivals(deps, storeId, store.status === "banned", now),
   };
 };

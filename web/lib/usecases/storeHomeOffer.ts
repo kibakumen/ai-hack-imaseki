@@ -2,25 +2,23 @@
 // ⚠️ 別のファイルに切ってあるのは、`usecases/storeHome.ts` がタスク7（承認の状況・チェックリスト）と
 // タスク17（向かっている客）でも育つため。あちらへの差し込みは1行に留める。
 
-import { missingStoreProfile, publishPrefill, type PublishPrefill } from "../domain/storeHome";
+import { publishPrefill, type PublishPrefill } from "../domain/storeHome";
 import { latestUntilOf } from "../domain/until";
 import type { Deps } from "../ports";
-import { findLastOffer, findLiveOffer, findStorePublishState, listStoreCoupons, type CouponRow } from "../repo/offers";
+import { listCoupons, type CouponRow } from "../repo/coupons";
+import { findLastOffer, findLiveOffer } from "../repo/offers";
 import type { OfferView } from "../schemas/offer";
 
 export type StoreHomeOfferPart = {
-  /** 店名・住所・ジャンル・予算の幅のうち埋まっていないもの（基準 17.11・要件12の基準 12.8） */
-  missingProfile: string[];
   /** 公開中のオファー。無ければ null（基準 17.22） */
   offer: OfferView | null;
   /** 公開のフォームの初めの値（基準 17.17〜17.21） */
   publishPrefill: PublishPrefill;
-  coupons: CouponRow[];
 };
 
 const toOfferView = (
   offer: { id: string; capacity: number; remaining: number; partyMax: number; publishedAt: string; untilAt: string; couponIds: string[] },
-  coupons: CouponRow[],
+  coupons: readonly CouponRow[],
 ): OfferView => ({
   id: offer.id,
   capacity: offer.capacity,
@@ -30,7 +28,7 @@ const toOfferView = (
   untilAt: offer.untilAt,
   publishedAt: offer.publishedAt,
   // 見せているクーポンは、店のクーポンの並び（作った順）で出す。削除されたものは落ちる。
-  coupons: coupons.filter((coupon) => offer.couponIds.includes(coupon.id)),
+  coupons: coupons.filter((coupon) => offer.couponIds.includes(coupon.id)).map(({ id, name, note }) => ({ id, name, note })),
   latestUntil: latestUntilOf(new Date(offer.publishedAt)).toISOString(),
 });
 
@@ -41,30 +39,28 @@ const toOfferView = (
  */
 export const liveOfferView = async (deps: Deps, storeId: string): Promise<OfferView | null> => {
   const nowIso = deps.clock.now().toISOString();
-  const [coupons, live] = await Promise.all([listStoreCoupons(deps.db, storeId), findLiveOffer(deps.db, storeId, nowIso)]);
+  const [coupons, live] = await Promise.all([listCoupons(deps.db, storeId), findLiveOffer(deps.db, storeId, nowIso)]);
   return live ? toOfferView(live, coupons) : null;
 };
 
-export const storeHomeOfferPart = async (deps: Deps, storeId: string): Promise<StoreHomeOfferPart> => {
+/**
+ * 店のホームのオファーの部分。店のクーポンは**呼ぶ側（usecases/storeHome）が1回読んだもの**を受け取る
+ * （2026-09-25 監査の指摘 設計-10: 店のホームが店の行とクーポンを2回ずつ読み、1回ぶんを捨てていた）。
+ * 足りない店の情報の判定もここでは持たない（`domain/storeHome.missingProfileFields` 1本・店のホームが呼ぶ）。
+ */
+export const storeHomeOfferPart = async (deps: Deps, storeId: string, coupons: readonly CouponRow[]): Promise<StoreHomeOfferPart> => {
   const now = deps.clock.now();
-  const nowIso = now.toISOString();
-  const [store, coupons, live] = await Promise.all([
-    findStorePublishState(deps.db, storeId),
-    listStoreCoupons(deps.db, storeId),
-    findLiveOffer(deps.db, storeId, nowIso),
-  ]);
+  const live = await findLiveOffer(deps.db, storeId, now.toISOString());
 
   // 公開中があるときは、その値がカードに出ている。初めの値が要るのは公開のフォームのときだけ。
   const last = live ? null : await findLastOffer(deps.db, storeId);
 
   return {
-    missingProfile: store ? missingStoreProfile(store) : [],
     offer: live ? toOfferView(live, coupons) : null,
     publishPrefill: publishPrefill({
       lastOffer: last ? { ...last, untilAt: new Date(last.untilAt) } : null,
       coupons,
       now,
     }),
-    coupons,
   };
 };

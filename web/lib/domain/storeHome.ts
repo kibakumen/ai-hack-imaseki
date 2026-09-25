@@ -1,4 +1,5 @@
-import { canComplete, effectiveState, isWithinExpiredGrace } from "./reservation";
+import { isGuestNickname, isPlaceholderPhone } from "./guest";
+import { canCancelByStore, canComplete, effectiveState, isWithinExpiredGrace } from "./reservation";
 import { formatTimeOfDay, resolveUntil } from "./until";
 // 店のホームに何を出すかの判断（設計書「どの判断をどこに置くか」）。副作用なし・時計も引数で受け取る。
 //
@@ -26,8 +27,16 @@ export type OfferView = {
 export type ArrivalView = {
   reservationId: string;
   kind: "active" | "expired" | "completed" | "store_cancelled";
-  nickname: string;
-  phone: string;
+  /**
+   * 客の呼び名。客が自分で決めていない（自動の登録の `guest-…`・消した客の空）なら null——店の画面は
+   * 「お客さま」と出し、見分けはコードに任せる（横断-02 の案A。客は自分の仮の呼び名を知らない）。
+   */
+  nickname: string | null;
+  /**
+   * 受け取った時点の電話番号。登録が無い（自動の登録の仮の番号・空）なら null——店の画面は発信の
+   * リンクを付けず「電話番号の登録なし（コードで照合）」と出す（横断-02 の案A。仮の番号へ発信させない）。
+   */
+  phone: string | null;
   party: number;
   code: string;
   expiresAt: string;
@@ -37,9 +46,6 @@ export type ArrivalView = {
 
 /** 公開のフォームの初めの値。中身を埋めるのはタスク9（`publishPrefill`）。 */
 export type PublishPrefillView = { couponIds: string[]; capacity: number | null; partyMax: number | null; until: string | null };
-
-/** まだ一度も公開していない店の、公開のフォームの初めの値（どの欄も空）。 */
-export const EMPTY_PUBLISH_PREFILL: PublishPrefillView = { couponIds: [], capacity: null, partyMax: null, until: null };
 
 /** オファーを公開するために埋まっていなければならない、店の情報の項目（設計書 17.11 の行）。 */
 export const REQUIRED_PROFILE_FIELDS = ["name", "address", "genres", "budget"] as const;
@@ -60,6 +66,8 @@ const isBlank = (value: string | null): boolean => value === null || value.trim(
  *
  * ⚠️ 店のホームの `missingProfile` と、公開を断るときの `profile_incomplete` の `fields` は、
  * **同じここを通す**（1つの責務は1か所）。片方だけを直すと、画面の案内と断りの理由がずれる。
+ * （2026-09-25 監査の指摘 設計-10: 予算を `budgetMin`・`budgetMax` で返す2本目の判定が公開の断りで使われて
+ * いたので消した。予算の幅は1項目 `budget` として返す。）
  */
 export const missingProfileFields = (profile: ProfileForPublish): RequiredProfileField[] => {
   const missing: RequiredProfileField[] = [];
@@ -109,7 +117,7 @@ export const publishPrefill = ({
   now,
 }: {
   lastOffer: LastOffer | null;
-  coupons: Array<{ id: string }>;
+  coupons: ReadonlyArray<{ id: string }>;
   now: Date;
 }): PublishPrefill => {
   if (!lastOffer) return { couponIds: [], capacity: null, partyMax: null, until: null };
@@ -125,27 +133,6 @@ export const publishPrefill = ({
     partyMax: lastOffer.partyMax,
     until: resolved?.kind === "ok" ? time : null,
   };
-};
-
-// ---------- 店の情報の足りないもの（要件17の基準 17.11・要件12の基準 12.8） ----------
-
-export type StoreProfileState = {
-  name: string | null;
-  address: string | null;
-  genres: string[];
-  budgetMin: number | null;
-  budgetMax: number | null;
-};
-
-/** 入口の断り（`profile_incomplete` の `fields`）とホームの `missingProfile` が同じ答えを使う。 */
-export const missingStoreProfile = (store: StoreProfileState): string[] => {
-  const missing: string[] = [];
-  if (!store.name || store.name.trim() === "") missing.push("name");
-  if (!store.address || store.address.trim() === "") missing.push("address");
-  if (store.genres.length === 0) missing.push("genres");
-  if (store.budgetMin === null) missing.push("budgetMin");
-  if (store.budgetMax === null) missing.push("budgetMax");
-  return missing;
 };
 
 // ---------- 「向かっている客」の一覧の行（タスク17・要件20の基準 20.1〜20.5・20.14〜20.16） ----------
@@ -211,14 +198,14 @@ export const arrivalRows = (rows: readonly ArrivalRowInput[], now: Date, options
     .map(({ row, kind }) => ({
       reservationId: row.reservationId,
       kind,
-      nickname: row.nickname,
-      phone: row.phone,
+      // 自動の登録の仮の値は、店へ渡す手前で外す（横断-02 の案A。見分けは `domain/guest` の1か所）
+      nickname: isGuestNickname(row.nickname) ? null : row.nickname,
+      phone: isPlaceholderPhone(row.phone) ? null : row.phone,
       party: row.party,
       code: row.code,
       expiresAt: row.expiresAt.toISOString(),
       canComplete: canComplete({ ...row, storeBanned: options.storeBanned }, now),
-      // ⚠️ タスク18（店の取り消し）が `canCancelByStore` を `domain/reservation.ts` へ足したら、
-      //    ここをそれに差し替えること（入口の断りと同じ規則を、画面のボタンも読むため）。
-      //    止められている店に操作を出さないのは、完了済み（基準 20.23）と同じ扱い。
-      canCancel: kind === "active" && !options.storeBanned,
+      // 入口の断り（usecases/cancelByStore）と同じ規則を、画面のボタンも読む。
+      // 止められている店に操作を出さないのは、完了済み（基準 20.23）と同じ扱い。
+      canCancel: canCancelByStore(row, now) && !options.storeBanned,
     }));

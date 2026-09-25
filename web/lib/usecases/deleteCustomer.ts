@@ -6,6 +6,7 @@
 //    客の行そのものも消さず、4項目と `token_hash` を空にする（`repo/customers.eraseCustomer`）。
 
 import { canDeleteRegistration, type DeleteRefusalKind } from "../domain/customer";
+import { EXPIRED_GRACE_MS } from "../domain/reservation";
 import type { Deps } from "../ports";
 import { eraseCustomer, findCustomerProfile } from "../repo/customers";
 import { listReservationStatesOfCustomer } from "../repo/reservations";
@@ -25,6 +26,9 @@ export const deleteCustomer = async (deps: Deps, customerId: string): Promise<De
   // 断るときは D1 を1行も変えない（基準 29.3 と同じ向き。受け入れ検査が前後の中身を突き合わせる）。
   if (!decision.ok) return { ok: false, kind: decision.kind };
 
-  await eraseCustomer(deps.db, customerId, now.toISOString());
-  return { ok: true };
+  // 消せない条件は消す文の中でもう一度見る（読んでから消すまでに受け取りが入ったら消さない・不具合-15）
+  const erased = await eraseCustomer(deps.db, customerId, { nowIso: now.toISOString(), expiredGraceFromIso: new Date(now.getTime() - EXPIRED_GRACE_MS).toISOString() });
+  if (erased) return { ok: true };
+  // 当たらなかった: 同時に消された（見分けの断り）か、同時に受け取った（確保中の断り）
+  return (await findCustomerProfile(deps.db, customerId)) ? { ok: false, kind: "has_active_reservation" } : { ok: false, kind: "not_found" };
 };

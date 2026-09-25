@@ -16,6 +16,9 @@
 //
 // ⚠️ 「今」は必ず呼ぶ側が束縛した値を渡す（実行者への契約: SQLite の datetime('now') は使わない）。
 //    偽の時計で日付をまたぐ検査が、SQL の側だけ本物の時計を見ていると通らなくなる。
+//
+// ⚠️ 確保の状態の条件（`status = 'active'` を含む比べ方）は、repo のほかのファイルに手で書かない
+//    （2026-09-25 監査の指摘 設計-10: 5か所に手書きされていた）。単体の検査 sqlFragments.test.ts が見張る。
 
 /**
  * 公開中のオファーの条件（設計書「オファーの状態」）。まだ終わっておらず（`ended_at` が無い）、
@@ -40,6 +43,25 @@ export const publishingOfferCondition = (alias: string, nowPlaceholder: string):
  */
 export const activeReservationCondition = (reservationAlias: string, nowPlaceholder: string): string =>
   `${reservationAlias}.status = 'active' AND ${reservationAlias}.expires_at > ${nowPlaceholder}`;
+
+/**
+ * 「期限切れの確保」の条件（`status='active'` で、今が期限ちょうどか後）。期限切れは保存せず時刻から導く
+ * （TS 側の正本は `domain/reservation.ts` の `effectiveState` が `expired` を返す場合）。
+ *
+ * ⚠️ 2026-09-25 監査の指摘 設計-10 で足した。それまで同じ条件が記録の足し込み（repo/logs）と運営の数字
+ * （repo/adminMetrics）に手で書かれていた。
+ */
+export const expiredReservationCondition = (reservationAlias: string, nowPlaceholder: string): string =>
+  `${reservationAlias}.status = 'active' AND ${reservationAlias}.expires_at <= ${nowPlaceholder}`;
+
+/**
+ * 「期限切れで、期限から20分以内」の条件（受け取り直せる・店が完了済みにできる・登録を消せない期間）。
+ * TS 側の正本は `domain/reservation.ts` の `isWithinExpiredGrace`（`今 − 期限 < 20分` ⇔ `期限 > 今 − 20分`）。
+ *
+ * @param graceFromPlaceholder 束縛した「今 − 20分」（ISO 8601）の置き場所。引き算は呼ぶ側の TS で済ませる
+ */
+export const expiredWithinGraceCondition = (reservationAlias: string, nowPlaceholder: string, graceFromPlaceholder: string): string =>
+  `${expiredReservationCondition(reservationAlias, nowPlaceholder)} AND ${reservationAlias}.expires_at > ${graceFromPlaceholder}`;
 
 /**
  * 枠を押さえている確保（設計書「確保の状態と、残りの数え方」の3つ）:

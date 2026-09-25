@@ -52,14 +52,13 @@ const ArrivalCard = ({ row, done, onAsk }: CardProps) => (
   <li className={done ? "store-arrival store-arrival--done" : "store-arrival"} data-testid={`row-${row.reservationId}`}>
     <div className="store-arrival__main">
       <p className="store-arrival__name">
-        {row.nickname} さん（{row.party} 名）
+        {ARRIVALS_TEXTS.who(row.nickname)}（{row.party} 名）
       </p>
       <p className="store-arrival__meta">
         {ARRIVALS_TEXTS.kindLabel(row.kind)}・期限 {timeInJst(row.expiresAt)}
       </p>
-      <p className="store-arrival__meta">
-        <a href={`tel:${row.phone}`}>{row.phone}</a>
-      </p>
+      {/* 登録の無い客に仮の番号の発信のリンクを出さない（横断-02） */}
+      <p className="store-arrival__meta">{row.phone ? <a href={`tel:${row.phone}`}>{row.phone}</a> : ARRIVALS_TEXTS.noPhone}</p>
     </div>
     <div className="store-arrival__side">
       <p className="store-arrival__code">{row.code}</p>
@@ -98,7 +97,7 @@ const ConfirmDialog = ({
   <div className="store-confirm" role="dialog" aria-label="確かめ" data-testid={`confirm-${action}`}>
     {action === "complete" ? (
       <p>
-        {row.nickname} さん・{row.party} 名・コード {row.code} の来店を確かめましたか。
+        {ARRIVALS_TEXTS.who(row.nickname)}・{row.party} 名・コード {row.code} の来店を確かめましたか。
       </p>
     ) : (
       <p>取り消すと、客に知らせが送られます。この確保を取り消しますか。</p>

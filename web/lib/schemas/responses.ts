@@ -110,8 +110,9 @@ const recentStore = object({ reservationId: string(), storeId: string(), storeNa
 const arrival = object({
   reservationId: string(),
   kind: oneOf(["active", "expired", "completed", "store_cancelled"]),
-  nickname: string(),
-  phone: string(),
+  // 客が決めた呼び名・登録された電話番号が無ければ null（自動の登録の仮の値を店へ渡さない・横断-02）
+  nickname: nullable(string()),
+  phone: nullable(string()),
   party: number(),
   code: string(),
   expiresAt: string(),

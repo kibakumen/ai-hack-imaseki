@@ -1,8 +1,18 @@
 // 「公開中」の条件は SQL の文字列なので、型検査では守れない。契約で決まっている2点——
 // 終わっていないこと・「今」を束縛した値で比べること——をここで固定する。
 // （実行者への契約: SQL の比較も束縛した「今」で行う。SQLite の datetime('now') は使わない）
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { holdsSlotCondition, publishingOfferCondition, receivableCondition, remainingExpression } from "./sqlFragments";
+import {
+  activeReservationCondition,
+  expiredReservationCondition,
+  expiredWithinGraceCondition,
+  holdsSlotCondition,
+  publishingOfferCondition,
+  receivableCondition,
+  remainingExpression,
+} from "./sqlFragments";
 
 describe("公開中のオファーの条件", () => {
   const condition = publishingOfferCondition("o", "?2");
@@ -49,5 +59,28 @@ describe("枠を押さえている確保・残り・受け取れる状態", () =
     for (const sql of [holdsSlotCondition("res", "?1"), remainingExpression("o", "?1"), receivableCondition("o", "?1")]) {
       expect(sql).not.toMatch(/datetime\s*\(|CURRENT_TIMESTAMP|julianday\s*\(\s*'now'/i);
     }
+  });
+});
+
+// 2026-09-25 監査の指摘 設計-10: 「確保中」の条件が、ただ1つの置き場を名乗るこのファイルを通らずに5か所で手書きされていた。
+describe("確保の状態の条件のただ1つの置き場", () => {
+  it("確保中・期限切れ・期限から20分以内の期限切れは、束縛した「今」で切り分ける（期限ちょうどは期限切れ）", () => {
+    expect(activeReservationCondition("res", "?2")).toBe("res.status = 'active' AND res.expires_at > ?2");
+    expect(expiredReservationCondition("res", "?2")).toBe("res.status = 'active' AND res.expires_at <= ?2");
+    expect(expiredWithinGraceCondition("res", "?2", "?3")).toBe("res.status = 'active' AND res.expires_at <= ?2 AND res.expires_at > ?3");
+  });
+
+  it("repo のほかのファイルに、確保の状態の条件（status = 'active' の比べ方）を手で書いていない", () => {
+    const dir = path.dirname(new URL(import.meta.url).pathname);
+    const code = (text: string) =>
+      text
+        .split("\n")
+        .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+        .join("\n");
+    const offenders = fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts") && name !== "sqlFragments.ts")
+      .filter((name) => /status\s*=\s*'active'/.test(code(fs.readFileSync(path.join(dir, name), "utf8"))));
+    expect(offenders).toEqual([]);
   });
 });

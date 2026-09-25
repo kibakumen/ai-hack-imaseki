@@ -17,6 +17,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PERSONAL_DATA_TEXTS } from "../../lib/domain/texts";
 import { FetchForm } from "./FetchForm";
 import { replyToResponse, streamOfResult, type FakeReply } from "../../../tests/acceptance/v2/_fakes";
 
@@ -74,8 +75,9 @@ describe("こだわり条件の並びと電話番号", () => {
     expect(phone.type).toBe("tel");
     expect(phone.getAttribute("inputmode")).toBe("numeric");
     expect(phone.getAttribute("autocomplete")).toBe("tel");
-    expect(container.textContent).toMatch(/緊急時に連絡/);
     expect(container.textContent).toMatch(/任意/);
+    // 何のために聞くかと、どの店にいつまで見えるか（安全-17 の案3）
+    expect(container.textContent).toContain(PERSONAL_DATA_TEXTS.fetchPhoneNote);
   });
 
   it("登録が仮の番号なら欄は空。本物が登録されていればそれを見せる", () => {

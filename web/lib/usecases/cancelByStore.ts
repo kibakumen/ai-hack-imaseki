@@ -4,18 +4,16 @@
 // 順は4つ:
 //   1. その店の確保を1件読む（別の店のもの・在らない番号は「無い」として返す）
 //   2. 取り消せる状態かを `domain/reservation.canCancelByStore` に聞く（判断はここに書かない）
-//   3. **前の状態を WHERE に入れた1つの UPDATE**（同時の完了済み・客の取り消しと競っても2回変わらない）
-//   4. 状態の変化を記録し（基準 27.4）、その客へ知らせを送る（基準 22.1）
+//   3. **前の状態を WHERE に入れた1つの UPDATE**（同時の完了済み・客の取り消しと競っても2回変わらない）と、
+//      状態の変化の記録（基準 27.4）を1つのまとまりで書く（不具合-16）
+//   4. その客へ知らせを送る（基準 22.1）
 //
 // 残りは戻らず、募集する組数も変わらない（基準 18.4・18.5）——`holds_slot` を触らないことで満たす。
 // 取り消しは1件ずつで、同じオファーのほかの確保には触らない（基準 21.4）。
 
 import { canCancelByStore, effectiveState, type EffectiveState } from "../domain/reservation";
-import { tokenFromBytes } from "../domain/token";
 import type { Deps } from "../ports";
-import { insertReservationEvent } from "../repo/logs";
 import { cancelReservationByStore, findReservationOfStore } from "../repo/reservations";
-import { ID_BYTES } from "../schemas/limits";
 import { sendCancellationPush } from "./pushMessage";
 
 export type CancelByStoreResult =
@@ -24,8 +22,6 @@ export type CancelByStoreResult =
   | { ok: false; kind: "not_found" }
   /** 確保中ではない（基準 21.5・21.6）。今の状態を返して断る（基準 21.7） */
   | { ok: false; kind: "state"; state: EffectiveState };
-
-const newId = (deps: Deps): string => tokenFromBytes(deps.rng.bytes(ID_BYTES));
 
 /**
  * 店がその確保を取り消す。取り消せたら、その客へ「お店の都合で取り消された」を送る（基準 22.1）。
@@ -50,7 +46,6 @@ export const cancelByStore = async (deps: Deps, storeId: string, reservationId: 
     return { ok: false, kind: "state", state: effectiveState(latest, deps.clock.now()) };
   }
 
-  await insertReservationEvent(deps.db, { id: newId(deps), reservationId, status: "store_cancelled", at: nowIso });
   deps.logger.log({ event: "store_cancel", id: reservationId });
 
   // その客へ「お店の都合で取り消された」を知らせる（基準 22.1・22.6・22.7）。

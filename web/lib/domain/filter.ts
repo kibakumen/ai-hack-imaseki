@@ -4,7 +4,7 @@
 //
 // 入力の型にクーポン（特記事項）は無い（要件16の基準 16.8）。店の姿に無いものは絞り込みに使いようがない。
 
-import { distanceMeters, SEARCH_RADIUS_METERS, type Point } from "./geo";
+import { withinSearchRadius, type Point } from "./geo";
 
 /**
  * その回の取得の条件。
@@ -41,5 +41,6 @@ export const filterCandidates = <T extends FilterStore>(input: FilterInput, stor
     if (!store.receivable) return false; // 基準 5.2（受け取れる状態の店だけ）
     if (input.party > store.partyMax) return false; // 基準 5.3（同じなら残し、1多いと落とす）
     if (input.budgetMax !== null && store.budgetMin > input.budgetMax) return false; // 基準 5.4・5.5
-    return distanceMeters(input.origin, store) <= SEARCH_RADIUS_METERS; // 基準 5.1
+    // 基準 5.1（範囲の内かの判断は geo の1か所・設計-10: ここに同じ比べ方が写されていた）
+    return withinSearchRadius(input.origin, store);
   });

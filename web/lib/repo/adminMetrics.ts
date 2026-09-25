@@ -11,6 +11,7 @@
 //    AVG と SUM は NULL を返すので、読む側で 0 に倒す（下の toNumber）。
 
 import type { Deps } from "../ports";
+import { expiredReservationCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -128,15 +129,14 @@ export const fetchTotals = async (db: Db): Promise<FetchTotals> => {
  * 期限を過ぎたあとに店が完了済みにしたものは `status='completed'` になるので、ここでは数えない
  * （客は来ていて、自動で取り消されたわけではないため）。
  *
- * ⚠️ この条件は、期限切れを導くただ1つの置き場（タスク13・17 が置く `domain` の
- *    `effectiveState` ／ `repo/sqlFragments.ts`）が出来たらそちらへ寄せる。今は数字の画面だけが
- *    この条件を使うのでここに置いた（AI判断・タスク11・18 が同じ時間に sqlFragments を足しているため）。
+ * 期限切れの条件は `repo/sqlFragments.ts` の `expiredReservationCondition`（TS 側の正本は `domain/reservation` の
+ * `effectiveState`）。2026-09-25 監査の指摘 設計-10 で、ここに手で書いていた条件をそちらへ寄せた。
  */
 export const reservationTotals = async (db: Db, nowIso: string): Promise<ReservationTotals> => {
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN status = 'active' AND expires_at <= ?1 THEN 1 ELSE 0 END) AS expired
+              SUM(CASE WHEN ${expiredReservationCondition("reservations", "?1")} THEN 1 ELSE 0 END) AS expired
          FROM reservations`,
     )
     .bind(nowIso)

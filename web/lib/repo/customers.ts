@@ -3,7 +3,8 @@
 // （設計書「客の識別子」）。時刻の比較が要る問い合わせは、束縛した「今」を引数で受ける。
 
 import type { Deps } from "../ports";
-import { parseStringList } from "./d1";
+import { changedRows, parseStringList } from "./d1";
+import { activeReservationCondition, expiredWithinGraceCondition } from "./sqlFragments";
 import type { CustomerProfile } from "../schemas/customer";
 
 type Db = Deps["db"];
@@ -46,18 +47,37 @@ export const updateCustomerProfile = async (db: Db, customerId: string, profile:
 };
 
 /**
- * 登録を消す（要件28の基準 28.6・28.8【最終日】・タスク32 が足した）。**行は消さない**——
- * 要件27の記録（`fetch_logs` ほか）がこの `id` を指しており、行を消すと記録が壊れる
+ * 登録を消す（要件28の基準 28.6・28.8【最終日】・タスク32 が足した）。消せたら true。
+ *
+ * **行は消さない**——要件27の記録（`fetch_logs` ほか）がこの `id` を指しており、行を消すと記録が壊れる
  * （消しても記録は残す・基準 28.10・本人選択）。消すのは4項目（呼び名・電話番号・好みのジャンル・
  * 予算の上限）と、見分けに使う `token_hash`——空にするのでその Cookie はもう誰にも当たらない（基準 28.8）。
  *
+ * **消せない条件を同じ文の WHERE に入れる**（不具合-15）: 確保中の確保も、期限から20分以内の期限切れの確保も
+ * 無いこと（基準 28.5）。判断の正本は `domain/customer.canDeleteRegistration` で、この条件はその SQL 版——
+ * **どちらかを直したら両方直す**。手続きが読んで確かめたあとに受け取りが入っても、確保を残したまま消さない。
+ *
+ * 同じまとまりで、その客のものを2つ片づける（どちらも、消せたときだけ当たる条件つき）:
+ *   - 確保の行に写した電話番号（`reservations.customer_phone`・安全-17）を空にする。店の一覧にもう出さない
+ *   - 通知の宛先（`push_subscriptions`）を消す。もう誰も見分けられない客へ知らせを送らない（不具合-15 の直し方の注）
+ *
  * 既に消えている客には当たらない（何も起きない）＝2度押しても記録は動かない。
  */
-export const eraseCustomer = async (db: Db, customerId: string, atIso: string): Promise<void> => {
-  await db
-    .prepare(`UPDATE customers SET nickname = '', phone = '', genres = '[]', budget_max = NULL, token_hash = NULL, deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL`)
-    .bind(customerId, atIso)
-    .run();
+export const eraseCustomer = async (db: Db, customerId: string, input: { nowIso: string; expiredGraceFromIso: string }): Promise<boolean> => {
+  const erasedNow = `EXISTS (SELECT 1 FROM customers c WHERE c.id = ?1 AND c.deleted_at = ?2)`;
+  const [erased] = await db.batch([
+    db
+      .prepare(
+        `UPDATE customers SET nickname = '', phone = '', genres = '[]', budget_max = NULL, token_hash = NULL, deleted_at = ?2` +
+          ` WHERE id = ?1 AND deleted_at IS NULL` +
+          ` AND NOT EXISTS (SELECT 1 FROM reservations res WHERE res.customer_id = ?1` +
+          ` AND ((${activeReservationCondition("res", "?2")}) OR (${expiredWithinGraceCondition("res", "?2", "?3")})))`,
+      )
+      .bind(customerId, input.nowIso, input.expiredGraceFromIso),
+    db.prepare(`UPDATE reservations SET customer_phone = NULL WHERE customer_id = ?1 AND ${erasedNow}`).bind(customerId, input.nowIso),
+    db.prepare(`DELETE FROM push_subscriptions WHERE customer_id = ?1 AND ${erasedNow}`).bind(customerId, input.nowIso),
+  ]);
+  return changedRows(erased) > 0;
 };
 
 export const findCustomerProfile = async (db: Db, customerId: string): Promise<CustomerProfile | null> => {

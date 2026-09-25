@@ -9,19 +9,20 @@
 //   1. 入力を「受け取り」か「受け取り直し」に決める（受け取り直しは元の確保の条件も見る）
 //   2. 受け取った時点のクーポンの写しを読む（基準 16.6）
 //   3. 空いているコードを1つ作る（基準 8.2・8.3）
-//   4. **WHERE つきの1文の INSERT**（受け取れる状態／人数／確保中の確保が無い・基準 8.6〜8.8）
+//   4. **WHERE つきの1文の INSERT** と、選択と状態の変化の記録（基準 27.3・27.4）を1つのまとまりで書く
+//      （受け取れる状態／人数／確保中の確保が無い・基準 8.6〜8.8。記録を別の往復で書くと、途中で落ちたとき
+//      確保だけが残って記録が欠けた・不具合-16）
 //   5. 入らなかったら、読み直して理由と次の一手を決める（`domain/receiveRefusal`）
-//   6. 入ったら、選択と状態の変化を記録する（基準 27.3・27.4）
+//   6. 入ったら、新しいホームを組んで返す（記録を書いたあとに組む）
 //
 // ⚠️ `domain/receiveRefusal` を値として import してよいのはこのファイルだけ（構造の検査）。
 
 import { codeFromBytes, nextCode } from "../domain/code";
 import type { CustomerHomeView, ReservationView } from "../domain/customerHome";
 import { classify, nextStep, type NextStep, type ReceiveRefusalKind } from "../domain/receiveRefusal";
-import { effectiveState, isWithinExpiredGrace, RESERVATION_HOLD_MS } from "../domain/reservation";
+import { effectiveState, EXPIRED_GRACE_MS, isWithinExpiredGrace, RESERVATION_HOLD_MS } from "../domain/reservation";
 import { tokenFromBytes } from "../domain/token";
 import type { Deps } from "../ports";
-import { insertReservationEvent, insertSelection } from "../repo/logs";
 import {
   countReceivesOfOffer,
   fetchShowsOffer,
@@ -30,8 +31,8 @@ import {
   findOfferSnapshot,
   findReservationOfCustomer,
   hasActiveReservation,
-  insertReservationIfReceivable,
   isCodeTaken,
+  receiveReservation,
 } from "../repo/reservations";
 import type { ReceiveInput } from "../schemas/reservation";
 import { CODE_BYTES, CODE_DRAW_ATTEMPTS, CODE_SEARCH_ATTEMPTS, FETCH_RESULT_RECEIVE_WINDOW_MS, ID_BYTES, RECEIVES_PER_OFFER_MAX } from "../schemas/limits";
@@ -70,8 +71,8 @@ const freshCode = async (deps: Deps): Promise<string> => {
   return code;
 };
 
-/** 何を受け取るか（どちらの入口の形でも、この3つに落ちる）。 */
-type ReceivePlan = { offerId: string; party: number; fetchId: string };
+/** 何を受け取るか（どちらの入口の形でも、この3つに落ちる）。受け取り直しなら元の確保の番号も持つ。 */
+type ReceivePlan = { offerId: string; party: number; fetchId: string; retryOf: string | null };
 
 type PlanResult =
   | { ok: true; plan: ReceivePlan }
@@ -95,7 +96,8 @@ const planRetry = async (deps: Deps, customerId: string, retryOf: string, nowIso
     // 画面はこの応答の `home` で自分を作り直し、完了済み・期限切れの表示そのものが答えになる。
     return { ok: false, refuseWith: "classify", offerId: reservation.offerId, party: reservation.party, fetchId: reservation.fetchId };
   }
-  return { ok: true, plan: { offerId: reservation.offerId, party: reservation.party, fetchId: reservation.fetchId } };
+  // 元の確保の条件は、INSERT の文の中でもう一度見る（読んでから書くまでに店が完了済みにしたら入れない・不具合-14）
+  return { ok: true, plan: { offerId: reservation.offerId, party: reservation.party, fetchId: reservation.fetchId, retryOf } };
 };
 
 /**
@@ -111,7 +113,7 @@ const planReceive = async (deps: Deps, customerId: string, input: ReceiveInput, 
   if (!input.fetchId) missing.push({ name: "fetchId", reason: "required" });
   if (missing.length > 0) return { ok: false, refusal: invalidInput(missing) };
 
-  const plan = { offerId: input.offerId as string, party: input.party as number, fetchId: input.fetchId as string };
+  const plan = { offerId: input.offerId as string, party: input.party as number, fetchId: input.fetchId as string, retryOf: null };
   const fetchedAt = await findFetchLogAt(deps.db, plan.fetchId, customerId);
   if (!fetchedAt) return { ok: false, refusal: invalidInput([{ name: "fetchId", reason: "bad_format" }]) };
   if (!(await fetchShowsOffer(deps.db, { fetchId: plan.fetchId, offerId: plan.offerId }))) return { ok: false, refusal: invalidInput([{ name: "offerId", reason: "bad_format" }]) };
@@ -127,7 +129,7 @@ const refusedWith = async (deps: Deps, customerId: string, refusal: ReturnType<t
 };
 
 /** 断った理由を読み直して決め、次の一手と新しいホームを載せる（設計書「受け取りが断られたとき」）。 */
-const refuse = async (deps: Deps, customerId: string, plan: ReceivePlan, nowIso: string, now: Date): Promise<ReceiveOfferResult | ReceiveOfferMissing> => {
+const refuse = async (deps: Deps, customerId: string, plan: Pick<ReceivePlan, "offerId" | "party">, nowIso: string, now: Date): Promise<ReceiveOfferResult | ReceiveOfferMissing> => {
   const found = await findOfferForReceive(deps.db, plan.offerId, nowIso);
   const used = await countReceivesOfOffer(deps.db, { customerId, offerId: plan.offerId });
   const refusal = classify(
@@ -167,7 +169,8 @@ export const receiveOffer = async (deps: Deps, customerId: string, input: Receiv
   if (!snapshot) return refuse(deps, customerId, plan, nowIso, now);
 
   const reservationId = newId(deps);
-  const inserted = await insertReservationIfReceivable(deps.db, {
+  // 確保と、どの取得のどの店が選ばれたか（27.3）と、状態の変化（27.4）を1つのまとまりで書く（記録は追加だけ・27.7）
+  const inserted = await receiveReservation(deps.db, {
     id: reservationId,
     offerId: plan.offerId,
     customerId,
@@ -179,16 +182,16 @@ export const receiveOffer = async (deps: Deps, customerId: string, input: Receiv
     expiresAtIso: new Date(now.getTime() + RESERVATION_HOLD_MS).toISOString(),
     couponsJson: JSON.stringify(snapshot.coupons),
     receivesPerOfferMax: RECEIVES_PER_OFFER_MAX,
+    retryOf: plan.retryOf,
+    expiredGraceFromIso: new Date(now.getTime() - EXPIRED_GRACE_MS).toISOString(),
+    selectionId: newId(deps),
   });
   if (!inserted) return refuse(deps, customerId, plan, nowIso, now);
+  deps.logger.log({ event: "receive", id: reservationId });
 
-  // 記録は追加だけ（基準 27.7）。どの取得のどの店が選ばれたか（27.3）と、状態の変化（27.4）
   const home = await customerHome(deps, customerId);
   // 見分けの直後に登録が消えた場合だけ（入口が 401 に倒す）
   if (!home?.reservation) return null;
-  await insertSelection(deps.db, { id: newId(deps), fetchId: plan.fetchId, storeId: snapshot.storeId, at: nowIso });
-  await insertReservationEvent(deps.db, { id: newId(deps), reservationId, status: "active", at: nowIso });
-  deps.logger.log({ event: "receive", id: reservationId });
 
   return { ok: true, reservation: home.reservation, home };
 };
