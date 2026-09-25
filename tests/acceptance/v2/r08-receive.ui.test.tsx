@@ -119,6 +119,48 @@ describeTask("14", "受け取りの画面と断りの表示", () => {
     expect(within(screen.getByTestId(TID.card("o1"))).queryByTestId("refusal-notice")).toBeTruthy();
   });
 
+  // 2026-09-25 レビューの指摘（不具合-06 の残り）: 断りの「◯名で探し直す」は一覧を片づけるだけで取得の画面を
+  // 外さないので、前の取得のストリームは走り続ける。後から届く紹介文で片づけた一覧（前の人数・古い fetchId）が
+  // 戻り、そこで押すと人数の欄と違う人数で席を押さえていた。
+  it("不具合-06 断りの次の一手で探し直したあとに前の取得の紹介文が届いても、片づけた一覧は戻らず、次の受け取りは新しい人数で送る", async () => {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let searches = 0;
+    installGeo();
+    api = installFakeApi({
+      "GET /api/config/public": publicConfig,
+      "GET /api/customer/home": () => ({ json: homeFetch() }),
+      "POST /api/customer/fetch/stream": () => {
+        searches += 1;
+        const fetchId = `f${searches}`;
+        return { stream: streamOfResult({ fetchId, items: [item(), item({ offerId: "o2", storeId: "s2", storeName: "店B" })] }, searches === 1 ? { holdAfter: 1, release: released } : {}) };
+      },
+      "POST /api/customer/reservations": () => ({ status: 409, json: { ok: false, refusal: { kind: "party_over_max", partyMax: 2, nextStep: "search_again_with_party" }, home: homeFetch() } }),
+    });
+    const receives = () => api.calls.filter((c) => c.method === "POST" && c.path === "/api/customer/reservations");
+    const CustomerApp = await componentOf("components/customer/CustomerApp", "CustomerApp");
+    render(<CustomerApp />);
+    await screen.findByTestId(TID.btn("fetch"));
+    fireEvent.change(screen.getByTestId(TID.field("party")), { target: { value: "4" } });
+    fireEvent.click(screen.getByTestId(TID.btn("fetch")));
+    fireEvent.click(within(await screen.findByTestId(TID.card("o1"))).getByTestId(TID.btn("receive")));
+    fireEvent.click(await within(screen.getByTestId(TID.card("o1"))).findByTestId(TID.btn("next-step")));
+    await waitFor(() => expect(screen.queryByTestId(TID.card("o1"))).toBeNull());
+    expect((screen.getByTestId(TID.field("party")) as HTMLInputElement).value).toBe("2");
+
+    // 前の取得の紹介文が届き切っても、片づけた一覧は戻らない
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId(TID.card("o1"))).toBeNull();
+
+    // 新しい人数で探し直した結果から受け取ると、新しい人数と新しい取得の番号を送る
+    fireEvent.click(screen.getByTestId(TID.btn("fetch")));
+    fireEvent.click(within(await screen.findByTestId(TID.card("o1"))).getByTestId(TID.btn("receive")));
+    await waitFor(() => expect(receives()).toHaveLength(2));
+    expect(receives()[0].body).toMatchObject({ party: 4, fetchId: "f1" });
+    expect(receives()[1].body).toMatchObject({ party: 2, fetchId: "f2" });
+  });
+
   it("RefusalNotice は nextStep を自分で決めない（同じ kind でも渡した nextStep が違えば違うボタンが出る）", async () => {
     const { TEXTS } = await loadWeb("lib/domain/texts");
     const RefusalNotice = await componentOf("components/customer/RefusalNotice", "RefusalNotice");

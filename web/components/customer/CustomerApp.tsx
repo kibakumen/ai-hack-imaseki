@@ -80,6 +80,13 @@ const CustomerScreens = () => {
   const fetchScreenRef = useRef<HTMLElement | null>(null);
   /** 今出している結果の取得の番号（`showResults` が、同じ取得の入れ直しか新しい取得かを見分ける）。 */
   const shownFetchIdRef = useRef<string | null>(null);
+  /**
+   * 客が片づけた取得の番号（2026-09-25 レビューの指摘・不具合-06 の残り）。断りの「探し直す」「◯名で探し直す」は
+   * 一覧を片づけるだけで `FetchForm` を外さないので、その取得のストリームは走り続ける。後から届く紹介文が
+   * 片づけた一覧（前の人数・古い fetchId）を戻し、押すと人数の欄と違う人数で席を押さえていた。
+   * この番号の結果は、次に探し始める（`showResults(null)`）まで受け取らない。
+   */
+  const dismissedFetchIdRef = useRef<string | null>(null);
   const [refused, setRefused] = useState<RefusedReceive | null>(null);
   const [searching, setSearching] = useState(false);
   // 脇の画面（最近行った店）と、通報が指している店。どちらも表示の種類とは別に持つ
@@ -136,6 +143,18 @@ const CustomerScreens = () => {
 
   usePolling(refresh);
 
+  /**
+   * 出している結果を片づけ、その取得から後で届く結果も受け取らない（`dismissedFetchIdRef`）。
+   * 受け取りが通ったときもここを通す——前の取得は `FetchForm` が外れたときに止まるが、止めるのは描き終えた
+   * あとの後始末（effect の片づけ）なので、その間に届いた紹介文が一覧を入れ直しうる（全体の検査を重く回した
+   * ときに、受け取りのあとの一覧が戻る検査が1度だけ落ちた。この隙間が原因というのは推測）。
+   */
+  const dismissResults = () => {
+    dismissedFetchIdRef.current = shownFetchIdRef.current;
+    shownFetchIdRef.current = null;
+    setFetchResult(null);
+  };
+
   /** 受け取り・受け取り直しの応答（通った／断られた）で、表示を作り直す。 */
   const applyReceived = (result: unknown, offerId: string | null) => {
     const failure = isFailure(result) ? result : null;
@@ -152,7 +171,7 @@ const CustomerScreens = () => {
     const keepsNotice = responded !== null && KEEPS_REFUSAL.includes(responded.kind);
     setRefused(body !== undefined && keepsNotice ? { offerId, body } : null);
     // 通ったときは結果の一覧を片づける（確保中の表示へ移る・基準 8.5）
-    if (failure === null) setFetchResult(null);
+    if (failure === null) dismissResults();
     // 通って確保中になったときだけ、受け取りの演出を前面に出す（断りでは出さない）
     if (failure === null && responded !== null && responded.reservation !== undefined && responded.kind === "active") setCelebrating(true);
   };
@@ -205,11 +224,14 @@ const CustomerScreens = () => {
     }
     // 「◯名で探し直す」は、その人数を入れた取得の画面へ（人数を減らせば取れる客を振り出しに戻さない）
     if (step === "search_again_with_party" && refused.body.partyMax !== undefined) setParty(String(refused.body.partyMax));
-    setFetchResult(null);
+    dismissResults();
     setSearching(true);
   };
 
   const showResults = (result: FetchResult | null) => {
+    // 片づけた取得の結果は戻さない。探し始めたら解く（前の取得は `useOfferSearch` が止めてから null を渡す）。
+    if (result !== null && result.fetchId === dismissedFetchIdRef.current) return;
+    if (result === null) dismissedFetchIdRef.current = null;
     // 断りの知らせを消すのは、探し始めたとき（null）と取得が替わったときだけ（2026-09-25 監査の指摘 不具合-06）。
     // 紹介文が届くたびに同じ取得の結果が入れ直されるので、そのたびに消すと断りの文とボタンが読めないうちに消える。
     const nextFetchId = result?.fetchId ?? null;
@@ -228,7 +250,7 @@ const CustomerScreens = () => {
   };
   const searchAgain = () => {
     setRefused(null);
-    setFetchResult(null);
+    dismissResults();
     setSearching(true);
   };
   const togglePanel = (next: Panel) => setPanel((current) => (current === next ? "none" : next));
