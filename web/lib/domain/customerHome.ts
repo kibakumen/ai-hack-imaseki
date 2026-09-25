@@ -138,10 +138,16 @@ export const customerHomeView = (input: CustomerHomeInput, now: Date): CustomerH
   if (state === "active") return { kind: "active", reservation: toView(row, state, true) };
 
   const sinceChange = now.getTime() - row.statusAt.getTime();
-  // 4 の「そのあと1回も取得を押していない」（状態が変わったあとに押していれば、客は探しに来ている）
-  const fetchedSince = input.lastFetchAt !== null && input.lastFetchAt.getTime() > row.statusAt.getTime();
+  /**
+   * 4 の「そのあと1回も取得を押していない」（状態が変わったあとに押していれば、客は探しに来ている）。
+   * 状態が変わった時刻は、期限切れなら**期限の時刻**——期限切れは書き込みが起きないので、status_at は
+   * 受け取った時刻のまま残る。status_at と比べると、確保中に「ほかの店を探す」で押した取得まで
+   * 「変わったあとに押した」と読み、期限切れの表示を黙って飛ばしていた（2026-09-25 監査の指摘 不具合-19）。
+   */
+  const changedAt = state === "expired" ? row.expiresAt : row.statusAt;
+  const fetchedSince = input.lastFetchAt !== null && input.lastFetchAt.getTime() > changedAt.getTime();
 
-  // 3・4 の期限切れ（変化の時刻は期限の時刻。書き込みは起きないので status_at は受け取った時刻のまま）
+  // 3・4 の期限切れ（変化の時刻は期限の時刻。上の `changedAt`）
   if (state === "expired") {
     const withinGrace = isWithinExpiredGrace(row, now);
     if (withinGrace) {
