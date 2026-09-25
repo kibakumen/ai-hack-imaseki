@@ -1244,3 +1244,27 @@
 .erase-registration__confirm p {
   margin: 0;
 }
+
+/* 声で入れる（2026-09-25 客-16）。フォームの先頭に置く1つのボタン。聞き取った結果はその下に1行で */
+.voice-input {
+  display: grid;
+  gap: 0.25rem;
+}
+.voice-input__button {
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  color: var(--color-accent);
+  font-weight: 800;
+  justify-self: start;
+  padding: 0.55rem 1.1rem;
+}
+.voice-input__note {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: 0;
+}
+.voice-input__status {
+  font-size: 0.8125rem;
+  margin: 0;
+}

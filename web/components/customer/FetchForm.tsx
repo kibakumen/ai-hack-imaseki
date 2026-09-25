@@ -19,6 +19,7 @@
 //   6. こだわり条件の並びは **予算 → ジャンル**（「予算は好みよりも重要な情報なので、人数のすぐ下に」）。
 //      人数は「今すぐ探す」の直前に −/＋ つきで出した（2026-09-25 監査の指摘 客-07・`PartyStepper`）。
 //   7. こだわり条件の**いちばん下に電話番号（任意）**（`PhoneField`）。
+//   8. 先頭に**声で入れる**ボタン（2026-09-25 監査の指摘 客-16・`VoiceInput`。聞き取った人数・予算・ジャンルを欄へ入れる）。
 //
 // 現在地が取れなくても押せる（取れなければ押した時に場所を求める・基準 3.7・3.8）。
 // 送る前に自分では検査せず、入口が返した断りを InputRefusal に描かせる（設計書「入力の誤りの出し方」
@@ -28,6 +29,7 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { isFailure, type ApiFailure } from "../../lib/client/api";
 import { rememberOrigin } from "../../lib/client/lastOrigin";
+import type { SpokenConditions } from "../../lib/client/voiceConditions";
 import { TEXTS } from "../../lib/domain/texts";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
 import { BudgetChips } from "./BudgetChips";
@@ -37,6 +39,7 @@ import { PlaceField } from "./PlaceField";
 import { EMPTY_RESULT_TEXT } from "./ResultList";
 import { useHereLocation, type Point } from "./useHereLocation";
 import { useOfferSearch, type FetchResult } from "./useOfferSearch";
+import { VoiceInput } from "./VoiceInput";
 
 export type { FetchOrigin, FetchResult } from "./useOfferSearch";
 export { phoneToShow, phoneToStore } from "./PhoneField";
@@ -102,6 +105,13 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
   const toggleGenre = (genre: string) =>
     setGenres((current) => (current.includes(genre) ? current.filter((g) => g !== genre) : [...current, genre]));
 
+  /** 声で読み取れた条件を欄へ入れる（読めなかった項目は今の値のまま・探すのは客が押したとき）。 */
+  const applySpoken = (conditions: SpokenConditions) => {
+    if (conditions.party !== undefined) onPartyChange(String(conditions.party));
+    if (conditions.budgetMax !== undefined) setBudgetMax(conditions.budgetMax === null ? "" : String(conditions.budgetMax));
+    if (conditions.genres !== undefined && conditions.genres.length > 0) setGenres(conditions.genres);
+  };
+
   /** 欄の中身が現在地から離れたか（離れている間は「現在地を使う」を強調する）。 */
   const away = hereLabel !== null && place.trim() !== "" && place.trim() !== hereLabel;
 
@@ -140,6 +150,9 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
   return (
     <form data-testid="form-fetch" className={collapsed ? "fetch-form fetch-form--collapsed" : "fetch-form"} noValidate onSubmit={handleSubmit}>
       <h2>今入れるお店を探す</h2>
+
+      {/* 先頭にワンタップで声で入れる（2026-09-25 監査の指摘 客-16・本人の第1回の指摘「歩きながら音声で入れたい」） */}
+      <VoiceInput onApply={applySpoken} />
 
       <PlaceField place={place} onPlaceChange={setPlace} locate={location.locate} hereLabel={hereLabel} away={away} onUseLocation={backToHere} failure={failure} />
 
