@@ -2,7 +2,10 @@
 
 // 店の登録の入力（要件12の基準 12.1〜12.5）。打つ欄は3つ（店名・メールアドレス・パスワード）。
 // 送る前に自分では検査せず、入口が返した断りを InputRefusal に描かせる（設計書「入力の誤りの出し方」の規則5）。
-// 断られたら、店名とメールアドレスは残し、パスワードだけ消す（打ち直しを求めるのはそこだけ）。
+// 断られたら、店名とメールアドレスは残す。パスワードを消すのは、パスワードの欄の断りと人の確かめの断りの
+// ときだけ（2026-09-25 監査の指摘 店-20）——別の欄の断りでも消していたので、打ち直しのたびに打ち間違いが
+// 入り込み、登録の直後はログインした状態のまま気づけず、翌日入れなくなって運営に頼むしかなかった。
+// 同じ理由で、字数の案内と「パスワードを表示」の切り替えを置く（システムはメールを送らないので自力で戻れない）。
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
@@ -19,6 +22,11 @@ const FIELD_NAMES = ["name", "email", "password"];
  */
 const EMAIL_KINDS = ["email_taken"];
 const EMAIL_HINT = "メールアドレスの形";
+const PASSWORD_HINT_ID = "store-register-password-hint";
+
+/** 断りのあとパスワードを消すか。パスワードの欄の断りと、人の確かめの断り（入れ直しを求める場面）だけ。 */
+const shouldClearPassword = (failure: ApiFailure): boolean =>
+  failure.error?.kind === "human_check_failed" || (failure.error?.fields ?? []).some((field) => field.name === "password");
 /** 登録が済んだら店のホームへ（画面の遷移は1本だけ・呼ぶ側に渡さない） */
 const STORE_HOME_PATH = "/store";
 
@@ -26,6 +34,7 @@ export const RegisterForm = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
@@ -51,7 +60,7 @@ export const RegisterForm = () => {
     const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken } });
     if (isFailure(result)) {
       setFailure(result);
-      setPassword("");
+      if (shouldClearPassword(result)) setPassword("");
       // 確かめの値は使い切り。次に送るときのために、その場で取り直す。
       setHumanToken(null);
       humanRef.current?.reset();
@@ -99,12 +108,20 @@ export const RegisterForm = () => {
       <input
         id="store-register-password"
         data-testid="field-password"
-        type="password"
+        type={showPassword ? "text" : "password"}
         autoComplete="new-password"
+        aria-describedby={PASSWORD_HINT_ID}
         value={password}
         maxLength={PASSWORD_MAX}
         onChange={(event) => setPassword(event.target.value)}
       />
+      <p id={PASSWORD_HINT_ID} className="field-hint" data-testid="hint-password">
+        {PASSWORD_MIN}〜{PASSWORD_MAX}字。次からのログインに使います（忘れると運営に頼んで決め直すことになります）。
+      </p>
+      <label className="show-password">
+        <input type="checkbox" data-testid="toggle-show-password" checked={showPassword} onChange={(event) => setShowPassword(event.target.checked)} />
+        パスワードを表示
+      </label>
       <FieldMessage name="password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} onToken={handleToken} />}
