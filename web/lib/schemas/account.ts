@@ -3,6 +3,7 @@
 // 役割（role）の項目は持たない——登録の入口に role を送っても店として作る（基準 14.8）。
 
 import { z } from "zod";
+import { isPlainLine } from "../domain/plainText";
 import { EMAIL_MAX, EMAIL_PATTERN, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_MAX, STORE_NAME_MIN } from "./limits";
 
 /** メールアドレス: @ をちょうど1つ、その前後に1字以上、254字以内（基準 12.4）。 */
@@ -12,7 +13,8 @@ const emailSchema = z.string().max(EMAIL_MAX).regex(EMAIL_PATTERN);
 const passwordSchema = z.string().min(PASSWORD_MIN).max(PASSWORD_MAX);
 
 export const storeRegisterSchema = z.object({
-  name: z.string().min(STORE_NAME_MIN).max(STORE_NAME_MAX),
+  // 店名は AI への指示に入る。改行・制御文字・書字方向の制御文字は断る（安全-11・domain/plainText）
+  name: z.string().min(STORE_NAME_MIN).max(STORE_NAME_MAX).refine(isPlainLine),
   email: emailSchema,
   password: passwordSchema,
 });

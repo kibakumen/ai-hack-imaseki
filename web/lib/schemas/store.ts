@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 import { GENRES } from "../domain/genres";
+import { isPlainLine } from "../domain/plainText";
 import {
   BUDGET_MAX_MAX,
   BUDGET_MAX_MIN,
@@ -45,13 +46,14 @@ const genresSchema = z
  * defineRoute が「長すぎる（too_long）」へ直すので、「上限に達した（too_many）」を返せない。
  * ここの `.max(MENUS_INPUT_MAX)` はそれより十分に広い、大きすぎる並びを早く切るためだけの上限（安全-13）。
  */
-const menusSchema = z.array(z.string().min(MENU_NAME_MIN).max(MENU_NAME_MAX)).max(MENUS_INPUT_MAX);
+const menusSchema = z.array(z.string().min(MENU_NAME_MIN).max(MENU_NAME_MAX).refine(isPlainLine)).max(MENUS_INPUT_MAX);
 
 /** 1人あたりの予算（基準 15.8）。範囲は客の予算の上限と同じ。最低が最高以下かは手続きが見る。 */
 const budgetSchema = z.int().min(BUDGET_MAX_MIN).max(BUDGET_MAX_MAX);
 
 export const storeProfileSchema = z.object({
-  name: z.string().min(STORE_NAME_MIN).max(STORE_NAME_MAX),
+  // 店名とおすすめメニューは AI への指示に入る。改行・制御文字・書字方向の制御文字は断る（安全-11・domain/plainText）
+  name: z.string().min(STORE_NAME_MIN).max(STORE_NAME_MAX).refine(isPlainLine),
   address: z.string().min(STORE_ADDRESS_MIN).max(STORE_ADDRESS_MAX),
   url: urlSchema,
   genres: genresSchema,
