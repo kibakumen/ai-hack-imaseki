@@ -1,4 +1,4 @@
-// 「受け取りが断られた理由（閉じた6種）」と「理由ごとの次の一手」のただ1つの置き場
+// 「受け取りが断られた理由（閉じた7種）」と「理由ごとの次の一手」のただ1つの置き場
 // （設計書「どの判断をどこに置くか」・「ファイル構成の計画」）。
 //
 // 機械が読む識別子（ここ）と、人が読む文（domain/texts.ts）を**分けて持つ**——画面が文字列を
@@ -23,11 +23,13 @@ export const RECEIVE_REFUSAL_KINDS = [
   "has_active_reservation",
   /** 店が運営に停止された（要件25の基準 25.7） */
   "store_banned",
-  /**
-   * その検索の結果からは、もう受け取れない（2026-09-25 監査の指摘 安全-06）——同じ取得の結果から同じオファーを
-   * 受け取り直しまで使い切った、または取得から時間がたちすぎた。探し直してもらう。
-   */
+  /** その検索の結果からは、もう受け取れない（2026-09-25 監査の指摘 安全-06）——取得から時間がたちすぎた。探し直してもらう */
   "results_stale",
+  /**
+   * そのオファーを押さえられる件数（受け取り＋受け取り直し）を、取得をまたいで使い切った（安全-06 の案A と案C）。
+   * 探し直しても同じオファーは受け取れないので、「結果が古い」とは分けて言う。ほかの店を探してもらう
+   */
+  "receives_used_up",
 ] as const;
 export type ReceiveRefusalKind = (typeof RECEIVE_REFUSAL_KINDS)[number];
 
@@ -67,7 +69,7 @@ export type ReceiveCheck = {
   party: number;
   /** その客が確保中の確保を持っている（基準 8.8） */
   hasActiveReservation: boolean;
-  /** その取得の結果から、そのオファーを押さえられる件数を使い切った（安全-06）。省けば false */
+  /** そのオファーを押さえられる件数を、取得をまたいで使い切った（安全-06）。省けば false */
   receivesUsedUp?: boolean;
 };
 
@@ -75,7 +77,7 @@ export type ReceiveCheck = {
  * 断った理由を1つ決める（基準 8.6・8.8）。
  *
  * 確保を作らなかった事実そのものは INSERT の WHERE が保証していて、ここが出すのは
- * **「断った直後の見立て」**（読み直す間に状態がさらに動きうる）。6種のどれにも当たらないときは
+ * **「断った直後の見立て」**（読み直す間に状態がさらに動きうる）。7種のどれにも当たらないときは
  * 「満席になった」に倒す（最も起こりやすい理由・設計書「入口の一覧」の注）。
  */
 export const classify = (check: ReceiveCheck, now: Date): ReceiveRefusal => {
@@ -88,6 +90,6 @@ export const classify = (check: ReceiveCheck, now: Date): ReceiveRefusal => {
   }
   if (check.hasActiveReservation) return { kind: "has_active_reservation" };
   if (check.party > offer.partyMax) return { kind: "party_over_max", partyMax: offer.partyMax };
-  if (check.receivesUsedUp) return { kind: "results_stale" };
+  if (check.receivesUsedUp) return { kind: "receives_used_up" };
   return { kind: "sold_out" };
 };

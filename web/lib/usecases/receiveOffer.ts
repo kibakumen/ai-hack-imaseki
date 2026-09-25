@@ -23,7 +23,8 @@ import { tokenFromBytes } from "../domain/token";
 import type { Deps } from "../ports";
 import { insertReservationEvent, insertSelection } from "../repo/logs";
 import {
-  countReceivesFromFetch,
+  countReceivesOfOffer,
+  fetchShowsOffer,
   findFetchLogAt,
   findOfferForReceive,
   findOfferSnapshot,
@@ -33,7 +34,7 @@ import {
   isCodeTaken,
 } from "../repo/reservations";
 import type { ReceiveInput } from "../schemas/reservation";
-import { CODE_BYTES, CODE_DRAW_ATTEMPTS, CODE_SEARCH_ATTEMPTS, FETCH_RESULT_RECEIVE_WINDOW_MS, ID_BYTES, RECEIVES_PER_FETCH_MAX } from "../schemas/limits";
+import { CODE_BYTES, CODE_DRAW_ATTEMPTS, CODE_SEARCH_ATTEMPTS, FETCH_RESULT_RECEIVE_WINDOW_MS, ID_BYTES, RECEIVES_PER_OFFER_MAX } from "../schemas/limits";
 import { customerHome, type CustomerHome } from "./customerHome";
 
 /** 受け取りの断り（基準 8.6）。入力の断り（`error`）とは別の形（設計書「入口の一覧」の注）。 */
@@ -99,7 +100,9 @@ const planRetry = async (deps: Deps, customerId: string, retryOf: string, nowIso
 
 /**
  * 受け取り（基準 8.1）——オファーの番号・人数・どの取得から選んだか、の3つが揃っていること。
- * 取得から FETCH_RESULT_RECEIVE_WINDOW_MS を過ぎた結果からは新しく受け取らせない（安全-06・古い fetchId の使い回しを塞ぐ）。
+ * - その取得の結果に出た店のオファーだけを受け取らせる（不具合-12）。出ていなければ入力の断り——画面の操作からは
+ *   起きず、別の場所で知った番号を組み合わせた要求なので、どの店が結果に出たかは教えない
+ * - 取得から FETCH_RESULT_RECEIVE_WINDOW_MS を過ぎた結果からは新しく受け取らせない（安全-06・古い fetchId の使い回しを塞ぐ）
  */
 const planReceive = async (deps: Deps, customerId: string, input: ReceiveInput, now: Date): Promise<PlanResult> => {
   const missing: Array<{ name: string; reason: "required" | "bad_format" }> = [];
@@ -111,6 +114,7 @@ const planReceive = async (deps: Deps, customerId: string, input: ReceiveInput, 
   const plan = { offerId: input.offerId as string, party: input.party as number, fetchId: input.fetchId as string };
   const fetchedAt = await findFetchLogAt(deps.db, plan.fetchId, customerId);
   if (!fetchedAt) return { ok: false, refusal: invalidInput([{ name: "fetchId", reason: "bad_format" }]) };
+  if (!(await fetchShowsOffer(deps.db, { fetchId: plan.fetchId, offerId: plan.offerId }))) return { ok: false, refusal: invalidInput([{ name: "offerId", reason: "bad_format" }]) };
   if (now.getTime() - fetchedAt.getTime() > FETCH_RESULT_RECEIVE_WINDOW_MS) return { ok: false, refuseWith: "results_stale", offerId: plan.offerId, party: plan.party };
   return { ok: true, plan };
 };
@@ -125,14 +129,14 @@ const refusedWith = async (deps: Deps, customerId: string, refusal: ReturnType<t
 /** 断った理由を読み直して決め、次の一手と新しいホームを載せる（設計書「受け取りが断られたとき」）。 */
 const refuse = async (deps: Deps, customerId: string, plan: ReceivePlan, nowIso: string, now: Date): Promise<ReceiveOfferResult | ReceiveOfferMissing> => {
   const found = await findOfferForReceive(deps.db, plan.offerId, nowIso);
-  const used = await countReceivesFromFetch(deps.db, { customerId, offerId: plan.offerId, fetchId: plan.fetchId });
+  const used = await countReceivesOfOffer(deps.db, { customerId, offerId: plan.offerId });
   const refusal = classify(
     {
       storeBanned: found?.storeBanned ?? false,
       offer: found ? { ...found.offer } : null,
       party: plan.party,
       hasActiveReservation: await hasActiveReservation(deps.db, customerId, nowIso),
-      receivesUsedUp: used >= RECEIVES_PER_FETCH_MAX,
+      receivesUsedUp: used >= RECEIVES_PER_OFFER_MAX,
     },
     now,
   );
@@ -174,7 +178,7 @@ export const receiveOffer = async (deps: Deps, customerId: string, input: Receiv
     // 期限は受け取った時刻から20分後（基準 8.4）
     expiresAtIso: new Date(now.getTime() + RESERVATION_HOLD_MS).toISOString(),
     couponsJson: JSON.stringify(snapshot.coupons),
-    receivesPerFetchMax: RECEIVES_PER_FETCH_MAX,
+    receivesPerOfferMax: RECEIVES_PER_OFFER_MAX,
   });
   if (!inserted) return refuse(deps, customerId, plan, nowIso, now);
 

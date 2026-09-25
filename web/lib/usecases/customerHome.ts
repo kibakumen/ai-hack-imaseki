@@ -13,8 +13,8 @@ import { effectiveState } from "../domain/reservation";
 import type { Deps } from "../ports";
 import { findCustomerProfile } from "../repo/customers";
 import { insertExpiredEvents } from "../repo/logs";
-import { countReceivesFromFetch, findLastFetchAt, findLatestReservation, type ReservationContext } from "../repo/reservations";
-import { RECEIVES_PER_FETCH_MAX } from "../schemas/limits";
+import { countReceivesOfOffer, findLastFetchAt, findLatestReservation, type ReservationContext } from "../repo/reservations";
+import { RECEIVES_PER_OFFER_MAX } from "../schemas/limits";
 import type { CustomerProfile } from "../schemas/customer";
 import { pushPromptDue } from "./pushMessage";
 
@@ -45,11 +45,11 @@ const toViewInput = (context: ReservationContext | null, lastFetchAt: Date | nul
   };
 };
 
-/** 期限切れの確保について、その取得の結果から受け取り直しまで使い切ったか（安全-06）。期限切れでなければ見ない。 */
+/** 期限切れの確保について、そのオファーを押さえられる件数を使い切ったか（取得をまたいで・安全-06）。期限切れでなければ見ない。 */
 const retryUsedUpFor = async (deps: Deps, context: ReservationContext | null, now: Date): Promise<boolean> => {
   if (!context || effectiveState(context.reservation, now) !== "expired") return false;
-  const { customerId, offerId, fetchId } = context.reservation;
-  return (await countReceivesFromFetch(deps.db, { customerId, offerId, fetchId })) >= RECEIVES_PER_FETCH_MAX;
+  const { customerId, offerId } = context.reservation;
+  return (await countReceivesOfOffer(deps.db, { customerId, offerId })) >= RECEIVES_PER_OFFER_MAX;
 };
 
 /** 登録が見つからなければ null（入口が見分けの断り 401 に倒す）。 */

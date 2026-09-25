@@ -86,7 +86,7 @@ const FIELD_REASON_TEXTS: Record<string, (ctx: Ctx) => string> = {
   over_window: () => "公開から12時間以内の時刻にしてください。それより先まで出すときは、公開を止めて新しく公開し直してください。",
 };
 
-// ---------- 受け取りの断り（domain/receiveRefusal.ts の閉じた6種） ----------
+// ---------- 受け取りの断り（domain/receiveRefusal.ts の閉じた7種） ----------
 const RECEIVE_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   sold_out: () => "この店は今、満席になりました。",
   offer_ended: () => "この店の受け付けは終わりました。",
@@ -94,6 +94,7 @@ const RECEIVE_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   has_active_reservation: () => "今の確保があります。",
   store_banned: () => "このお店は運営により停止されました。",
   results_stale: () => "この検索の結果からは、もう受け取れません。もう一度探してください。",
+  receives_used_up: () => "このお店の今回の受け付けは、受け取れる回数を使い切りました。ほかのお店を探してください。",
 };
 
 // ---------- 次の一手（domain/receiveRefusal.nextStep の閉じた4種） ----------
