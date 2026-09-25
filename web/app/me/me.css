@@ -1166,3 +1166,45 @@
 .party-stepper__unit {
   font-weight: 700;
 }
+
+/* 予算の上限のチップ（2026-09-25 客-15）。丸い札を横に並べて折り返す。選んだ札は縁と地で示す */
+.budget-chips {
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.budget-chips > legend {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  margin-bottom: 0.375rem;
+  padding: 0;
+}
+.budget-chip {
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill, 999px);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.875rem;
+  gap: 0.25rem;
+  padding: 0.4rem 0.8rem;
+}
+.budget-chip > input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+.budget-chip:has(input:checked) {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 700;
+}
+.budget-chip:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

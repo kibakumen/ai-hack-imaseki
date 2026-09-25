@@ -29,8 +29,8 @@ import { useCallback, useState, type FormEvent } from "react";
 import { isFailure, type ApiFailure } from "../../lib/client/api";
 import { rememberOrigin } from "../../lib/client/lastOrigin";
 import { TEXTS } from "../../lib/domain/texts";
-import { BUDGET_MAX_MAX, BUDGET_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage } from "../ui/InputRefusal";
+import { BudgetChips } from "./BudgetChips";
 import { fetchButtonText, PartyStepper } from "./PartyStepper";
 import { PhoneField, useOptionalPhone } from "./PhoneField";
 import { PlaceField } from "./PlaceField";
@@ -162,18 +162,8 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
         <p className="fetch-options-title">こだわり条件（入れなくても探せます）</p>
 
         {/* 予算は好みより効く情報なので、こだわり条件のいちばん上（本人の指摘・2026-09-22「人数のすぐ下に」） */}
-        <label htmlFor="fetch-budget">1人あたりの予算の上限（この回だけ・空なら上限なし）</label>
-        <input
-          id="fetch-budget"
-          data-testid="field-budgetMax"
-          type="number"
-          inputMode="numeric"
-          min={BUDGET_MAX_MIN}
-          max={BUDGET_MAX_MAX}
-          value={budgetMax}
-          onChange={(event) => setBudgetMax(event.target.value)}
-        />
-        <FieldMessage name="budgetMax" failure={failure} ctx={{ field: "予算の上限", min: BUDGET_MAX_MIN, max: BUDGET_MAX_MAX }} />
+        {/* 押して選ぶチップ（2026-09-25 監査の指摘 客-15・本人の指摘「予算も専用のフォームがあった方が入力しやすい」） */}
+        <BudgetChips value={budgetMax} onChange={setBudgetMax} registered={profile?.budgetMax ?? null} failure={failure} />
 
         <fieldset data-testid="field-genres">
           <legend>今の気分のジャンル（この回だけ・登録は変わりません）</legend>

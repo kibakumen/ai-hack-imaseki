@@ -50,19 +50,21 @@ describeTask("12", "取得の画面", () => {
   // 取得の要求（本番の画面は少しずつ届く入口を先に使う。普通の入口へ倒れても1回と数える）
   const fetchCalls = () => api.calls.filter(isFetchCall);
 
+  // 予算の上限は押して選ぶチップ（2026-09-25 監査の指摘 客-15 で素の数値欄から替えた。検査もチップを押す形に合わせた）
   it("3.13・3.12 初めの値が登録の値で、変えた値が要求に載る", async () => {
     installGeolocation({ mode: "ok", coords: { latitude: 35.1, longitude: 139.1 } });
     await renderApp();
     const genres = screen.getByTestId(TID.field("genres"));
     for (const g of CUSTOMER.genres) expect((within(genres).getByTestId(`genre-${g}`) as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByTestId(TID.field("budgetMax")) as HTMLInputElement).value).toBe(String(CUSTOMER.budgetMax));
+    const budget = screen.getByTestId(TID.field("budgetMax"));
+    expect((within(budget).getByTestId(`budget-${CUSTOMER.budgetMax}`) as HTMLInputElement).checked).toBe(true);
     fireEvent.click(within(genres).getByTestId(`genre-${CUSTOMER.genres[0]}`));
     fireEvent.click(within(genres).getByTestId("genre-中華"));
-    fireEvent.change(screen.getByTestId(TID.field("budgetMax")), { target: { value: "1500" } });
+    fireEvent.click(within(budget).getByTestId("budget-2000"));
     fireEvent.change(screen.getByTestId(TID.field("party")), { target: { value: "3" } });
     fireEvent.click(screen.getByTestId(TID.btn("fetch")));
     await waitFor(() => expect(fetchCalls()).toHaveLength(1));
-    expect(fetchCalls()[0].body).toMatchObject({ party: 3, budgetMax: 1500, lat: 35.1, lng: 139.1 });
+    expect(fetchCalls()[0].body).toMatchObject({ party: 3, budgetMax: 2000, lat: 35.1, lng: 139.1 });
     expect([...fetchCalls()[0].body.genres].sort()).toEqual([CUSTOMER.genres[1], "中華"].sort());
     expect(fetchCalls()[0].body.place ?? null).toBeNull();
   });
