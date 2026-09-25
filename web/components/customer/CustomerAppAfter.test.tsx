@@ -6,7 +6,7 @@
 //   客-08    … 結果の到着・確保の成立・状態の変化を読み上げで伝え、焦点を見失わせない
 
 import React from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { homeFetch, installFakeApi, reservationDto, type FakeApi } from "../../../tests/acceptance/v2/_fakes";
 import { CustomerApp } from "./CustomerApp";

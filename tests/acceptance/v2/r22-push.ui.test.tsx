@@ -7,11 +7,14 @@ import { describeTask } from "./_tasks";
 import { componentOf, homeFetch, installFakeApi, reservationDto, type FakeApi } from "./_fakes";
 import { TID } from "./_types";
 
+// 端末の許可は、問いに「許可」と答えると granted に変わる（実物のブラウザと同じ。以前の偽物は問いの答えを返すだけで
+// permission を default のまま残し、許可した端末を「まだ答えていない」端末に見せていた・2026-09-25 不具合-11）。
 const installPush = (permission: NotificationPermission = "default") => {
   const subscribeCalls: any[] = [];
   const registration = { pushManager: { subscribe: async (opts: any) => (subscribeCalls.push(opts), { endpoint: "https://push.example.test/1", toJSON: () => ({ endpoint: "https://push.example.test/1", keys: { p256dh: "x", auth: "y" } }) }), getSubscription: async () => null } };
   Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { register: async () => registration, ready: Promise.resolve(registration) } });
-  (globalThis as any).Notification = { permission, requestPermission: async () => "granted" };
+  const notification = { permission, requestPermission: async () => ((notification.permission = "granted"), "granted" as const) };
+  (globalThis as any).Notification = notification;
   (globalThis as any).PushManager = function PushManager() {};
   return subscribeCalls;
 };

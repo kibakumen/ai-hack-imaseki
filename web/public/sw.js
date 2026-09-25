@@ -4,8 +4,15 @@
 // 画面が立ち上がり、「端末に残した確保中の表示」が出る（要件9の基準 9.10〜9.12。残す内容そのものは
 // `lib/client/reservationCache.ts` が localStorage に持つ）。
 //
+// 登録するのは客の画面（`components/customer/CustomerApp`）を開いたとき、**範囲は `/me`**（`lib/client/push` の
+// `registerMeServiceWorker`）。通知の許可とは切り離してある（2026-09-25 監査の指摘 不具合-05——以前は通知を
+// 許可した客にしか登録されず、「今はしない」・拒否・iPhone の Safari の客は電波の無い所で /me を開き直せなかった）。
+//
 // 決め:
-//   - 画面（navigate）は**まず通信**、だめなら保存した殻へ倒す（最新を見せるのを既定にし、切れた時だけ殻）。
+//   - `/me` の画面の移動は**まず通信**、だめなら保存した殻へ倒す（最新を見せるのを既定にし、切れた時だけ殻）。
+//     殻として保存するのは **`/me` の 2xx の応答だけ**。以前はどの画面の応答も状態を見ずに /me の殻として
+//     上書きし、トップ・ログイン・500 の頁がオフラインの /me に出た。保存の失敗は取れた応答を捨てる理由にしない。
+//   - 版を上げたら古い保存は入れ替わりのとき（activate）に消す。
 //   - 部品（`/_next/static/**`）は**まず保存**（版ごとに URL が変わるので、古い版を掴んだままにならない）。
 //   - 入口（`/api/**`）は保存しない。確保の状態は必ず通信で確かめ、確かめられなければ画面が
 //     「確かめられていません」を出す（基準 9.11）。ここで古い応答を返すと、その見分けが壊れる。
@@ -17,8 +24,10 @@
 // 中身は後のタスクが足す:
 //   - タスク19: プッシュの受信と、通知を押したときに `/me` を開く（要件22）
 
-const SHELL_CACHE = "ai-sekitori-shell-v1";
-const ASSET_CACHE = "ai-sekitori-assets-v1";
+const SHELL_CACHE = "ai-sekitori-shell-v2";
+const ASSET_CACHE = "ai-sekitori-assets-v2";
+/** 今の版が使う保存の名前。これ以外は入れ替わりのときに消す */
+const CURRENT_CACHES = [SHELL_CACHE, ASSET_CACHE];
 /** 通信が切れていても立ち上がる必要がある画面（客の画面は1つの URL）。 */
 const SHELL_PATH = "/me";
 
@@ -36,31 +45,53 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
+/** 古い版の保存を消す（保存の名前に版を入れてある）。 */
+const dropOldCaches = async () => {
+  const names = await caches.keys();
+  await Promise.all(names.filter((name) => !CURRENT_CACHES.includes(name)).map((name) => caches.delete(name)));
+};
+
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(Promise.all([dropOldCaches(), self.clients.claim()]));
 });
 
-/** まず通信。だめなら保存した殻（客の画面は1つなので、どの画面の要求でもこれで足りる）。 */
-const shellFirstNetwork = async (request) => {
+/** 取れた /me の応答を殻として残す。失敗しても応答は捨てない（保存は表示の助けで、無くても通信で動く）。 */
+const keepShell = async (response) => {
+  if (!response.ok) return;
   try {
-    const response = await fetch(request);
     const cache = await caches.open(SHELL_CACHE);
     await cache.put(SHELL_PATH, response.clone());
-    return response;
+  } catch {
+    // 端末の容量が足りない・保存を止めている。次に取れたときにまた残す
+  }
+};
+
+/** /me の画面の移動: まず通信。通信が切れていたら保存した殻。 */
+const shellFirstNetwork = async (request) => {
+  let response;
+  try {
+    response = await fetch(request);
   } catch (error) {
     const cached = await caches.match(SHELL_PATH);
     if (cached) return cached;
     throw error;
   }
+  await keepShell(response);
+  return response;
 };
 
-/** まず保存。無ければ通信して保存する。 */
+/** まず保存。無ければ通信して、取れた（2xx）ものだけ保存する。保存の失敗で応答を捨てない。 */
 const assetFirstCache = async (request) => {
   const cached = await caches.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  const cache = await caches.open(ASSET_CACHE);
-  await cache.put(request, response.clone());
+  if (!response.ok) return response;
+  try {
+    const cache = await caches.open(ASSET_CACHE);
+    await cache.put(request, response.clone());
+  } catch {
+    // 保存できなくても部品は届いている
+  }
   return response;
 };
 
@@ -71,8 +102,9 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   // 入口は保存しない（古い応答を確保の今の状態として見せない）
   if (url.pathname.startsWith("/api/")) return;
+  // 殻を返すのは /me の画面の移動だけ（ほかの画面を /me の殻として保存しない・不具合-05）
   if (request.mode === "navigate") {
-    event.respondWith(shellFirstNetwork(request));
+    if (url.pathname === SHELL_PATH) event.respondWith(shellFirstNetwork(request));
     return;
   }
   if (url.pathname.startsWith("/_next/static/")) {
@@ -129,4 +161,54 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(openApp());
+});
+
+// ---------- 購読の作り直し（2026-09-25 監査の指摘 不具合-11） ----------
+//
+// 配信元が購読を入れ替えた・切れたときに届く。受け手が無いと、サーバーの購読は古いまま「もう無い」と
+// 返されて消され、取り消しの通知（要件22）が気づかないうちに届かなくなる。新しい購読を入口へ預け直す。
+// 鍵は入口 `GET /api/config/public` から受け取る（このファイルに値を書かない・構造の検査が見張る）。
+// 預けられなくても、客が /me を開けば画面の側（`lib/client/push` の `restorePushSubscription`）が作り直す。
+
+const SUBSCRIPTION_URL = "/api/customer/push-subscription";
+const CONFIG_URL = "/api/config/public";
+
+/** base64url の公開鍵を、`subscribe` が受け取るバイト列に直す（`lib/client/push` と同じ変換）。 */
+const toKeyBytes = (base64Url) => {
+  const normalized = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+};
+
+/** 新しい購読を作るときの設定。古い購読の設定が残っていればそれを、無ければ公開値の鍵で組む。 */
+const subscribeOptions = async (oldSubscription) => {
+  if (oldSubscription && oldSubscription.options && oldSubscription.options.applicationServerKey) return oldSubscription.options;
+  const res = await fetch(CONFIG_URL, { credentials: "same-origin", cache: "no-store" });
+  if (!res.ok) return null;
+  const config = await res.json();
+  const key = config && typeof config.vapidPublicKey === "string" ? config.vapidPublicKey : "";
+  return key === "" ? null : { userVisibleOnly: true, applicationServerKey: toKeyBytes(key) };
+};
+
+const resubscribe = async (event) => {
+  try {
+    let subscription = event.newSubscription;
+    if (!subscription) {
+      const options = await subscribeOptions(event.oldSubscription);
+      if (!options) return;
+      subscription = await self.registration.pushManager.subscribe(options);
+    }
+    await fetch(SUBSCRIPTION_URL, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ subscription: subscription.toJSON() }),
+    });
+  } catch {
+    // 端末が購読を断った・通信が切れている。次に /me を開いたときに画面の側が作り直す
+  }
+};
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(resubscribe(event));
 });

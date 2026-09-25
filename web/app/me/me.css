@@ -1305,3 +1305,39 @@
   font-size: 0.875rem;
   padding: 0.5rem 1rem;
 }
+
+/* 通知の説明（客-05）。札・経路・クーポンの下に1行で置き、届かない端末の注は畳む */
+.push-prompt .push-prompt__lead {
+  color: var(--color-text);
+  font-size: 0.8125rem;
+}
+.push-prompt__actions {
+  align-items: center;
+}
+.push-prompt__more summary {
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+/* iPhone の Safari で、確保を持たない取得の画面に出す「ホーム画面に追加すると通知が届く」（客-04 の案A） */
+.home-screen-hint {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 0.875rem;
+}
+.home-screen-hint > button {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+}

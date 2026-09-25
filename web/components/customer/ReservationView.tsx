@@ -10,7 +10,8 @@
 // 「確保を取り消す」と「人数を変える」（要件10）は `ReservationActions` が持ち、この囲いの中に置く
 // ——断りの出し場所（人数の欄の直下・操作の直下）もあちらの受け持ち。
 // 通報の入口（要件26の基準 26.1）は入れ物（`CustomerApp`）が中身として渡す（`children`）。
-// 通知の説明（`PushPrompt`）は要件22の基準 22.8。
+// 通知の説明（`PushPrompt`）は要件22の基準 22.8。**札・経路・クーポンの下**に置く（2026-09-25 監査の指摘 客-05
+// ——番号より上に出ると、店頭で見せる前に店員がまず通知の案内を読むことになる）。
 //
 // 「Googleマップで経路を開く」を**半券のすぐ下**に置く（2026-09-22 の本人の指摘「確保の画面に戻ったら
 // Googleマップを探すボタンに辿り着けなくなるので、この画面にもおくようにしてほしい」）。向かうのが主で、
@@ -60,8 +61,6 @@ export const ReservationView = ({ reservation, onSearchMore, onChanged, failure 
   const route = routeHref(reservation, from);
   return (
     <section className="claim-view" data-testid="view-active">
-      <PushPrompt due={pushPromptDue} />
-
       {/* 店頭で見せる面。番号をいちばん大きく、そのまわりに店名と期限を置く（基準 9.1・9.2） */}
       <div className="claim-ticket">
         <p className="claim-ticket__eyebrow">確保できました</p>
@@ -110,6 +109,8 @@ export const ReservationView = ({ reservation, onSearchMore, onChanged, failure 
         <CouponPickNote count={reservation.coupons.length} />
         {reservation.coupons.length === 0 ? <p className="claim-coupons__none">クーポンの案内はありません。</p> : null}
       </div>
+
+      <PushPrompt due={pushPromptDue} />
 
       {reservation.storeUrl === null ? null : (
         <a className="claim-view__link" href={reservation.storeUrl} target="_blank" rel="noreferrer">

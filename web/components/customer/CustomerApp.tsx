@@ -31,6 +31,7 @@ import { EraseRegistration } from "./EraseRegistration";
 import { CompletedView } from "./CompletedView";
 import { ExpiredView } from "./ExpiredView";
 import { FetchForm, type FetchResult } from "./FetchForm";
+import { HomeScreenHint } from "./HomeScreenHint";
 import type { HomeDto, ReceiveRefusal, ReservationDto } from "./home";
 import { PreviousCompletedEntry } from "./PreviousCompleted";
 import { RecentStores } from "./RecentStores";
@@ -39,6 +40,7 @@ import { ReportForm, type ReportTarget } from "./ReportForm";
 import { ReservationView } from "./ReservationView";
 import { ResultList, type ResultItem } from "./ResultList";
 import { StoreCancelledView } from "./StoreCancelledView";
+import { useMeServiceWorker } from "./useMeServiceWorker";
 import { CustomerRefusals } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
 
@@ -153,6 +155,8 @@ const CustomerScreens = () => {
   };
 
   const polling = usePolling(refresh);
+  // 開いたら Service Worker を /me の範囲で登録し、許可済みの端末の購読を作り直す（不具合-05・不具合-11）
+  useMeServiceWorker(home?.pushPromptDue === true);
 
   /**
    * 出している結果を片づけ、その取得から後で届く結果も受け取らない（`dismissedFetchIdRef`）。
@@ -401,6 +405,8 @@ const CustomerScreens = () => {
       {onFetchScreen ? (
         <section ref={fetchScreenRef} className={hasItems ? "fetch-screen fetch-screen--with-fab" : "fetch-screen"}>
           {previous !== undefined && fetchResult === null ? <PreviousCompletedEntry reservation={previous} onOpen={() => setPreviousOpen(true)} /> : null}
+          {/* ホーム画面への追加は、確保を持っていないときだけ勧める（客-04 の案A） */}
+          {reservation === undefined ? <HomeScreenHint /> : null}
           <FetchForm
             profile={home.profile}
             party={party}
