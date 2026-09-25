@@ -15,12 +15,16 @@ import { internalError } from "./unhandled";
 export type RouteAuth = "public" | "customer" | "store" | "admin";
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+/**
+ * 見分けが済んだ文脈。店と運営の `tokenHash` は、今の要求のセッション（表の鍵）——パスワードと
+ * メールアドレスの変更が「今の1本以外」を切るときに残す1本を指す（2026-09-25 監査の指摘 安全-08）。
+ */
 export type RouteAuthContext =
   | { auth: "public" }
   | { auth: "customer"; customerId: string }
   /** `mustChangePassword` は【最終日】仮のパスワードで入った店の印（要件14の基準 14.14） */
-  | { auth: "store"; accountId: string; storeId: string; mustChangePassword: boolean }
-  | { auth: "admin"; accountId: string };
+  | { auth: "store"; accountId: string; storeId: string; mustChangePassword: boolean; tokenHash: string }
+  | { auth: "admin"; accountId: string; tokenHash: string };
 
 /** 見分けが済んだあとの文脈。`auth: "customer"` の入口の手続きは customerId だけを受け取る。 */
 export type RouteAuthContextFor<TAuth extends RouteAuth> = Extract<RouteAuthContext, { auth: TAuth }>;
@@ -212,8 +216,16 @@ const verifyHuman = async (deps: Deps, token: string, deadline: Promise<void>): 
 /** 見分けの結果。断るときは応答、通すときは文脈と、延ばしたセッションの Set-Cookie。 */
 type Identified = { ok: true; ctx: RouteAuthContext; renewCookies: string[] } | { ok: false; result: RouteHandlerResult };
 
+/**
+ * 仮のパスワードのまま入った店（mustChangePassword）が使える入口（2026-09-25 監査の指摘 安全-21・案1）。
+ * ホーム（決め直す画面への案内が載る）とパスワードの変更だけ。ログアウトは見分けを求めない入口なので
+ * ここに載せなくても使える。それまでは画面で案内するだけで、案内を読み飛ばすと、運営がメールで平文のまま
+ * 送った仮のパスワードが店のパスワードとして残り続けた（要件14の補足「運営が知っている値を残さない」）。
+ */
+const MUST_CHANGE_PASSWORD_ROUTES: ReadonlySet<string> = new Set(["GET /api/store/home", "POST /api/store/password"]);
+
 /** 見分け（客の Cookie・店と運営のセッション）。401 は unauthenticated、役割違いは 403 の forbidden。 */
-const identify = async (auth: RouteAuth, req: Request, deps: Deps): Promise<Identified> => {
+const identify = async (auth: RouteAuth, route: string, req: Request, deps: Deps): Promise<Identified> => {
   if (auth === "public") return { ok: true, ctx: { auth: "public" }, renewCookies: [] };
   if (auth === "customer") {
     const customerId = await identifyCustomer(req, deps);
@@ -225,10 +237,12 @@ const identify = async (auth: RouteAuth, req: Request, deps: Deps): Promise<Iden
   // 役割が店なのに店の番号が無いアカウントは断る（本人選択 2026-09-21）。
   // 空の文字列へ黙って倒すと、どの店にも当たらない問い合わせが「正しく通った」ように見える。
   if (auth === "store" && !session.storeId) return { ok: false, result: forbidden() };
+  // 仮のパスワードのまま入った店は、決め直すまでホームとパスワードの変更だけ（安全-21）。
+  if (auth === "store" && session.mustChangePassword && !MUST_CHANGE_PASSWORD_ROUTES.has(route)) return { ok: false, result: forbidden() };
   const ctx: RouteAuthContext =
     auth === "store"
-      ? { auth: "store", accountId: session.accountId, storeId: session.storeId as string, mustChangePassword: session.mustChangePassword }
-      : { auth: "admin", accountId: session.accountId };
+      ? { auth: "store", accountId: session.accountId, storeId: session.storeId as string, mustChangePassword: session.mustChangePassword, tokenHash: session.tokenHash }
+      : { auth: "admin", accountId: session.accountId, tokenHash: session.tokenHash };
   // 使われたセッションを延ばしたときの Set-Cookie（延ばさなければ空）。応答に足して返す。
   return { ok: true, ctx, renewCookies: await renewSession(deps, session) };
 };
@@ -280,7 +294,7 @@ const handleRoute = async <TInput, TAuth extends RouteAuth>(config: RouteConfig<
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   if (declaresTooLarge(req, maxBodyBytes)) return toResponse(refusal("body_too_large"));
 
-  const identified = await identify(config.auth, req, deps);
+  const identified = await identify(config.auth, routeId(config), req, deps);
   if (!identified.ok) return toResponse(identified.result);
   const { ctx, renewCookies } = identified;
 

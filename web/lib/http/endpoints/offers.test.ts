@@ -87,8 +87,8 @@ const seedStore = async (over: { status?: string; profile?: boolean; coupons?: s
     .bind(`account-${n}`, `store${n}@example.com`, id)
     .run();
   await db
-    .prepare(`INSERT INTO sessions (token_hash, account_id, expires_at) VALUES (?1, ?2, ?3)`)
-    .bind(await hasher.sha256Hex(token), `account-${n}`, new Date(clock.now().getTime() + 25 * 60 * 60 * 1000).toISOString())
+    .prepare(`INSERT INTO sessions (token_hash, account_id, expires_at, created_at) VALUES (?1, ?2, ?3, ?4)`)
+    .bind(await hasher.sha256Hex(token), `account-${n}`, new Date(clock.now().getTime() + 25 * 60 * 60 * 1000).toISOString(), clock.now().toISOString())
     .run();
 
   const couponIds: string[] = [];

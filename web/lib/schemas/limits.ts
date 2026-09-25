@@ -63,6 +63,13 @@ export const SESSION_TOKEN_BYTES = 16;
  */
 export const SESSION_MAX_AGE_SECONDS = 25 * 60 * 60;
 export const SESSION_RENEW_WITHIN_SECONDS = 60 * 60;
+/**
+ * セッションの絶対の寿命（2026-09-25 監査の指摘 安全-08・AI判断・値は本人の確認待ち）。上の延長を何度重ねても、
+ * 作った時刻（sessions.created_at・migration 0008）からこの長さで必ず切る。それまでは使い続ける限り切れず、
+ * 盗まれたり置き忘れたりしたセッションを持ち主が止める手段が無かった。14日は監査の例の値で、
+ * 店が2週に1度は入り直す程度の手間に収まる長さとして選んだ。
+ */
+export const SESSION_ABSOLUTE_MAX_SECONDS = 14 * 24 * 60 * 60;
 
 // 要件16（クーポン）の基準 16.2・16.3
 /** 1つの店が持てるクーポンの数（基準 16.2） */

@@ -1,9 +1,10 @@
 // セッションの見分けと、使われるたびの延長（要件14）。受け入れ検査が触れない2つの道を固定する:
 // ①期限の値が壊れているときに「切れている」側へ倒すこと（フェイルクローズ・本人選択 2026-09-21）
 // ②残りが1時間（SESSION_RENEW_WITHIN_SECONDS）を切ったときだけ延ばすこと（スライディングウィンドウ・同）。
+// ③作った時刻から14日（SESSION_ABSOLUTE_MAX_SECONDS）で必ず切れ、延ばす先もそれを越えないこと（安全-08）。
 import { describe, expect, it } from "vitest";
 import type { Deps } from "../ports";
-import { SESSION_MAX_AGE_SECONDS } from "../schemas/limits";
+import { SESSION_ABSOLUTE_MAX_SECONDS, SESSION_MAX_AGE_SECONDS } from "../schemas/limits";
 import { identifySession, renewSession } from "./guards";
 import { defineRoute } from "./defineRoute";
 
@@ -38,6 +39,8 @@ const fakeDeps = (row: Record<string, unknown> | null) => {
 
 const sessionRow = (expiresAt: unknown, over: Record<string, unknown> = {}) => ({
   expires_at: expiresAt,
+  // 既定は1時間前に作ったセッション（絶対の寿命の内）
+  created_at: new Date(NOW.getTime() - 60 * 60_000).toISOString(),
   account_id: "account-1",
   role: "store",
   store_id: "store-1",
@@ -68,6 +71,21 @@ describe("セッションの見分け", () => {
     }
   });
 
+  it("作った時刻から絶対の寿命（14日）を過ぎていれば、期限の内でも null", async () => {
+    const created = new Date(NOW.getTime() - SESSION_ABSOLUTE_MAX_SECONDS * 1000).toISOString();
+    const { deps } = fakeDeps(sessionRow(minutesFromNow(90), { created_at: created }));
+    expect(await identifySession(requestWithCookie(), deps)).toBeNull();
+    const justInside = new Date(NOW.getTime() - SESSION_ABSOLUTE_MAX_SECONDS * 1000 + 1000).toISOString();
+    expect(await identifySession(requestWithCookie(), fakeDeps(sessionRow(minutesFromNow(90), { created_at: justInside })).deps)).not.toBeNull();
+  });
+
+  it("作った時刻が無い・読めない行（0008 より前の行・壊れた値）は、切れたものとして断る（フェイルクローズ）", async () => {
+    for (const broken of [null, "", "きのう"]) {
+      const { deps } = fakeDeps(sessionRow(minutesFromNow(90), { created_at: broken }));
+      expect(await identifySession(requestWithCookie(), deps), String(broken)).toBeNull();
+    }
+  });
+
   it("Cookie が無ければ表を引かずに null", async () => {
     const { deps } = fakeDeps(sessionRow(minutesFromNow(90)));
     expect(await identifySession(new Request(`${ORIGIN}/api/store/home`), deps)).toBeNull();
@@ -93,6 +111,24 @@ describe("使われるたびの延長", () => {
     expect(cookies[0]).toContain(`aihack_session=${TOKEN}`);
     expect(cookies[0]).toContain(`Max-Age=${SESSION_MAX_AGE_SECONDS}`);
     expect(cookies[0]).toMatch(/HttpOnly/);
+  });
+
+  it("延ばす先は絶対の寿命の終わりを越えない（Cookie の Max-Age もそこまで）", async () => {
+    // 作ってから13日と23時間たったセッション: 寿命の終わりまで残り1時間
+    const created = new Date(NOW.getTime() - SESSION_ABSOLUTE_MAX_SECONDS * 1000 + 60 * 60_000);
+    const { deps, ran } = fakeDeps(sessionRow(minutesFromNow(30), { created_at: created.toISOString() }));
+    const session = (await identifySession(requestWithCookie(), deps))!;
+    const cookies = await renewSession(deps, session);
+    expect(ran[0].args).toEqual([hashOf(TOKEN), new Date(created.getTime() + SESSION_ABSOLUTE_MAX_SECONDS * 1000).toISOString()]);
+    expect(cookies[0]).toContain(`Max-Age=${60 * 60}`);
+  });
+
+  it("寿命の終わりが今の期限より手前なら、延ばさない（表も Cookie も触らない）", async () => {
+    const created = new Date(NOW.getTime() - SESSION_ABSOLUTE_MAX_SECONDS * 1000 + 20 * 60_000);
+    const { deps, ran } = fakeDeps(sessionRow(minutesFromNow(30), { created_at: created.toISOString() }));
+    const session = (await identifySession(requestWithCookie(), deps))!;
+    expect(await renewSession(deps, session)).toEqual([]);
+    expect(ran).toEqual([]);
   });
 });
 

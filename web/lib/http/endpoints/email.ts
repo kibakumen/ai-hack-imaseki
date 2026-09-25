@@ -1,6 +1,7 @@
 // ログインのメールアドレスの変更の入口（2026-09-22 追加・店と運営で1つずつ）。
 // 手続きは1つ（usecases/changeEmail）で、役割ごとに見分けだけが違う。
 // 確認メールは送らない設計なので、今のパスワードの再入力で本人を確かめる（合わなければ 403）。
+// 変えたら、今の1本以外のセッションを切る（安全-08・手続きの側）。
 // 重複は登録の入口（POST /api/register/store）と同じ 409・email_taken・項目 email で断る。
 
 import { changeEmailSchema } from "../../schemas/account";
@@ -19,7 +20,7 @@ const changeStoreEmailRoute = defineRoute({
   auth: "store",
   input: changeEmailSchema,
   handler: async ({ input, deps, ctx }) => {
-    const result = await changeEmail(deps, ctx.accountId, input);
+    const result = await changeEmail(deps, ctx, input);
     if (!result.ok) return refuse(result);
     return respond("POST /api/store/email", { ok: true });
   },
@@ -31,7 +32,7 @@ const changeAdminEmailRoute = defineRoute({
   auth: "admin",
   input: changeEmailSchema,
   handler: async ({ input, deps, ctx }) => {
-    const result = await changeEmail(deps, ctx.accountId, input);
+    const result = await changeEmail(deps, ctx, input);
     if (!result.ok) return refuse(result);
     return respond("POST /api/admin/email", { ok: true });
   },

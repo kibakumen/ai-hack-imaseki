@@ -37,7 +37,7 @@ export const registerStore = async (deps: Deps, input: StoreRegisterInput): Prom
     await insertStoreWithAccountAndSession(deps.db, {
       store: { id: storeId, name: input.name, createdAtIso: deps.clock.now().toISOString() },
       account: { id: accountId, email: input.email, role: "store", storeId, passwordHash },
-      session: { tokenHash: session.tokenHash, accountId, expiresAtIso: session.expiresAtIso },
+      session: { tokenHash: session.tokenHash, accountId, expiresAtIso: session.expiresAtIso, createdAtIso: session.createdAtIso },
     });
   } catch (error) {
     // メールアドレスの重複だけを断りへ倒す。ほかの落ち方（書き込みそのものの失敗）は握りつぶさず、

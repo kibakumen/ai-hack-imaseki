@@ -25,12 +25,16 @@ export const verifyPassword = async (deps: Deps, record: string, password: strin
   return constantTimeEqual(hashB64, parsed.hashB64);
 };
 
-/** 端末に配る値（token）と、表に置く値（token_hash）と、切れる時刻。書き込みは呼ぶ側が行う。 */
-export type IssuedSession = { token: string; tokenHash: string; expiresAtIso: string };
+/**
+ * 端末に配る値（token）と、表に置く値（token_hash）と、切れる時刻と、作った時刻。書き込みは呼ぶ側が行う。
+ * 作った時刻は絶対の寿命（安全-08・SESSION_ABSOLUTE_MAX_SECONDS）を数える起点。
+ */
+export type IssuedSession = { token: string; tokenHash: string; expiresAtIso: string; createdAtIso: string };
 
 export const issueSession = async (deps: Deps): Promise<IssuedSession> => {
   const token = tokenFromBytes(deps.rng.bytes(SESSION_TOKEN_BYTES));
   const tokenHash = await deps.hasher.sha256Hex(token);
-  const expiresAtIso = new Date(deps.clock.now().getTime() + SESSION_MAX_AGE_SECONDS * 1000).toISOString();
-  return { token, tokenHash, expiresAtIso };
+  const now = deps.clock.now().getTime();
+  const expiresAtIso = new Date(now + SESSION_MAX_AGE_SECONDS * 1000).toISOString();
+  return { token, tokenHash, expiresAtIso, createdAtIso: new Date(now).toISOString() };
 };
