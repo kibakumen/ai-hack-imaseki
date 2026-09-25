@@ -543,6 +543,25 @@
   font-weight: 800;
 }
 
+/* まだ選んでいない（空欄）——目盛りを霞ませ、中央の帯を塗って「—」を出す。1 を指しているように見せない（店-04） */
+.store-dial__window--unset .store-dial__item {
+  opacity: 0.25;
+}
+
+.store-dial__window--unset .store-dial__marker {
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-background));
+}
+
+.store-dial__placeholder {
+  color: var(--color-text-muted);
+  font-size: 1.5rem;
+  font-weight: 900;
+  left: 0;
+  position: absolute;
+  right: 0;
+  text-align: center;
+}
+
 /* 目には出さないが DOM には残す（読み上げと キーボード入力の受け口）。 */
 .store-sr-only {
   block-size: 1px;
