@@ -24,6 +24,7 @@ import { useRef, useState } from "react";
 import { callApi, isFailure, isTransientFailure, type ApiFailure } from "../../lib/client/api";
 import { clearHome as clearCachedHome, loadHome as loadCachedHome, saveHome as saveCachedHome } from "../../lib/client/reservationCache";
 import { usePolling, type PollTicket } from "../../lib/client/usePolling";
+import { useBackLayer } from "../../lib/client/useBackLayer";
 import { AdminCancelledView } from "./AdminCancelledView";
 import { recallOrigin } from "../../lib/client/lastOrigin";
 import { ClaimedCelebration } from "./ClaimedCelebration";
@@ -116,6 +117,18 @@ const CustomerScreens = () => {
   /** 取得の画面から、前回の完了済み（応答の `previousCompleted`）を開いているか（基準 9.4・不具合-18） */
   const [previousOpen, setPreviousOpen] = useState(false);
 
+  /**
+   * 確保を持ったまま探している間に、その確保が確保中でなくなった（店・運営の取り消し・期限切れ・完了）ら、
+   * 探すのをやめて変化の表示を出す（2026-09-25 監査の指摘 客-03——以前は取り直しが searching を戻さず、
+   * 「今の確保を取り消すと受け取れます」の案内が黙って消えるだけで、取り消されたことが出なかった）。
+   * 確保中でなくなった確保の演出も閉じる（あとで別の確保中が来ても、古い演出を出し直さない）。
+   */
+  const followReservationChange = (next: HomeDto) => {
+    if (home?.kind !== "active" || next.kind === "active") return;
+    setCelebrating(false);
+    if (next.kind !== "fetch") setSearching(false);
+  };
+
   /** 取り直しが成功したホームを端末に残す（確保が無いホームは残すものが無いので消す）。 */
   const keep = (next: HomeDto) => {
     if (next.reservation === undefined) clearCachedHome();
@@ -132,6 +145,7 @@ const CustomerScreens = () => {
     if (!ticket.isCurrent()) return;
     setLoaded(true);
     if (!isFailure(result)) {
+      followReservationChange(result);
       setHome(result);
       setStale(false);
       setUnreachable(null);
@@ -157,6 +171,14 @@ const CustomerScreens = () => {
   const polling = usePolling(refresh);
   // 開いたら Service Worker を /me の範囲で登録し、許可済みの端末の購読を作り直す（不具合-05・不具合-11）
   useMeServiceWorker(home?.pushPromptDue === true);
+
+  // 端末の「戻る」で、上に重ねたものを閉じる（客-03。客の画面は1つの URL なので、以前は /me の外へ出ていた）。
+  // 確保を持ったまま探している取得の画面・受け取った直後の演出・前回の完了済み・最近行った店・通報の欄の5つ。
+  useBackLayer(searching && home?.reservation !== undefined, () => setSearching(false));
+  useBackLayer(celebrating && home?.kind === "active", () => setCelebrating(false));
+  useBackLayer(previousOpen && home?.kind === "fetch" && home.previousCompleted !== undefined, () => setPreviousOpen(false));
+  useBackLayer(panel !== "none", () => setPanel("none"));
+  useBackLayer(reportTarget !== null, () => setReportTarget(null));
 
   /**
    * 出している結果を片づけ、その取得から後で届く結果も受け取らない（`dismissedFetchIdRef`）。
@@ -303,6 +325,8 @@ const CustomerScreens = () => {
   }
 
   const reservation = home.reservation;
+  /** 確保中の確保を持ったまま探しているか（基準 8.10。受け取りの操作を選べない形にし、戻る道を常に出す） */
+  const holding = searching && home.kind === "active";
   /** 既定の幅を過ぎた完了済み（取得の画面のときだけ載る・基準 9.4）。開いていればその表示を出す */
   const previous = home.kind === "fetch" ? home.previousCompleted : undefined;
   const showingPrevious = previousOpen && previous !== undefined;
@@ -411,6 +435,15 @@ const CustomerScreens = () => {
           {previous !== undefined && fetchResult === null ? <PreviousCompletedEntry reservation={previous} onOpen={() => setPreviousOpen(true)} /> : null}
           {/* ホーム画面への追加は、確保を持っていないときだけ勧める（客-04 の案A） */}
           {reservation === undefined ? <HomeScreenHint /> : null}
+          {/* 確保を持ったまま探している間は、条件の上に戻る道を常に出す（客-03。条件を畳んでも隠れない位置） */}
+          {holding ? (
+            <p className="hold-banner" data-testid="hold-banner">
+              <span>今の確保はそのままです。</span>
+              <button type="button" data-testid="btn-back-to-reservation" onClick={() => setSearching(false)}>
+                確保中の表示へ戻る
+              </button>
+            </p>
+          ) : null}
           <FetchForm
             profile={home.profile}
             party={party}
@@ -431,7 +464,6 @@ const CustomerScreens = () => {
               refusal={refused !== null && refused.offerId !== null ? { offerId: refused.offerId, body: refused.body } : null}
               onNextStep={takeNextStep}
               holding={home.kind === "active"}
-              onBackToReservation={() => setSearching(false)}
             />
           )}
         </section>

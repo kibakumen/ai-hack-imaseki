@@ -1375,3 +1375,20 @@
   font-size: 0.875rem;
   padding: 0.5rem 0.75rem;
 }
+
+/* 確保を持ったまま探している間、条件の上に常に出す「確保中の表示へ戻る」（客-03）。条件を畳んでも隠れない位置 */
+.hold-banner {
+  align-items: center;
+  background: var(--color-highlight);
+  border: 1px solid var(--color-highlight-edge);
+  border-radius: var(--radius-md);
+  color: var(--color-highlight-text);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  font-weight: 700;
+  gap: 0.5rem 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 0.875rem;
+}
