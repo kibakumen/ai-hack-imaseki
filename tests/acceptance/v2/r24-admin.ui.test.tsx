@@ -179,10 +179,16 @@ describeTask("28", "モデル別の表（第4周の追記）", () => {
     expect(screen.getByTestId("fallback-count").textContent).toMatch(/1/);
   });
 
-  it.fails("既知の不具合（横断-01）: 運営の店の一覧を開いてログインが切れていたら（401）、ログインへ戻る道が出る", async () => {
+  // 横断-01 で直した: /login への道は運営の画面の殻（app/admin/layout の SessionExpiredNotice）が出すので、殻ごと描く。
+  it("運営の店の一覧を開いてログインが切れていたら（401）、ログインへ戻る道が出る（横断-01）", async () => {
     api = installFakeApi({ "GET /api/admin/stores": unauthorized });
+    const AdminLayout = await componentOf("app/admin/layout", "AdminLayout");
     const StoreList = await componentOf("components/admin/StoreList", "StoreList");
-    const { container } = render(<StoreList />);
+    const { container } = render(
+      <AdminLayout>
+        <StoreList />
+      </AdminLayout>,
+    );
     await waitFor(() => expect(container.querySelector('a[href^="/login"]')).toBeTruthy(), { timeout: 2_000 });
   });
 });

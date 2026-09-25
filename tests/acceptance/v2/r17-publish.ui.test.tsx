@@ -98,11 +98,17 @@ describeTask("9", "公開のフォームと公開中のカード", () => {
   });
 
   // ログインが切れると、店の画面が真っ白・「まだありません」・「入れた内容を確かめてください」のどれかになり、
-  // ログインへ戻る道が無い（以前は店と運営の画面にログイン切れの検査が1本も無かった・設計-04）。
-  it.fails("既知の不具合（横断-01）: 店のホームを開いてログインが切れていたら（401）、ログインへ戻る道が出る", async () => {
+  // ログインへ戻る道が無かった（以前は店と運営の画面にログイン切れの検査が1本も無かった・設計-04）。
+  // 横断-01 で直した: /login への道は店の画面の殻（app/store/layout の SessionExpiredNotice）が出すので、殻ごと描く。
+  it("店のホームを開いてログインが切れていたら（401）、ログインへ戻る道が出る（横断-01）", async () => {
     api = installFakeApi({ "GET /api/store/home": unauthorized, "GET /api/config/public": () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } }) });
+    const StoreLayout = await componentOf("app/store/layout", "StoreLayout");
     const StoreHome = await componentOf("components/store/StoreHome", "StoreHome");
-    const { container } = render(<StoreHome />);
+    const { container } = render(
+      <StoreLayout>
+        <StoreHome />
+      </StoreLayout>,
+    );
     await waitFor(() => expect(container.querySelector('a[href^="/login"]')).toBeTruthy(), { timeout: 2_000 });
   });
 });
