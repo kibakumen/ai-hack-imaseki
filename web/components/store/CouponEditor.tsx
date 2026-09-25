@@ -274,10 +274,7 @@ export const CouponEditor = () => {
   return (
     <section className="store-stack" data-testid="coupon-list">
       <div className="store-head">
-        <div>
-          <p className="store-eyebrow">店の画面</p>
-          <h1>クーポン</h1>
-        </div>
+        <h1>クーポン</h1>
         {state.status === "ready" ? (
           <span className="store-count">
             {state.data.length}/{COUPON_MAX}

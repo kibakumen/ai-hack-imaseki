@@ -96,14 +96,10 @@ export const StoreHome = () => {
   // 読めなかった・ログインが切れたときも、見出しとタブは出す（空の main で止めない・横断-01）。
   return (
     <main className="store-main" aria-busy={state.status === "loading"}>
-      <div className="store-head">
-        <div>
-          <p className="store-eyebrow">店の画面</p>
-          <h1>今日のオファー</h1>
-        </div>
-      </div>
-
+      {/* 上部は**タブだけ**にする（2026-09-25 監査の指摘 店-14・本人の第2回の指摘「上部の方に不要な情報が多い」）。
+          見出しは読み上げのために残し、目には出さない（タブの「オファー」と同じことを言うので） */}
       <StoreNav active="home" />
+      <h1 className="store-sr-only">今日のオファー</h1>
 
       <LoadView state={state} onRetry={refresh}>
         {(home) => <HomeBody home={home} onChanged={refresh} />}
