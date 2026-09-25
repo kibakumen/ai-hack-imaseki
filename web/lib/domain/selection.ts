@@ -2,6 +2,7 @@
 // 副作用なし——AI を呼ぶのは lib/usecases/fetchOffers（差し替え口 AiSelector）で、ここは返ってきた
 // 文字列を見るだけ。設計書「どの判断をどこに置くか」の `domain/selection.ts` の行。
 
+import { claimProblem } from "./claims";
 import { TEXTS } from "./texts";
 
 /** AI が選べる件数の上限（基準 7.3） */
@@ -26,7 +27,11 @@ export type SelectionRejection =
   | "empty_reason"
   | "reason_too_long"
   | "reason_multi_sentence"
-  | "reason_has_newline";
+  | "reason_has_newline"
+  /** 理由に URL・電話番号・メールの住所らしき並びがある（不具合-07） */
+  | "reason_has_contact"
+  /** 理由が、食べたことがないと言えない断定か、このシステムに無いデータ（口コミ・星の数）に触れている（不具合-07） */
+  | "reason_unfounded_claim";
 
 export type SelectionResult = { ok: true; items: Selection[] } | { ok: false; rejection: SelectionRejection };
 
@@ -46,7 +51,12 @@ export const stripCodeFence = (text: string): string => {
   return (fenced ? fenced[1] : text).trim();
 };
 
-/** 理由1文の検査（基準 7.3 の「空」と基準 7.4 の「1文・60字以内・改行なし」）。通れば null */
+/**
+ * 理由1文の検査（基準 7.3 の「空」と基準 7.4 の「1文・60字以内・改行なし」）。通れば null。
+ * 語と連絡先は**紹介文と同じ domain/claims の1つ**で見る（不具合-07）——理由の文は紹介文より先に客へ出る
+ * （待ちの表示・紹介文を諦めたときの確定の表示・普通の入口の結果）ので、ここを素通しすると、本人が直した
+ * 「ステマ臭い」文が別の経路から出る。当たれば選定ごと点数順に倒す（ほかの理由の検査と同じ扱い）。
+ */
 const reasonRejection = (reason: unknown): SelectionRejection | null => {
   if (typeof reason !== "string") return "empty_reason";
   if (/[\r\n]/.test(reason)) return "reason_has_newline";
@@ -55,6 +65,9 @@ const reasonRejection = (reason: unknown): SelectionRejection | null => {
   if ([...trimmed].length > REASON_MAX_LENGTH) return "reason_too_long";
   // 1文＝終わりの印が末尾にしか無い。末尾の1つを外しても残っていれば2文以上。
   if (SENTENCE_END.test(trimmed.replace(TRAILING_SENTENCE_END, ""))) return "reason_multi_sentence";
+  const problem = claimProblem(trimmed);
+  if (problem === "contact") return "reason_has_contact";
+  if (problem) return "reason_unfounded_claim";
   return null;
 };
 

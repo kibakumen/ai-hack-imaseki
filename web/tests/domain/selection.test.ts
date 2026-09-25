@@ -23,6 +23,11 @@ describe("AI の出力の検査", () => {
     expect(rejectionOf(body([{ storeId: "s1", reason: "あ".repeat(61) }]))).toBe("reason_too_long");
     expect(rejectionOf(body([{ storeId: "s1", reason: "近いです。安いです。" }]))).toBe("reason_multi_sentence");
     expect(rejectionOf(body([{ storeId: "s1", reason: "近い\n安い" }]))).toBe("reason_has_newline");
+    // 紹介文と同じ語と連絡先の検査（不具合-07: 以前は紹介文の層にだけあり、先に客へ出る選定の理由を素通しした）
+    expect(rejectionOf(body([{ storeId: "s1", reason: "刺身が名物です" }]))).toBe("reason_unfounded_claim");
+    expect(rejectionOf(body([{ storeId: "s1", reason: "口コミで評判の和食です" }]))).toBe("reason_unfounded_claim");
+    expect(rejectionOf(body([{ storeId: "s1", reason: "予約は０３－１２３４－５６７８へ" }]))).toBe("reason_has_contact");
+    expect(rejectionOf(body([{ storeId: "s1", reason: "www.example.jp で予約できます" }]))).toBe("reason_has_contact");
   });
 
   it("店の番号が文字列でない・選定の1件が値でない出力は、形が違うものとして落ちる", () => {
@@ -43,7 +48,9 @@ describe("AI の出力の検査", () => {
   it("理由は前後の空白を落として返る。終わりの印が末尾に1つだけなら1文として通る", () => {
     const result = validateSelection(body([{ storeId: "s1", reason: "  近くて安いです。  " }]), IDS);
     expect(result).toEqual({ ok: true, items: [{ storeId: "s1", reason: "近くて安いです。" }] });
-    expect(validateSelection(body([{ storeId: "s2", reason: "刺身が名物です！" }]), IDS).ok).toBe(true);
+    expect(validateSelection(body([{ storeId: "s2", reason: "刺身盛りを出している和食です！" }]), IDS).ok).toBe(true);
+    // 「名物」は食べたことがないと言えない断定なので、1文でも落ちる（不具合-07・以前はここで通る側に固めていた）
+    expect(validateSelection(body([{ storeId: "s2", reason: "刺身が名物です！" }]), IDS).ok).toBe(false);
     expect(validateSelection(body([{ storeId: "s2", reason: "予算3.000円で入れます" }]), IDS).ok).toBe(true);
   });
 });
