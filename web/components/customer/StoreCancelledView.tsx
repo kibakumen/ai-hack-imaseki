@@ -3,14 +3,21 @@
 // 店が確保を取り消したときの表示（要件9の基準 9.6）。理由（店の都合）と、取得し直す入口を出す。
 // 客に落ち度は無いので、責める語は使わない（`domain/texts` と同じ決め）。
 
+//
+// 2026-09-25 監査の指摘 横断-09: 店まで歩いて行って断られた客が運営へ知らせられるよう、通報の入口
+// （呼ぶ側の CustomerApp が組む `children`）を置く。入口の側も、店に取り消された確保を7日間は受け付ける。
+
+import type { ReactNode } from "react";
 import type { ReservationDto } from "./home";
 
 type StoreCancelledViewProps = {
   reservation: ReservationDto;
   onSearchAgain: () => void;
+  /** 通報の入口（呼ぶ側が組む。完了済みの表示と同じ置き方） */
+  children?: ReactNode;
 };
 
-export const StoreCancelledView = ({ reservation, onSearchAgain }: StoreCancelledViewProps) => (
+export const StoreCancelledView = ({ reservation, onSearchAgain, children = null }: StoreCancelledViewProps) => (
   <section data-testid="view-store_cancelled">
     <h2>店の都合で確保が取り消されました</h2>
     <h3 data-testid="reservation-store">{reservation.storeName}</h3>
@@ -18,6 +25,7 @@ export const StoreCancelledView = ({ reservation, onSearchAgain }: StoreCancelle
     <button type="button" data-testid="btn-search-again" onClick={onSearchAgain}>
       ほかの店を探す
     </button>
+    {children}
   </section>
 );
 

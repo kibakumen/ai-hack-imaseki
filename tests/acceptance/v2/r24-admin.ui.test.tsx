@@ -7,6 +7,7 @@ import { describeTask } from "./_tasks";
 import { componentOf, installFakeApi, refusal, unauthorized, type FakeApi } from "./_fakes";
 import { TID } from "./_types";
 
+// 2026-09-25 監査の指摘（運営-01〜運営-05・横断-09）で詳細の応答に足した項目（判断材料・写し・履歴）も揃えた形。
 const storeDetail = (over: Record<string, unknown> = {}) => ({
   json: {
     store: {
@@ -26,10 +27,39 @@ const storeDetail = (over: Record<string, unknown> = {}) => ({
       url: null,
       license: true,
       cardRegistered: true,
+      changedSinceApproval: false,
+      contacted: false,
+      storeCancelled: 0,
+      storeCancelRate: 0,
+      licenseUploadedAt: null,
+      approval: null,
+      changes: { name: false, address: false, license: false },
+      activeReservations: 0,
+      duplicates: 0,
+      note: null,
+      contactedAt: null,
       ...over,
     },
+    reports: { count: 0, latest: [] },
+    history: [],
   },
 });
+
+/** 一覧の1行（2026-09-25 の監査の指摘で足した項目つき） */
+const listRow = (over: Record<string, unknown> = {}) => ({
+  publishing: false,
+  createdAt: "2026-09-01T00:00:00.000Z",
+  claims: 0,
+  budgetMin: null,
+  offerRemaining: null,
+  changedSinceApproval: false,
+  contacted: false,
+  storeCancelled: 0,
+  storeCancelRate: 0,
+  ...over,
+});
+
+const SUMMARY = { publishing: 0, pending: 0, awaiting: 0, total: 0 };
 
 describeTask("8", "店の一覧と詳細の画面", () => {
   let api: FakeApi;
@@ -40,12 +70,12 @@ describeTask("8", "店の一覧と詳細の画面", () => {
 
   it("24.7 当たる店が無いことの文が出る。店があれば出ない", async () => {
     let items: any[] = [];
-    api = installFakeApi({ "GET /api/admin/stores": () => ({ json: { items, summary: { publishing: 0, pending: 0 } } }) });
+    api = installFakeApi({ "GET /api/admin/stores": () => ({ json: { items, summary: { ...SUMMARY, total: items.length } } }) });
     const StoreList = await componentOf("components/admin/StoreList", "StoreList");
     render(<StoreList />);
     await screen.findByTestId("stores-empty");
     cleanup();
-    items = [{ id: "s1", name: "店A", address: "住所A", email: "a@example.com", status: "approved", publishing: false, createdAt: "2026-09-01T00:00:00.000Z", claims: 0, budgetMin: null, offerRemaining: null }];
+    items = [listRow({ id: "s1", name: "店A", address: "住所A", email: "a@example.com", status: "approved" })];
     render(<StoreList />);
     await screen.findByText("店A");
     expect(screen.queryByTestId("stores-empty")).toBeNull();
@@ -78,8 +108,9 @@ describeTask("8", "店の一覧と詳細の画面", () => {
     expect(screen.getByText("検査の店")).toBeTruthy();
   });
 
+  // 2026-09-25 運営-01: 取り消しには理由を入れてから確かめる（理由を入れるまで押せない）。応答は取り消した組数と通知した人数つき（運営-03）。
   it("25.5 止める前に、公開中のオファーが終わり確保が取り消されることの確かめが出て、確かめてから止める要求が出る", async () => {
-    api = installFakeApi({ "GET /api/admin/stores/:id": () => storeDetail({ status: "approved" }), "POST /api/admin/stores/:id/ban": () => ({ json: { ok: true } }) });
+    api = installFakeApi({ "GET /api/admin/stores/:id": () => storeDetail({ status: "approved" }), "POST /api/admin/stores/:id/ban": () => ({ json: { ok: true, cancelled: 0, notified: 0 } }) });
     const StoreDetail = await componentOf("components/admin/StoreDetail", "StoreDetail");
     render(<StoreDetail storeId="store-1" />);
     fireEvent.click(await screen.findByTestId(TID.btn("ban")));
@@ -88,6 +119,7 @@ describeTask("8", "店の一覧と詳細の画面", () => {
     expect(confirm.textContent).toMatch(/オファー/);
     expect(confirm.textContent).toMatch(/確保/);
     expect(confirm.textContent).toMatch(/取り消/);
+    fireEvent.change(within(confirm).getByTestId("field-reason"), { target: { value: "通報が続いたため" } });
     fireEvent.click(within(confirm).getByTestId(TID.btn("confirm")));
     await waitFor(() => expect(api.calls.filter((c) => c.path.endsWith("/ban"))).toHaveLength(1));
   });
@@ -107,7 +139,7 @@ describeTask("23", "通報の一覧の画面", () => {
     render(<ReportList />);
     await screen.findByTestId("reports-empty");
     cleanup();
-    items = [{ id: "r1", storeId: "store-9", storeName: "通報された店", reason: "来たら閉まっていた", at: "2026-09-22T06:00:00.000Z" }];
+    items = [{ id: "r1", storeId: "store-9", storeName: "通報された店", reason: "来たら閉まっていた", at: "2026-09-22T06:00:00.000Z", reporter: "a1b2c3", storeReportCount: 1 }];
     const { container } = render(<ReportList />);
     await screen.findByText("通報された店");
     expect(screen.queryByTestId("reports-empty")).toBeNull();
@@ -125,8 +157,18 @@ describeTask("24", "運営の数字の画面", () => {
   });
 
   it("33.4 数字（AI の実費・所要時間・成否、取得の所要時間、AI を使った／倒れた、自動で取り消された割合）が出て、値を変えると表示が変わる", async () => {
+    // 2026-09-25 運営-08・不具合-10 で足した項目（数えた時刻・実費の合計・候補0件・割合）も揃えた形
     const metrics = (expiredRate: number) => ({
-      json: { ai: { calls: 12, avgCostUsd: 0.0012, avgDurationMs: 1500, succeeded: 11, failed: 1 }, fetch: { count: 20, avgDurationMs: 2200, aiUsed: 18, fellBack: 2 }, reservations: { total: 10, expiredRate }, byModel: [], fallbackCount: 0 },
+      json: {
+        at: "2026-09-22T06:00:00.000Z",
+        cost: { totalUsd: 0.0144, totalCalls: 12, todayUsd: 0.0144, todayCalls: 12 },
+        ai: { calls: 12, avgCostUsd: 0.0012, avgDurationMs: 1500, succeeded: 11, failed: 1 },
+        fetch: { count: 20, avgDurationMs: 2200, aiUsed: 18, fellBack: 2, noCandidates: 0, fellBackRate: 0.1 },
+        reservations: { total: 10, expiredRate },
+        byModel: [],
+        fallbackCount: 0,
+        fallbackRate: 0,
+      },
     });
     let rate = 0.3;
     api = installFakeApi({ "GET /api/admin/metrics": () => metrics(rate) });
@@ -156,8 +198,10 @@ describeTask("28", "モデル別の表（第4周の追記）", () => {
     api = installFakeApi({
       "GET /api/admin/metrics": () => ({
         json: {
+          at: "2026-09-22T06:00:00.000Z",
+          cost: { totalUsd: 0.005, totalCalls: 5, todayUsd: 0.005, todayCalls: 5 },
           ai: { calls: 5, avgCostUsd: 0.001, avgDurationMs: 1000, succeeded: 5, failed: 0 },
-          fetch: { count: 5, avgDurationMs: 2000, aiUsed: 4, fellBack: 1 },
+          fetch: { count: 5, avgDurationMs: 2000, aiUsed: 4, fellBack: 1, noCandidates: 0, fellBackRate: 0.2 },
           reservations: { total: 1, expiredRate: 0 },
           byModel: [
             { model: "openai/gpt-4o-mini", count: 3, avgCostUsd: 0.0011, avgDurationMs: 900, validationFailedRate: 0.3333, fellBackRate: 0.3333 },
@@ -165,6 +209,7 @@ describeTask("28", "モデル別の表（第4周の追記）", () => {
             { model: null, count: 1, avgCostUsd: null, avgDurationMs: 800, validationFailedRate: 0, fellBackRate: 1 },
           ],
           fallbackCount: 1,
+          fallbackRate: 0.2,
         },
       }),
     });

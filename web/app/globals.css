@@ -204,6 +204,13 @@ nav > a {
   text-decoration: none;
 }
 
+/* 今いる画面（運営の殻のナビ・運営-11）。押せる面のまま、塗りで「ここ」を示す */
+[data-testid="admin-nav"] > a[aria-current="page"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
 /* 縁だけ（soft）の札。`nav > a:hover` のままだと詳細度 (0,1,2) で `.entry__primary` (0,1,0) に勝ち、
    塗りの主ボタンの地だけを薄い色へ塗り替えて「白地に白文字」にしていた（本人の指摘の実体）。
    `:where(a)` で (0,1,1) に落とし、`.entry__primary:hover` (0,2,0) が勝つようにする。 */
