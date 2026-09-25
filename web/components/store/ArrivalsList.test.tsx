@@ -135,13 +135,35 @@ describe("人数の札（店-11）", () => {
 });
 
 describe("客の変更の合図（横断-08）", () => {
-  it("A: 客が取り消した行は「客が取り消しました」として済んだぶんに出て、操作も電話番号も出ない", async () => {
-    await renderHome(() => [row({ kind: "customer_cancelled", phone: null, canComplete: false, canCancel: false })]);
+  it("A: 客が取り消した行は、畳んだ「済んだぶん」ではなく確保中の客と同じ開いた場所に薄く出て、「客が取り消しました」の印が付き、操作も電話番号も出ない", async () => {
+    await renderHome(() => [row({ reservationId: "r0", nickname: "さとう" }), row({ kind: "customer_cancelled", phone: null, canComplete: false, canCancel: false })]);
     const card = screen.getByTestId("row-r1");
-    expect(card.textContent).toMatch(/客が取り消しました/);
+    // 畳んだ中に入れると、店から見れば確保中のカードが黙って消えたのと同じになる（横断-08 のレビュー）
+    expect(card.closest("details")).toBeNull();
+    expect(card.className).toMatch(/store-arrival--done/);
+    expect(within(card).getByTestId("customer-cancelled-r1").textContent).toMatch(/客が取り消しました/);
     expect(within(card).queryByTestId("btn-complete")).toBeNull();
     expect(within(card).queryByTestId("btn-store-cancel")).toBeNull();
     expect(card.textContent).not.toMatch(/電話番号の登録なし/);
+    // 確保中の客がいるので「向かっている客はいません」は出ない。取り消した行だけのときも、行は開いた場所に出る
+    expect(screen.getByTestId("arrivals").textContent).not.toMatch(/向かっている客はいません/);
+  });
+
+  it("A: 確保中だった客が取り消すと、合図が鳴り（鳴らせなければ振動）、そのカードが目立つ。初めて開いたときの取り消し済みの行では鳴らない", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    let rows = [row(), row({ reservationId: "old", kind: "customer_cancelled", phone: null, canComplete: false, canCancel: false })];
+    await renderHome(() => rows);
+    expect(vibrate).not.toHaveBeenCalled();
+    rows = [row({ kind: "customer_cancelled", phone: null, canComplete: false, canCancel: false }), rows[1]];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ARRIVALS_REFRESH_MS);
+    });
+    await waitFor(() => expect(screen.getByTestId("row-r1").className).toMatch(/store-arrival--new/));
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("row-old").className).not.toMatch(/store-arrival--new/);
+    Reflect.deleteProperty(navigator, "vibrate");
   });
 
   it("B: 前に見た人数から変わった行に「人数が変わりました 2→4 名」の印が付く。初めて見た行には付かない", async () => {
@@ -194,5 +216,58 @@ describe("取り直し（店-08）", () => {
     const before = homeCalls();
     fireEvent.click(screen.getByTestId("btn-refresh-arrivals"));
     await waitFor(() => expect(homeCalls()).toBeGreaterThan(before));
+  });
+});
+
+describe("断られたときの文の場所（店-01 のレビュー）", () => {
+  const refusedWith = (state: string) => ({
+    "POST /api/store/reservations/:id/complete": () => ({ status: 409, json: { ok: false, current: { state } } }),
+  });
+  const pressComplete = async (id: string) => {
+    fireEvent.click(within(screen.getByTestId(`row-${id}`)).getByTestId("btn-complete"));
+    fireEvent.click(within(await screen.findByTestId("confirm-complete")).getByTestId("btn-confirm"));
+  };
+
+  it("押したカードが一覧に残っていれば、断りの文はそのカードの中に出る（一覧の最下部ではない）", async () => {
+    await renderHome(() => [row(), row({ reservationId: "r2", nickname: "すずき" })], refusedWith("expired"));
+    await pressComplete("r1");
+    const message = await within(screen.getByTestId("row-r1")).findByTestId("msg-form");
+    expect(message.getAttribute("role")).toBe("alert");
+    expect(within(screen.getByTestId("row-r2")).queryByTestId("msg-form")).toBeNull();
+  });
+
+  it("押したカードが一覧から消えた・畳んだ済んだぶんへ移ったときは、一覧の先頭に出る", async () => {
+    let rows = [row(), row({ reservationId: "r2", nickname: "すずき" })];
+    await renderHome(() => rows, refusedWith("completed"));
+    rows = [row({ kind: "completed", canComplete: false, canCancel: false }), rows[1]];
+    await pressComplete("r1");
+    await waitFor(() => expect(screen.getByTestId("row-r1").closest("details")).not.toBeNull());
+    const message = await screen.findByTestId("msg-form");
+    expect(message.closest("details")).toBeNull();
+    // 先頭＝確保中の客のカードより前
+    expect(message.compareDocumentPosition(screen.getByTestId("row-r2")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("タブのタイトル（店-07 のレビュー）", () => {
+  it("件数を付けていないまま画面を離れても、次の画面のタイトルを書き戻さない", async () => {
+    await renderHome(() => [row()]);
+    // 次の画面が自分のタイトルを先に入れた（Next のメタデータ）
+    document.title = "書類 | イマセキ";
+    cleanup();
+    expect(document.title).toBe("書類 | イマセキ");
+  });
+
+  it("件数を付けたまま画面を離れたら、付けた件数だけを外す（ほかの画面のタイトルに入れ替わっていれば触らない）", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let rows = [row()];
+    await renderHome(() => rows);
+    rows = [row(), row({ reservationId: "r2", nickname: "すずき" })];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ARRIVALS_REFRESH_MS);
+    });
+    await waitFor(() => expect(document.title).toBe("(1) 店のホーム"));
+    cleanup();
+    expect(document.title).toBe("店のホーム");
   });
 });

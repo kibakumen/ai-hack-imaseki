@@ -235,6 +235,8 @@ export const ARRIVALS_TEXTS = {
   pastHeading: (count: number): string => `済んだぶん（${count}件）`,
   /** 人数の変更の印（横断-08 の案B） */
   partyChanged: (from: number, to: number): string => `人数が変わりました ${from}→${to} 名`,
+  /** 客が取り消した行の印（横断-08 の案A。10分で一覧から消える） */
+  customerCancelled: "客が取り消しました。この組の席の用意は要りません",
   /** 確かめ（店-01）。取り消しは、残りの枠が戻らないことと、来ない客は期限で枠が戻ることも言う */
   confirmComplete: (who: string, party: number, code: string): string => `${who}・${party} 名・コード ${code} の来店を確かめましたか。`,
   confirmCancel: "取り消すと、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります）。この確保を取り消しますか。",

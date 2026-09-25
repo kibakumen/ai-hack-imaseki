@@ -37,8 +37,8 @@ const loadHome = (): Promise<StoreHomeView | ApiFailure> => callApi("GET /api/st
 type HomeBodyProps = {
   home: StoreHomeView;
   onChanged: () => void;
-  /** 新しい客・人数の変更の印（店-07・横断-08） */
-  signals: Pick<ArrivalSignals, "newIds" | "partyChanges">;
+  /** 新しい客・客の取り消し・人数の変更の印（店-07・横断-08） */
+  signals: Pick<ArrivalSignals, "newIds" | "cancelledIds" | "partyChanges">;
   /** 最後に取れた時刻（「最終更新 HH:MM」・店-08） */
   updatedAt: number | null;
 };
@@ -72,6 +72,7 @@ const HomeBody = ({ home, onChanged, signals, updatedAt }: HomeBodyProps) => {
         rows={home.arrivals ?? []}
         onChanged={onChanged}
         newIds={signals.newIds}
+        cancelledIds={signals.cancelledIds}
         partyChanges={signals.partyChanges}
         updatedAt={updatedAt}
         onRefresh={onChanged}

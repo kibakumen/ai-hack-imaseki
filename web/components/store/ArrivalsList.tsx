@@ -15,8 +15,13 @@
 //   - 1人1枚の横長のカード。左端に**人数の札**（呼び名から切り離して省かない・店-11）、右に完了のボタン
 //   - 確保中の客 → **遅れている客**（期限切れでまだ完了にできる行。何時まで完了にできるかを出し、開いたまま・店-02）
 //     → 済んだぶん（完了済み・取り消し）は畳んで下へ——**消さない**（見返せる）
+//   - **客が取り消した行**（10分だけ届く）は、確保中の客と同じ開いた並びに、元の位置のまま薄く出して「客が取り消しました」の
+//     印を付ける（横断-08 のレビュー。畳んだ済んだぶんに入れると、確保中のカードが黙って消えたのと店には同じに見えた）
 //   - 確かめは**押したカードの中**に出し、確定のボタンへ焦点を移す。送っている間は押せない（店-01）
-//   - 新しく来た客のカードは数秒目立たせ、人数が変わった行には「2→4 名」の印を付ける（店-07・横断-08。印は StoreHome が渡す）
+//   - 断られたときの文も**押したカードの中**に出す。そのカードが一覧から消えた・畳んだ済んだぶんへ移ったときだけ、
+//     一覧の先頭に出す（店-01 のレビュー。一覧の最下部だと、スマホでは画面の外に出て何も起きていないように見えた）
+//   - 新しく来た客・今しがた取り消した客のカードは数秒目立たせ、人数が変わった行には「2→4 名」の印を付ける
+//     （店-07・横断-08。印は StoreHome が渡す）
 
 import { useEffect, useRef, useState } from "react";
 import { callApi, isFailure, type ApiFailure, type ArrivalDto } from "../../lib/client/api";
@@ -38,6 +43,8 @@ type Props = {
   onChanged: () => void;
   /** 新しく来た客（目立たせる・店-07） */
   newIds?: ReadonlySet<string>;
+  /** 今しがた客が取り消した行（目立たせる・横断-08 のレビュー） */
+  cancelledIds?: ReadonlySet<string>;
   /** 人数が変わった行（横断-08 の案B） */
   partyChanges?: ReadonlyMap<string, PartyChange>;
   /** 見出しの右に出す「最終更新」と「今すぐ更新」（店-08）。渡さなければ出さない */
@@ -52,6 +59,12 @@ const ROUTE_OF = {
 
 /** 押したカードと操作、送っている最中か */
 type Pending = { action: ArrivalAction; row: ArrivalsListRow; sending: boolean };
+
+/** 断られた操作（どのカードの・どの操作が・どう断られたか。文は操作ごとに選ぶ・店-10） */
+type Refusal = { reservationId: string; action: ArrivalAction; failure: ApiFailure };
+
+/** 開いた並びに出す、客が取り消した行（10分だけ届く・横断-08） */
+const isCustomerCancelled = (row: ArrivalsListRow): boolean => row.kind === "customer_cancelled";
 
 /** 遅れている客の行（期限切れで、まだ完了にできる）。止められている店の期限切れは済んだぶんへ回す */
 const isLate = (row: ArrivalsListRow): boolean => row.kind === "expired" && row.canComplete;
@@ -93,25 +106,38 @@ const ConfirmPanel = ({ pending, onConfirm, onDismiss }: ConfirmProps) => {
   );
 };
 
+/** 断りの文。状態による断り（今の状態）と、それ以外の断りで出し口が分かれる（設計書「入口の一覧」の3つの形） */
+const RefusalMessage = ({ refusal }: { refusal: Refusal }) =>
+  refusal.failure.current ? (
+    <p className="msg" role="alert" data-testid="msg-form">
+      {ARRIVALS_TEXTS.refused(refusal.action, refusal.failure.current)}
+    </p>
+  ) : (
+    <FormMessage failure={refusal.failure} />
+  );
+
 type CardProps = {
   row: ArrivalsListRow;
-  /** 済んだぶんは薄く出す（操作は入口の canComplete・canCancel が決める） */
+  /** 済んだぶん・客が取り消した行は薄く出す（操作は入口の canComplete・canCancel が決める） */
   done: boolean;
-  isNew: boolean;
+  /** 数秒だけ目立たせる（新しく来た客・今しがた取り消した客） */
+  highlighted: boolean;
   partyChange: PartyChange | undefined;
   /** このカードで開いている確かめ（無ければ null） */
   pending: Pending | null;
+  /** このカードで断られた操作（無ければ null） */
+  refusal: Refusal | null;
   onAsk: (action: ArrivalAction, row: ArrivalsListRow) => void;
   onConfirm: () => void;
   onDismiss: () => void;
 };
 
-const cardClassName = (done: boolean, isNew: boolean): string =>
-  ["store-arrival", done ? "store-arrival--done" : "", isNew ? "store-arrival--new" : ""].filter(Boolean).join(" ");
+const cardClassName = (done: boolean, highlighted: boolean): string =>
+  ["store-arrival", done ? "store-arrival--done" : "", highlighted ? "store-arrival--new" : ""].filter(Boolean).join(" ");
 
-/** 客1組ぶんの横長のカード。左端に人数の札、右端に押せるボタン、確かめはカードの中の下段。 */
-const ArrivalCard = ({ row, done, isNew, partyChange, pending, onAsk, onConfirm, onDismiss }: CardProps) => (
-  <li className={cardClassName(done, isNew)} data-testid={`row-${row.reservationId}`}>
+/** 客1組ぶんの横長のカード。左端に人数の札、右端に押せるボタン、確かめと断りの文はカードの中の下段。 */
+const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refusal, onAsk, onConfirm, onDismiss }: CardProps) => (
+  <li className={cardClassName(done, highlighted)} data-testid={`row-${row.reservationId}`}>
     <p className="store-arrival__party" data-testid="arrival-party">
       {ARRIVALS_TEXTS.party(row.party)}
     </p>
@@ -124,6 +150,11 @@ const ArrivalCard = ({ row, done, isNew, partyChange, pending, onAsk, onConfirm,
       {partyChange ? (
         <p className="store-arrival__changed" role="status" data-testid={`party-changed-${row.reservationId}`}>
           {ARRIVALS_TEXTS.partyChanged(partyChange.from, partyChange.to)}
+        </p>
+      ) : null}
+      {isCustomerCancelled(row) ? (
+        <p className="store-arrival__changed" role="status" data-testid={`customer-cancelled-${row.reservationId}`}>
+          {ARRIVALS_TEXTS.customerCancelled}
         </p>
       ) : null}
       {/* 登録の無い客に仮の番号の発信のリンクを出さない（横断-02）。客が取り消した行には番号を出さない（横断-08） */}
@@ -147,6 +178,7 @@ const ArrivalCard = ({ row, done, isNew, partyChange, pending, onAsk, onConfirm,
       </div>
     </div>
     {pending ? <ConfirmPanel pending={pending} onConfirm={onConfirm} onDismiss={onDismiss} /> : null}
+    {refusal ? <RefusalMessage refusal={refusal} /> : null}
   </li>
 );
 
@@ -167,15 +199,13 @@ const RefreshBar = ({ updatedAt, onRefresh }: { updatedAt: number | null | undef
   );
 };
 
-export const ArrivalsList = ({ rows, onChanged, newIds, partyChanges, updatedAt, onRefresh }: Props) => {
+export const ArrivalsList = ({ rows, onChanged, newIds, cancelledIds, partyChanges, updatedAt, onRefresh }: Props) => {
   const [pending, setPending] = useState<Pending | null>(null);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
-  /** 断られた操作（断りの文を操作ごとに選ぶ・店-10） */
-  const [failedAction, setFailedAction] = useState<ArrivalAction>("complete");
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
 
   const ask = (action: ArrivalAction, row: ArrivalsListRow) => {
     if (pending?.sending) return;
-    setFailure(null);
+    setRefusal(null);
     setPending({ action, row, sending: false });
   };
 
@@ -186,8 +216,7 @@ export const ArrivalsList = ({ rows, onChanged, newIds, partyChanges, updatedAt,
     // コードも理由も送らない（基準 20.11・要件21の基準 21.3）
     const result = await callApi(ROUTE_OF[action], { params: { id: row.reservationId }, body: {} });
     const refused = isFailure(result);
-    setFailure(refused ? result : null);
-    setFailedAction(action);
+    setRefusal(refused ? { reservationId: row.reservationId, action, failure: result } : null);
     setPending(null);
     // 手が離せない店でも気づけるように、通った時だけ音を鳴らす（鳴らせない環境では何も起きない）
     if (!refused) playNotifyBeep();
@@ -195,14 +224,25 @@ export const ArrivalsList = ({ rows, onChanged, newIds, partyChanges, updatedAt,
     onChanged();
   };
 
+  // 今まさに向かっている組（と、今しがた客が取り消した組・元の位置のまま薄く）を上に、遅れている組をその直下（開いたまま）、
+  // 済んだ組を下に畳む。**どこにも同じ行を二重に出さない。**
+  const waiting = rows.filter((row) => row.kind === "active" || isCustomerCancelled(row));
+  const late = rows.filter(isLate);
+  const openIds = new Set([...waiting, ...late].map((row) => row.reservationId));
+  const past = rows.filter((row) => !openIds.has(row.reservationId));
+  const noneComing = waiting.every(isCustomerCancelled) && late.length === 0;
+  // 押したカードが開いた並びに残っていればその中に、消えた・畳んだ中へ移ったなら一覧の先頭に出す
+  const refusalInCard = refusal !== null && openIds.has(refusal.reservationId);
+
   const renderCard = (row: ArrivalsListRow, done: boolean) => (
     <ArrivalCard
       key={`${row.reservationId}:${row.kind}`}
       row={row}
       done={done}
-      isNew={newIds?.has(row.reservationId) ?? false}
+      highlighted={(newIds?.has(row.reservationId) ?? false) || (cancelledIds?.has(row.reservationId) ?? false)}
       partyChange={partyChanges?.get(row.reservationId)}
       pending={pending !== null && pending.row.reservationId === row.reservationId ? pending : null}
+      refusal={refusalInCard && refusal.reservationId === row.reservationId ? refusal : null}
       onAsk={ask}
       onConfirm={() => {
         void send();
@@ -211,12 +251,6 @@ export const ArrivalsList = ({ rows, onChanged, newIds, partyChanges, updatedAt,
     />
   );
 
-  // 今まさに向かっている組を上に、遅れている組をその直下（開いたまま）、済んだ組を下に畳む。
-  // **どこにも同じ行を二重に出さない。**
-  const waiting = rows.filter((row) => row.kind === "active");
-  const late = rows.filter(isLate);
-  const past = rows.filter((row) => row.kind !== "active" && !isLate(row));
-
   return (
     <section className="store-arrivals" data-testid="arrivals">
       <div className="store-arrivals__head">
@@ -224,9 +258,11 @@ export const ArrivalsList = ({ rows, onChanged, newIds, partyChanges, updatedAt,
         <RefreshBar updatedAt={updatedAt} onRefresh={onRefresh} />
       </div>
 
-      {waiting.length === 0 && late.length === 0 ? <p className="store-empty store-empty--arrivals">{ARRIVALS_TEXTS.empty}</p> : null}
+      {refusal !== null && !refusalInCard ? <RefusalMessage refusal={refusal} /> : null}
 
-      {waiting.length > 0 ? <ul className="store-arrival-grid">{waiting.map((row) => renderCard(row, false))}</ul> : null}
+      {noneComing ? <p className="store-empty store-empty--arrivals">{ARRIVALS_TEXTS.empty}</p> : null}
+
+      {waiting.length > 0 ? <ul className="store-arrival-grid">{waiting.map((row) => renderCard(row, isCustomerCancelled(row)))}</ul> : null}
 
       {late.length > 0 ? (
         <div className="store-late" data-testid="arrivals-late">
@@ -241,15 +277,6 @@ export const ArrivalsList = ({ rows, onChanged, newIds, partyChanges, updatedAt,
           <ul className="store-arrival-grid">{past.map((row) => renderCard(row, true))}</ul>
         </details>
       ) : null}
-
-      {/* 断った理由は、状態による断り（今の状態）と、それ以外の断りで出し口が分かれる（設計書「入口の一覧」の3つの形） */}
-      {failure?.current ? (
-        <p className="msg" role="alert" data-testid="msg-form">
-          {ARRIVALS_TEXTS.refused(failedAction, failure.current)}
-        </p>
-      ) : (
-        <FormMessage failure={failure} />
-      )}
     </section>
   );
 };
