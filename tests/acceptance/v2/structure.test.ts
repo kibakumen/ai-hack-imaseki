@@ -184,6 +184,15 @@ describeTask("11", "取得の手続き: AI の口を呼ぶ場所・道具を持�
     expect(callers.map(rel).filter((r) => !r.includes(path.join("lib", "http")))).toEqual([path.join("web", "lib", "usecases", "fetchOffers.ts")]);
   });
 
+  // 紹介文の層（deps.pitch）も AI を呼ぶ。以前は deps.ai だけを数えていて、紹介文の書き手と検査官の呼び出しを
+  // 素通しした（2026-09-25 監査の指摘 設計-05）。取得1回あたりの上限（選定1回＋紹介文）は writePitch が持ち、r07 が見る。
+  it("7.2・7.12 紹介文の口（deps.pitch の write・judge）を呼ぶのは usecases/writePitch.ts だけ、紹介文の層を起こすのは usecases/streamOffers.ts だけ", () => {
+    const pitchCallers = webSources().filter((f) => /\.(write|judge)\(\{/.test(read(f)) && /deps\.pitch\b|writer\.(write|judge)\(/.test(read(f)));
+    expect(pitchCallers.map(rel).filter((r) => !r.includes(".test."))).toEqual([path.join("web", "lib", "usecases", "writePitch.ts")]);
+    const pitchLayerCallers = webSources().filter((f) => /\bwritePitch\(/.test(read(f)) && !rel(f).endsWith(path.join("usecases", "writePitch.ts")));
+    expect(pitchLayerCallers.map(rel).filter((r) => !r.includes(".test."))).toEqual([path.join("web", "lib", "usecases", "streamOffers.ts")]);
+  });
+
   it("AI に道具が無い: web/ の全ソースに tools: と tool_choice が無い", () => {
     for (const f of webSources()) {
       expect(read(f), rel(f)).not.toMatch(/\btools\s*:/);

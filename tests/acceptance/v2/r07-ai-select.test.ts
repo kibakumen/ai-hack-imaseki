@@ -97,14 +97,44 @@ describeTask("11", "AI の呼び出し（手続き）と OrcaRouter の口", () 
     expect(pitches.map((l) => l.storeId).sort()).toEqual(r.lines[0].items.map((i: any) => i.storeId).sort());
   });
 
-  // 要件7.2 は「取得1回につき AI の呼び出しは1回・選定のほかには使わない」。紹介文の層（書き手＋検査官）を
-  // 合わせると、取得1回で最大21回呼ぶ。数えるのは、取得1回あたりの**合計**。
-  it.fails("既知の不具合（設計-05）: 取得1回あたりの AI の呼び出しは、紹介文の書き手と検査官も合わせて1回（要件7.2）", async () => {
-    const c = await newCustomer(8);
-    const before = ctx.ai.calls.length + ctx.pitch.total();
-    const r = await fetchOffersStream(ctx, c.api, { party: 2, genres: ["和食"] });
-    expect(r.status).toBe(200);
-    expect(ctx.ai.calls.length + ctx.pitch.total() - before).toBe(1);
+  // 要件7.2 は以前「取得1回につき AI の呼び出しは1回・選定のほかには使わない」だったが、本番の画面が使う道
+  // （少しずつ届く入口）は選ばれた店ごとに紹介文の書き手と検査官を呼ぶ。2026-09-25 監査の指摘 設計-05 の案A
+  // （今の機能を残し、回数の上限を要件に書く・AI判断）で「選定1回＋紹介文（1店あたり上限まで）」に決めた。
+  // 数えるのは取得1回あたりの**合計**と店ごとの数。検査官が不合格にし続ける（1店ぶんを使い切ろうとする）場面で見る。
+  // ⚠️ 店ごとの回数がちょうど上限になるかは、偽の時計を進める速さと D1 の書き込みの実時間の兼ね合いで揺れる
+  // （1店15秒の割り振りが先に尽きる店がある）ので、ここでは上限を超えないことだけを見る。ちょうど上限まで呼ぶことは
+  // web/lib/usecases/writePitch.test.ts が固定の時計で見る。
+  it("7.2 取得1回あたりの AI の呼び出しは、選定1回＋紹介文（1店につき書き手と検査官を合わせて上限まで）に収まる", async () => {
+    const { PITCH_CALLS_PER_STORE_MAX, AI_CALLS_PER_FETCH_MAX } = await loadWeb("lib/usecases/writePitch");
+    const { SELECTION_MAX } = await loadWeb("lib/domain/selection");
+    expect(AI_CALLS_PER_FETCH_MAX).toBe(1 + SELECTION_MAX * PITCH_CALLS_PER_STORE_MAX);
+    // 書き手は決定論のガードを通る文を書き、検査官は不合格にし続ける（1店ぶんの上限を使い切る）
+    ctx.pitch.respondWrite(() => ({ ok: true, text: "歩いて行ける距離で和食が食べられるよ", costUsd: 0.0004, truncated: false }));
+    ctx.pitch.respondJudge(() => ({ ok: true, text: JSON.stringify({ ok: false, reason: "検査の不合格" }), costUsd: 0.0002, truncated: false }));
+    try {
+      const c = await newCustomer(8);
+      const aiBefore = ctx.ai.calls.length;
+      const pitchBefore = ctx.pitch.total();
+      const writesBefore = ctx.pitch.writes.length;
+      const judgesBefore = ctx.pitch.judges.length;
+      const r = await fetchOffersStream(ctx, c.api, { party: 2, genres: ["和食"] });
+      expect(r.status).toBe(200);
+      const shown = r.lines[0].items.length;
+      expect(shown).toBeGreaterThan(0);
+      expect(ctx.ai.calls.length - aiBefore).toBe(1);
+      const pitchCalls = ctx.pitch.total() - pitchBefore;
+      expect(pitchCalls).toBeGreaterThan(0);
+      expect(pitchCalls).toBeLessThanOrEqual(shown * PITCH_CALLS_PER_STORE_MAX);
+      expect(ctx.ai.calls.length - aiBefore + pitchCalls).toBeLessThanOrEqual(AI_CALLS_PER_FETCH_MAX);
+      // 店ごとにも上限を超えない（書き手と検査官を店名で数える）
+      const perStore = new Map<string, number>();
+      for (const w of ctx.pitch.writes.slice(writesBefore)) perStore.set(w.store.name, (perStore.get(w.store.name) ?? 0) + 1);
+      for (const j of ctx.pitch.judges.slice(judgesBefore)) perStore.set(j.store.name, (perStore.get(j.store.name) ?? 0) + 1);
+      for (const [name, count] of perStore) expect(count, name).toBeLessThanOrEqual(PITCH_CALLS_PER_STORE_MAX);
+    } finally {
+      ctx.pitch.respondWrite((input) => ({ ok: true, text: `${input.store.menus[0] ?? input.store.name}が近くで味わえます`, costUsd: 0.0004, truncated: false }));
+      ctx.pitch.respondJudge(() => ({ ok: true, text: JSON.stringify({ ok: true, reason: "" }), costUsd: 0.0002, truncated: false }));
+    }
   });
 
   it("7.11 候補が0件なら AI を呼ばず0件", async () => {

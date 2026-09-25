@@ -14,6 +14,7 @@
 //  ③指示に「評価」と書いたら検査官が褒め言葉を落とした → 落とす条件を3つに限定（adapters/orcarouter）
 
 import { checkPitch, fallbackPitch, PITCH_CHAR_LIMIT, readJudgement } from "../domain/pitch";
+import { SELECTION_MAX } from "../domain/selection";
 import { tokenFromBytes } from "../domain/token";
 import type { Deps, PitchResult, PitchStore } from "../ports";
 import { insertAiCall, type AiCallPurpose } from "../repo/logs";
@@ -27,6 +28,17 @@ const JUDGE_TIMEOUT_MS = 6000;
 const PITCH_BUDGET_MS = 15000;
 /** 書き直しは1回まで（2回目で駄目なら決定論の文へ倒す） */
 const MAX_ATTEMPTS = 2;
+
+/**
+ * 1店あたりの紹介文の AI の呼び出しの上限（書き手と検査官を合わせた数・口 PitchWriter の write と judge の回数）。
+ * 取得1回あたりの上限は、選定1回＋選定の上限の店の数ぶん（2026-09-25 監査の指摘 設計-05 の案A・AI判断——
+ * 要件7.2 の「取得1回につき1回」は、紹介文の層を足したときに追いついていなかった。今の機能を残し、上限を書く）。
+ * ⚠️ 口の中のやり直し（思考を止める指定を断られたときの1回・検査官が鍵の scope で断られたときの生成側での検査し直し）は
+ * この数に入らない——実物の HTTP の往復は、最も多いときこの倍近くになる（adapters/orcarouter）。
+ */
+export const PITCH_CALLS_PER_STORE_MAX = MAX_ATTEMPTS * 2;
+/** 取得1回あたりの AI の呼び出しの上限（選定1回＋紹介文）。構造の検査と受け入れ検査 r07 がこの数を見る */
+export const AI_CALLS_PER_FETCH_MAX = 1 + SELECTION_MAX * PITCH_CALLS_PER_STORE_MAX;
 
 /** 紹介文を書く相手1件（選定が返した理由も持つ——倒すときはそれをそのまま使う）。 */
 export type PitchTarget = { storeId: string; store: PitchStore; selectionReason: string };
