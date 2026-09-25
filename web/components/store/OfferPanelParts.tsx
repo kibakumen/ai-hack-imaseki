@@ -6,7 +6,11 @@ import type { OfferAction } from "./offerChange";
 
 export type OfferPanelCoupon = { id: string; name: string; note: string };
 
-/** 目に出さない1操作ぶんの欄とボタン（キーボード・読み上げ・受け入れ検査の受け口）。 */
+/**
+ * 目に出さない1操作ぶんの欄とボタン（キーボード・読み上げ・受け入れ検査の受け口）。
+ * Tab で焦点が入ったら見せる（`store-sr-only--focusable`・2026-09-25 監査の指摘 横断-06。見えないままだと、
+ * 焦点が画面から消えたまま数字を打つことになった）。
+ */
 export const HiddenControl = ({
   action,
   inputId,
@@ -30,7 +34,7 @@ export const HiddenControl = ({
   value: string;
   onChange: (next: string) => void;
 }) => (
-  <div className="store-sr-only">
+  <div className="store-sr-only store-sr-only--focusable">
     <label htmlFor={inputId}>{label}</label>
     <input
       id={inputId}

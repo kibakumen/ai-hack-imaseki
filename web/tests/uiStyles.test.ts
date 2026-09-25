@@ -137,3 +137,40 @@ describe("明るさの比（横断-04）", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// ---------- 焦点の輪（横断-06） ----------
+// 影だけの輪は背景との差が 1.4〜2:1 で、Windows のハイコントラスト（強制色）では影ごと消えて印が無くなる。
+// 焦点の輪は 2px の実線＋すき間で描く（影は足してよい）。
+
+/** 焦点を移すだけの見出し・番号（tabIndex=-1。押せる部品ではないので輪を出さない） */
+const PROGRAMMATIC_FOCUS = new Set([".offer-list__head:focus", ".claim-ticket__code:focus", ".claimed-title:focus"]);
+
+describe("焦点の輪（横断-06）", () => {
+  it("全体の既定: :focus-visible は 2px 以上の実線とすき間で描く", () => {
+    const base = parseCss(GLOBALS).find((r) => r.selector === ":focus-visible" && r.at.length === 0);
+    expect(base, ":focus-visible の既定の規則が無い").toBeDefined();
+    expect(declOf(base!, "outline")).toMatch(/^(2|3)px solid /);
+    expect(declOf(base!, "outline-offset")).toMatch(/^\d+px$/);
+  });
+
+  it("焦点の規則で輪を消さない（outline: none は、焦点を移すだけの見出し・番号だけ）", () => {
+    const offenders = allRules()
+      .filter((rule) => rule.selector.split(",").some((part) => /:focus/.test(part) && !PROGRAMMATIC_FOCUS.has(part.trim())))
+      .filter((rule) => /^(none|0)$/.test(declOf(rule, "outline") ?? ""))
+      .map((rule) => `${path.basename(rule.file)}: ${rule.selector}`);
+    expect(offenders).toEqual([]);
+  });
+
+  it("目に出さない欄は、焦点が入ったら見える（store-sr-only--focusable）。ダイヤルの枠にも輪を映す", () => {
+    const store = parseCss(path.join(WEB, "app", "store", "store.css"));
+    const reveal = store.filter((r) => r.selector.startsWith(".store-sr-only--focusable:focus"));
+    expect(reveal.length, ".store-sr-only--focusable:focus / :focus-within の規則が無い").toBeGreaterThan(0);
+    for (const rule of reveal) {
+      expect(declOf(rule, "clip-path"), rule.selector).toBe("none");
+      expect(declOf(rule, "position"), rule.selector).toBe("static");
+    }
+    const dialRing = store.find((r) => /:has\([^)]*:focus-visible\)/.test(r.selector) && /store-dial__rail/.test(r.selector));
+    expect(dialRing, "ダイヤルの枠に焦点を映す規則が無い").toBeDefined();
+    expect(declOf(dialRing!, "outline")).toMatch(/^(2|3)px solid /);
+  });
+});

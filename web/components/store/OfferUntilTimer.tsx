@@ -68,7 +68,7 @@ export const OfferUntilTimer = ({ offer, value, changed, failure, onChange, onSu
           {timeInJst(offer.publishedAt)} 公開・最長 {latestUntil} まで
         </p>
       </div>
-      <button type="submit" className="store-sr-only" data-testid="btn-until">
+      <button type="submit" className="store-sr-only store-sr-only--focusable" data-testid="btn-until">
         何時までを変える
       </button>
       <FieldMessage name="until" failure={failure} ctx={ctx} />

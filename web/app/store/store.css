@@ -673,6 +673,30 @@
   white-space: nowrap;
 }
 
+/* Tab で止まる裏の欄とボタン（ダイヤルの裏の欄・公開中のカードの1操作ずつの欄）は、焦点が入ったら見せる
+   （2026-09-25 監査の指摘 横断-06）。見えないままだと、キーボードの利用者は焦点が消えたまま数字を打つことになる。 */
+.store-sr-only--focusable:focus,
+.store-sr-only--focusable:focus-within {
+  align-items: center;
+  block-size: auto;
+  clip-path: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  inline-size: auto;
+  margin: 0.375rem 0 0;
+  overflow: visible;
+  position: static;
+  white-space: normal;
+}
+
+/* 裏の欄に焦点があるあいだ、見た目のダイヤルの枠にも輪を映す（どのダイヤルを動かしているかを示す） */
+.store-dial:has(.store-sr-only--focusable:focus-visible) .store-dial__rail,
+.store-tune__dial:has(.store-sr-only--focusable:focus-within) .store-dial__rail {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 2px;
+}
+
 /* ---------- チップ（ジャンル）と、チェックの札（クーポン） ---------- */
 
 .store-chips {
@@ -778,7 +802,8 @@
 .store-coupon:has(.store-coupon__input:focus-visible),
 .store-coupon--toggle:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
-  outline: none;
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 2px;
 }
 
 /* 本物のチェックボックスは目に出さない（DOM には残す） */

@@ -195,7 +195,8 @@ export const WheelPicker = ({ testId, inputId, label, unit, min, max, value, onC
       <input
         id={inputId}
         data-testid={testId}
-        className="store-sr-only"
+        // 目には出さないが、Tab で焦点が入ったら見せる（2026-09-25 監査の指摘 横断-06）
+        className="store-sr-only store-sr-only--focusable"
         type="number"
         inputMode="numeric"
         min={min}

@@ -341,12 +341,19 @@ input[type="file"] {
   padding: 0.5rem;
 }
 
+/* 焦点の輪の既定（2026-09-25 監査の指摘 横断-06）。影だけの輪は背景との差が 1.4〜2:1 しかなく、Windows の
+   ハイコントラスト（強制色）では影ごと消えて印が無くなった。2px の実線＋すき間で描く（影は下の各規則が足してよい）。 */
+:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 2px;
+}
+
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
-  outline: none;
+  outline-offset: 1px;
 }
 
 /* 薄めない（70% に透かすと 3.15:1 で、「空のままなら今いる場所で探します」の案内が読めなかった・横断-04） */
@@ -440,7 +447,6 @@ button:disabled {
 
 button:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
-  outline: none;
 }
 
 /* 主な操作（送る）は大きく・影を落として、副の操作と段を作る */
@@ -593,7 +599,6 @@ form > button[type="submit"] {
 
 .theme-toggle:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
-  outline: none;
 }
 
 /* 運営の画面はいちばん上に横並びの入口（admin-nav）が在るので、その邪魔にならないよう
