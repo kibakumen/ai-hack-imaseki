@@ -55,12 +55,12 @@
         {
           "path": "sprint/scripts/seed.mjs",
           "line": 12,
-          "quote": "    id: \"st-maru\", key: \"maru-2026\", name: \"炭火酒場 まる\", genre: \"居酒屋\", price: 3500,"
+          "quote": "（伏せた: 速成版の鍵の値を含む引用。2026-09-25 の監査の指摘 安全-05）"
         },
         {
           "path": "sprint/lib/db.ts",
           "line": 27,
-          "quote": "export const adminOk = (key: string) => key === (process.env.ADMIN_KEY ?? \"unei2026\");"
+          "quote": "（伏せた: 速成版の鍵の値を含む引用。2026-09-25 の監査の指摘 安全-05）"
         },
         {
           "path": ".gitignore",
