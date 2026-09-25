@@ -86,7 +86,7 @@ type CouponRowProps = {
   saved: string | null;
   /** この行の操作を送っている間 true（保存・削除のボタンを止める・横断-03） */
   busy: boolean;
-  /** どれかの操作を送っている間 true（ほかの行のボタンも止める。1度に送るのは1つ） */
+  /** どれかの操作を送っている間と、通ったあとの取り直しが返るまで true（ほかの行のボタンも止める。1度に送るのは1つ） */
   locked: boolean;
   onChange: (values: Draft) => void;
   onSave: () => void;
@@ -97,11 +97,11 @@ type CouponRowProps = {
  * 削除の確かめ（2026-09-25 監査の指摘 店-03）。消したクーポンは戻せないので、同じ画面の完了・取り消しと同じ形で
  * 1段挟む（それまでは押した瞬間に消えた）。
  */
-const DeleteConfirm = ({ name, busy, onConfirm, onCancel }: { name: string; busy: boolean; onConfirm: () => void; onCancel: () => void }) => (
+const DeleteConfirm = ({ name, busy, locked, onConfirm, onCancel }: { name: string; busy: boolean; locked: boolean; onConfirm: () => void; onCancel: () => void }) => (
   <div className="store-confirm" role="dialog" aria-label="クーポンを削除する確かめ" data-testid="confirm-delete-coupon">
     <p>「{name}」を削除します。元に戻せません。</p>
     <div className="store-confirm__buttons">
-      <SubmitButton type="button" className="store-btn store-btn--danger" data-testid="btn-confirm-delete-coupon" busy={busy} onClick={onConfirm}>
+      <SubmitButton type="button" className="store-btn store-btn--danger" data-testid="btn-confirm-delete-coupon" busy={busy} disabled={locked} onClick={onConfirm}>
         削除する
       </SubmitButton>
       <button type="button" className="store-btn store-btn--quiet" disabled={busy} onClick={onCancel}>
@@ -173,6 +173,7 @@ const CouponRow = ({ coupon, draft, failure, saved, busy, locked, onChange, onSa
         <DeleteConfirm
           name={coupon.name}
           busy={busy}
+          locked={locked}
           onConfirm={() => {
             // 送り終えるまで確かめを開いたままにし、「削除する」を止める（横断-03）
             onDelete();
@@ -255,6 +256,12 @@ export const CouponEditor = () => {
   const operation = useSubmit();
   const [scope, setScope] = useState<string | null>(null);
   const sendingScope = useRef<string | null>(null);
+  /**
+   * 通ったあとの取り直しを待っている間 true。その間も次の操作は受け付けないので、ボタンも止めておく
+   * （止めないと、押せる見た目のまま押しても黙って無視される・横断-03 のレビュー）。
+   */
+  const [reloading, setReloading] = useState(false);
+  const locked = operation.busy || reloading;
   /** 前に取れたサーバーの値（書きかけかどうかを見分けるため） */
   const serverDrafts = useRef<Record<string, Draft>>({});
   /** 次に取れたときにサーバーの値へ戻す行（今の操作で保存・削除した行） */
@@ -278,6 +285,9 @@ export const CouponEditor = () => {
   const apply = async (target: string, call: () => Promise<unknown>, onDone: () => void, doneText: string, doneScope = target) => {
     if (sendingScope.current !== null) return;
     sendingScope.current = target;
+    // 置き場を移す前に、前の操作の断りを消す。消さないと、応答が届くまでの間、前の断り（たとえば「作る」の
+    // 「名前を入れてください」）が今押した行の欄に出て、読み上げも違う断りを告げる（横断-03 のレビュー）。
+    operation.clear();
     setScope(target);
     try {
       const result = await operation.run(async () => (await call()) as ApiFailure | { ok: true }, doneText);
@@ -285,7 +295,12 @@ export const CouponEditor = () => {
       setScope(doneScope);
       if (target !== CREATE_SCOPE) resetIds.current = new Set([...resetIds.current, target]);
       onDone();
-      await reload();
+      setReloading(true);
+      try {
+        await reload();
+      } finally {
+        setReloading(false);
+      }
     } finally {
       sendingScope.current = null;
     }
@@ -318,7 +333,7 @@ export const CouponEditor = () => {
             failure={failureOf(coupon.id)}
             saved={doneOf(coupon.id)}
             busy={busyOf(coupon.id)}
-            locked={operation.busy}
+            locked={locked}
             onChange={(values) => {
               // 直し始めたら「保存しました」を消す（店-19）
               if (doneOf(coupon.id) !== null) operation.clear();
@@ -340,7 +355,7 @@ export const CouponEditor = () => {
         note={note}
         failure={failureOf(CREATE_SCOPE)}
         busy={busyOf(CREATE_SCOPE)}
-        locked={operation.busy}
+        locked={locked}
         done={doneOf(CREATE_SCOPE)}
         onName={setName}
         onNote={setNote}
