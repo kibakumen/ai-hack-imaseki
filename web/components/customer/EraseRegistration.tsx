@@ -12,10 +12,12 @@
 // 消えたら端末に残した確保の中身と、現在地を開いた瞬間に入れる覚えも消す（基準 28.9）。Cookie は入口が Max-Age=0 で消す。
 
 import { useState } from "react";
-import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure } from "../../lib/client/api";
 import { forgetLocationConsent } from "../../lib/client/locationStatus";
 import { clearHome as clearReservationCache } from "../../lib/client/reservationCache";
 import { FormMessage } from "../ui/InputRefusal";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 type EraseRegistrationProps = {
   /** 消えたあとに呼ぶ。客の画面は登録の入力へ戻る（基準 28.11） */
@@ -24,20 +26,16 @@ type EraseRegistrationProps = {
 
 export const EraseRegistration = ({ onDeleted }: EraseRegistrationProps) => {
   const [confirming, setConfirming] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は「消す」を止める（全画面で共通の components/ui/useSubmit・横断-03）
+  const erase = useSubmit();
+  const failure = erase.failure;
 
   const remove = async () => {
-    setSending(true);
-    const result = await callApi("DELETE /api/customer");
-    setSending(false);
+    const result = await erase.run(() => callApi("DELETE /api/customer"));
+    if (result === null) return;
     // 断られたら確かめを閉じて文だけを残す（表示は消去の前のまま・基準 28.5）。
     setConfirming(false);
-    if (isFailure(result)) {
-      setFailure(result);
-      return;
-    }
-    setFailure(null);
+    if (isFailure(result)) return;
     clearReservationCache();
     forgetLocationConsent();
     onDeleted();
@@ -56,10 +54,10 @@ export const EraseRegistration = ({ onDeleted }: EraseRegistrationProps) => {
             呼び名・電話番号・好みのジャンル・予算の上限と、通知の宛先を消します。この端末からは探せなくなり、次に開くとはじめからになります。
             探したときの記録（起点の緯度経度など）は集計のために残ります。消したあとに戻すことはできません。
           </p>
-          <button type="button" data-testid="btn-confirm" disabled={sending} onClick={() => void remove()}>
+          <SubmitButton type="button" data-testid="btn-confirm" busy={erase.busy} onClick={() => void remove()}>
             消す
-          </button>
-          <button type="button" onClick={() => setConfirming(false)}>
+          </SubmitButton>
+          <button type="button" disabled={erase.busy} onClick={() => setConfirming(false)}>
             やめる
           </button>
         </div>

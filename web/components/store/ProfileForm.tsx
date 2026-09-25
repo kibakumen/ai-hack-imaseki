@@ -16,7 +16,7 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
-import { TEXTS } from "../../lib/domain/texts";
+import { SUBMIT_TEXTS, TEXTS } from "../../lib/domain/texts";
 import {
   BUDGET_MAX_MAX,
   BUDGET_MAX_MIN,
@@ -33,6 +33,8 @@ import {
 } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
+import { DoneNotice, SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 /** 店の情報（型は schemas/responses の表から・設計-07）。 */
 type StoreProfile = ResponseOf<"GET /api/store/profile">["profile"];
@@ -78,8 +80,9 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
   const [menu, setMenu] = useState("");
   const [budgetMin, setBudgetMin] = useState(() => asNumberText(initial.budgetMin));
   const [budgetMax, setBudgetMax] = useState(() => asNumberText(initial.budgetMax));
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
-  const [saved, setSaved] = useState(false);
+  // 送っている間は「保存する」を止め、済んだら role=status で知らせる（2026-09-25 監査の指摘 横断-03）
+  const save = useSubmit();
+  const failure = save.failure;
 
   /** 外すのはいつでもできる。足すのは上限まで（画面の側でも止める・下の fieldset の注を参照）。 */
   const toggleGenre = (genre: string) => {
@@ -114,24 +117,21 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("PUT /api/store/profile", {
-      body: {
-        name,
-        address,
-        url,
-        genres,
-        menus,
-        budgetMin: asNumber(budgetMin),
-        budgetMax: asNumber(budgetMax),
-      },
-    });
-    if (isFailure(result)) {
-      setFailure(result);
-      setSaved(false);
-      return;
-    }
-    setFailure(null);
-    setSaved(true);
+    await save.run(
+      () =>
+        callApi("PUT /api/store/profile", {
+          body: {
+            name,
+            address,
+            url,
+            genres,
+            menus,
+            budgetMin: asNumber(budgetMin),
+            budgetMax: asNumber(budgetMax),
+          },
+        }),
+      SUBMIT_TEXTS.profileSaved,
+    );
   };
 
   return (
@@ -291,11 +291,11 @@ const ProfileFields = ({ initial }: { initial: StoreProfile }) => {
         </div>
       </div>
 
-      <button type="submit" data-testid="btn-save-profile">
+      <SubmitButton type="submit" data-testid="btn-save-profile" busy={save.busy}>
         保存する
-      </button>
+      </SubmitButton>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
-      {saved && <p data-testid="profile-saved">保存しました。</p>}
+      <DoneNotice message={save.done} testId="profile-saved" />
     </form>
   );
 };

@@ -13,9 +13,11 @@
 // 店の画面（StorePasswordPanel）がホームの印を見て `requireCurrent` を渡す。
 
 import { useState, type FormEvent } from "react";
-import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure } from "../../lib/client/api";
 import { PASSWORD_MAX, PASSWORD_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+import { DoneNotice, SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 /** 今のパスワードが合わない断りは、欄の直下に語の文で出す */
 const MISMATCH_KINDS = ["password_mismatch"];
@@ -32,20 +34,21 @@ type Props = {
 export const PasswordForm = ({ onChanged, endpoint = "/api/store/password", requireCurrent = false }: Props) => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は押せない（2026-09-25 監査の指摘 横断-03）
+  const change = useSubmit();
+  const failure = change.failure;
   const [changed, setChanged] = useState(false);
 
   const fieldNames = requireCurrent ? ["currentPassword", "password"] : ["password"];
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi(`POST ${endpoint}` as const, { body: requireCurrent ? { currentPassword, password } : { password } });
+    const result = await change.run(() => callApi(`POST ${endpoint}` as const, { body: requireCurrent ? { currentPassword, password } : { password } }));
+    if (result === null) return;
     if (isFailure(result)) {
-      setFailure(result);
       setChanged(false);
       return;
     }
-    setFailure(null);
     setChanged(true);
     // 決めた値は画面に残さない（見える所に平文を置き続けない）。
     setCurrentPassword("");
@@ -98,10 +101,10 @@ export const PasswordForm = ({ onChanged, endpoint = "/api/store/password", requ
       />
       <FieldMessage name="password" inputId="store-new-password" failure={failure} ctx={{ field: "パスワード", min: PASSWORD_MIN, max: PASSWORD_MAX }} />
 
-      <button type="submit" data-testid="btn-change-password">
+      <SubmitButton type="submit" data-testid="btn-change-password" busy={change.busy}>
         {requireCurrent ? "パスワードを変える" : "パスワードを決める"}
-      </button>
-      {changed && <p data-testid="password-changed">パスワードを変えました。次のログインから新しいパスワードを使ってください。</p>}
+      </SubmitButton>
+      <DoneNotice message={changed ? "パスワードを変えました。次のログインから新しいパスワードを使ってください。" : null} testId="password-changed" />
       <FormMessage failure={failure} fieldNames={fieldNames} />
     </form>
   );

@@ -29,6 +29,8 @@ import { OfferReveal } from "./OfferReveal";
 import { RefusalNotice } from "./RefusalNotice";
 import { CouponPickNote } from "./CouponPickNote";
 import { StoreImage } from "./StoreImage";
+import { SUBMIT_TEXTS } from "../../lib/domain/texts";
+import { SubmitButton } from "../ui/Submit";
 
 /**
  * 紹介文の出どころ（少しずつ届く入口の `pitch` フレームの `source`）。
@@ -60,6 +62,11 @@ type ResultListProps = {
   holding?: boolean;
   /** 見出し（結果が届いたら入れ物がここへ焦点を移す・2026-09-25 監査の指摘 客-08） */
   headingRef?: Ref<HTMLHeadingElement>;
+  /**
+   * 受け取りを送っている結果の番号（無ければ null）。送っている間は、押したカードのボタンを「席を確保しています…」に
+   * し、どのカードのボタンも押せなくする（2026-09-25 監査の指摘 横断-03）。
+   */
+  receiving?: string | null;
 };
 
 /** 金額は3桁ごとに区切って出す（読み違えを減らすための表示だけの整形）。 */
@@ -124,9 +131,11 @@ type ResultCardProps = {
   refusal?: ReceiveRefusal | null;
   onNextStep?: () => void;
   holding?: boolean;
+  /** 受け取りを送っている結果の番号（ResultListProps の注） */
+  receiving?: string | null;
 };
 
-const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holding = false }: ResultCardProps) => (
+const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holding = false, receiving = null }: ResultCardProps) => (
   <li className="offer-card" data-testid={`result-${item.offerId}`} style={{ animationDelay: `${index * 70}ms` }}>
     <OfferArt storeName={item.storeName} storeId={item.storeId} hasHomepage={item.storeUrl !== null} />
 
@@ -171,9 +180,17 @@ const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holdin
       {item.coupons.length === 0 ? <p className="offer-card__no-coupon">クーポンの案内はありません（席の確保はできます）</p> : null}
     </div>
 
-    <button type="button" className="offer-card__cta" data-testid="btn-receive" disabled={holding} onClick={() => onReceive?.(item)}>
+    <SubmitButton
+      type="button"
+      className="offer-card__cta"
+      data-testid="btn-receive"
+      busy={receiving === item.offerId}
+      busyLabel={SUBMIT_TEXTS.receiving}
+      disabled={holding || receiving !== null}
+      onClick={() => onReceive?.(item)}
+    >
       この店に行く（20分間 席を確保）
-    </button>
+    </SubmitButton>
 
     {item.storeUrl === null ? null : (
       <a className="offer-card__link" href={item.storeUrl} target="_blank" rel="noreferrer">
@@ -196,7 +213,7 @@ const HoldNotice = () => (
   </p>
 );
 
-export const ResultList = ({ items, onReceive, refusal = null, onNextStep, holding = false, headingRef }: ResultListProps) => (
+export const ResultList = ({ items, onReceive, refusal = null, onNextStep, holding = false, headingRef, receiving = null }: ResultListProps) => (
   <section className="offer-list" data-testid="result-list">
     {/* 描かれた時に1回だけ出る宝くじの札（探し直すたびにこの部品ごと作り直されるので、
         出す・消すの状態を入れ物へ増やさずに済む）。 */}
@@ -220,6 +237,7 @@ export const ResultList = ({ items, onReceive, refusal = null, onNextStep, holdi
             refusal={refusal !== null && refusal.offerId === item.offerId ? refusal.body : null}
             onNextStep={onNextStep}
             holding={holding}
+            receiving={receiving}
           />
         ))}
       </ul>

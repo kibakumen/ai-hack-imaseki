@@ -11,7 +11,7 @@ import { callApi, isFailure, type AdminStoreDetailDto } from "../../lib/client/a
 import { PASSWORD_MAX } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { ConfirmBox } from "./ConfirmBox";
-import { useAdminAction } from "./useAdminAction";
+import { useSubmit } from "../ui/useSubmit";
 import styles from "./admin.module.css";
 
 const FIELD_NAMES = ["currentPassword"];
@@ -25,7 +25,7 @@ export const TempPasswordPanel = ({ store }: { store: AdminStoreDetailDto }) => 
   const [currentPassword, setCurrentPassword] = useState("");
   /** 発行した仮のパスワード。入口が見せるただ1回（基準 14.13）なので、この画面を離れると消える。 */
   const [tempPassword, setTempPassword] = useState<string | null>(null);
-  const issue = useAdminAction();
+  const issue = useSubmit();
 
   const send = async () => {
     const result = await issue.run(() => callApi("POST /api/admin/stores/:id/temp-password", { params: { id: store.id }, body: { currentPassword } }));

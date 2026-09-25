@@ -13,7 +13,7 @@
 //   - 止める前に「今 N 組が向かっています」、止めたあと「N 組を取り消し、M 人に通知しました」（運営-03）
 //   - 断り（409）が今の状況を持っていれば、詳細を取り直して「ほかの操作で、すでに『◯◯』に」と出す。
 //     送っている間は押せない（運営-04）
-//   - 断りは操作ごとに持つ（useAdminAction）。「やめる」で消す（運営-13）
+//   - 断りは操作ごとに持つ（components/ui/useSubmit・横断-03 で全画面の共通にした）。「やめる」で消す（運営-13）
 //   - 承認後の変更・審査の手がかり・通報・操作の履歴（運営-02・運営-05・運営-09）は StoreReviewPanel・StoreDetailPanels
 //   - 一覧の絞り込み・検索・並び順を持ったまま一覧へ戻る（運営-06）
 //   ⚠️ data-testid・ボタンの文言・確かめの文の3語（オファー／確保／取り消）は受け入れ検査が見ている。
@@ -29,7 +29,8 @@ import { ConfirmBox } from "./ConfirmBox";
 import { StoreDocuments, StoreFacts, StoreHistory, StoreImpact, StoreReportsPanel } from "./StoreDetailPanels";
 import { ApprovalChanges, CHANGED_SINCE_SEEN_TEXT, seenOf, StoreReviewPanel } from "./StoreReviewPanel";
 import { TempPasswordPanel } from "./TempPasswordPanel";
-import { useAdminAction, type AdminAction } from "./useAdminAction";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit, type Submit } from "../ui/useSubmit";
 import styles from "./admin.module.css";
 
 // 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
@@ -63,7 +64,7 @@ type OperationProps = { store: StoreDetailDto; onDone: (notice: Notice) => Promi
  * 1つの操作を送り、結果を詳細へ返す。通れば `resultText`、状況が合わない断り（409 の `current`）なら
  * 今の状況を知らせて取り直す（運営-04）。そのほかの断りは操作の欄の直下に残す（運営-13）。
  */
-const sendOperation = async <T,>(action: AdminAction, send: () => Promise<T | ApiFailure>, onDone: OperationProps["onDone"], resultText: (response: T) => string): Promise<void> => {
+const sendOperation = async <T,>(action: Submit, send: () => Promise<T | ApiFailure>, onDone: OperationProps["onDone"], resultText: (response: T) => string): Promise<void> => {
   const result = await action.run(send);
   if (result === null) return;
   if (!isFailure(result)) {
@@ -81,7 +82,7 @@ const sendOperation = async <T,>(action: AdminAction, send: () => Promise<T | Ap
  * この画面で見ている店名・住所・許可書を上げた日時を載せる——開いている間に店が変えていたら、サーバーが断る（運営-02 のレビュー）。
  */
 const ApproveForm = ({ store, onDone }: OperationProps) => {
-  const approve = useAdminAction();
+  const approve = useSubmit();
   const missing = missingLabels(store);
   const body = { seen: seenOf(store) };
   const send = () =>
@@ -102,9 +103,9 @@ const ApproveForm = ({ store, onDone }: OperationProps) => {
       ) : (
         <p className={styles.actionLead}>書類とカードが揃っています。承認すると、この店はオファーを公開できるようになります。</p>
       )}
-      <button type="submit" data-testid="btn-approve" disabled={missing.length > 0 || approve.busy}>
+      <SubmitButton type="submit" data-testid="btn-approve" busy={approve.busy} disabled={missing.length > 0}>
         承認する
-      </button>
+      </SubmitButton>
       <FormMessage failure={approve.failure} />
     </form>
   );
@@ -179,7 +180,7 @@ const restoreResultText = (response: ResponseOf<"POST /api/admin/stores/:id/rest
 const ReasonedForm = ({ store, onDone, op }: OperationProps & { op: ReasonedOperation }) => {
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
-  const action = useAdminAction();
+  const action = useSubmit();
   const params = { params: { id: store.id }, body: { reason: reason.trim() } };
   const send = () =>
     op.path === "ban"

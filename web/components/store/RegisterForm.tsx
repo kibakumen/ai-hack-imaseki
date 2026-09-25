@@ -13,6 +13,8 @@ import { EMAIL_MAX, HUMAN_CHECK_ACTIONS, PASSWORD_MAX, PASSWORD_MIN, STORE_NAME_
 import { STORE_TERMS_TEXTS } from "../../lib/domain/texts";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 const FIELD_NAMES = ["name", "email", "password", "agreedTermsVersion"];
 /**
@@ -38,7 +40,9 @@ export const RegisterForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は「登録する」を止める（2026-09-25 監査の指摘 横断-03）
+  const register = useSubmit();
+  const failure = register.failure;
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const humanRef = useRef<HumanCheckHandle | null>(null);
@@ -68,16 +72,15 @@ export const RegisterForm = () => {
       return;
     }
     // 同意した規約の版も送る（入口が今の版と突き合わせ、版と時刻を残す・店-21 のレビュー）
-    const result = await callApi("POST /api/register/store", { body: { name, email, password, humanToken, agreedTermsVersion: STORE_TERMS_VERSION } });
+    const result = await register.run(() => callApi("POST /api/register/store", { body: { name, email, password, humanToken, agreedTermsVersion: STORE_TERMS_VERSION } }));
+    if (result === null) return;
     if (isFailure(result)) {
-      setFailure(result);
       if (shouldClearPassword(result)) setPassword("");
       // 確かめの値は使い切り。次に送るときのために、その場で取り直す。
       setHumanToken(null);
       humanRef.current?.reset();
       return;
     }
-    setFailure(null);
     window.location.assign(STORE_HOME_PATH);
   };
 
@@ -169,9 +172,9 @@ export const RegisterForm = () => {
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.registerStore} onToken={handleToken} />}
 
-      <button type="submit" data-testid="btn-register">
+      <SubmitButton type="submit" data-testid="btn-register" busy={register.busy}>
         登録する
-      </button>
+      </SubmitButton>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
     </form>
   );

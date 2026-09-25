@@ -3,10 +3,11 @@
 // 押す前の確かめ（止める・戻す・仮のパスワード）。何が起きるかを先に見せて、確かめてから入口を呼ぶ。
 //
 // 2026-09-25 監査の指摘 運営-01: 取り消しと戻すは**理由を入れるまで押せない**（`reason` を渡すと欄が出る）。
-// 運営-04: 送っている間は押せない（`busy`）。断りは呼ぶ側が `children` に入れて、この箱の中に出す（運営-13）。
+// 運営-04: 送っている間は押せない（`busy`。ボタンは全画面で共通の components/ui/Submit・横断-03）。断りは呼ぶ側が `children` に入れて、この箱の中に出す（運営-13）。
 
 import type { ReactNode } from "react";
 import { ADMIN_REASON_MAX } from "../../lib/schemas/limits";
+import { SubmitButton } from "../ui/Submit";
 import styles from "./admin.module.css";
 
 type ReasonField = { value: string; onChange: (value: string) => void; label: string };
@@ -41,9 +42,9 @@ export const ConfirmBox = ({ testId, label, text, confirmTestId = "btn-confirm",
       )}
       {children}
       <div className={styles.btnRow}>
-        <button type="button" data-testid={confirmTestId} className={danger ? styles.dangerBtn : undefined} disabled={busy || reasonMissing || !ready} aria-busy={busy} onClick={onConfirm}>
-          {busy ? "送っています…" : confirmLabel}
-        </button>
+        <SubmitButton type="button" data-testid={confirmTestId} className={danger ? styles.dangerBtn : undefined} busy={busy} disabled={reasonMissing || !ready} onClick={onConfirm}>
+          {confirmLabel}
+        </SubmitButton>
         <button type="button" className={styles.quietBtn} onClick={onCancel}>
           やめる
         </button>

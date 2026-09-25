@@ -12,10 +12,12 @@
 import { useRef, useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure, type ResponseOf } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
-import { COUPON_TEXTS } from "../../lib/domain/texts";
+import { COUPON_TEXTS, SUBMIT_TEXTS } from "../../lib/domain/texts";
 import { COUPON_MAX, COUPON_NAME_MAX, COUPON_NAME_MIN, COUPON_NOTE_MAX } from "../../lib/schemas/limits";
 import { FieldMessage, fieldAria } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
+import { DoneNotice, SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 // 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
 type Coupon = ResponseOf<"GET /api/store/coupons">["items"][number];
@@ -23,11 +25,10 @@ type Draft = { name: string; note: string };
 
 /** 作る側の断りの置き場を表す印（行の断りは、その行の番号を使う） */
 const CREATE_SCOPE = "create";
+/** 削除が済んだ知らせの置き場（消した行はもう無いので、一覧の上に出す） */
+const DELETED_SCOPE = "deleted";
 const NAME_CTX = { field: "名前", min: COUPON_NAME_MIN, max: COUPON_NAME_MAX };
 const NOTE_CTX = { field: "特記事項", min: 0, max: COUPON_NOTE_MAX };
-
-/** 断りと、それがどの操作のものか。 */
-type ScopedFailure = { scope: string; failure: ApiFailure };
 
 const draftOf = (coupon: Coupon): Draft => ({ name: coupon.name, note: coupon.note ?? "" });
 
@@ -81,8 +82,12 @@ type CouponRowProps = {
   coupon: Coupon;
   draft: Draft;
   failure: ApiFailure | null;
-  /** この行の保存が通った直後か（「保存しました」を出す・店-19） */
-  saved: boolean;
+  /** この行の保存が通った直後の知らせ（「保存しました。」・店-19）。無ければ null */
+  saved: string | null;
+  /** この行の操作を送っている間 true（保存・削除のボタンを止める・横断-03） */
+  busy: boolean;
+  /** どれかの操作を送っている間 true（ほかの行のボタンも止める。1度に送るのは1つ） */
+  locked: boolean;
   onChange: (values: Draft) => void;
   onSave: () => void;
   onDelete: () => void;
@@ -92,14 +97,14 @@ type CouponRowProps = {
  * 削除の確かめ（2026-09-25 監査の指摘 店-03）。消したクーポンは戻せないので、同じ画面の完了・取り消しと同じ形で
  * 1段挟む（それまでは押した瞬間に消えた）。
  */
-const DeleteConfirm = ({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) => (
+const DeleteConfirm = ({ name, busy, onConfirm, onCancel }: { name: string; busy: boolean; onConfirm: () => void; onCancel: () => void }) => (
   <div className="store-confirm" role="dialog" aria-label="クーポンを削除する確かめ" data-testid="confirm-delete-coupon">
     <p>「{name}」を削除します。元に戻せません。</p>
     <div className="store-confirm__buttons">
-      <button type="button" className="store-btn store-btn--danger" data-testid="btn-confirm-delete-coupon" onClick={onConfirm}>
+      <SubmitButton type="button" className="store-btn store-btn--danger" data-testid="btn-confirm-delete-coupon" busy={busy} onClick={onConfirm}>
         削除する
-      </button>
-      <button type="button" className="store-btn store-btn--quiet" onClick={onCancel}>
+      </SubmitButton>
+      <button type="button" className="store-btn store-btn--quiet" disabled={busy} onClick={onCancel}>
         やめる
       </button>
     </div>
@@ -112,7 +117,7 @@ const DeleteConfirm = ({ name, onConfirm, onCancel }: { name: string; onConfirm:
  * 上段が券面（客に見える名前と特記事項・客の画面の `.offer-coupon` と同じ点線の縁の語彙）、
  * 下段が直す欄と、離して置いた2つのボタン。「削除」は確かめを1段挟む（店-03）。
  */
-const CouponRow = ({ coupon, draft, failure, saved, onChange, onSave, onDelete }: CouponRowProps) => {
+const CouponRow = ({ coupon, draft, failure, saved, busy, locked, onChange, onSave, onDelete }: CouponRowProps) => {
   const [askingDelete, setAskingDelete] = useState(false);
   return (
     <li className="store-coupon-card" data-testid={`row-${coupon.id}`}>
@@ -157,29 +162,26 @@ const CouponRow = ({ coupon, draft, failure, saved, onChange, onSave, onDelete }
       </div>
 
       <div className="store-actions">
-        <button type="button" className="store-btn store-btn--primary" data-testid="btn-save-coupon" onClick={onSave}>
+        <SubmitButton type="button" className="store-btn store-btn--primary" data-testid="btn-save-coupon" busy={busy && !askingDelete} disabled={locked} onClick={onSave}>
           保存する
-        </button>
-        <button type="button" className="store-btn store-btn--danger" data-testid="btn-delete-coupon" aria-expanded={askingDelete} onClick={() => setAskingDelete(true)}>
+        </SubmitButton>
+        <button type="button" className="store-btn store-btn--danger" data-testid="btn-delete-coupon" aria-expanded={askingDelete} disabled={locked} onClick={() => setAskingDelete(true)}>
           削除
         </button>
       </div>
       {askingDelete ? (
         <DeleteConfirm
           name={coupon.name}
+          busy={busy}
           onConfirm={() => {
-            setAskingDelete(false);
+            // 送り終えるまで確かめを開いたままにし、「削除する」を止める（横断-03）
             onDelete();
           }}
           onCancel={() => setAskingDelete(false)}
         />
       ) : null}
       <CouponFormMessage failure={failure} />
-      {saved ? (
-        <p className="store-note" role="status" data-testid="msg-saved">
-          保存しました。
-        </p>
-      ) : null}
+      <DoneNotice message={saved} testId="msg-saved" />
     </li>
   );
 };
@@ -188,13 +190,17 @@ type CreateFormProps = {
   name: string;
   note: string;
   failure: ApiFailure | null;
+  /** 作るのを送っている間 true／どれかの操作を送っている間 true／作れた知らせ（横断-03） */
+  busy: boolean;
+  locked: boolean;
+  done: string | null;
   onName: (value: string) => void;
   onNote: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
 /** 新しいクーポンを作る欄（名前と特記事項の2つだけ・基準 16.7）。 */
-const CouponCreateForm = ({ name, note, failure, onName, onNote, onSubmit }: CreateFormProps) => (
+const CouponCreateForm = ({ name, note, failure, busy, locked, done, onName, onNote, onSubmit }: CreateFormProps) => (
   <form className="store-coupon-new" data-testid="form-coupon" noValidate onSubmit={onSubmit}>
     <h3>クーポンを作る</h3>
     <p className="store-note">名前は客の画面の札に大きく、特記事項はその下に小さく出ます。</p>
@@ -229,10 +235,11 @@ const CouponCreateForm = ({ name, note, failure, onName, onNote, onSubmit }: Cre
       <FieldMessage inputId="coupon-new-note" name="note" failure={failure} ctx={NOTE_CTX} />
     </div>
 
-    <button type="submit" data-testid="btn-create-coupon">
+    <SubmitButton type="submit" data-testid="btn-create-coupon" busy={busy} disabled={locked}>
       作る
-    </button>
+    </SubmitButton>
     <CouponFormMessage failure={failure} />
+    <DoneNotice message={done} />
   </form>
 );
 
@@ -240,9 +247,14 @@ export const CouponEditor = () => {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
-  const [refused, setRefused] = useState<ScopedFailure | null>(null);
-  /** 保存が通った直後の行（その行に「保存しました」を出す。その行を直し始めたら消す・店-19） */
-  const [savedId, setSavedId] = useState<string | null>(null);
+  /**
+   * 作る・保存・削除の送信（2026-09-25 監査の指摘 横断-03）。1度に送るのは1つで、送っている間はどのボタンも止める
+   * （「作る」を2回押すと2枚できていた）。断りと済んだ知らせは、最後に押した操作の置き場（`scope`）にだけ出す
+   * ——作る側か、どれか1つの行か（同じ `msg-name` が2か所に出ると、どちらの話か読めない）。
+   */
+  const operation = useSubmit();
+  const [scope, setScope] = useState<string | null>(null);
+  const sendingScope = useRef<string | null>(null);
   /** 前に取れたサーバーの値（書きかけかどうかを見分けるため） */
   const serverDrafts = useRef<Record<string, Draft>>({});
   /** 次に取れたときにサーバーの値へ戻す行（今の操作で保存・削除した行） */
@@ -259,18 +271,24 @@ export const CouponEditor = () => {
   };
   const { state, reload } = useLoad(fetchCoupons, { onLoaded: absorb });
 
-  /** 断られたらその場に文を出して終わる。通ったら一覧を取り直す（一覧の正本は入口の側）。 */
-  const apply = async (scope: string, call: () => Promise<unknown>, onDone: () => void) => {
-    const result = await call();
-    if (isFailure(result)) {
-      setRefused({ scope, failure: result });
-      setSavedId(null);
-      return;
+  /**
+   * 1つの操作を送る。断られたらその場に文を出して終わる。通ったら一覧を取り直す（一覧の正本は入口の側）。
+   * `doneScope` は済んだ知らせを出す置き場（削除は消えた行の代わりに一覧の上）。
+   */
+  const apply = async (target: string, call: () => Promise<unknown>, onDone: () => void, doneText: string, doneScope = target) => {
+    if (sendingScope.current !== null) return;
+    sendingScope.current = target;
+    setScope(target);
+    try {
+      const result = await operation.run(async () => (await call()) as ApiFailure | { ok: true }, doneText);
+      if (result === null || isFailure(result)) return;
+      setScope(doneScope);
+      if (target !== CREATE_SCOPE) resetIds.current = new Set([...resetIds.current, target]);
+      onDone();
+      await reload();
+    } finally {
+      sendingScope.current = null;
     }
-    setRefused(null);
-    if (scope !== CREATE_SCOPE) resetIds.current = new Set([...resetIds.current, scope]);
-    onDone();
-    await reload();
   };
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
@@ -278,16 +296,18 @@ export const CouponEditor = () => {
     await apply(CREATE_SCOPE, () => callApi("POST /api/store/coupons", { body: { name, note } }), () => {
       setName("");
       setNote("");
-      setSavedId(null);
-    });
+    }, SUBMIT_TEXTS.couponCreated);
   };
 
-  const failureOf = (scope: string): ApiFailure | null => (refused?.scope === scope ? refused.failure : null);
+  const failureOf = (target: string): ApiFailure | null => (scope === target ? operation.failure : null);
+  const doneOf = (target: string): string | null => (scope === target ? operation.done : null);
+  const busyOf = (target: string): boolean => operation.busy && scope === target;
 
   const renderList = (items: Coupon[]) => (
     <>
       {/* 「まだありません」は**取れて0件のときだけ**（読めなかったときは読み込みの部品が断りの文を出す・横断-01）。 */}
       {items.length === 0 ? <p className="store-empty">クーポンはまだありません。下の欄から作れます。</p> : null}
+      <DoneNotice message={doneOf(DELETED_SCOPE)} />
 
       <ul className="store-coupon-cards">
         {items.map((coupon) => (
@@ -296,17 +316,20 @@ export const CouponEditor = () => {
             coupon={coupon}
             draft={drafts[coupon.id] ?? { name: coupon.name, note: coupon.note ?? "" }}
             failure={failureOf(coupon.id)}
-            saved={savedId === coupon.id}
+            saved={doneOf(coupon.id)}
+            busy={busyOf(coupon.id)}
+            locked={operation.busy}
             onChange={(values) => {
-              if (savedId === coupon.id) setSavedId(null);
+              // 直し始めたら「保存しました」を消す（店-19）
+              if (doneOf(coupon.id) !== null) operation.clear();
               setDrafts((prev) => ({ ...prev, [coupon.id]: values }));
             }}
             onSave={() => {
               const draft = drafts[coupon.id] ?? draftOf(coupon);
-              void apply(coupon.id, () => callApi("PUT /api/store/coupons/:id", { params: { id: coupon.id }, body: draft }), () => setSavedId(coupon.id));
+              void apply(coupon.id, () => callApi("PUT /api/store/coupons/:id", { params: { id: coupon.id }, body: draft }), () => undefined, SUBMIT_TEXTS.couponSaved);
             }}
             onDelete={() => {
-              void apply(coupon.id, () => callApi("DELETE /api/store/coupons/:id", { params: { id: coupon.id } }), () => setSavedId(null));
+              void apply(coupon.id, () => callApi("DELETE /api/store/coupons/:id", { params: { id: coupon.id } }), () => undefined, SUBMIT_TEXTS.couponDeleted, DELETED_SCOPE);
             }}
           />
         ))}
@@ -316,6 +339,9 @@ export const CouponEditor = () => {
         name={name}
         note={note}
         failure={failureOf(CREATE_SCOPE)}
+        busy={busyOf(CREATE_SCOPE)}
+        locked={operation.busy}
+        done={doneOf(CREATE_SCOPE)}
         onName={setName}
         onNote={setNote}
         onSubmit={(event) => {

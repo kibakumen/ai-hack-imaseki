@@ -50,6 +50,7 @@ import { ResultList, type ResultItem } from "./ResultList";
 import { StoreCancelledView } from "./StoreCancelledView";
 import { useMeServiceWorker } from "./useMeServiceWorker";
 import { CustomerRefusals } from "../ui/InputRefusal";
+import { DoneNotice } from "../ui/Submit";
 import { LoadView } from "../ui/LoadState";
 
 /** 断られた1件。`offerId` は結果のカードに出すため（受け取り直しは押した場所が1つなので null）。 */
@@ -130,6 +131,17 @@ const CustomerScreens = () => {
   const [announcement, setAnnouncement] = useState("");
   /** 結果の一覧の見出し（結果が届いたら焦点を移す先。押した「今すぐ探す」は条件ごと畳まれて消えるため） */
   const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  /**
+   * 済んだことの1文（確保の取り消し・人数の変更・2026-09-25 監査の指摘 横断-03）。取り消しは取得の画面へ切り替わる
+   * だけで何も出なかったので、画面の上に role=status で出す。次に探し始めた・受け取った・操作したら消す。
+   */
+  const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * 受け取りを送っている結果の番号（受け取り直しは null の番号として "retry"）。送っている間は、押したカードの
+   * ボタンを「席を確保しています…」にし、ほかのカードも押せなくする（横断-03）。同じ瞬間の2度押しは ref で止める。
+   */
+  const [receiving, setReceiving] = useState<string | null>(null);
+  const receivingRef = useRef(false);
 
   /**
    * 確保を持ったまま探している間に、その確保が確保中でなくなった（店・運営の取り消し・期限切れ・完了）ら、
@@ -222,6 +234,7 @@ const CustomerScreens = () => {
 
   /** 受け取り・受け取り直しの応答（通った／断られた）で、表示を作り直す。 */
   const applyReceived = (result: unknown, offerId: string | null) => {
+    setNotice(null);
     const failure = isFailure(result) ? result : null;
     const body = failure === null ? undefined : (failure.refusal as ReceiveRefusal | undefined);
     // 応答に `home` が無い形でも表示を消さない（今の表示のまま、断りだけを出す）
@@ -251,7 +264,8 @@ const CustomerScreens = () => {
    * 応答が新しいホームを連れてきたらそれで作り直し、連れてこない（今の状態と衝突した）なら取り直す
    * （基準 10.3・9.8）。
    */
-  const applyHome = (next?: unknown) => {
+  const applyHome = (next?: unknown, done?: string) => {
+    setNotice(done ?? null);
     if (next === undefined || next === null) {
       polling.refreshNow();
       return;
@@ -266,19 +280,30 @@ const CustomerScreens = () => {
     if (responded.kind !== "fetch") setSearching(false);
   };
 
+  /** 受け取りを1件だけ送る（送っている間の2度押し・ほかのカードの押下は送らない・横断-03）。 */
+  const sendReceive = async (key: string, body: Record<string, unknown>, offerId: string | null): Promise<void> => {
+    if (receivingRef.current) return;
+    receivingRef.current = true;
+    setReceiving(key);
+    try {
+      applyReceived(await callApi("POST /api/customer/reservations", { body }), offerId);
+    } finally {
+      receivingRef.current = false;
+      setReceiving(null);
+    }
+  };
+
   /** 結果から1件を受け取る（基準 8.1・8.5・8.6）。人数とどの取得から選んだかを一緒に送る。 */
   const receive = async (item: ResultItem): Promise<void> => {
     if (fetchResult === null) return;
-    const result = await callApi("POST /api/customer/reservations", { body: { offerId: item.offerId, party: fetchResult.party, fetchId: fetchResult.fetchId } });
-    applyReceived(result, item.offerId);
+    await sendReceive(item.offerId, { offerId: item.offerId, party: fetchResult.party, fetchId: fetchResult.fetchId }, item.offerId);
   };
 
   /** 期限切れから同じ人数で受け取り直す（基準 11.8・11.10）。人数は元の確保から取るので送らない。 */
   const retry = async (): Promise<void> => {
     const id = home?.reservation?.id;
     if (id === undefined) return;
-    const result = await callApi("POST /api/customer/reservations", { body: { retryOf: id } });
-    applyReceived(result, null);
+    await sendReceive("retry", { retryOf: id }, null);
   };
 
   /** 断りの「次の一手」の行き先（文は `RefusalNotice`、行き先はここ・設計書の3）。 */
@@ -303,7 +328,10 @@ const CustomerScreens = () => {
   const showResults = (result: FetchResult | null) => {
     // 片づけた取得の結果は戻さない。探し始めたら解く（前の取得は `useOfferSearch` が止めてから null を渡す）。
     if (result !== null && result.fetchId === dismissedFetchIdRef.current) return;
-    if (result === null) dismissedFetchIdRef.current = null;
+    if (result === null) {
+      dismissedFetchIdRef.current = null;
+      setNotice(null);
+    }
     // 断りの知らせを消すのは、探し始めたとき（null）と取得が替わったときだけ（2026-09-25 監査の指摘 不具合-06）。
     // 紹介文が届くたびに同じ取得の結果が入れ直されるので、そのたびに消すと断りの文とボタンが読めないうちに消える。
     const nextFetchId = result?.fetchId ?? null;
@@ -420,6 +448,7 @@ const CustomerScreens = () => {
           expired={home.expired}
           refusal={refused === null ? null : refused.body}
           onRetry={() => void retry()}
+          retrying={receiving === "retry"}
           onNextStep={takeNextStep}
           onSearchAgain={searchAgain}
           from={routeFrom}
@@ -462,6 +491,7 @@ const CustomerScreens = () => {
       <p className="visually-hidden" role="status" data-testid="live-status">
         {announcement}
       </p>
+      <DoneNotice message={notice} />
       {celebration}
       {stale ? (
         <p className="msg" role="status" data-testid="stale-notice">
@@ -503,6 +533,7 @@ const CustomerScreens = () => {
               refusal={refused !== null && refused.offerId !== null ? { offerId: refused.offerId, body: refused.body } : null}
               onNextStep={takeNextStep}
               holding={home.kind === "active"}
+              receiving={receiving}
               headingRef={resultsHeadingRef}
             />
           )}

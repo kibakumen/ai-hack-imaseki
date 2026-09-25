@@ -10,12 +10,14 @@
 // 電話番号は任意（空なら仮の番号を送る＝裏の自動の登録と同じ `lib/client/guestIdentity`）。
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { callApi, getPublicConfig, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, getPublicConfig, isFailure } from "../../lib/client/api";
 import { guestNickname, phoneOrPlaceholder } from "../../lib/client/guestIdentity";
 import { PERSONAL_DATA_TEXTS, TEXTS } from "../../lib/domain/texts";
 import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, HUMAN_CHECK_ACTIONS, NICKNAME_MAX, NICKNAME_MIN, PHONE_MAX_LENGTH } from "../../lib/schemas/limits";
 import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 const FIELD_NAMES = ["nickname", "phone", "genres", "budgetMax"];
 const PHONE_HINT = "数字10桁か11桁";
@@ -36,7 +38,9 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
   const [phone, setPhone] = useState("");
   const [genres, setGenres] = useState<string[]>([]);
   const [budgetMax, setBudgetMax] = useState("");
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は「はじめる」を止める（2026-09-25 監査の指摘 横断-03）
+  const register = useSubmit();
+  const failure = register.failure;
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const humanRef = useRef<HumanCheckHandle | null>(null);
@@ -61,23 +65,24 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("POST /api/register/customer", {
-      body: {
-        nickname,
-        phone: phoneOrPlaceholder(phone),
-        genres,
-        budgetMax: budgetToSend(budgetMax),
-        humanToken,
-      },
-    });
+    const result = await register.run(() =>
+      callApi("POST /api/register/customer", {
+        body: {
+          nickname,
+          phone: phoneOrPlaceholder(phone),
+          genres,
+          budgetMax: budgetToSend(budgetMax),
+          humanToken,
+        },
+      }),
+    );
+    if (result === null) return;
     if (isFailure(result)) {
-      setFailure(result);
       // 確かめの値は使い切り。次に送るときのために、その場で取り直す。
       setHumanToken(null);
       humanRef.current?.reset();
       return;
     }
-    setFailure(null);
     onRegistered();
   };
 
@@ -152,9 +157,9 @@ export const RegisterForm = ({ onRegistered }: { onRegistered: () => void }) => 
 
       {siteKey !== null && <HumanCheck ref={humanRef} siteKey={siteKey} action={HUMAN_CHECK_ACTIONS.registerCustomer} onToken={handleToken} />}
 
-      <button type="submit" data-testid="btn-register">
+      <SubmitButton type="submit" data-testid="btn-register" busy={register.busy}>
         はじめる
-      </button>
+      </SubmitButton>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
     </form>
   );

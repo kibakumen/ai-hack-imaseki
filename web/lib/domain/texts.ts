@@ -131,6 +131,25 @@ export const TEXTS = {
   fallbackReason: "今の条件で近い順に選びました",
 } as const;
 
+// ---------- 押したあとの手応え（2026-09-25 監査の指摘 横断-03） ----------
+// 送っている間のボタンの文言と、済んだことを伝える1文（components/ui/Submit が出す）。
+export const SUBMIT_TEXTS = {
+  sending: "送っています…",
+  receiving: "席を確保しています…",
+  uploading: "上げています…",
+  searching: "探しています…",
+  /** 客が確保を取り消した（画面は取得の画面へ切り替わるので、何が起きたかを1文で添える） */
+  reservationCancelled: "確保を取り消しました。",
+  partyChanged: (party: number): string => `人数を ${party} 名に変えました。`,
+  reportSent: "運営に知らせました。ありがとうございます。",
+  couponCreated: "クーポンを作りました。",
+  couponSaved: "保存しました。",
+  couponDeleted: "クーポンを削除しました。",
+  licenseUploaded: "営業許可書を上げました。運営が確かめてから承認します。",
+  licenseDeleted: "営業許可書を消しました。",
+  profileSaved: "保存しました。",
+} as const;
+
 // ---------- 読み込みの状態とログインの切れ（2026-09-25 監査の指摘 横断-01） ----------
 // 画面の部品（components/ui/LoadState・SessionExpired）が出す決まった文。
 export const LOAD_TEXTS = {
@@ -240,7 +259,7 @@ export const ARRIVALS_TEXTS = {
   /** 確かめ（店-01）。取り消しは、残りの枠が戻らないことと、来ない客は期限で枠が戻ることも言う */
   confirmComplete: (who: string, party: number, code: string): string => `${who}・${party} 名・コード ${code} の来店を確かめましたか。`,
   confirmCancel: "取り消すと、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります）。この確保を取り消しますか。",
-  sending: "送っています…",
+  sending: SUBMIT_TEXTS.sending,
   /** 取り直し（店-08） */
   refresh: "今すぐ更新",
   updatedAt: (hhmm: string): string => `最終更新 ${hhmm}`,

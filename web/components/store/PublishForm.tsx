@@ -19,6 +19,8 @@ import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { WheelPicker } from "./WheelPicker";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 export type PublishFormCoupon = { id: string; name: string; note: string };
 export type PublishFormPrefill = { couponIds: string[]; capacity: number | null; partyMax: number | null; until: string | null };
@@ -153,7 +155,9 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
   const [until, setUntil] = useState(prefill.until ?? "");
   // 終了タイマーはいつも畳んでおく（入れなくても公開できる・店-05）。断られたら開く
   const [untilOpen, setUntilOpen] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // 送っている間は「公開する」を止める（2026-09-25 監査の指摘 横断-03）
+  const publish = useSubmit();
+  const failure = publish.failure;
 
   const toggleCoupon = (id: string) => {
     setCouponIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
@@ -161,22 +165,23 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("POST /api/store/offers", {
-      body: {
-        couponIds,
-        capacity: toNumberOrNull(capacity),
-        partyMax: toNumberOrNull(partyMax),
-        // 空欄は載せない＝終了タイマーなし（公開から12時間で自動で終わる・店-05）
-        until: until === "" ? undefined : until,
-      },
-    });
+    const result = await publish.run(() =>
+      callApi("POST /api/store/offers", {
+        body: {
+          couponIds,
+          capacity: toNumberOrNull(capacity),
+          partyMax: toNumberOrNull(partyMax),
+          // 空欄は載せない＝終了タイマーなし（公開から12時間で自動で終わる・店-05）
+          until: until === "" ? undefined : until,
+        },
+      }),
+    );
+    if (result === null) return;
     if (isFailure(result)) {
       // 画面は移らず、入れた内容もそのまま（設計書「入力の誤りの出し方」の規則3）。
-      setFailure(result);
       if (untilRefused(result)) setUntilOpen(true);
       return;
     }
-    setFailure(null);
     onPublished();
   };
 
@@ -226,9 +231,9 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
 
       <CouponChoices coupons={coupons} selected={couponIds} onToggle={toggleCoupon} />
 
-      <button type="submit" className="store-btn store-btn--primary" data-testid="btn-publish">
+      <SubmitButton type="submit" className="store-btn store-btn--primary" data-testid="btn-publish" busy={publish.busy}>
         公開する
-      </button>
+      </SubmitButton>
       <FormMessage failure={failure} fieldNames={FIELD_NAMES} links={PROFILE_LINKS} />
     </form>
   );

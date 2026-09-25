@@ -34,6 +34,7 @@ import type { OfferViewDto } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria, type RefusalContext } from "../ui/InputRefusal";
 import { timeInJst } from "../ui/jstTime";
+import { SubmitButton } from "../ui/Submit";
 import { useOfferChange, type OfferChange, type Outcome } from "./offerChange";
 import { CouponToggles, HiddenControl, NextValue, OfferStatusBadge, Remaining, StopConfirm, type OfferPanelCoupon } from "./OfferPanelParts";
 import { OfferTrend, type TrendBucket } from "./OfferTrend";
@@ -360,17 +361,17 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
             data-sticky={String(pendingCount > 0)}
           >
             <p className={pendingCount === 0 ? "store-note" : "store-tune__pending"}>{pendingCount === 0 ? "変えたところはありません" : `${pendingCount} 項目を変えます`}</p>
-            <button
+            <SubmitButton
               type="button"
               className="store-btn store-btn--primary store-tune__apply"
               data-testid="btn-update"
-              disabled={sending}
+              busy={sending}
               onClick={() => {
                 void applyAll();
               }}
             >
-              {sending ? "送っています…" : "更新する"}
-            </button>
+              更新する
+            </SubmitButton>
           </div>
           {nothingToSend ? <p className="store-note">ダイヤルを回すか、時刻を入れるか、クーポンを選び直してから押してください。</p> : null}
           <FormMessage failure={couponsChange.failure} />

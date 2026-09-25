@@ -9,9 +9,12 @@
 //   その店へは通報できない（report_not_allowed） … 「送る」の直下（FormMessage）
 
 import { useState, type FormEvent } from "react";
-import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
+import { callApi, isFailure } from "../../lib/client/api";
+import { SUBMIT_TEXTS } from "../../lib/domain/texts";
 import { REPORT_REASON_MAX, REPORT_REASON_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+import { SubmitButton } from "../ui/Submit";
+import { useSubmit } from "../ui/useSubmit";
 
 const FIELD_NAMES = ["reason"];
 const REASON_CTX = { field: "理由", min: REPORT_REASON_MIN, max: REPORT_REASON_MAX };
@@ -20,21 +23,33 @@ export type ReportTarget = { storeId: string; storeName: string };
 
 type Props = ReportTarget & { onClose: () => void };
 
+/**
+ * 送れたあと（2026-09-25 監査の指摘 横断-03）。欄と「送る」を畳み、送れたことだけを出す——それまでは送ったあとも
+ * 「送る」が押せ、同じ通報が重ねて届いた（運営が通報の件数を読み違える）。
+ */
+const ReportSent = ({ storeName, onClose }: { storeName: string; onClose: () => void }) => (
+  <section className="report-sent" aria-label={`${storeName}の通報`}>
+    <p className="done-notice" role="status" data-testid="report-sent">
+      {SUBMIT_TEXTS.reportSent}
+    </p>
+    <button type="button" onClick={onClose}>
+      閉じる
+    </button>
+  </section>
+);
+
 export const ReportForm = ({ storeId, storeName, onClose }: Props) => {
   const [reason, setReason] = useState("");
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [sent, setSent] = useState(false);
+  const report = useSubmit();
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await callApi("POST /api/customer/reports", { body: { storeId, reason } });
-    if (isFailure(result)) {
-      setFailure(result);
-      return;
-    }
-    setFailure(null);
-    setSent(true);
+    const result = await report.run(() => callApi("POST /api/customer/reports", { body: { storeId, reason } }));
+    if (result !== null && !isFailure(result)) setSent(true);
   };
+
+  if (sent) return <ReportSent storeName={storeName} onClose={onClose} />;
 
   return (
     <form
@@ -55,16 +70,14 @@ export const ReportForm = ({ storeId, storeName, onClose }: Props) => {
         value={reason}
         maxLength={REPORT_REASON_MAX}
         onChange={(event) => setReason(event.target.value)}
-        {...fieldAria("reason", failure, "report-reason")}
+        {...fieldAria("reason", report.failure, "report-reason")}
       />
-      <FieldMessage name="reason" inputId="report-reason" failure={failure} ctx={REASON_CTX} />
+      <FieldMessage inputId="report-reason" name="reason" failure={report.failure} ctx={REASON_CTX} />
 
-      <button type="submit" data-testid="btn-send-report">
+      <SubmitButton type="submit" data-testid="btn-send-report" busy={report.busy}>
         送る
-      </button>
-      <FormMessage failure={failure} fieldNames={FIELD_NAMES} />
-
-      {sent && <p data-testid="report-sent">運営に知らせました。ありがとうございます。</p>}
+      </SubmitButton>
+      <FormMessage failure={report.failure} fieldNames={FIELD_NAMES} />
 
       <button type="button" onClick={onClose}>
         閉じる
