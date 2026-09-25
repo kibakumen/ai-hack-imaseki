@@ -9,49 +9,39 @@
 //     その気になれば画面を開いた瞬間に今すぐ探すボタンを押せること」
 //
 // **なぜ `CustomerApp` の中ではなくこの1枚を被せる形にしたか**
-// 客の登録は要件1として決まっており、受け入れ検査（`tests/acceptance/v2/r01-customer-register.ui.test.tsx`）が
-// 「ホームが 401 なら登録の入力を出し、取得の画面は出さない」（基準 1.10・1.11）を `CustomerApp` に対して
-// 見ている。だから**部品の描き方は変えない**——変えるのは「実際のアプリが 401 のままにならないこと」だけ。
-// ここが開いた瞬間に登録を済ませるので、`CustomerApp` は 200 のホームを受け取り、いきなり取得の画面を出す。
-// 自動の登録が通らなかったときは `CustomerApp` をそのまま描く＝客が手で入れる登録の入力が出る（受け皿）。
+// 客の登録は要件1として決まっており、受け入れ検査が「ホームが 401 なら登録の入力を出し、取得の画面は
+// 出さない」（基準 1.10・1.11）を見ている。だから `CustomerApp` の描き方は変えず、ここが開いた瞬間に
+// 登録を済ませて、`CustomerApp` が 200 のホームを受け取るようにする。自動の登録が通らなかったときは
+// `CustomerApp` をそのまま描く＝受け皿の登録の入力が出る（呼び名は自動で入り、電話番号は任意）。
 //
-// 集めるものは要件のまま（呼び名・電話番号）だが、**客には聞かない**:
+// 集めるものは要件のまま（呼び名・電話番号）だが、**客には聞かない**（`lib/client/guestIdentity`）:
 //   - 呼び名は `guest-xxxxxx` を作る。店は照合コードで客を見分けるので、本人の名前は要らない。
-//   - 電話番号は形だけを満たす仮の値。店が緊急時に連絡できる先は、客が登録の確認の画面から
-//     あとで入れ直せる（`AccountSettings`）。
-// どちらも「客が入れなくても探し始められる」ことを優先した結果で、要件の項目自体は減らしていない。
+//   - 電話番号は形だけを満たす仮の値。店が緊急時に連絡できる先は、取得の画面のこだわり条件の
+//     いちばん下から任意で入れられる。登録そのものは /me の下端の「この端末の登録を消す」で消せる。
+//
+// 2026-09-25 監査の指摘で直した2つ:
+//   - 不具合-22: 「一度だけ走らせる印」と片付けの印が組み合わさって、開発時の StrictMode（effect を
+//     実行→片付け→再実行）で準備中のまま進まなかった。印をやめ、effect は毎回始めて片付けで打ち切る。
+//     二重の登録は「送る直前にまだ打ち切られていないか」を見て防ぐ。
+//   - 客-02: 35%の濃さに縮めた確かめの部品と「準備をしています…」だけで最長15秒待たせ、押すよう促す文も
+//     無いまま登録の画面へ落としていた。3秒たっても値が来なければ部品を普通の濃さに戻して押すよう促し、
+//     **部品を描いたまま**待つ。部品が失敗を知らせたら待たずに受け皿へ。遅れた値を拾う別の待ち（部品ごと
+//     外していたので値が二度と届かなかった）は消した。
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { callApi, getPublicConfig, isFailure, isUnauthenticated } from "../../lib/client/api";
-import { GUEST_PHONE_PLACEHOLDER } from "../../lib/schemas/limits";
-import { HumanCheck, type HumanCheckHandle } from "../ui/HumanCheck";
+import { guestNickname, phoneOrPlaceholder } from "../../lib/client/guestIdentity";
+import { HumanCheck } from "../ui/HumanCheck";
 import { CustomerApp } from "./CustomerApp";
 
-/** 自動で作る呼び名。`guest-` ＋ 6字（呼び名の上限20字に収まる）。 */
-const guestNickname = (): string => `guest-${Math.random().toString(36).slice(2, 8)}`;
+/** 確かめの値がこれだけ来なければ、部品を普通の濃さで見せて押すよう促す（客-02 の案A・AI判断の値）。 */
+const HUMAN_CHECK_HINT_MS = 3000;
 /**
- * 仮の電話番号（形の正本は `schemas/limits.ts` の `PHONE_PATTERN`＝0 で始まる10〜11桁。値は
- * `GUEST_PHONE_PLACEHOLDER`——取得の画面の電話番号の欄が「仮のまま」を見分けるのに同じ値を読む）。
- * 実在しない番号を入れるのは、**客に聞かずに登録を済ませる**ため。店が本当に連絡したい場面は
- * 「来ない客への確認」で、そこは照合コードと来店の記録で足りる（本人の指摘）。
- * 本物の番号は、取得の画面のこだわり条件のいちばん下から任意で入れられる（2026-09-22 本人の指摘）。
+ * 確かめの値を待つ上限。部品を描いたまま待つので、対話の確かめを客が押す時間も入る（旧: 15秒で打ち切り、
+ * そのあと部品を外したまま45秒待っていた）。過ぎたら受け皿の登録の入力へ倒れる（値なしでは送らない・不具合-04）。
+ * ⚠️ 自動の登録は確かめが通ることに依っている——守りを緩めて通す道は作らない（設計書「人かどうかの確かめ」）。
  */
-const PLACEHOLDER_PHONE = GUEST_PHONE_PLACEHOLDER;
-
-/**
- * 人かどうかの確かめの値を待つ上限。これを過ぎたら送らずに手の登録へ倒れる（値なしでは送らない・不具合-04）。
- * ⚠️ 確かめが働いていない間（サイトキーのホスト名の設定が合っていない等）は、客はここで待たされた
- * あとに手の登録の画面を見る。**自動の登録は確かめが通ることに依っている**——守りを緩めて通す道は
- * 作らない（設計書「人かどうかの確かめ」: 確かめが取れないときも断る・本人選択）。
- */
-const HUMAN_TOKEN_WAIT_MS = 15000;
-/**
- * 1回目が空振りしたあと、遅れて届いた値でもう一度だけ登録を試す上限（2026-09-22 追加）。
- * ⚠️ **4秒では足りなかった**——チームの人が README の URL を開いて**登録の画面を見た**。
- * Turnstile の managed は、初回や回線によっては読み込みだけで数秒かかり、
- * 対話の challenge が出れば人が押すまで値が来ない。**待ち切って諦めるより、遅れて来た値を拾う**。
- */
-const LATE_TOKEN_WAIT_MS = 45000;
+const HUMAN_TOKEN_WAIT_MS = 60000;
 /** 値が届いたかを見に行く間隔（AI判断。待ち時間の刻み）。 */
 const TOKEN_POLL_MS = 100;
 
@@ -73,30 +63,53 @@ type RegisterOutcome = "registered" | "refused" | "busy";
 
 const isRateLimited = (answer: unknown): boolean => isFailure(answer) && answer.error?.kind === "rate_limited";
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** 裏の登録を1回送る。 */
+const sendRegistration = async (humanToken: string): Promise<RegisterOutcome> => {
+  const answer = await callApi("POST /api/register/customer", {
+    body: { nickname: guestNickname(), phone: phoneOrPlaceholder(""), genres: [], budgetMax: null, humanToken },
+  });
+  if (isRateLimited(answer)) return "busy";
+  return isFailure(answer) ? "refused" : "registered";
+};
+
 export const GuestEntry = () => {
   const [phase, setPhase] = useState<Phase>("checking");
   const [siteKey, setSiteKey] = useState<string | null>(null);
-  const humanRef = useRef<HumanCheckHandle | null>(null);
-  // 確かめの値は使い切りなので、届いた値を「1回だけ使う」形で持つ（登録に使ったら捨てる）。
+  /** 確かめの値が3秒来ない（部品を普通の濃さで見せて押すよう促す） */
+  const [slow, setSlow] = useState(false);
+  // 確かめの値は使い切りなので、届いた値を「1回だけ使う」形で持つ。部品の失敗も同じく印で受ける。
   const tokenRef = useRef<string | null>(null);
-  /** 二重に登録しないための印（描き直しで effect がもう一度走っても1回だけ送る）。 */
-  const startedRef = useRef(false);
+  const failedRef = useRef(false);
 
   const handleToken = useCallback((token: string) => {
     tokenRef.current = token;
   }, []);
+  const handleError = useCallback(() => {
+    failedRef.current = true;
+  }, []);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+    // 片付けで打ち切る（StrictMode の1回目・画面を離れたとき）。打ち切られた回は何も変えず、何も送らない。
     let alive = true;
+
+    /** 値が届くか、部品が失敗するか、上限を過ぎるまで待つ。値が無ければ null。 */
+    const waitForToken = async (): Promise<string | null> => {
+      const startedAt = Date.now();
+      while (tokenRef.current === null && !failedRef.current && Date.now() - startedAt < HUMAN_TOKEN_WAIT_MS) {
+        await sleep(TOKEN_POLL_MS);
+        if (!alive) return null;
+        if (Date.now() - startedAt >= HUMAN_CHECK_HINT_MS) setSlow(true);
+      }
+      return tokenRef.current;
+    };
 
     void (async () => {
       // 1. 識別子を持っているか。**登録へ進むのは「識別子が無い・受け付けられない」（401・unauthenticated）
-      //    ときだけ**（設計書「客の画面」の優先の順の1）。サーバーの不具合（500・internal）・通信の失敗・
-      //    応答の形の崩れで登録すると、新しい識別子の Cookie が今の Cookie を上書きし、確保中の客が店で見せる
-      //    コードへ二度と戻れなくなる（2026-09-25 レビューの指摘）。それ以外は `CustomerApp` に任せる
-      //    ——端末に残した確保と「確かめられていません」を出す（基準 9.10・9.11）。
+      //    ときだけ**（設計書「客の画面」の優先の順の1）。サーバーの不具合・通信の失敗・応答の形の崩れで
+      //    登録すると、新しい識別子の Cookie が今の Cookie を上書きし、確保中の客が店で見せるコードへ二度と
+      //    戻れなくなる（不具合-02）。それ以外は `CustomerApp` に任せる。
       const home = await callApi("GET /api/customer/home");
       if (!alive) return;
       if (!isUnauthenticated(home)) {
@@ -104,60 +117,30 @@ export const GuestEntry = () => {
         return;
       }
 
-      // 2. 持っていない。人かどうかの確かめの部品を出して、値が届くのを待つ。
+      // 2. 持っていない。人かどうかの確かめの部品を出して、値が届くのを待つ。サイトキーが取れないときは
+      //    値を作る部品を描けないので、待たずに受け皿へ（値の無い登録は送らない・不具合-04）。
       const config = await getPublicConfig();
       if (!alive) return;
       const key = config?.turnstileSiteKey ?? "";
-      if (key !== "") setSiteKey(key);
-      setPhase("registering");
-
-      // 3. 値が届いたら（または待ちきれなかったら）、裏で登録する。
-      //    サイトキーが取れていないときは待たない——値を作る部品を描けないので、待つだけ無駄に遅くなる。
-      const waitedUntil = Date.now() + (key === "" ? 0 : HUMAN_TOKEN_WAIT_MS);
-      while (tokenRef.current === null && Date.now() < waitedUntil) {
-        await new Promise((resolve) => setTimeout(resolve, TOKEN_POLL_MS));
-        if (!alive) return;
-      }
-      const register = async (humanToken: string): Promise<RegisterOutcome> => {
-        tokenRef.current = null;
-        const answer = await callApi("POST /api/register/customer", {
-          body: {
-            nickname: guestNickname(),
-            phone: PLACEHOLDER_PHONE,
-            genres: [],
-            budgetMax: null,
-            humanToken,
-          },
-        });
-        if (isRateLimited(answer)) return "busy";
-        return isFailure(answer) ? "refused" : "registered";
-      };
-
-      // 値が無いまま送らない（不具合-04）——値の無い登録は必ず断られるうえ、以前は接続元の登録の回数を減らしていた。
-      const firstToken = tokenRef.current;
-      const first: RegisterOutcome = firstToken === null ? "refused" : await register(firstToken);
-      if (!alive) return;
-      if (first === "registered") {
+      if (key === "") {
         setPhase("ready");
         return;
       }
-      if (first === "busy") {
-        setPhase("busy");
+      setSiteKey(key);
+      setPhase("registering");
+      const token = await waitForToken();
+      // 送る直前にまだ打ち切られていないかを見る（二重の登録を防ぐ）
+      if (!alive) return;
+      if (token === null) {
+        setPhase("ready");
         return;
       }
 
-      // 1回目が通らなかった。**画面は先に出す**——待たせ続けるより、手で登録できる状態を見せる。
-      // そのうえで裏で値の到着を待ち続け、遅れて届いたらもう一度だけ送る（2026-09-22）。
-      setPhase("ready");
-      const lateUntil = Date.now() + LATE_TOKEN_WAIT_MS;
-      while (tokenRef.current === null && Date.now() < lateUntil) {
-        await new Promise((resolve) => setTimeout(resolve, TOKEN_POLL_MS));
-        if (!alive) return;
-      }
-      const lateToken = tokenRef.current;
-      if (lateToken === null) return;
-      // 通れば `CustomerApp` がホームを取り直して取得の画面へ変わる。通らなければ登録の入力のまま。
-      if ((await register(lateToken)) === "registered") window.location.reload();
+      // 3. 裏で登録する。通れば `CustomerApp` は 200 のホームを受け取る。断られたら受け皿の登録の入力へ。
+      tokenRef.current = null;
+      const outcome = await sendRegistration(token);
+      if (!alive) return;
+      setPhase(outcome === "busy" ? "busy" : "ready");
     })();
 
     return () => {
@@ -181,10 +164,15 @@ export const GuestEntry = () => {
   return (
     <main aria-busy="true" data-testid="guest-entry">
       <p>お店を探す準備をしています…</p>
-      {/* 確かめの部品は描かれていないと値を作れない。客の目に触れない置き方は CSS 側の仕事。 */}
+      {slow ? (
+        <p className="human-check-prompt" role="status" data-testid="human-check-prompt">
+          下の確認を押してください。押すと、すぐに探せるようになります。
+        </p>
+      ) : null}
+      {/* 確かめの部品は描かれていないと値を作れない。初めの3秒は目立たせず、来なければ普通の濃さで見せる */}
       {siteKey !== null ? (
-        <div className="human-check-quiet">
-          <HumanCheck ref={humanRef} siteKey={siteKey} onToken={handleToken} />
+        <div className={slow ? "human-check-visible" : "human-check-quiet"}>
+          <HumanCheck siteKey={siteKey} onToken={handleToken} onError={handleError} />
         </div>
       ) : null}
     </main>
