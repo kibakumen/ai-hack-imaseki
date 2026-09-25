@@ -6,6 +6,7 @@ import type { ZodType } from "zod";
 import type { FieldReason } from "../domain/inputRefusal";
 import type { Deps } from "../ports";
 import { DEFAULT_MAX_BODY_BYTES } from "../schemas/limits";
+import { LOGIN_DEVICE_COOKIE_NAME, parseCookies } from "./cookies";
 import { checkOrigin, identifyCustomer, identifySession, renewSession } from "./guards";
 import { admitRequest, rateRulesFor, settleCharges } from "./rateLimits";
 import { forbidden, refusal, unauthenticated } from "./refusals";
@@ -302,6 +303,7 @@ const handleRoute = async <TInput, TAuth extends RouteAuth>(config: RouteConfig<
           customerId: ctx.auth === "customer" ? ctx.customerId : null,
           accountId: ctx.auth === "store" || ctx.auth === "admin" ? ctx.accountId : null,
           input,
+          loginDevice: parseCookies(req.headers.get("cookie"))[LOGIN_DEVICE_COOKIE_NAME] ?? null,
         });
   if (admission?.refused) return toResponse(refusal("rate_limited"), renewCookies);
 

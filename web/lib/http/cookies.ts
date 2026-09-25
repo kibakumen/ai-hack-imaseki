@@ -2,10 +2,15 @@
 // HttpOnly・Secure・SameSite=Lax・400日の Set-Cookie）。名前は自由（受け入れ検査は
 // Set-Cookie の先頭の `name=value` をそのまま見る）。
 
-import { SESSION_MAX_AGE_SECONDS } from "../schemas/limits";
+import { LOGIN_DEVICE_TRUST_MS, SESSION_MAX_AGE_SECONDS } from "../schemas/limits";
 
 export const CUSTOMER_COOKIE_NAME = "aihack_customer";
 export const SESSION_COOKIE_NAME = "aihack_session";
+/**
+ * 端末の印（ログインに通ったブラウザ・安全-10 のレビュー）。セッションではない——ログアウトでは消さず、
+ * これだけでは何の操作もできない。持っている要求だけ、ログインの接続元ごとの失敗の上限を数えない。
+ */
+export const LOGIN_DEVICE_COOKIE_NAME = "aihack_login_device";
 
 const DAY_SECONDS = 24 * 60 * 60;
 /** 400日（7桁以上・設計書「比べた案と、決めたこと」）。 */
@@ -16,6 +21,8 @@ export const CUSTOMER_COOKIE_MAX_AGE_SECONDS = 400 * DAY_SECONDS;
  * （スライディングウィンドウ・本人選択／AI提示 2026-09-21。数字の正本は schemas/limits.ts）。
  */
 export const SESSION_COOKIE_MAX_AGE_SECONDS = SESSION_MAX_AGE_SECONDS;
+/** 端末の印の Cookie は、信じる期間と同じ寿命にする（通るたびに配り直して延ばす）。 */
+export const LOGIN_DEVICE_COOKIE_MAX_AGE_SECONDS = Math.floor(LOGIN_DEVICE_TRUST_MS / 1000);
 
 const COMMON_ATTRS = "Path=/; HttpOnly; Secure; SameSite=Lax";
 

@@ -13,8 +13,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // 偽の時計と手元の D1 は受け入れ検査の道具を使う（写しを持たない・設計-19）。人かどうかの確かめの打ち切りは、進めないので起きない
 import { fakeClock, openDb, type Db } from "../../../tests/acceptance/v2/_fakes";
 import type { Deps } from "../ports";
-import { CUSTOMER_REGISTER_RATE_LIMIT, FETCH_RATE_LIMIT, LOGIN_FAILURE_LIMIT, LOGIN_IP_FAILURE_LIMIT, REGISTER_RATE_LIMIT, STORE_IMAGE_RATE_LIMIT } from "../schemas/limits";
-import { CUSTOMER_COOKIE_NAME } from "./cookies";
+import { rememberLoginDevice } from "../repo/loginDevices";
+import { CUSTOMER_REGISTER_RATE_LIMIT, FETCH_RATE_LIMIT, LOGIN_DEVICE_TRUST_MS, LOGIN_FAILURE_LIMIT, LOGIN_IP_FAILURE_LIMIT, REGISTER_RATE_LIMIT, STORE_IMAGE_RATE_LIMIT } from "../schemas/limits";
+import { CUSTOMER_COOKIE_NAME, LOGIN_DEVICE_COOKIE_NAME } from "./cookies";
 import { defineRoute } from "./defineRoute";
 import { rateKeyFor, rateLimitedRoutes, rateRuleFor, rateRulesFor } from "./rateLimits";
 import { ROUTE_DEFINITIONS } from "./routes";
@@ -469,6 +470,53 @@ describe("30.4 同じアカウントへの、同じ接続元からのログイ�
     expect(results.filter((r) => r.status === 401)).toHaveLength(LOGIN_FAILURE_LIMIT);
     expect(results.filter((r) => r.status === 429)).toHaveLength(30 - LOGIN_FAILURE_LIMIT);
     expect(handled).toBe(LOGIN_FAILURE_LIMIT);
+  });
+
+  // レビューの指摘: 接続元ごとの失敗の上限は正しいパスワードも断るので、会場の Wi-Fi や携帯の CGNAT で同じ回線の
+  // 他人が30回間違えると、その回線の店と運営が全員15分入れなくなった。「上限を超えても照合が通れば通す」にすると、
+  // 上限を超えたあとも 200 と 429 で当たり外れが分かり、スプレーの上限そのものが無くなる。
+  // そこで、前にこの端末（ブラウザ）でそのアカウントに通った印（端末の Cookie）を持つ要求だけ、接続元の上限を数えない。
+  describe("安全-10 のレビュー: 端末の印", () => {
+    const DEVICE = "d".repeat(22);
+    const deviceCookie = { cookie: `${LOGIN_DEVICE_COOKIE_NAME}=${DEVICE}` };
+    const loginWith = (route: ReturnType<typeof loginRoute>, deps: Deps, email: string, password: string, headers: Record<string, string> = {}) =>
+      route.handle(post("/api/auth/login", { email, password, humanToken: "tok-ok" }, { "cf-connecting-ip": IP, ...headers }), deps);
+    const spray = async (route: ReturnType<typeof loginRoute>, deps: Deps) => {
+      for (let i = 0; i < LOGIN_IP_FAILURE_LIMIT; i++) expect((await login(route, deps, `victim-${i}@example.com`, "guess-1")).status, String(i)).toBe(401);
+      expect((await login(route, deps, "victim-next@example.com", "guess-1")).status).toBe(429);
+    };
+
+    it("前にこの端末でそのアカウントに通っていれば、同じ回線の他人が上限まで間違えたあとでも入れる", async () => {
+      const route = loginRoute(() => {});
+      const { deps, db, clock } = await makeDeps();
+      clock.set(at(500));
+      await rememberLoginDevice(db, { email: "Owner@Example.com", tokenHash: hashOf(DEVICE), nowIso: at(400) });
+      await spray(route, deps);
+      expect((await loginWith(route, deps, "owner@example.com", RIGHT, deviceCookie)).status).toBe(200);
+    });
+
+    it("印が無い・別のアカウントの印・形の違う印・30日より古い印では、接続元の上限で断る（スプレーの上限は残る）", async () => {
+      const route = loginRoute(() => {});
+      const { deps, db, clock } = await makeDeps();
+      clock.set(at(500));
+      await rememberLoginDevice(db, { email: "owner@example.com", tokenHash: hashOf(DEVICE), nowIso: at(400) });
+      await rememberLoginDevice(db, { email: "stale@example.com", tokenHash: hashOf(DEVICE), nowIso: new Date(Date.parse(at(500)) - LOGIN_DEVICE_TRUST_MS - MIN).toISOString() });
+      await spray(route, deps);
+      expect((await loginWith(route, deps, "owner@example.com", RIGHT)).status).toBe(429);
+      expect((await loginWith(route, deps, "someone-else@example.com", RIGHT, deviceCookie)).status).toBe(429);
+      expect((await loginWith(route, deps, "stale@example.com", RIGHT, deviceCookie)).status).toBe(429);
+      await rememberLoginDevice(db, { email: "odd@example.com", tokenHash: hashOf("x"), nowIso: at(400) });
+      expect((await loginWith(route, deps, "odd@example.com", RIGHT, { cookie: `${LOGIN_DEVICE_COOKIE_NAME}=x` })).status).toBe(429);
+    });
+
+    it("印があっても、そのアカウントへの同じ接続元からの失敗10回（基準 30.4）は数える", async () => {
+      const route = loginRoute(() => {});
+      const { deps, db, clock } = await makeDeps();
+      clock.set(at(500));
+      await rememberLoginDevice(db, { email: "owner@example.com", tokenHash: hashOf(DEVICE), nowIso: at(400) });
+      for (let i = 0; i < LOGIN_FAILURE_LIMIT; i++) expect((await loginWith(route, deps, "owner@example.com", `wrong-${i}`, deviceCookie)).status, String(i)).toBe(401);
+      expect((await loginWith(route, deps, "owner@example.com", RIGHT, deviceCookie)).status).toBe(429);
+    });
   });
 
   it("通ったら数が消える＝失敗の続きが切れる（9回失敗して1回通ると、数え直しになる）", async () => {

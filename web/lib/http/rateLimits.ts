@@ -12,7 +12,9 @@
 // 落ちた要求だけを数える規則（ログインなど）も、試行を先に数え、通ったら取り消す形にした。
 
 import { ipCountingUnit } from "../domain/clientAddress";
+import { isLoginDeviceValue, normalizeLoginEmail } from "../domain/loginDevice";
 import type { Deps } from "../ports";
+import { isKnownLoginDevice } from "../repo/loginDevices";
 import { deleteRateCounter, hitRateCounter, refundRateCounter } from "../repo/rateCounters";
 import {
   ACCOUNT_SECRET_FAILURE_LIMIT,
@@ -22,6 +24,7 @@ import {
   CUSTOMER_REGISTER_RATE_LIMIT,
   FETCH_RATE_LIMIT,
   FETCH_RATE_WINDOW_MS,
+  LOGIN_DEVICE_TRUST_MS,
   LOGIN_FAILURE_LIMIT,
   LOGIN_IP_FAILURE_LIMIT,
   LOGIN_LOCK_WINDOW_MS,
@@ -70,6 +73,11 @@ export type RateRule = {
    * - `refund`: その1回ぶんだけ返す＝窓の中の失敗の数は残る（成功を挟んで数を戻す手を塞ぐ）
    */
   onSuccess?: "reset" | "refund";
+  /**
+   * 前にこの端末でそのアカウントに通った要求（端末の印の Cookie を持つ）では、この規則を数えない（断りもしない）。
+   * ログインの接続元ごとの上限だけが使う（安全-10 のレビュー）——同じ回線の他人の失敗で、店と運営を締め出さないため。
+   */
+  skipForKnownLoginDevice?: boolean;
 };
 
 const FETCH_RULE: RateRule = { name: "fetch", limit: FETCH_RATE_LIMIT, windowMs: FETCH_RATE_WINDOW_MS, by: "customer", counts: "requests" };
@@ -78,7 +86,17 @@ const CUSTOMER_REGISTER_RULE: RateRule = { name: "registerCustomer", limit: CUST
 const STORE_REGISTER_RULE: RateRule = { name: "registerStore", limit: REGISTER_RATE_LIMIT, windowMs: REGISTER_RATE_WINDOW_MS, by: "ip", counts: "requests" };
 const REPORT_RULE: RateRule = { name: "report", limit: REPORT_RATE_LIMIT, windowMs: REPORT_RATE_WINDOW_MS, by: "customer", counts: "requests" };
 const LOGIN_RULE: RateRule = { name: "login", limit: LOGIN_FAILURE_LIMIT, windowMs: LOGIN_LOCK_WINDOW_MS, by: "loginEmailAndIp", counts: "failures", onSuccess: "reset" };
-const LOGIN_IP_RULE: RateRule = { name: "loginIp", limit: LOGIN_IP_FAILURE_LIMIT, windowMs: LOGIN_LOCK_WINDOW_MS, by: "ip", counts: "failures", onSuccess: "refund" };
+// 接続元ごとの上限は正しいパスワードも断る（上限を超えても照合が通れば通す形にすると、200 と 429 で当たり外れが
+// 分かり続け、スプレーの上限そのものが無くなる）。同じ回線の店と運営を巻き込まないよう、端末の印を持つ要求は数えない。
+const LOGIN_IP_RULE: RateRule = {
+  name: "loginIp",
+  limit: LOGIN_IP_FAILURE_LIMIT,
+  windowMs: LOGIN_LOCK_WINDOW_MS,
+  by: "ip",
+  counts: "failures",
+  onSuccess: "refund",
+  skipForKnownLoginDevice: true,
+};
 // 店の画像（2026-09-22 追加）。2026-09-25 の直し（安全-12・安全-19）で、客の要求のたびに外へ取りに行くことは
 // 無くなった（保存のときに1回だけ取って置き場に置く）。置き場を読むだけになったが、数え続ける（AI判断）。
 const STORE_IMAGE_RULE: RateRule = { name: "storeImage", limit: STORE_IMAGE_RATE_LIMIT, windowMs: STORE_IMAGE_RATE_WINDOW_MS, by: "customer", counts: "requests" };
@@ -138,14 +156,27 @@ export type RateKeySource = {
   accountId?: string | null;
   /** 検査を通った入力（ログインの入口のメールアドレスだけを見る） */
   input: unknown;
+  /** 端末の印の Cookie の値（無ければ null）。`skipForKnownLoginDevice` の規則だけが見る */
+  loginDevice?: string | null;
 };
 
-/** ログインの入口の入力からメールアドレスを取る。大小の違いで鍵が分かれないよう小文字へ揃える。 */
+/** ログインの入口の入力からメールアドレスを取る。大小の違いで鍵が分かれないよう揃える（domain/loginDevice）。 */
 const loginEmailOf = (input: unknown): string => {
   const value = (input as { email?: unknown } | null | undefined)?.email;
-  // 大文字の別名で数を分けられると、抑止そのものが無いのと同じになる（accounts の引き当ては大小を区別
-  // するので、揃えたことで別のアカウントの数に混ざることはない）。
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
+  return typeof value === "string" ? normalizeLoginEmail(value) : "";
+};
+
+/** 前にこの端末で、入力のメールアドレスのアカウントに通ったか（端末の印・安全-10 のレビュー）。 */
+const fromKnownLoginDevice = async (deps: Deps, source: RateKeySource): Promise<boolean> => {
+  const email = loginEmailOf(source.input);
+  if (!email || !isLoginDeviceValue(source.loginDevice)) return false;
+  const now = deps.clock.now();
+  return isKnownLoginDevice(deps.db, {
+    email,
+    tokenHash: await deps.hasher.sha256Hex(source.loginDevice),
+    sinceIso: new Date(now.getTime() - LOGIN_DEVICE_TRUST_MS).toISOString(),
+    nowIso: now.toISOString(),
+  });
 };
 
 /** 接続元の見出しが無いときの印（ログインの鍵だけが使う）。 */
@@ -188,7 +219,9 @@ export type RateAdmission = { refused: true } | { refused: false; charges: RateC
  * そのとき先に数えたほかの規則の分は返す（手続きが動いていない要求で、ほかの数えを減らさないため）。
  */
 export const admitRequest = async (deps: Deps, rules: readonly RateRule[], source: RateKeySource): Promise<RateAdmission> => {
-  const keyed = rules.flatMap((rule) => {
+  const skipKnownDevice = rules.some((rule) => rule.skipForKnownLoginDevice) && (await fromKnownLoginDevice(deps, source));
+  const applicable = skipKnownDevice ? rules.filter((rule) => !rule.skipForKnownLoginDevice) : rules;
+  const keyed = applicable.flatMap((rule) => {
     const key = rateKeyFor(rule, source);
     return key ? [{ rule, key }] : [];
   });

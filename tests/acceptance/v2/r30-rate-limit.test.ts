@@ -103,6 +103,23 @@ describeTask("33", "連打の抑止", () => {
     expect((await login("free@example.com", "right-password-1")).status).toBe(200);
   });
 
+  // 安全-10 のレビュー: 接続元ごとの失敗の上限（パスワードスプレーを数える・15分に30回）は正しいパスワードも断るので、
+  // 会場の Wi-Fi や携帯の CGNAT で同じ回線の他人が30回間違えると、その回線の店と運営が全員入れなくなった。
+  // 前にこの端末（ブラウザ）でそのアカウントに入った印を持つ要求だけ、接続元の上限を数えない（AI判断）。
+  it("安全-10: 同じ回線の他人がアカウントをまたいで30回間違えても、前にこの端末で入った店は入れる。印の無い端末は断る", async () => {
+    at(ctx, 250);
+    await registerStore(ctx, { email: "venue@example.com", password: "right-password-1" });
+    const body = (email: string, password: string) => ({ email, password, humanToken: "tok-ok" });
+    const before = await ctx.api(null, { ip: "198.51.100.10" }).post("/api/auth/login", body("venue@example.com", "right-password-1"));
+    expect(before.status).toBe(200);
+    // ログインが配った Cookie を全部持ち帰る（端末の印の名前は決めない）
+    const browser = before.setCookies.map((c) => c.split(";")[0]).join("; ");
+    const venue = "203.0.113.90";
+    for (let i = 0; i < 30; i++) expect((await ctx.api(null, { ip: venue }).post("/api/auth/login", body(`nobody-${i}@example.com`, "guess-1"))).status, String(i)).toBe(401);
+    expect((await ctx.api(null, { ip: venue }).post("/api/auth/login", body("venue@example.com", "right-password-1"))).status).toBe(429);
+    expect((await ctx.api(browser, { ip: venue }).post("/api/auth/login", body("venue@example.com", "right-password-1"))).status).toBe(200);
+  });
+
   // 数えが「読んでから書く」の2手だった頃は、同時に送ると上限をすり抜けた。上限まで通り、残りは断る
   // （以前の検査は全部1本ずつ順に送っていて、これを見ていなかった・設計-04。数えを1つの文にした・安全-02）。
   it("安全-02: 同じ客が取得を10本同時に送っても、通るのは1分の上限の5本だけ", async () => {
