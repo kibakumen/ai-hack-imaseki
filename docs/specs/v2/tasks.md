@@ -267,7 +267,7 @@ phase: tasks
   - _受け入れ検査: なし_
   - _担当: 本人_
 
-- [ ] 38. GitHub の public リポジトリ: 提出用の写し（`git clone --no-local`）で履歴から `sprint/` を消し（`git filter-repo --path sprint/ --invert-paths`）、`git log --all --oneline -- sprint/` が0行と古い鍵が履歴に無いことを確かめてから、public のリポジトリを作って push する（手順は `07_鍵と環境の準備.md` 9節）。公開中の速成版 `ai-hack-sekiari` が古い鍵で動いているなら、先に鍵を入れ替える
+- [ ] 38. 【2026-09-25 更新: このタスクは行わない。履歴は書き換えない（本人選択）。今の履歴のまま 2026-09-22 に public で公開済みで、代わりに速成版の Worker を止める・安全-05。完了の印は付けない。以下は当時の記録】GitHub の public リポジトリ: 提出用の写し（`git clone --no-local`）で履歴から `sprint/` を消し（`git filter-repo --path sprint/ --invert-paths`）、`git log --all --oneline -- sprint/` が0行と古い鍵が履歴に無いことを確かめてから、public のリポジトリを作って push する（手順は `07_鍵と環境の準備.md` 9節）。公開中の速成版 `ai-hack-sekiari` が古い鍵で動いているなら、先に鍵を入れ替える
   - 履歴から `sprint/` を消して push することは本人選択（19節）。手元の作業用のリポジトリは書き換えない（設計者の案・AI判断）
   - _要件: 34.8_
   - _受け入れ検査: なし_
