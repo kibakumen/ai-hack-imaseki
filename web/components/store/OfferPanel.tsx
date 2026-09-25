@@ -20,14 +20,11 @@
 //   2. **登録してある全部のクーポンを横並びの札にして、押して選べる**。選び直しも「更新する」で一括
 //   3. 「数を変える」が主役——左の広い列。右は「今日の動き」のまま。「公開を止める」は見出し行の右のまま
 //
-// ⚠️ **クーポンの選び直しの送り方（要報告・AI判断）**: 公開したままクーポンを変える入口は無い
-//    （要件19の基準 19.11——選び直すときは公開を止めて公開し直す）。新しい入口は作らず、
-//    「更新する」がその手順を代わりに踏む: `POST …/current/stop` → `POST /api/store/offers`
-//    （同じ組数・何名まで・何時までに、選び直したクーポンを載せて）。公開し直すと残りは配信数から
-//    数え直されるので、**配信数には今の残り（＋ダイヤルの差）を入れて残りを守る**。受け取られた数は
-//    0 から数え直しになる。確保している客はそのまま（止めても確保は取り消されない）。
-//    ⚠️ 受け入れ検査 19.11 は「カードの中に `input[type='checkbox']` が0個」を見る。クーポンの札は
-//    `<button role="checkbox" aria-checked>` で作る（押せて・選択状態が見える・読み上げにも答える）。
+// **クーポンの選び直しの送り方**（2026-09-25 監査の指摘 不具合-03 の案A・要件19.11 を改めた）: 公開中の
+//    オファーの `coupon_ids` だけを1文で差し替える入口 `POST …/current/coupons` へ送る。それまでは
+//    「止める → 公開し直す」の2本で代わりに踏んでいて、残りが古いオファーに割れ、結果を見ていた客の受け取りが
+//    古い番号で断られ、公開し直しが断られるとオファーが止まったまま消えた。今は同じオファーのまま変わる。
+//    クーポンの札は `<button role="checkbox" aria-checked>`（押せて・選択状態が見える・読み上げにも答える）。
 //
 // ⚠️ **受け入れ検査が掴む4つの `<form>`（`form-add` `form-reduce` `form-party-max` `form-until`）と、
 //    その中の `<input>`・ボタンは DOM に残す**。見た目はダイヤルが担い、欄とボタンは目には出さない
@@ -58,7 +55,7 @@ type Props = {
 };
 
 /** 公開したままできる操作（入口 `POST /api/store/offers/current/<action>`）。 */
-type OfferAction = "stop" | "add" | "reduce" | "party-max" | "until";
+type OfferAction = "stop" | "add" | "reduce" | "party-max" | "until" | "coupons";
 
 /** 1回の送信の結果。`ended` は「オファーが終わっていた」（ホームを取り直す・基準 19.12）。 */
 type Outcome = "ok" | "refused" | "ended";
@@ -112,19 +109,6 @@ const useOfferChange = (action: OfferAction) => {
 };
 
 type Change = ReturnType<typeof useOfferChange>;
-
-/** 公開し直し（入口 `POST /api/store/offers`）。クーポンを選び直したときだけ、止めたあとに呼ぶ。 */
-const useRepublish = () => {
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
-
-  const send = async (body: Record<string, unknown>): Promise<boolean> => {
-    const result = await callApi("POST /api/store/offers", { body });
-    setFailure(isFailure(result) ? result : null);
-    return !isFailure(result);
-  };
-
-  return { failure, send };
-};
 
 /** 目に出さない1操作ぶんの欄とボタン（キーボード・読み上げ・受け入れ検査の受け口）。 */
 const HiddenControl = ({
@@ -224,7 +208,7 @@ const CouponToggles = ({
       <p className="store-label" id="offer-coupons-label">
         見せるクーポン
       </p>
-      <p className="store-note">{changed ? "選び直しは「更新する」で送ります" : "押して選ぶ・0個でもよい"}</p>
+      <p className="store-note">{changed ? "選び直しは「更新する」で送ります（公開は止まりません）" : "押して選ぶ・0個でもよい"}</p>
     </div>
     {coupons.length === 0 ? (
       <p className="store-empty store-empty--coupons">
@@ -267,7 +251,7 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
   const reduce = useOfferChange("reduce");
   const partyMaxChange = useOfferChange("party-max");
   const untilChange = useOfferChange("until");
-  const republish = useRepublish();
+  const couponsChange = useOfferChange("coupons");
 
   // 打った（回した）値。空欄は「変えていない」。⚠️ 丸めない・範囲へ寄せない（断られた値をそのまま残す）
   const [addCount, setAddCount] = useState("");
@@ -278,8 +262,6 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
   const [couponIds, setCouponIds] = useState<string[]>(() => offer.coupons.map((coupon) => coupon.id));
   /** 「更新する」を押したが、変えたところが無かった */
   const [nothingToSend, setNothingToSend] = useState(false);
-  /** 残りが 0 組なので、クーポンを変えて公開し直せない（配信数の下限を割る） */
-  const [cannotRepublish, setCannotRepublish] = useState(false);
   const [sending, setSending] = useState(false);
 
   const nowUntil = timeInJst(offer.untilAt);
@@ -302,7 +284,6 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
 
   const clearNotes = () => {
     setNothingToSend(false);
-    setCannotRepublish(false);
   };
   const dialCapacity = (next: string) => {
     const delta = Number(next) - offer.capacity;
@@ -353,55 +334,18 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
   };
 
   /**
-   * クーポンを選び直したときの「更新する」——公開したまま変える入口は無いので（基準 19.11）、
-   * **止めてから、同じ内容にクーポンを載せて公開し直す**（どちらも既存の入口）。
-   * 配信数には**今の残り（＋ダイヤルの差）**を入れる——公開し直すと残りは配信数から数え直されるので、
-   * こうして残りを守る。何名まで・何時までもダイヤルと欄の値をそのまま載せる。
-   * 止めたあとに公開し直しが断られたら、ホームを取り直す（カードは消え、前回の値が入った公開の
-   * フォームに変わる）。
-   */
-  const republishWithCoupons = async () => {
-    const nextCapacity = offer.remaining + capacityDelta;
-    if (nextCapacity < OFFER_CAPACITY_MIN) {
-      // 止めてから断られると戻れないので、これだけは送る前に見る
-      setCannotRepublish(true);
-      return;
-    }
-    setSending(true);
-    const stopped = await stop.send({});
-    if (stopped === "refused") {
-      setSending(false);
-      return;
-    }
-    if (stopped === "ok") {
-      await republish.send({
-        couponIds,
-        capacity: nextCapacity,
-        partyMax: numberToSend(partyTarget),
-        until: untilChanged ? until : nowUntil,
-      });
-    }
-    setSending(false);
-    onChanged();
-  };
-
-  /**
-   * 「更新する」——変えたものだけを、既存の4つの入口へ**順に**送る（新しい入口は作らない）。
+   * 「更新する」——変えたものだけを、公開中の5つの入口へ**順に**送る。
    * 断られた操作の文はその操作の欄の下に残り、通った操作の欄は空に戻る。
    * 全部済んでから1回だけホームを取り直す。途中でオファーが終わっていたら、そこで止めて取り直す。
-   * クーポンを選び直していれば、4つの入口は使わず、止めて公開し直す（上の `republishWithCoupons`）。
+   * クーポンは差し替えの入口の1文（同じオファーのまま・不具合-03）。
    */
   const applyAll = async () => {
-    if (couponsChanged) {
-      setNothingToSend(false);
-      await republishWithCoupons();
-      return;
-    }
     const steps: Array<() => Promise<Outcome>> = [];
     if (addCount !== "") steps.push(() => sendOne(add, { count: numberToSend(addCount) }, () => setAddCount("")));
     if (reduceCount !== "") steps.push(() => sendOne(reduce, { count: numberToSend(reduceCount) }, () => setReduceCount("")));
     if (partyChanged) steps.push(() => sendOne(partyMaxChange, { partyMax: numberToSend(partyMax) }, () => setPartyMax("")));
     if (untilChanged) steps.push(() => sendOne(untilChange, { until }, () => setUntil("")));
+    if (couponsChanged) steps.push(() => sendOne(couponsChange, { couponIds }, () => undefined));
     if (steps.length === 0) {
       setNothingToSend(true);
       return;
@@ -580,18 +524,8 @@ export const OfferPanel = ({ offer, coupons, trend, onChanged }: Props) => {
               {sending ? "送っています…" : "更新する"}
             </button>
           </div>
-          {couponsChanged ? (
-            <p className="store-note">
-              クーポンを変えるので、いったん止めて同じ内容で公開し直します（残り {Math.max(0, offer.remaining + capacityDelta)} 組はそのまま・受け取られた数は 0 から数え直し・向かっている客はそのまま）。
-            </p>
-          ) : null}
           {nothingToSend ? <p className="store-note">ダイヤルを回すか、時刻を入れるか、クーポンを選び直してから押してください。</p> : null}
-          {cannotRepublish ? (
-            <p className="msg" role="alert">
-              残りが 0 組なので、クーポンを変えて公開し直せません。配信数を足すか、公開を止めてから新しく公開してください。
-            </p>
-          ) : null}
-          <FormMessage failure={republish.failure} />
+          <FormMessage failure={couponsChange.failure} />
         </div>
 
         <div className="store-offer__aside">

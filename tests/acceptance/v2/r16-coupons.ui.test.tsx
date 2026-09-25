@@ -59,7 +59,8 @@ describeTask("6", "クーポンの入力の画面", () => {
     await setup({ "DELETE /api/store/coupons/:id": () => refusal("coupon_in_use"), "PUT /api/store/coupons/:id": () => refusal("coupon_in_use") });
     const row = screen.getByTestId(TID.row("c1"));
     fireEvent.click(row.querySelector(`[data-testid="${TID.btn("delete-coupon")}"]`)!);
-    await waitFor(() => expect(row.querySelector(`[data-testid="${TID.msgForm}"]`)!.textContent).toMatch(/公開を止め/));
+    // 次の一手は「オファーの画面で選択を外す」（2026-09-25 に改めた・不具合-03: 公開中のクーポンは止めずに選び直せる）
+    await waitFor(() => expect(row.querySelector(`[data-testid="${TID.msgForm}"]`)!.textContent).toMatch(/選択を外/));
     expect(screen.getAllByTestId(/^row-c/)).toHaveLength(2);
     expect(row.textContent).toContain("生ビール1杯");
   });

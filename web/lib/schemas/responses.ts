@@ -280,6 +280,7 @@ export const RESPONSES = {
   "POST /api/store/offers/current/reduce": object({ ok, offer: offerView }),
   "POST /api/store/offers/current/party-max": object({ ok, offer: offerView }),
   "POST /api/store/offers/current/until": object({ ok, offer: offerView }),
+  "POST /api/store/offers/current/coupons": object({ ok, offer: offerView }),
   "POST /api/store/reservations/:id/complete": done,
   "POST /api/store/reservations/:id/cancel": done,
   "GET /api/store/results": object({ items: array(storeResult) }),

@@ -1,4 +1,6 @@
 // 要件19 公開中の変更（手続き・純粋 domain/until）。画面は r19-live-changes.ui.test.tsx。
+// ⚠️ 19.11 は 2026-09-25 に改めた（監査の指摘 不具合-03 の案A・本人承認）: 公開中のクーポンは、専用の入口
+//    `POST /api/store/offers/current/coupons` の1文で差し替える。
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { describeTask } from "./_tasks";
 import { approvedStore, fetchOffers, loadWeb, makeCtx, one, publishOffer, receive, receivedScene, registerCustomer, requireInResults, spot, type Ctx } from "./_fakes";
@@ -124,6 +126,47 @@ describeTask("20", "公開中の変更", () => {
     const late = (input: string) => resolveUntil({ input, publishedAt: new Date(JST("20:00")), now: new Date(JST("23:00")) });
     expect(late("02:00")).toMatchObject({ kind: "ok", at: new Date(JST("02:00", 1)) });
     expect(late("21:00").kind).toBe("in_past");
+  });
+
+  // 2026-09-25 監査の指摘 不具合-03 の案A（本人承認・要件19.11 を改めた）: それまで画面は「止める → 公開し直す」の
+  // 2本の要求でクーポンを選び直していて、残りが古いオファーに割れ、見ていた客の受け取りが断られた。
+  it("19.11（改） 公開中のクーポンを選び直すと、同じオファーのまま見せるクーポンだけが変わる。残り・確保のクーポンはそのまま・見ていた客は受け取れる・店のものでない番号は落ちる・終わったら offer_ended", async () => {
+    ctx.clock.set(JST("15:00"));
+    const s = await receivedScene(ctx, { capacity: 3, coupons: [{ name: "生ビール", note: "" }, { name: "デザート", note: "" }] });
+    const [beer, dessert] = s.store.coupons;
+    const before = await offerOf(s.store.api);
+    expect(before.coupons.map((c: any) => c.name)).toEqual(["生ビール", "デザート"]);
+    const readReservation = () => one(ctx.db, "SELECT coupons_json FROM reservations WHERE id = ?", s.reservation.id);
+    const reservationBefore = await readReservation();
+    // 選び直す前に結果を見ていた客
+    const watcher = await registerCustomer(ctx, { nickname: "みていた", phone: "08077770001" });
+    const seen = await fetchOffers(watcher.api, { party: 2, ...s.at });
+    requireInResults(seen, s.offer.id);
+
+    const other = await approvedStore(ctx, { coupons: [{ name: "よその店", note: "" }], ...spot() });
+    const changed = await s.store.api.post("/api/store/offers/current/coupons", { couponIds: [dessert.id, other.coupons[0].id] });
+    expect(changed.status).toBe(200);
+    expect(changed.json.offer).toMatchObject({ id: before.id, capacity: 3, remaining: 2 });
+    const after = await offerOf(s.store.api);
+    expect(after).toMatchObject({ id: before.id, capacity: 3, remaining: 2 });
+    expect(after.coupons.map((c: any) => c.name)).toEqual(["デザート"]);
+    expect((await one(ctx.db, "SELECT COUNT(*) AS n FROM offers WHERE store_id = ?", s.store.id)).n).toBe(1);
+    expect(await readReservation()).toEqual(reservationBefore);
+
+    // 見ていた客は、選び直したあとのクーポンの写しで受け取れる（要件16.6: 受け取った時点のクーポンを持つ）
+    const received = await receive(watcher.api, { offerId: s.offer.id, party: 2, fetchId: seen.json.fetchId });
+    expect(received.status).toBe(200);
+    expect(received.json.reservation.coupons.map((c: any) => c.name)).toEqual(["デザート"]);
+    expect((await offerOf(s.store.api)).remaining).toBe(1);
+
+    expect((await s.store.api.post("/api/store/offers/current/coupons", { couponIds: [] })).status).toBe(200);
+    expect((await offerOf(s.store.api)).coupons).toEqual([]);
+    expect((await s.store.api.post("/api/store/offers/current/coupons", { couponIds: "x" })).status).toBe(400);
+
+    await s.store.api.post("/api/store/offers/current/stop", {});
+    const ended = await s.store.api.post("/api/store/offers/current/coupons", { couponIds: [beer.id] });
+    expect(ended.status).toBe(409);
+    expect(ended.json.error.kind).toBe("offer_ended");
   });
 
   it("19.10 どの変更でも確保中の確保の人数・コード・期限・クーポンが変わらない。19.12 終わったオファーへの変更は offer_ended", async () => {

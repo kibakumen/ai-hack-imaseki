@@ -59,3 +59,13 @@ export const offerUntilSchema = z.object({
 });
 
 export type OfferUntilInput = z.infer<typeof offerUntilSchema>;
+
+/**
+ * 見せるクーポンの選び直し（要件19の基準 19.11・2026-09-25 に改めた・監査の指摘 不具合-03）。
+ * 0個でよい（公開と同じ）。店のものでない番号は手続きの文が落とす。
+ */
+export const offerCouponsSchema = z.object({
+  couponIds: z.array(z.string()).max(OFFER_COUPONS_MAX),
+});
+
+export type OfferCouponsInput = z.infer<typeof offerCouponsSchema>;

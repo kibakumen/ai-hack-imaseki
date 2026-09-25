@@ -60,8 +60,8 @@ const HomeBody = ({ home, trend, onChanged }: HomeBodyProps) => {
 
       {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={onChanged} />}
 
-      {/* `key` はオファーの番号——クーポンを選び直して公開し直すと別のオファーになるので、
-          ダイヤルと選択を新しいオファーの値から作り直す（同じオファーの取り直しでは残す） */}
+      {/* `key` はオファーの番号——止めて新しく公開すると別のオファーになるので、ダイヤルと選択を新しいオファーの
+          値から作り直す（同じオファーの取り直しとクーポンの選び直しでは残す・不具合-03） */}
       {home.offer ? <OfferPanel key={home.offer.id} offer={home.offer} coupons={home.coupons} trend={trend} onChanged={onChanged} /> : null}
     </>
   );

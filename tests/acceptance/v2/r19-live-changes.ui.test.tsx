@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// 要件19（画面）: 19.2・19.5・19.9・19.12・19.13 の断りの表示、19.11 クーポンのチェックを変える操作が無い、欄の横に公開した時刻と最長の時刻。
+// 要件19（画面）: 19.2・19.5・19.9・19.12・19.13 の断りの表示、19.11（2026-09-25 改）クーポンの選び直しは差し替えの入口1本、欄の横に公開した時刻と最長の時刻。
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
@@ -21,12 +21,38 @@ describeTask("20", "公開中のカードの4つの操作", () => {
     return screen.findByTestId("offer-card");
   };
 
-  it("19.11 公開中のオファーにクーポンのチェックを変える操作が無く、「何時まで」の欄の横に公開した時刻と最長の時刻が出る", async () => {
-    const card = await renderOffer(() => storeHomeDto({ offer: offerDto({ publishedAt: "2026-09-22T06:00:00.000Z", latestUntil: "2026-09-22T18:00:00.000Z", coupons: [{ id: "c1", name: "生ビール", note: "" }] }) }), {});
-    expect(card.querySelectorAll("input[type='checkbox']")).toHaveLength(0);
+  // 19.11 は 2026-09-25 に改めた（監査の指摘 不具合-03 の案A・本人承認）。それまでの画面は「止める → 公開し直す」の
+  // 2本で選び直していて、残りが古いオファーに割れた。今は差し替えの入口 1本だけを呼ぶ。
+  it("19.11（改） クーポンを選び直して「更新する」を押すと、差し替えの入口が1回だけ呼ばれ、止める入口も公開の入口も呼ばれない。「何時まで」の欄の横に公開した時刻と最長の時刻が出る", async () => {
+    const c1 = { id: "c1", name: "生ビール", note: "" };
+    const c2 = { id: "c2", name: "デザート", note: "" };
+    let shown = [c1];
+    const card = await renderOffer(
+      () =>
+        storeHomeDto({
+          offer: offerDto({ publishedAt: "2026-09-22T06:00:00.000Z", latestUntil: "2026-09-22T18:00:00.000Z", coupons: shown }),
+          coupons: [c1, c2].map((c) => ({ ...c, createdAt: "2026-09-01T00:00:00Z" })),
+        }),
+      {
+        "POST /api/store/offers/current/coupons": ({ body }: any) => {
+          shown = [c1, c2].filter((c) => body.couponIds.includes(c.id));
+          return { json: { ok: true, offer: offerDto({ coupons: shown }) } };
+        },
+        "POST /api/store/offers/current/stop": () => ({ json: { ok: true } }),
+        "POST /api/store/offers": () => ({ status: 201, json: { ok: true, offer: offerDto() } }),
+      },
+    );
     const untilForm = within(card).getByTestId(TID.form("until"));
     expect(untilForm.textContent).toMatch(/15:00/);
     expect(untilForm.textContent).toMatch(/03:00/);
+
+    fireEvent.click(within(card).getByTestId("offer-coupon-c2"));
+    fireEvent.click(within(card).getByTestId(TID.btn("update")));
+    await waitFor(() => expect(api.calls.some((c) => c.path === "/api/store/offers/current/coupons")).toBe(true));
+    await waitFor(() => expect(within(screen.getByTestId("offer-card")).getByTestId("offer-coupon-c2").getAttribute("aria-checked")).toBe("true"));
+    const posts = api.calls.filter((c) => c.method === "POST").map((c) => c.path);
+    expect(posts).toEqual(["/api/store/offers/current/coupons"]);
+    expect(api.calls.find((c) => c.path === "/api/store/offers/current/coupons")!.body).toEqual({ couponIds: ["c1", "c2"] });
   });
 
   it("断りの応答が、その操作の欄の直下かボタンの直下にだけ出て、カードの5項目と入れた数・時刻が残る。until_in_past の文に「公開を止める」、until_over_window の文に最長の時刻", async () => {

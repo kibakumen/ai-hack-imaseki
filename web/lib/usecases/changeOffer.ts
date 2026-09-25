@@ -1,8 +1,9 @@
-// 公開したままの変更（要件19）。店ができるのは4つ——組数を足す（基準 19.1）／残りの募集を減らす
-// （基準 19.4）／「何名まで」を上げ下げする（基準 19.6）／「何時まで」を動かす（基準 19.8）。
+// 公開したままの変更（要件19）。店ができるのは5つ——組数を足す（基準 19.1）／残りの募集を減らす
+// （基準 19.4）／「何名まで」を上げ下げする（基準 19.6）／「何時まで」を動かす（基準 19.8）／
+// 見せるクーポンを選び直す（基準 19.11・2026-09-25 に改めた・監査の指摘 不具合-03 の案A）。
 // 「公開を止める」（要件17の基準 17.12）はオファーを終わらせる操作なので、ここには無い。
 //
-// 4つとも同じ形で書く:
+// 5つとも同じ形で書く:
 //   1. **公開中の条件を WHERE に入れた1つの UPDATE** を当てる（終わったオファーには当たらない・基準 19.12）
 //   2. 当たらなかったら、公開中が在るかを読んで理由を分ける（無い＝ `offer_ended`／在る＝規則の断り）
 //   3. 当たったら、変えたあとのカードを返す（画面はこの値で数字を出し直す）
@@ -16,10 +17,10 @@
 import type { ServerRefusalKind } from "../domain/inputRefusal";
 import { resolveUntil } from "../domain/until";
 import type { Deps } from "../ports";
-import { addLiveOfferCapacity, findLiveOffer, reduceLiveOfferCapacity, updateLiveOfferPartyMax, updateLiveOfferUntil } from "../repo/offers";
+import { addLiveOfferCapacity, findLiveOffer, reduceLiveOfferCapacity, updateLiveOfferCoupons, updateLiveOfferPartyMax, updateLiveOfferUntil } from "../repo/offers";
 import type { FieldError } from "../schemas/error";
 import { OFFER_CAPACITY_MAX } from "../schemas/limits";
-import type { OfferCountInput, OfferPartyMaxInput, OfferUntilInput, OfferView } from "../schemas/offer";
+import type { OfferCountInput, OfferCouponsInput, OfferPartyMaxInput, OfferUntilInput, OfferView } from "../schemas/offer";
 import { liveOfferView } from "./storeHomeOffer";
 
 export type ChangeOfferResult =
@@ -68,6 +69,17 @@ export const reduceOfferCount = async (deps: Deps, storeId: string, input: Offer
 export const changeOfferPartyMax = async (deps: Deps, storeId: string, input: OfferPartyMaxInput): Promise<ChangeOfferResult> => {
   const nowIso = deps.clock.now().toISOString();
   const updated = await updateLiveOfferPartyMax(deps.db, { storeId, nowIso, partyMax: input.partyMax });
+  return updated ? changedCard(deps, storeId) : ENDED;
+};
+
+/**
+ * 見せるクーポンを選び直す（基準 19.11・2026-09-25 に改めた・監査の指摘 不具合-03 の案A）。
+ * 同じオファーの `coupon_ids` だけを差し替える（止めて公開し直さない）ので、残り・受け取られた数・実績の行は
+ * 割れず、結果を見ていた客もそのまま受け取れる。店のものでない番号は文が落とす（公開と同じ）。
+ */
+export const changeOfferCoupons = async (deps: Deps, storeId: string, input: OfferCouponsInput): Promise<ChangeOfferResult> => {
+  const nowIso = deps.clock.now().toISOString();
+  const updated = await updateLiveOfferCoupons(deps.db, { storeId, nowIso, couponIds: input.couponIds });
   return updated ? changedCard(deps, storeId) : ENDED;
 };
 
