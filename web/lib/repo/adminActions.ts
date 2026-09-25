@@ -67,16 +67,26 @@ export const insertAdminAction = async (db: Db, action: NewAdminAction): Promise
   await insertAdminActionStatement(db, action).run();
 };
 
-/** `detail` の JSON を読む。数と真偽だけを拾い、それ以外は落とす（壊れていれば空）。 */
-const parseDetail = (raw: unknown): AdminActionDetail => {
-  if (typeof raw !== "string") return {};
+/** 読んだ値が「名前 → 値」の組か（並びや null ではない）。 */
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** JSON の文字列を読む。壊れていれば null。 */
+const parseJson = (raw: string): unknown => {
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
-    return Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === "number" || typeof v === "boolean")) as AdminActionDetail;
+    return JSON.parse(raw);
   } catch {
-    return {};
+    return null;
   }
+};
+
+/**
+ * `detail` の JSON（名前 → 数か真偽の組）を読む。数と真偽だけを拾い、それ以外は落とす（壊れていれば空）。
+ * 並びを読む道具（repo/d1 の parseJsonArray）とは形が違うので、ここに置く。
+ */
+const parseDetail = (raw: unknown): AdminActionDetail => {
+  const parsed = typeof raw === "string" ? parseJson(raw) : null;
+  if (!isRecord(parsed)) return {};
+  return Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === "number" || typeof v === "boolean")) as AdminActionDetail;
 };
 
 /** その店への運営の操作を、新しい順に `limit` 件まで。 */
