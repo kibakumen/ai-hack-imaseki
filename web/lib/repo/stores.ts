@@ -104,10 +104,15 @@ export type StoreHomeRow = StoreSummary &
     budgetMax: number | null;
   };
 
-/** 店が承認済み（客に見せてよい）か。無い店・承認前・止められた店は false（店の画像の入口・安全-12）。 */
-export const isStoreApproved = async (db: Db, storeId: string): Promise<boolean> => {
-  const row = await db.prepare(`SELECT 1 AS found FROM stores WHERE id = ?1 AND status = 'approved'`).bind(storeId).first();
-  return row !== null;
+/**
+ * 承認済み（客に見せてよい）店の、登録の URL。無い店・承認前・止められた店は null（店の画像の入口・安全-12）。
+ * URL を登録していない承認済みの店は `{ url: null }`。
+ */
+export const findApprovedStoreUrl = async (db: Db, storeId: string): Promise<{ url: string | null } | null> => {
+  const row = await db.prepare(`SELECT url FROM stores WHERE id = ?1 AND status = 'approved'`).bind(storeId).first();
+  if (!row) return null;
+  const url = (row as { url?: unknown }).url;
+  return { url: typeof url === "string" && url !== "" ? url : null };
 };
 
 /** 書類の3つだけ。許可書を読む入口（店・運営）が使う。無ければ null＝そんな店は無い。 */

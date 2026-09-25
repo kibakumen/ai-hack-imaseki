@@ -3,8 +3,10 @@
 // 以前は客が渡した任意の URL をサーバーが取りに行き（外向きの GET の踏み台）、返した外部の URL を客の端末が
 // 店のサーバーから直接読んでいた（客の接続元と時刻が店側に渡る）。今は:
 //   - 画像は店が情報を保存したときに1回だけ、その店の登録の URL から取り、置き場に置く
-//   - 客の入口は店の番号で引き、**承認済みの店**の画像を自分のオリジンから返すだけ（外へは出ない）
+//   - 客の入口は店の番号で引き、**承認済みの店**の画像を自分のオリジンから返すだけ（置いてあれば外へは出ない）
+//   - 置き場にまだ画像が無い承認済みの店だけ、店の登録の URL から取って置く（埋め戻し・店ごとに1日1回まで・レビュー）
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { FAKE_STORE_IMAGE_PNG } from "../../tests/acceptance/v2/_fakePorts";
 import { approvedStore, makeCtx, PROFILE, registerCustomer, registerStore, type Ctx } from "../../tests/acceptance/v2/_fakes";
 
 describe("入口 GET /api/customer/store-image", () => {
@@ -47,6 +49,44 @@ describe("入口 GET /api/customer/store-image", () => {
     expect(r.headers.get("content-security-policy")).toContain("default-src 'none'");
     // 客の要求では外へ出ない
     expect(ctx.storeImage.calls.length).toBe(before);
+  });
+
+  // レビューの指摘: 画像は店が情報を保存したときにしか置かれないので、この直しを出した時点で URL を持っている店
+  // （ダミーデータの店を含む）は、店が保存し直すまで画像が出なかった（埋め戻しの手段が無かった）。
+  // 置き場に画像が無い承認済みの店だけ、客が開いたときに店の登録の URL から取って置く。店ごとに1日1回まで。
+  it("レビュー: 画像がまだ置かれていない承認済みの店は、客が開いたときに店の URL から取って置く。次からは置き場から返す", async () => {
+    const s = await approvedStore(ctx, { name: "前からの店" });
+    ctx.geocoder.set(PROFILE.address, { lat: 35.6595, lng: 139.7005 });
+    // 保存のときに取れなかった店（この直しより前に URL を保存した店と同じく、置き場に画像が無い）
+    ctx.storeImage.result = { ok: false };
+    expect((await s.api.put("/api/store/profile", { ...PROFILE, url: "https://legacy.example/home" })).status).toBe(200);
+    ctx.storeImage.result = { ok: true, image: { body: FAKE_STORE_IMAGE_PNG, contentType: "image/png" } };
+
+    const { api } = await registerCustomer(ctx);
+    const before = ctx.storeImage.calls.length;
+    const first = await api.get(`/api/customer/store-image?storeId=${encodeURIComponent(s.id)}`);
+    expect(first.status).toBe(200);
+    expect(first.headers.get("content-type")).toBe("image/png");
+    // 取りに行くのは店の登録の URL だけ
+    expect(ctx.storeImage.calls.slice(before)).toEqual(["https://legacy.example/home"]);
+    expect((await api.get(`/api/customer/store-image?storeId=${encodeURIComponent(s.id)}`)).status).toBe(200);
+    expect(ctx.storeImage.calls.length).toBe(before + 1);
+  });
+
+  it("レビュー: 埋め戻しで取れなかった店は、その日はもう取りに行かない（客が開くたびに外へ出ない）。1日たつとまた1回だけ試す", async () => {
+    const s = await approvedStore(ctx, { name: "画像の取れない店" });
+    ctx.geocoder.set(PROFILE.address, { lat: 35.6595, lng: 139.7005 });
+    ctx.storeImage.result = { ok: false };
+    expect((await s.api.put("/api/store/profile", { ...PROFILE, url: "https://no-image.example/" })).status).toBe(200);
+    const { api } = await registerCustomer(ctx);
+    const before = ctx.storeImage.calls.length;
+    for (let i = 0; i < 3; i++) expect((await api.get(`/api/customer/store-image?storeId=${encodeURIComponent(s.id)}`)).status, String(i)).toBe(404);
+    expect(ctx.storeImage.calls.length).toBe(before + 1);
+    ctx.clock.set(new Date(ctx.clock.now().getTime() + 24 * 60 * 60 * 1000 + 1000).toISOString());
+    ctx.storeImage.result = { ok: true, image: { body: FAKE_STORE_IMAGE_PNG, contentType: "image/png" } };
+    const { api: later } = await registerCustomer(ctx);
+    expect((await later.get(`/api/customer/store-image?storeId=${encodeURIComponent(s.id)}`)).status).toBe(200);
+    expect(ctx.storeImage.calls.length).toBe(before + 2);
   });
 
   it("承認されていない店・画像の無い店・無い番号は 404（在る無しを分けて見せない）", async () => {

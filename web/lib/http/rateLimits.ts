@@ -99,6 +99,7 @@ const LOGIN_IP_RULE: RateRule = {
 };
 // 店の画像（2026-09-22 追加）。2026-09-25 の直し（安全-12・安全-19）で、客の要求のたびに外へ取りに行くことは
 // 無くなった（保存のときに1回だけ取って置き場に置く）。置き場を読むだけになったが、数え続ける（AI判断）。
+// まだ置いていない店だけは、店ごとに1日1回まで店の登録の URL へ取りに行く（埋め戻し・usecases/storeImage）。
 const STORE_IMAGE_RULE: RateRule = { name: "storeImage", limit: STORE_IMAGE_RATE_LIMIT, windowMs: STORE_IMAGE_RATE_WINDOW_MS, by: "customer", counts: "requests" };
 // 場所の候補（2026-09-22 追加）。打つたびに呼ぶ入口で、1回ごとに地図のサービスを呼ぶ。
 const PLACE_SUGGEST_RULE: RateRule = { name: "placeSuggest", limit: PLACE_SUGGEST_RATE_LIMIT, windowMs: PLACE_SUGGEST_RATE_WINDOW_MS, by: "customer", counts: "requests" };
