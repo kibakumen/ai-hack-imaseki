@@ -7,13 +7,18 @@
 // （2026-09-25 監査の指摘 設計-13: 手続きの中から D1 を直接呼んでいたのを repo へ移した）。
 
 import type { Deps } from "../ports";
-import { banApprovedStore, findStoreStatus } from "../repo/adminStores";
+import { banApprovedStore, countNotifiableCustomersOfStore, findStoreStatus } from "../repo/adminStores";
 import { listActiveReservationsOfStore } from "../repo/reservations";
 import type { StoreStatus } from "../repo/stores";
+import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { sendCancellationPushes } from "./pushMessage";
 
 export type BanStoreResult =
-  | { ok: true }
+  /**
+   * 止まった。`cancelled` は取り消した確保の数、`notified` は知らせを送った客の数（購読のある客だけ・
+   * 送信の成否は問わない）。運営の画面が「N 組を取り消し、M 人に通知しました」と出す（運営-03）。
+   */
+  | { ok: true; cancelled: number; notified: number }
   | { ok: false; kind: "not_found" }
   /** 承認済みではない（未承認・もう止められている）。今の状況を返して断る（基準 25.4） */
   | { ok: false; kind: "state"; state: StoreStatus };
@@ -24,7 +29,10 @@ export type BanStoreResult =
  * 取り消した確保の残りは1戻る（基準 18.6）——押さえている条件に `admin_cancelled` が無いので、
  * どこにも数を保存せずに満たす（設計書「確保の状態と、残りの数え方」）。オファーは同時に終わる。
  */
-export const banStore = async (deps: Deps, storeId: string): Promise<BanStoreResult> => {
+/**
+ * 誰が・なぜ止めたか（と取り消した数・通知した人数）を、停止と同じまとまりで記録する（運営-01）。
+ */
+export const banStore = async (deps: Deps, storeId: string, actor: AdminActor, reason: string | null = null): Promise<BanStoreResult> => {
   const status = await findStoreStatus(deps.db, storeId);
   if (!status) return { ok: false, kind: "not_found" };
   if (status !== "approved") return { ok: false, kind: "state", state: status };
@@ -32,11 +40,13 @@ export const banStore = async (deps: Deps, storeId: string): Promise<BanStoreRes
   const nowIso = deps.clock.now().toISOString();
   // 知らせの相手は**取り消す前に**読む（取り消したあとでは「確保中だった客」を選べない・基準 22.2）。
   const affected = await listActiveReservationsOfStore(deps.db, storeId, nowIso);
+  const notified = await countNotifiableCustomersOfStore(deps.db, storeId, nowIso);
+  const action = newAdminAction(deps, actor, "ban", storeId, { reason, detail: { cancelled: affected.length, notified } });
 
   // 同時に来た操作に負けた・変わった行の数が分からないときは「当たらなかった」側へ倒す（repo/d1 の changedRows）。
-  if (!(await banApprovedStore(deps.db, storeId, nowIso))) return { ok: false, kind: "state", state: status };
+  if (!(await banApprovedStore(deps.db, storeId, nowIso, action))) return { ok: false, kind: "state", state: status };
 
-  deps.logger.log({ event: "ban_store", id: storeId });
+  deps.logger.log({ event: "ban_store", id: storeId, actor: actor.accountId });
   // 取り消した確保を1件ずつ残す（`id` は確保の番号。客を指す値は載せない・基準 27.6）。
   for (const reservation of affected) deps.logger.log({ event: "admin_cancel", id: reservation.id });
 
@@ -48,5 +58,5 @@ export const banStore = async (deps: Deps, storeId: string): Promise<BanStoreRes
     affected.map((reservation) => reservation.customerId),
   );
 
-  return { ok: true };
+  return { ok: true, cancelled: affected.length, notified };
 };

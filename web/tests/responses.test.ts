@@ -64,6 +64,10 @@ const ADMIN_ROW = {
   claims: 0,
   budgetMin: null,
   offerRemaining: null,
+  changedSinceApproval: false,
+  contacted: false,
+  storeCancelled: 0,
+  storeCancelRate: 0,
 };
 
 /**
@@ -102,13 +106,42 @@ const ALWAYS_SENT: ReadonlyArray<{ route: keyof typeof RESPONSES; body: unknown;
   { route: "PUT /api/store/coupons/:id", body: { ok: true, coupon: COUPON_ROW }, fields: ["coupon.createdAt"] },
   {
     route: "GET /api/admin/stores",
-    body: { items: [ADMIN_ROW], summary: { publishing: 0, pending: 0 } },
-    fields: ["items.0.publishing", "items.0.createdAt", "items.0.claims", "items.0.budgetMin", "items.0.offerRemaining"],
+    body: { items: [ADMIN_ROW], summary: { publishing: 0, pending: 0, awaiting: 0, total: 1 } },
+    fields: [
+      "items.0.publishing",
+      "items.0.createdAt",
+      "items.0.claims",
+      "items.0.budgetMin",
+      "items.0.offerRemaining",
+      "items.0.changedSinceApproval",
+      "items.0.storeCancelled",
+      "summary.awaiting",
+      "summary.total",
+    ],
   },
   {
     route: "GET /api/admin/stores/:id",
-    body: { store: { ...ADMIN_ROW, url: null, genres: [], menus: [], budgetMax: null, license: false, cardRegistered: false } },
-    fields: ["store.publishing", "store.createdAt", "store.claims", "store.offerRemaining"],
+    body: {
+      store: {
+        ...ADMIN_ROW,
+        url: null,
+        genres: [],
+        menus: [],
+        budgetMax: null,
+        license: false,
+        cardRegistered: false,
+        licenseUploadedAt: null,
+        approval: null,
+        changes: { name: false, address: false, license: false },
+        activeReservations: 0,
+        duplicates: 0,
+        note: null,
+        contactedAt: null,
+      },
+      reports: { count: 0, latest: [] },
+      history: [],
+    },
+    fields: ["store.publishing", "store.createdAt", "store.claims", "store.offerRemaining", "store.activeReservations", "store.changes", "reports", "history"],
   },
 ];
 

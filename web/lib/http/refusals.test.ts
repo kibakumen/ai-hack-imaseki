@@ -62,7 +62,7 @@ describe("見分けと「見つからない」の断りの語", () => {
       ["運営の承認", ctx.admin!.api.post("/api/admin/stores/no-such-store/approve", {})],
       ["運営の停止", ctx.admin!.api.post("/api/admin/stores/no-such-store/ban", {})],
       ["運営の戻す", ctx.admin!.api.post("/api/admin/stores/no-such-store/restore", {})],
-      ["仮のパスワード", ctx.admin!.api.post("/api/admin/stores/no-such-store/temp-password", {})],
+      ["仮のパスワード", ctx.admin!.api.post("/api/admin/stores/no-such-store/temp-password", { currentPassword: ctx.admin!.password })],
       ["運営が読む許可書", ctx.admin!.api.get("/api/admin/stores/no-such-store/license")],
       ["店のクーポンの変更", scene.store.api.put("/api/store/coupons/no-such-coupon", { name: "x", note: "" })],
       ["店のクーポンの削除", scene.store.api.del("/api/store/coupons/no-such-coupon")],

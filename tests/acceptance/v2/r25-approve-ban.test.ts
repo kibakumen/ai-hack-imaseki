@@ -40,8 +40,8 @@ describeTask("8", "承認", () => {
   });
 
   // どの直し方（承認を戻す・承認時の写しを残す・差し替えを断る）でも、承認に使った許可書は消さない（運営-02 の直し方）。
-  // 以前は、承認のあとの差し替えを確かめる検査が1本も無かった（設計-04）。
-  it.fails("既知の不具合（運営-02）: 承認したあとに店が許可書を上げ直しても、承認に使った許可書は消えない", async () => {
+  // 以前は、承認のあとの差し替えを確かめる検査が1本も無かった（設計-04）。2026-09-25 に案2（承認した時点の写し）で直した。
+  it("運営-02: 承認したあとに店が許可書を上げ直しても、承認に使った許可書は消えない", async () => {
     const s = await approvedStore(ctx);
     const reviewed = (await one(ctx.db, "SELECT license_key FROM stores WHERE id = ?", s.id)).license_key as string;
     expect(ctx.files.store.has(reviewed)).toBe(true);

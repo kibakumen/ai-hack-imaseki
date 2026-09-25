@@ -152,6 +152,17 @@ export const CARD_SESSION_ID_MAX = 255;
 // 要件24（運営の店の一覧）の基準 24.5
 /** 検索の語の上限（AI判断。店名50字・住所・メールアドレス254字のどれにも当てられる長さ） */
 export const ADMIN_SEARCH_MAX = 254;
+// 運営の操作の記録（2026-09-25 監査の指摘 運営-01・運営-05）。字数は AI判断（通報の理由の500字と揃えた）
+/** 取り消し・戻すの理由の上限 */
+export const ADMIN_REASON_MAX = 500;
+/** 店ごとの運営のメモの上限 */
+export const ADMIN_NOTE_MAX = 1000;
+/** 店の詳細に出す操作の履歴の件数 */
+export const ADMIN_HISTORY_MAX = 20;
+/** 店の詳細に出す、その店への通報の直近の件数（運営-03） */
+export const ADMIN_STORE_REPORTS_LATEST = 3;
+/** 通報した客の短い印の字数（運営-09。客の内部の番号のハッシュの先頭） */
+export const REPORTER_MARK_LENGTH = 6;
 // 要件17（オファーの公開）の基準 17.3・17.4・17.5／要件19（公開中の変更）の基準 19.1・19.2・19.6
 /** 募集する組数（基準 17.3・範囲は AI判断） */
 export const OFFER_CAPACITY_MIN = 1;

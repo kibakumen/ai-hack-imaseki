@@ -124,8 +124,9 @@ describe("運営の店の一覧（要件24）", () => {
 
   it("24.8・24.9 いちばん上の集計は、公開中のオファーの数と未承認の店の数。絞り込みで変わらない", async () => {
     const json = await list();
-    expect(json.summary).toEqual({ publishing: 2, pending: 1 });
-    expect((await list("?filter=banned")).summary).toEqual({ publishing: 2, pending: 1 });
+    // awaiting は未承認のうち「連絡済み」でない店（運営-05）、total は全部の店（運営-11）。
+    expect(json.summary).toEqual({ publishing: 2, pending: 1, awaiting: 1, total: json.items.length });
+    expect((await list("?filter=banned")).summary).toEqual({ publishing: 2, pending: 1, awaiting: 1, total: json.items.length });
   });
 });
 

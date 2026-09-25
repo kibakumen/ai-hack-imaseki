@@ -20,8 +20,9 @@ describeTask("25", "全部の入口の入力の検査", () => {
     const apis: Record<string, any> = { public: ctx.api(), customer: customer.api, store: scene.store.api, admin: ctx.admin!.api };
     const { INPUT_REFUSAL_KINDS, FIELD_REASONS } = await loadWeb("lib/domain/inputRefusal");
     const { errorSchema } = await loadWeb("lib/schemas/error");
-    // 本文を持たない入口（操作の名前だけで決まるもの・消すもの）は除く
-    const bodyless = (r: { method: string; path: string }) => /logout|\/stop$|\/complete$|\/cancel$|\/approve$|\/ban$|\/restore$|\/temp-password$|card\/setup$|^\/api\/customer$/.test(r.path) || (r.method === "DELETE" && r.path === "/api/store/coupons/:id");
+    // 本文を持たない入口（操作の名前だけで決まるもの・消すもの）と、本文の項目が全部任意の入口（止める・戻すの理由・運営-01）は除く。
+    // 仮のパスワードの発行は運営の今のパスワードを求めるようになった（運営-01 の案3）ので、本文のある入口として検査する。
+    const bodyless = (r: { method: string; path: string }) => /logout|\/stop$|\/complete$|\/cancel$|\/approve$|\/ban$|\/restore$|\/acknowledge$|card\/setup$|^\/api\/customer$/.test(r.path) || (r.method === "DELETE" && r.path === "/api/store/coupons/:id");
     const routes = ctx.app.routes.filter((r: any) => r.method !== "GET" && !bodyless(r));
     expect(routes.length).toBeGreaterThan(12);
     const before = await snapshot(ctx.db, { except: ["rate_counters"] });

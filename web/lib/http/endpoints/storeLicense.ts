@@ -3,7 +3,8 @@
 // URL を知っているだけでは読めない——見分けは defineRoute が済ませ、店の入口は自分の店しか指せない。
 
 import { confirmCardSetup, startCardSetup } from "../../usecases/card";
-import { readLicense, uploadLicense, type LicenseContent } from "../../usecases/license";
+import { readLicense, readLicenseAsAdmin, uploadLicense, type LicenseContent } from "../../usecases/license";
+import { adminLicenseQuerySchema } from "../../schemas/admin";
 import { cardConfirmSchema, licenseUploadSchema } from "../../schemas/documents";
 import { LICENSE_UPLOAD_MAX_BODY_BYTES } from "../../schemas/limits";
 import { respond } from "../respond";
@@ -58,12 +59,17 @@ const readOwnLicenseRoute = defineRoute({
   },
 });
 
+/**
+ * 運営が許可書を開く。`?version=approved` なら承認した時点の写し（2026-09-25 監査の指摘 運営-02）。
+ * 開いたことは「誰が・いつ」つきで記録に残す（個人が特定できる書類なので・運営-01）。
+ */
 const readLicenseAsAdminRoute = defineRoute({
   method: "GET",
   path: "/api/admin/stores/:id/license",
   auth: "admin",
-  handler: async ({ params, deps }) => {
-    const file = await readLicense(deps, params.id);
+  input: adminLicenseQuerySchema,
+  handler: async ({ params, input, deps, ctx }) => {
+    const file = await readLicenseAsAdmin(deps, params.id, { accountId: ctx.accountId }, input.version ?? "current");
     return file ? licenseResponse(file) : notFound();
   },
 });

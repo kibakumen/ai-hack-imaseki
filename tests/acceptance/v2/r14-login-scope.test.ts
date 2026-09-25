@@ -149,11 +149,11 @@ describeTask("31", "【最終日】仮のパスワードとパスワードの変
 
   it("14.10〜14.16 発行→前のパスワードとセッションが効かない→仮のパスワードで入ると変更を求められる→決めると仮のパスワードが効かない。範囲の外は変わらない", async () => {
     const s = await registerStore(ctx, { email: "temp@example.com", password: "old-password-1" });
-    const issued = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, {});
+    const issued = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, { currentPassword: ctx.admin!.password });
     expect(issued.status).toBe(200);
     const temp: string = issued.json.tempPassword;
     expect(temp.length).toBeGreaterThanOrEqual(16);
-    const issued2 = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, {});
+    const issued2 = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, { currentPassword: ctx.admin!.password });
     expect(issued2.json.tempPassword).not.toBe(temp);
     const current: string = issued2.json.tempPassword;
     expect((await ctx.admin!.api.get(`/api/admin/stores/${s.id}`)).text).not.toContain(current);
@@ -213,7 +213,7 @@ describeTask("31", "【最終日】パスワードの変更とセッション・
   it.fails("既知の不具合（安全-21）: 仮のパスワードのまま入った店は、パスワードを変えるまでホーム・パスワードの変更・ログアウト以外を使えない", async () => {
     if (!ctx.admin) await seedAdmin(ctx);
     const s = await registerStore(ctx, { email: "temp-guard@example.com", password: "old-password-1" });
-    const issued = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, {});
+    const issued = await ctx.admin!.api.post(`/api/admin/stores/${s.id}/temp-password`, { currentPassword: ctx.admin!.password });
     const temp = await login("temp-guard@example.com", issued.json.tempPassword);
     expect(temp.json.mustChangePassword).toBe(true);
     const api = ctx.api(cookieOf(temp)!);

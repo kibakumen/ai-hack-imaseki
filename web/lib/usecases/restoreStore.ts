@@ -9,6 +9,7 @@
 import type { Deps } from "../ports";
 import { findStoreStatus, restoreBannedStore } from "../repo/adminStores";
 import type { StoreStatus } from "../repo/stores";
+import { newAdminAction, type AdminActor } from "./adminActionRecord";
 
 export type RestoreStoreResult =
   | { ok: true }
@@ -16,15 +17,20 @@ export type RestoreStoreResult =
   /** 止められていない（未承認・もう承認済み）。今の状況を返して断る（基準 25.9） */
   | { ok: false; kind: "state"; state: StoreStatus };
 
-export const restoreStore = async (deps: Deps, storeId: string): Promise<RestoreStoreResult> => {
+/**
+ * 誰が・なぜ戻したかを、状況の書き換えと同じまとまりで記録する（2026-09-25 監査の指摘 運営-01）。
+ * 理由は任意（空白だけなら「理由なし」）。
+ */
+export const restoreStore = async (deps: Deps, storeId: string, actor: AdminActor, reason: string | null = null): Promise<RestoreStoreResult> => {
   const status = await findStoreStatus(deps.db, storeId);
   if (!status) return { ok: false, kind: "not_found" };
   if (status !== "banned") return { ok: false, kind: "state", state: status };
 
   // 読んでから書くまでの間に状況が動いた（同時に来た操作）なら、当たらない。変わった行の数が
   // 分からないときも「当たらなかった」側へ倒す（repo/d1 の changedRows・`approveStore` と同じ形）。
-  if (!(await restoreBannedStore(deps.db, storeId))) return { ok: false, kind: "state", state: status };
+  const action = newAdminAction(deps, actor, "restore", storeId, { reason });
+  if (!(await restoreBannedStore(deps.db, storeId, action))) return { ok: false, kind: "state", state: status };
 
-  deps.logger.log({ event: "restore_store", id: storeId });
+  deps.logger.log({ event: "restore_store", id: storeId, actor: actor.accountId });
   return { ok: true };
 };

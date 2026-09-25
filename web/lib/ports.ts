@@ -10,7 +10,11 @@ export type Hasher = {
   sha256Hex(input: string): Promise<string>;
   derive(password: string, saltB64: string, iterations: number): Promise<string>;
 };
-export type Logger = { log(entry: { event: string; id?: string | number; durationMs?: number; errorKind?: string }): void };
+/**
+ * 記録の1行。`actor` は操作した店・運営のアカウントの内部の番号（運営の強い操作で「誰が」を残す・
+ * 2026-09-25 監査の指摘 運営-01）。どれも自由な文字列ではない（個人データを載せない）。
+ */
+export type Logger = { log(entry: { event: string; id?: string | number; actor?: string; durationMs?: number; errorKind?: string }): void };
 
 export type AiSelectInput = {
   party: number;

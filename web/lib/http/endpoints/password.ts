@@ -6,20 +6,28 @@
 // パスワードの場面が無いので、今のパスワードの再入力を求める（合わなければ 403・password_mismatch）。
 
 import { changeOwnPasswordSchema, changePasswordSchema } from "../../schemas/account";
+import { adminTempPasswordSchema } from "../../schemas/admin";
 import { changeOwnPassword, changePassword } from "../../usecases/changePassword";
 import { issueTempPassword } from "../../usecases/issueTempPassword";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
 import { notFound, refusal } from "../refusals";
 
+/**
+ * 仮のパスワードの発行。**運営自身の今のパスワード**の再入力を求める（2026-09-25 監査の指摘 運営-01 の案3）。
+ * 合わなければ 403・password_mismatch（どの欄かも返す）。総当たりは rateLimits の「今のパスワードを確かめる操作」の
+ * 規則が数える（落ちた回だけを数える）。
+ */
 const issueTempPasswordRoute = defineRoute({
   method: "POST",
   path: "/api/admin/stores/:id/temp-password",
   auth: "admin",
-  handler: async ({ params, deps }) => {
-    const issued = await issueTempPassword(deps, params.id);
+  input: adminTempPasswordSchema,
+  handler: async ({ params, input, deps, ctx }) => {
+    const issued = await issueTempPassword(deps, params.id, { accountId: ctx.accountId }, input.currentPassword);
+    if (!issued.ok && issued.kind === "password_mismatch") return refusal("password_mismatch", { fields: [{ name: "currentPassword", reason: "not_allowed" }] });
     // 店が無い番号。運営にも在る無しを取り違えさせないよう、ほかの当たらない入口と同じ 404 に倒す。
-    if (!issued) return notFound();
+    if (!issued.ok) return notFound();
     // ここが仮のパスワードを見せるただ1回（基準 14.13）。運営の画面の一覧・詳細はこの値を持たない。
     return respond("POST /api/admin/stores/:id/temp-password", { ok: true, tempPassword: issued.tempPassword });
   },
