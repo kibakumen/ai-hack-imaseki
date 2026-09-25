@@ -238,7 +238,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
    3. 公開（`wrangler deploy`）
 
    Worker を消して止めていた場合は、公開のあとに Worker の秘密（5.2 の6つ）を送る: `scripts/v2-keys.sh push`（手元を Turnstile の試験用の鍵にしているなら、5.2 の注のとおり本番の秘密鍵は別に入れる）。
-7. **Google Cloud で、Geocoding API と Places API に1日の割り当て（quota）と予算アラートを置く**（安全-03。コードの抑止は客ごと・接続元ごとなので、客を大量に作られたときの実費の天井はコードの外で止める）。
+7. **Google Cloud で、Geocoding API と Places API に1日の割り当て（quota）と予算アラートを置く**（安全-03。コードの側にもアプリ全体の1日の地図の上限 `MAPS_DAILY_CALL_LIMIT`（`web/lib/schemas/limits.ts`）を置いたが、割り当ては二重の備えとして残す。割り当ては、この上限より少し大きい値にする——小さいと、アプリの上限に届く前に Google が断り、客には同じ「直せなかった」が出る）。
 8. **OrcaRouter の管理画面で、本番の鍵の1日の予算が、アプリ全体の1日の AI の上限（`web/lib/schemas/limits.ts` の `AI_DAILY_BUDGET_USD`）より大きいことを確かめる**（額は公開の文書に書かない・安全-25）。鍵の予算が上限より小さいと、アプリの上限に届く前に鍵が止まる。
 9. **公開のあとの確かめ**:
    - Cloudflare のダッシュボードで Workers Logs（`web/wrangler.jsonc` の `observability`）が見えること。想定外の例外は `unhandled_error`、AI の1日の上限に届いた日は `ai_daily_budget_reached` の1行が残る。呼び出しごとの記録は切ってあり（`invocation_logs: false`・`redact_query_string: true`）、問い合わせ文字列つきの URL（`/api/customer/place?lat=…`・`/api/customer/place-suggest?q=…`）が1行も無いことも確かめる（要件27）

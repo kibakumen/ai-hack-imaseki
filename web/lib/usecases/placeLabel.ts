@@ -12,6 +12,7 @@ import type { Deps } from "../ports";
 import { GEOCODE_TIMEOUT_MS } from "../schemas/limits";
 import type { PlaceQuery } from "../schemas/place";
 import { raceDeadline } from "./deadline";
+import { meteredGeocoder } from "./mapsBudget";
 
 export type PlaceLabelResult = { label: string | null };
 
@@ -24,10 +25,11 @@ export type PlaceLabelResult = { label: string | null };
 export const placeLabel = async (deps: Deps, input: PlaceQuery): Promise<PlaceLabelResult> => {
   // 打ち切りの合図は、最初の await より前に作る（raceDeadline の注）。
   const deadline = deps.clock.after(GEOCODE_TIMEOUT_MS);
-  const reverse = deps.geocoder.reverse;
+  const geocoder = meteredGeocoder(deps);
+  const reverse = geocoder.reverse;
   if (!reverse) return { label: null };
 
-  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deadline, (signal) => reverse.call(deps.geocoder, { lat: input.lat, lng: input.lng }, { signal }));
+  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deadline, (signal) => reverse.call(geocoder, { lat: input.lat, lng: input.lng }, { signal }));
   if (!answer.ok || !answer.value.ok) return { label: null };
   return { label: answer.value.label };
 };

@@ -126,6 +126,13 @@ export const PLACE_SUGGEST_DEBOUNCE_MS = 250;
 export const PLACE_SUGGEST_RATE_LIMIT = 60;
 export const PLACE_SUGGEST_RATE_WINDOW_MS = 60 * 1000;
 /**
+ * 同じ接続元からの候補の問い合わせは、客をまたいで1分に120回まで（2026-09-26 のレビュー・安全-03 の残り・AI判断。客2人ぶん）。
+ * 客ごとの上限だけだと、客の登録（接続元ごとに1時間60人）で識別子を作り直し、1つの回線から毎分およそ3600回
+ * Places Autocomplete（有料）を呼ばせられた。アプリ全体の1日の天井は MAPS_DAILY_CALL_LIMIT。
+ */
+export const PLACE_SUGGEST_IP_RATE_LIMIT = 120;
+export const PLACE_SUGGEST_IP_RATE_WINDOW_MS = 60 * 1000;
+/**
  * 店のホームページから雰囲気画像を取る打ち切り（2026-09-22 移植。地図と同じ3秒・値は AI判断）。
  * 差し替えた時計と AbortSignal の両方で使う（usecases/storeImage）。
  */
@@ -197,6 +204,13 @@ export const TIME_OF_DAY_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const FETCH_RATE_LIMIT = 5;
 export const FETCH_RATE_WINDOW_MS = 60 * 1000;
 /**
+ * 同じ接続元からの取得は、少しずつ届く取得と合わせて1分に30回まで（2026-09-26 のレビュー・安全-03 の残り・AI判断）。
+ * 客ごとの上限（1分5回）だけだと、客の登録（接続元ごとに1時間60人）で識別子を作り直し、1つの回線から AI の1日の上限を
+ * 1時間ほどで使い切れた（その日は全員の AI が止まる）。30 は「同じ回線の客6人が同時に上限まで探す」幅（値は仮）。
+ */
+export const FETCH_IP_RATE_LIMIT = 30;
+export const FETCH_IP_RATE_WINDOW_MS = 60 * 1000;
+/**
  * 同じ接続元からの**店の**登録は1時間に10回まで（基準 30.2）。
  * ⚠️ 2026-09-25 監査の指摘 不具合-04 で、客の登録とは**別に数える**ようにした（AI判断・要件30.2 の変更として
  * 仕様へ返す）。合わせて数えていた頃は、会場の Wi-Fi のように同じ回線から11人目が来ると、客の自動の登録も
@@ -240,6 +254,9 @@ export const LOGIN_DEVICE_BYTES = 16;
  */
 export const PLACE_RATE_LIMIT = 10;
 export const PLACE_RATE_WINDOW_MS = 60 * 1000;
+/** 同じ接続元からの、現在地を地名に直す問い合わせは1分に60回まで（2026-09-26 のレビュー・安全-03 の残り・AI判断。客6人ぶん） */
+export const PLACE_IP_RATE_LIMIT = 60;
+export const PLACE_IP_RATE_WINDOW_MS = 60 * 1000;
 /**
  * 同じ店の、店の情報の保存（PUT /api/store/profile）は1時間に30回まで（安全-03・AI判断）。
  * 保存のたびに住所を地図へ問い合わせ、ホームページから画像を1回取る。
@@ -254,6 +271,13 @@ export const STORE_PROFILE_RATE_WINDOW_MS = 60 * 60 * 1000;
 export const AI_DAILY_BUDGET_USD = 0.9;
 /** 実費が記録されない呼び出し（失敗・打ち切り）もあるので、その日の回数でも止める（AI判断） */
 export const AI_DAILY_CALL_LIMIT = 2000;
+/**
+ * アプリ全体の1日（日本時間）の、地図のサービス（Geocoding・Places）を呼ぶ回数の上限（2026-09-26 のレビュー・安全-03 の残り・AI判断）。
+ * 連打の抑止は客ごと・接続元ごとなので、接続元を替えれば天井が無い。届いたら、その日の残りは地図を呼ばずに
+ * 「直せなかった」と同じ倒れ方をする（候補は空・地名は出さない・場所の文字では探せず現在地で探す）。
+ * Google Cloud の割り当て（README 6.2 の手順7）は二重の備えとして残す。2000 回は Geocoding の単価で1日およそ10米ドルの天井。
+ */
+export const MAPS_DAILY_CALL_LIMIT = 2000;
 /** 同じ店の、カードの登録の開始と確かめ（Stripe を呼ぶ）は、合わせて10分に10回まで（安全-03 の構造の検査・AI判断） */
 export const CARD_RATE_LIMIT = 10;
 export const CARD_RATE_WINDOW_MS = 10 * 60 * 1000;
@@ -271,12 +295,23 @@ export const ACCOUNT_SECRET_WINDOW_MS = 15 * 60 * 1000;
 export const RECEIVE_RATE_LIMIT = 10;
 export const RECEIVE_RATE_WINDOW_MS = 10 * 60 * 1000;
 /**
+ * 同じ接続元からの受け取り・受け取り直しは、客をまたいで1時間に20回まで（2026-09-26 のレビュー・安全-06 の残り・AI判断）。
+ * 1回の受け取りが席を押さえるのは平均20分なので、1つの回線が同時に押さえ続けられる席はおよそ 20 × 20 / 60 ≒ 7。
+ * 配信数10以上の店を1人で埋め続けることはできなくなるが、配信数の小さい店は1つの回線でも押さえ続けられる——そこは
+ * 店の側の対抗手段（「来ない」で枠を戻す・要件18.4 の変更）が要り、本人の判断に上げてある（CHANGES-2026-09-25 の6節）。
+ * 会場や携帯の CGNAT で同じ回線の客が多い場面では、21人目の受け取りが1時間断られうる（釣り合いは本人が決める）。
+ */
+export const RECEIVE_IP_RATE_LIMIT = 20;
+export const RECEIVE_IP_RATE_WINDOW_MS = 60 * 60 * 1000;
+/**
  * 同じ客が同じオファーを押さえられる件数（受け取り1回＋受け取り直し1回・安全-06 の案A と案C・AI判断）。
  * 受け取り直しの道でも、もう一度受け取る道でも、**取得をまたいで**合わせてこの件数まで（状態を問わず数える）。
  *
  * 取得ごと（fetchId ごと）に数えていた頃は、探し直して新しい fetchId を取るだけで数え直しになり、40分ごとに
  * 取得を1回足せば同じ席を押さえ続けられた（2026-09-25 のレビュー）。今は押さえ続けるには識別子を作り直すしかなく、
- * そこに人かどうかの確かめ（Turnstile）と登録の上限が効く。
+ * そこに人かどうかの確かめ（Turnstile）が1回ずつ要る。ただし客の登録の上限は接続元ごとに1時間60人（不具合-04 で広げた）で、
+ * 識別子の作り直しの歯止めにはならない（配信数10の店を埋め続けるのに要る新しい識別子は1時間に約15個）。1つの回線の天井は
+ * 受け取りの接続元ごとの上限（下の RECEIVE_IP_RATE_LIMIT）が持つ（2026-09-26 のレビュー）。
  * 時間の窓は置かない——オファーは公開から12時間以内に終わる（要件17の基準 17.5・要件19の基準 19.8）ので、オファーの番号がそのまま窓になる。
  * 窓を短く置くと、窓が明けた古い識別子を使い回して押さえ続けられる。
  */

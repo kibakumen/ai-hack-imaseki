@@ -22,16 +22,24 @@ import {
   CARD_RATE_LIMIT,
   CARD_RATE_WINDOW_MS,
   CUSTOMER_REGISTER_RATE_LIMIT,
+  FETCH_IP_RATE_LIMIT,
+  FETCH_IP_RATE_WINDOW_MS,
   FETCH_RATE_LIMIT,
   FETCH_RATE_WINDOW_MS,
   LOGIN_DEVICE_TRUST_MS,
   LOGIN_FAILURE_LIMIT,
   LOGIN_IP_FAILURE_LIMIT,
   LOGIN_LOCK_WINDOW_MS,
+  PLACE_IP_RATE_LIMIT,
+  PLACE_IP_RATE_WINDOW_MS,
   PLACE_RATE_LIMIT,
   PLACE_RATE_WINDOW_MS,
+  PLACE_SUGGEST_IP_RATE_LIMIT,
+  PLACE_SUGGEST_IP_RATE_WINDOW_MS,
   PLACE_SUGGEST_RATE_LIMIT,
   PLACE_SUGGEST_RATE_WINDOW_MS,
+  RECEIVE_IP_RATE_LIMIT,
+  RECEIVE_IP_RATE_WINDOW_MS,
   RECEIVE_RATE_LIMIT,
   RECEIVE_RATE_WINDOW_MS,
   REGISTER_RATE_LIMIT,
@@ -114,19 +122,28 @@ const ACCOUNT_SECRET_RULE: RateRule = { name: "accountSecret", limit: ACCOUNT_SE
 // 受け取り・受け取り直し（安全-06 の案A）。
 const RECEIVE_RULE: RateRule = { name: "receive", limit: RECEIVE_RATE_LIMIT, windowMs: RECEIVE_RATE_WINDOW_MS, by: "customer", counts: "requests" };
 
+// 接続元ごとの天井（2026-09-26 のレビュー・安全-03 と安全-06 の残り）。客ごとの規則に重ねる。
+// 客の登録は接続元ごとに1時間60人まで作れる（不具合-04）ので、客ごとの規則だけだと識別子を作り直して1つの回線から
+// 天井なしに踏めた——地図の候補は毎分およそ3600回、AI の1日の上限は1時間ほどで尽き、席も1人で押さえ続けられた。
+// 取得と少しずつ届く取得は同じ名前で合わせて数える（客ごとの規則と同じ考え）。
+const FETCH_IP_RULE: RateRule = { name: "fetchIp", limit: FETCH_IP_RATE_LIMIT, windowMs: FETCH_IP_RATE_WINDOW_MS, by: "ip", counts: "requests" };
+const PLACE_SUGGEST_IP_RULE: RateRule = { name: "placeSuggestIp", limit: PLACE_SUGGEST_IP_RATE_LIMIT, windowMs: PLACE_SUGGEST_IP_RATE_WINDOW_MS, by: "ip", counts: "requests" };
+const PLACE_IP_RULE: RateRule = { name: "placeIp", limit: PLACE_IP_RATE_LIMIT, windowMs: PLACE_IP_RATE_WINDOW_MS, by: "ip", counts: "requests" };
+const RECEIVE_IP_RULE: RateRule = { name: "receiveIp", limit: RECEIVE_IP_RATE_LIMIT, windowMs: RECEIVE_IP_RATE_WINDOW_MS, by: "ip", counts: "requests" };
+
 /** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則。1つの入口に複数あれば全部で数える）。ここに無い入口には1度も表を引かない。 */
 const RULES_BY_ROUTE: ReadonlyMap<string, readonly RateRule[]> = new Map([
-  ["POST /api/customer/fetch", [FETCH_RULE]],
-  // 少しずつ届ける入口（NDJSON）も同じ規則・同じ鍵（客ごと）で数える。別扱いにすると、
+  ["POST /api/customer/fetch", [FETCH_RULE, FETCH_IP_RULE]],
+  // 少しずつ届ける入口（NDJSON）も同じ規則・同じ鍵（客ごと・接続元ごと）で数える。別扱いにすると、
   // そちらから同じ回数だけ AI を呼べてしまい、抑止が黙って外れる。
-  ["POST /api/customer/fetch/stream", [FETCH_RULE]],
+  ["POST /api/customer/fetch/stream", [FETCH_RULE, FETCH_IP_RULE]],
   ["POST /api/register/customer", [CUSTOMER_REGISTER_RULE]],
   ["POST /api/register/store", [STORE_REGISTER_RULE]],
   ["POST /api/customer/reports", [REPORT_RULE]],
   ["POST /api/auth/login", [LOGIN_RULE, LOGIN_IP_RULE]],
   ["GET /api/customer/store-image", [STORE_IMAGE_RULE]],
-  ["GET /api/customer/place-suggest", [PLACE_SUGGEST_RULE]],
-  ["GET /api/customer/place", [PLACE_RULE]],
+  ["GET /api/customer/place-suggest", [PLACE_SUGGEST_RULE, PLACE_SUGGEST_IP_RULE]],
+  ["GET /api/customer/place", [PLACE_RULE, PLACE_IP_RULE]],
   ["PUT /api/store/profile", [STORE_PROFILE_RULE]],
   ["POST /api/store/card/setup", [CARD_RULE]],
   ["POST /api/store/card/confirm", [CARD_RULE]],
@@ -137,7 +154,7 @@ const RULES_BY_ROUTE: ReadonlyMap<string, readonly RateRule[]> = new Map([
   ["POST /api/admin/stores/:id/temp-password", [ACCOUNT_SECRET_RULE]],
   // 店のパスワードの変更も、今のパスワードを確かめる形になれば同じ総当たりの的になる（安全-07 と揃える）。
   ["POST /api/store/password", [ACCOUNT_SECRET_RULE]],
-  ["POST /api/customer/reservations", [RECEIVE_RULE]],
+  ["POST /api/customer/reservations", [RECEIVE_RULE, RECEIVE_IP_RULE]],
 ]);
 
 /** その入口に掛かる規則（無ければ空）。 */

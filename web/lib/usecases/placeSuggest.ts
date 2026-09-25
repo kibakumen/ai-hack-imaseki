@@ -16,17 +16,19 @@ import type { Deps } from "../ports";
 import { GEOCODE_TIMEOUT_MS, PLACE_SUGGEST_MAX } from "../schemas/limits";
 import type { PlaceSuggestQuery } from "../schemas/placeSuggest";
 import { raceDeadline } from "./deadline";
+import { meteredGeocoder } from "./mapsBudget";
 
 export type PlaceSuggestResult = { suggestions: string[] };
 
 export const placeSuggest = async (deps: Deps, input: PlaceSuggestQuery): Promise<PlaceSuggestResult> => {
-  const suggest = deps.geocoder.suggest;
+  const geocoder = meteredGeocoder(deps);
+  const suggest = geocoder.suggest;
   if (!suggest) return { suggestions: [] };
 
   // 打ち切りの合図は、最初の await より前に作る（raceDeadline の注）。
   const deadline = deps.clock.after(GEOCODE_TIMEOUT_MS);
   const startedAt = deps.clock.now().getTime();
-  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deadline, (signal) => suggest.call(deps.geocoder, input.q, { signal }));
+  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deadline, (signal) => suggest.call(geocoder, input.q, { signal }));
   const durationMs = deps.clock.now().getTime() - startedAt;
   if (!answer.ok || !answer.value.ok) {
     deps.logger.log({ event: "place_suggest", durationMs, errorKind: "unavailable" });

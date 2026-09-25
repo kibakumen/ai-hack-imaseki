@@ -18,6 +18,7 @@ import { aiBudgetLeft } from "./aiBudget";
 import { scheduleGoogleUpkeep } from "./googleUpkeep";
 import { raceDeadline } from "./deadline";
 import type { PitchTarget } from "./writePitch";
+import { meteredGeocoder } from "./mapsBudget";
 
 /** 地図のサービスの打ち切り（基準 3.5・値は AI判断） */
 const GEOCODE_TIMEOUT_MS = 3000;
@@ -75,7 +76,7 @@ const resolveOrigin = async (deps: Deps, input: FetchInput): Promise<ResolvedOri
   const place = typeof input.place === "string" ? input.place.trim() : "";
   if (place !== "") {
     // 地図の打ち切りの合図は、地図を呼ぶ直前（この関数の最初の await より前）に作る（raceDeadline の注）
-    const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deps.clock.after(GEOCODE_TIMEOUT_MS), (signal) => deps.geocoder.geocode(place, { signal }));
+    const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deps.clock.after(GEOCODE_TIMEOUT_MS), (signal) => meteredGeocoder(deps).geocode(place, { signal }));
     if (!answer.ok || !answer.value.ok) return { ok: false, refusal: PLACE_UNRESOLVED };
     const point = { lat: answer.value.lat, lng: answer.value.lng };
     // 日本の外は「位置に直せなかった」として扱う（基準 3.6）

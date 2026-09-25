@@ -20,6 +20,7 @@ import { expireStoreCoordinates, findStoresToRegeocode, refreshStoreCoordinates,
 import { hitRateCounter } from "../repo/rateCounters";
 import { GEOCODE_TIMEOUT_MS } from "../schemas/limits";
 import { raceDeadline } from "./deadline";
+import { meteredGeocoder } from "./mapsBudget";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** 利用条件の上限（連続30日） */
@@ -36,7 +37,7 @@ const UPKEEP_WINDOW_MS = 60 * 60 * 1000;
 type RegeocodeAnswer = { kind: "found"; lat: number; lng: number } | { kind: "not_found" } | { kind: "unavailable" };
 
 const askGoogle = async (deps: Deps, address: string): Promise<RegeocodeAnswer> => {
-  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deps.clock.after(GEOCODE_TIMEOUT_MS), (signal) => deps.geocoder.geocode(address, { signal }));
+  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deps.clock.after(GEOCODE_TIMEOUT_MS), (signal) => meteredGeocoder(deps).geocode(address, { signal }));
   if (!answer.ok) return { kind: "unavailable" };
   if (!answer.value.ok) return answer.value.notFound === true ? { kind: "not_found" } : { kind: "unavailable" };
   const point = { lat: answer.value.lat, lng: answer.value.lng };

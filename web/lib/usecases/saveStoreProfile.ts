@@ -13,6 +13,7 @@ import { GEOCODE_TIMEOUT_MS, MENUS_MAX } from "../schemas/limits";
 import type { StoreProfile, StoreProfileInput } from "../schemas/store";
 import { raceDeadline } from "./deadline";
 import { refreshStoreImage } from "./storeImage";
+import { meteredGeocoder } from "./mapsBudget";
 
 export type FieldRefusal = { name: string; reason: FieldReason };
 
@@ -30,7 +31,7 @@ export type SaveStoreProfileResult =
  * （2026-09-25 監査の指摘 設計-11: それまで同じ競争をここに別に書いていた）。
  */
 const locate = async (deps: Deps, address: string): Promise<{ lat: number; lng: number } | null> => {
-  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deps.clock.after(GEOCODE_TIMEOUT_MS), (signal) => deps.geocoder.geocode(address, { signal }));
+  const answer = await raceDeadline(GEOCODE_TIMEOUT_MS, deps.clock.after(GEOCODE_TIMEOUT_MS), (signal) => meteredGeocoder(deps).geocode(address, { signal }));
   if (!answer.ok || !answer.value.ok) return null;
   const point = answer.value;
   return inJapan(point) ? { lat: point.lat, lng: point.lng } : null;

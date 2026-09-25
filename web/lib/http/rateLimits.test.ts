@@ -14,7 +14,23 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fakeClock, openDb, type Db } from "../../../tests/acceptance/v2/_fakes";
 import type { Deps } from "../ports";
 import { rememberLoginDevice } from "../repo/loginDevices";
-import { CUSTOMER_REGISTER_RATE_LIMIT, FETCH_RATE_LIMIT, LOGIN_DEVICE_TRUST_MS, LOGIN_FAILURE_LIMIT, LOGIN_IP_FAILURE_LIMIT, REGISTER_RATE_LIMIT, STORE_IMAGE_RATE_LIMIT } from "../schemas/limits";
+import {
+  CUSTOMER_REGISTER_RATE_LIMIT,
+  FETCH_IP_RATE_LIMIT,
+  FETCH_IP_RATE_WINDOW_MS,
+  FETCH_RATE_LIMIT,
+  LOGIN_DEVICE_TRUST_MS,
+  LOGIN_FAILURE_LIMIT,
+  LOGIN_IP_FAILURE_LIMIT,
+  PLACE_IP_RATE_LIMIT,
+  PLACE_IP_RATE_WINDOW_MS,
+  PLACE_SUGGEST_IP_RATE_LIMIT,
+  PLACE_SUGGEST_IP_RATE_WINDOW_MS,
+  RECEIVE_IP_RATE_LIMIT,
+  RECEIVE_IP_RATE_WINDOW_MS,
+  REGISTER_RATE_LIMIT,
+  STORE_IMAGE_RATE_LIMIT,
+} from "../schemas/limits";
 import { CUSTOMER_COOKIE_NAME, LOGIN_DEVICE_COOKIE_NAME } from "./cookies";
 import { defineRoute } from "./defineRoute";
 import { rateKeyFor, rateLimitedRoutes, rateRuleFor, rateRulesFor } from "./rateLimits";
@@ -190,6 +206,31 @@ describe("抑止を掛ける入口と鍵", () => {
     expect([customer.by, store.by]).toEqual(["ip", "ip"]);
     const source = { ip: "203.0.113.5", customerId: null, input: {} };
     expect(rateKeyFor(store, source)).not.toBe(rateKeyFor(customer, source));
+  });
+
+  // 2026-09-26 のレビュー（安全-03・安全-06 の残り）: 客ごとの規則だけだと、客の登録（接続元ごとに1時間60回）で
+  // 識別子を作り直せば1つの回線から天井なしに踏めた——地図の候補は毎分およそ3600回、席の押さえ続けも1人でできた。
+  it("外のサービスを呼ぶ客の入口と受け取りは、客ごとに加えて接続元ごとにも数える（取得と少しずつ届く取得は合わせて数える）", () => {
+    const expected: Array<[string, string, string, number, number]> = [
+      ["POST", "/api/customer/fetch", "fetchIp", FETCH_IP_RATE_LIMIT, FETCH_IP_RATE_WINDOW_MS],
+      ["POST", "/api/customer/fetch/stream", "fetchIp", FETCH_IP_RATE_LIMIT, FETCH_IP_RATE_WINDOW_MS],
+      ["GET", "/api/customer/place-suggest", "placeSuggestIp", PLACE_SUGGEST_IP_RATE_LIMIT, PLACE_SUGGEST_IP_RATE_WINDOW_MS],
+      ["GET", "/api/customer/place", "placeIp", PLACE_IP_RATE_LIMIT, PLACE_IP_RATE_WINDOW_MS],
+      ["POST", "/api/customer/reservations", "receiveIp", RECEIVE_IP_RATE_LIMIT, RECEIVE_IP_RATE_WINDOW_MS],
+    ];
+    for (const [method, routePath, name, limit, windowMs] of expected) {
+      const rules = rateRulesFor(method, routePath);
+      const route = `${method} ${routePath}`;
+      expect(rules.some((r) => r.by === "customer"), route).toBe(true);
+      expect(rules.find((r) => r.by === "ip"), route).toMatchObject({ name, limit, windowMs, counts: "requests" });
+    }
+    // 接続元ごとの天井は、1つの窓の中で客ごとの天井より広い（1人の客が、客ごとの天井より先に接続元の天井へ届かない）
+    for (const [method, routePath] of expected) {
+      const rules = rateRulesFor(method, routePath);
+      const perCustomer = rules.find((r) => r.by === "customer")!;
+      const perIp = rules.find((r) => r.by === "ip")!;
+      expect(perIp.limit, `${method} ${routePath}`).toBeGreaterThan(perCustomer.limit);
+    }
   });
 
   it("表の経路は全部、実在の入口と字面まで一致する（経路の名前が変わったら、黙って抑止が外れないようにここが落ちる）", () => {
