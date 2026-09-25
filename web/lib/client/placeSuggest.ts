@@ -7,8 +7,7 @@
 //   1. 打つ手が止まってから `PLACE_SUGGEST_DEBOUNCE_MS` 待って呼ぶ（打鍵ごとに呼ばない）
 //   2. `PLACE_SUGGEST_MIN_CHARS` 未満では呼ばない
 //   3. 古い答えが新しい答えを上書きしない——**どの文字への答えか**を一緒に持ち、今の文字と一致する
-//      ときだけ候補として返す（`components/customer/StoreImage` の「どの URL の答えか」と同じ手。
-//      効果の中で同期的に状態を捨てないので lint `react-hooks/set-state-in-effect` に掛からない）
+//      ときだけ候補として返す（効果の中で同期的に状態を捨てないので lint `react-hooks/set-state-in-effect` に掛からない）
 //   4. 候補は補助——入口が無い・断られた・通信が失敗した、のどれも「候補なし」に倒す
 //
 // 画面が fetch を直接呼ばない（基準 29.4）ため、呼び出しは `client/api` の `callApi` を経由する。
