@@ -220,6 +220,8 @@ describe("取得の入口 POST /api/customer/fetch", () => {
     const result = await search();
     const near = items(result).find((i) => i.storeId === "s-near");
     expect(near).toMatchObject({ offerId: "o-near", storeName: "店 s-near", walkMinutes: 1, budgetMin: 2000, budgetMax: 4000, partyMax: 4, storeUrl: "https://example.com/s-near" });
+    // 客-12: 確保する前にどこにある店かを見られるよう、店の住所も載せる
+    expect(near?.storeAddress).toBe("住所 s-near");
     expect(typeof near?.reason).toBe("string");
     expect(near?.coupons).toEqual([{ name: "先に作った", note: "1組1回" }, { name: "後に作った", note: "" }]);
     const far = items(result).find((i) => i.storeId === "s-far");

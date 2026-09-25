@@ -33,7 +33,7 @@ const installFetch = (respond: (method: string, path: string) => Answer) => {
   };
 };
 
-const ITEM = { offerId: "o1", storeId: "s1", storeName: "店", walkMinutes: 3, budgetMin: 1000, budgetMax: 3000, reason: "近い", partyMax: 4, coupons: [], storeUrl: null };
+const ITEM = { offerId: "o1", storeId: "s1", storeName: "店", walkMinutes: 3, budgetMin: 1000, budgetMax: 3000, reason: "近い", partyMax: 4, coupons: [], storeUrl: null, storeAddress: null };
 const HOME = { kind: "fetch", profile: { nickname: "guest-abc", phone: "0000000000", genres: [], budgetMax: null } };
 
 describe("取得の画面の入れ物", () => {

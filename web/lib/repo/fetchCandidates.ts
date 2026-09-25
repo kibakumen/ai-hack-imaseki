@@ -19,6 +19,8 @@ export type CandidateRow = {
   storeId: string;
   storeName: string;
   storeUrl: string | null;
+  /** 店の住所（客のカードに1行で出す・2026-09-25 監査の指摘 客-12）。入っていなければ null */
+  storeAddress: string | null;
   lat: number;
   lng: number;
   genres: string[];
@@ -33,7 +35,7 @@ export type CouponRow = { id: string; storeId: string; name: string; note: strin
 
 const CANDIDATES_SQL = `
   SELECT o.id AS offer_id, o.party_max, o.coupon_ids,
-         s.id AS store_id, s.name AS store_name, s.url AS store_url,
+         s.id AS store_id, s.name AS store_name, s.url AS store_url, s.address AS store_address,
          s.lat, s.lng, s.genres, s.menus, s.budget_min, s.budget_max, s.created_at
   FROM offers o
   JOIN stores s ON s.id = o.store_id
@@ -59,6 +61,7 @@ export const findFetchCandidates = async (db: Db, nowIso: string): Promise<Candi
     storeId: row.store_id as string,
     storeName: (row.store_name as string | null) ?? "",
     storeUrl: (row.store_url as string | null) ?? null,
+    storeAddress: typeof row.store_address === "string" && row.store_address !== "" ? row.store_address : null,
     lat: Number(row.lat),
     lng: Number(row.lng),
     genres: parseStringList(row.genres),

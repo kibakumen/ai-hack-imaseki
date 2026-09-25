@@ -139,6 +139,12 @@ const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holdin
     </p>
 
     <h3 className="offer-card__name">{item.storeName}</h3>
+    {/* 確保する前にどこにある店かを見せる（2026-09-25 監査の指摘 客-12 の案A。以前は受け取るまで住所が出なかった） */}
+    {item.storeAddress === null ? null : (
+      <p className="offer-card__address" data-testid="store-address">
+        <span aria-hidden>📍</span> {item.storeAddress}
+      </p>
+    )}
 
     <OfferPitch reason={item.reason} source={item.pitchSource} />
 

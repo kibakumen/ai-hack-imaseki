@@ -47,7 +47,7 @@ const RESERVATION = {
 };
 /** 探した場所をサーバーが座標に直して記録した値（打った場所の文字とは別の値にして、どちらが渡ったか見分ける）。 */
 const SERVER_ORIGIN = { lat: 35.6896, lng: 139.7006 };
-const ITEM = { offerId: "o1", storeId: "s1", storeName: "店A", walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, reason: "合います", partyMax: 4, coupons: [], storeUrl: null };
+const ITEM = { offerId: "o1", storeId: "s1", storeName: "店A", walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, reason: "合います", partyMax: 4, coupons: [], storeUrl: null, storeAddress: null };
 
 const installFetch = (respond: (method: string, path: string) => FakeResponse) => {
   const previous = globalThis.fetch;

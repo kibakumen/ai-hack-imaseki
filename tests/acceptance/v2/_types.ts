@@ -137,6 +137,8 @@ export type ResultItem = {
   partyMax: number;
   coupons: Array<{ name: string; note: string }>;
   storeUrl: string | null;
+  /** 店の住所（無い店は null・2026-09-25 監査の指摘 客-12 で足した） */
+  storeAddress: string | null;
 };
 export type StoreHomeDto = {
   id: string;

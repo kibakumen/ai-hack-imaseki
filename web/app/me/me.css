@@ -202,6 +202,13 @@
   letter-spacing: 0.01em;
 }
 
+/* 店の住所（2026-09-25 客-12）。店名のすぐ下に1行で、本文より淡く。長い住所は折り返す */
+.offer-card__address {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  margin: -0.25rem 0 0;
+}
+
 /* ---------- 紹介文（アピール説明）: カードでいちばん大きい文 ---------- */
 
 .offer-pitch {

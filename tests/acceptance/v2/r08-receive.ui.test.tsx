@@ -7,7 +7,7 @@ import { describeTask } from "./_tasks";
 import { componentOf, homeFetch, installFakeApi, loadWeb, reservationDto, streamOfResult, type FakeApi } from "./_fakes";
 import { TID, type HomeDto, type ResultItem } from "./_types";
 
-const item = (over: Partial<ResultItem> = {}): ResultItem => ({ offerId: "o1", storeId: "s1", storeName: "店A", walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, reason: "合います", partyMax: 4, coupons: [], storeUrl: null, ...over });
+const item = (over: Partial<ResultItem> = {}): ResultItem => ({ offerId: "o1", storeId: "s1", storeName: "店A", walkMinutes: 3, budgetMin: 2000, budgetMax: 4000, reason: "合います", partyMax: 4, coupons: [], storeUrl: null, storeAddress: null, ...over });
 const installGeo = () => Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition: (ok: (p: any) => void) => ok({ coords: { latitude: 35.6, longitude: 139.7 } }) } });
 const publicConfig = () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } });
 

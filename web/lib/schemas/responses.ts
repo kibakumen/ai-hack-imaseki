@@ -88,6 +88,7 @@ const fetchResultItem = object({
   partyMax: number(),
   coupons: array(couponFace),
   storeUrl: nullable(string()),
+  storeAddress: nullable(string()),
 });
 
 const historyItem = object({
