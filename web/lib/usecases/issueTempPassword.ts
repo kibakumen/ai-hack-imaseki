@@ -10,9 +10,8 @@
 
 import { tokenFromBytes } from "../domain/token";
 import type { Deps } from "../ports";
-import { insertAdminAction } from "../repo/adminActions";
-import { findAccountById, findAccountByStoreId, updateAccountPassword } from "../repo/accounts";
-import { deleteSessionsByAccount } from "../repo/sessions";
+import { replacePasswordByAdmin } from "../repo/adminActions";
+import { findAccountById, findAccountByStoreId } from "../repo/accounts";
 import { TEMP_PASSWORD_BYTES } from "../schemas/limits";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { hashPassword, verifyPassword } from "./credentials";
@@ -39,11 +38,9 @@ export const issueTempPassword = async (deps: Deps, storeId: string, actor: Admi
 
   const tempPassword = tokenFromBytes(deps.rng.bytes(TEMP_PASSWORD_BYTES));
   const passwordHash = await hashPassword(deps, tempPassword);
-  // 前のパスワードを効かなくする（基準 14.12）と同時に、次に入ったとき決め直させる印を立てる（基準 14.14）。
-  await updateAccountPassword(deps.db, account.id, passwordHash, true);
-  // 開いたままの画面が使えてしまわないよう、その店のセッションも全部切る（基準 14.12）。
-  await deleteSessionsByAccount(deps.db, account.id);
-  await insertAdminAction(deps.db, newAdminAction(deps, actor, "temp_password", storeId));
+  // 前のパスワードを効かなくし、次に入ったとき決め直させる印を立て（基準 14.12・14.14）、開いたままの画面が
+  // 使えてしまわないようセッションも全部切る（基準 14.12）。発行した記録と同じ1つのまとまりで書く（運営-01 のレビュー）。
+  await replacePasswordByAdmin(deps.db, account.id, passwordHash, newAdminAction(deps, actor, "temp_password", storeId));
   deps.logger.log({ event: "issue_temp_password", id: storeId, actor: actor.accountId });
 
   return { ok: true, tempPassword };

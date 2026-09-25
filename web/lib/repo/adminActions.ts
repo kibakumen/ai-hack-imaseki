@@ -7,7 +7,9 @@
 // ⚠️ 客を指す値は置かない。`detail` は数だけ（取り消した確保の数・通知を送った人数など）。
 
 import type { Deps } from "../ports";
+import { updateAccountPasswordStatement } from "./accounts";
 import type { D1PreparedStatement } from "./d1";
+import { deleteSessionsByAccountStatement } from "./sessions";
 
 type Db = Deps["db"];
 
@@ -65,6 +67,16 @@ export const insertAdminActionIfChangedStatement = (db: Db, action: NewAdminActi
 
 export const insertAdminAction = async (db: Db, action: NewAdminAction): Promise<void> => {
   await insertAdminActionStatement(db, action).run();
+};
+
+/**
+ * 運営が店のパスワードを仮のものに置き換える（【最終日】要件14の基準 14.10〜14.14）。3つの文を1つのまとまり（`db.batch`）で流す:
+ * パスワードの置き換えと「次に決め直す」の印・そのアカウントのセッションを全部切る・発行した記録。
+ * 記録が書けずに落ちたとき（本番で migration 0011 を当て忘れた、など）、パスワードだけ変わりセッションも切れて、
+ * 仮のパスワードはどこにも無く記録も無い、という形を作らない（2026-09-25 監査の指摘 運営-01 のレビュー）。
+ */
+export const replacePasswordByAdmin = async (db: Db, accountId: string, passwordHash: string, action: NewAdminAction): Promise<void> => {
+  await db.batch([updateAccountPasswordStatement(db, accountId, passwordHash, true), deleteSessionsByAccountStatement(db, accountId), insertAdminActionStatement(db, action)]);
 };
 
 /** 読んだ値が「名前 → 値」の組か（並びや null ではない）。 */
