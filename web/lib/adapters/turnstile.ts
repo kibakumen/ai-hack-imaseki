@@ -14,7 +14,7 @@ const VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 /**
  * Cloudflare の試験用の秘密鍵（手元の開発で使う・公開の値）。これらは答えの hostname と action が
  * 決まった値（"localhost"・"test"）で返るので、場所と用途を見ない。どれも鍵そのものが確かめを素通しにする
- * （または必ず断る）ので、見ないことで守りが弱まることは無い。本番に入れてはいけない（README の手順）。
+ * （または必ず断る）ので、見ないことで守りが弱まることは無い。本番に入れてはいけない（README 7.4）。
  */
 const TEST_SECRET_KEYS: ReadonlySet<string> = new Set([
   "1x0000000000000000000000000000000AA",
