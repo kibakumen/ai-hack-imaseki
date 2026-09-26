@@ -7,7 +7,7 @@
 // 場面の準備は受け入れ検査と同じ偽物（_fakes）を使う。
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cookieOf, makeCtx, registerStore, seedAdmin, snapshot, type Ctx } from "../../../../tests/acceptance/v2/_fakes";
+import { cookieOf, makeCtx, registerStore, rows, seedAdmin, snapshot, type Ctx } from "../../../../tests/acceptance/v2/_fakes";
 import { INPUT_REFUSAL_KINDS } from "../../domain/inputRefusal";
 import { errorSchema } from "../../schemas/error";
 
@@ -61,6 +61,43 @@ describe("店のメールアドレスの変更 POST /api/store/email", () => {
     const s = await registerStore(ctx, { email: "mail-d@example.com", password: "store-pass-1234" });
     const r = await s.api.post("/api/store/email", { email: "mail-d@example.com", currentPassword: "store-pass-1234" });
     expect(r.status).toBe(200);
+  });
+
+  // 2026-09-26 独立したレビューの指摘（AI判断）: 締め出しの数え（login:<アドレス>|…）と端末の印（loginDevice:<アドレス>|…）は
+  // 鍵にメールアドレスを含む。アドレスを変えても前のアドレスの行が残り、あとで店が退会しても（退会は今のアドレスの行しか消さない）
+  // 前のアドレスが表に残った。変えるときに、前のアドレスの2種の鍵を、アドレスの書き換えと同じまとまりで消す。
+  const seedCounter = (key: string) => ctx.db.prepare("INSERT INTO rate_counters (key, window_start, count) VALUES (?1, ?2, 1)").bind(key, ctx.clock.now().toISOString()).run();
+  const counterKeys = async (like: string) => (await rows<{ key: string }>(ctx.db, "SELECT key FROM rate_counters WHERE key LIKE ?1 ORDER BY key", like)).map((row) => row.key);
+
+  it("別のアドレスへ変えたら、前のアドレスを鍵に含む数え（締め出しの数え・端末の印）を消す。ほかのアドレスの数えは残す", async () => {
+    const s = await registerStore(ctx, { email: "mail-e@example.com", password: "store-pass-1234" });
+    await seedCounter("login:mail-e@example.com|203.0.113.1");
+    await seedCounter("loginDevice:mail-e@example.com|device-hash");
+    await seedCounter("login:mail-e@example.com.other|203.0.113.1");
+    await seedCounter("loginDevice:someone@example.com|device-hash");
+
+    const r = await s.api.post("/api/store/email", { email: "mail-e-new@example.com", currentPassword: "store-pass-1234" });
+    expect(r.status).toBe(200);
+    expect(await counterKeys("login%:mail-e@example.com|%")).toEqual([]);
+    expect(await counterKeys("login:mail-e@example.com.other|%")).toEqual(["login:mail-e@example.com.other|203.0.113.1"]);
+    expect(await counterKeys("loginDevice:someone@example.com|%")).toEqual(["loginDevice:someone@example.com|device-hash"]);
+  });
+
+  it("同じアドレス（大小の違いだけを含む）への変更では、数えを消さない（端末の印を信じ続ける）", async () => {
+    const s = await registerStore(ctx, { email: "mail-f@example.com", password: "store-pass-1234" });
+    await seedCounter("loginDevice:mail-f@example.com|device-hash");
+    const r = await s.api.post("/api/store/email", { email: "Mail-F@example.com", currentPassword: "store-pass-1234" });
+    expect(r.status).toBe(200);
+    expect(await counterKeys("loginDevice:mail-f@example.com|%")).toEqual(["loginDevice:mail-f@example.com|device-hash"]);
+  });
+
+  it("ほかのアカウントのアドレスで断られたら、前のアドレスの数えも残る（まとまりごと書かない）", async () => {
+    await registerStore(ctx, { email: "mail-g-taken@example.com" });
+    const s = await registerStore(ctx, { email: "mail-g@example.com", password: "store-pass-1234" });
+    await seedCounter("loginDevice:mail-g@example.com|device-hash");
+    const r = await s.api.post("/api/store/email", { email: "mail-g-taken@example.com", currentPassword: "store-pass-1234" });
+    expect(r.status).toBe(409);
+    expect(await counterKeys("loginDevice:mail-g@example.com|%")).toEqual(["loginDevice:mail-g@example.com|device-hash"]);
   });
 });
 

@@ -11,9 +11,9 @@
 // 残すもの: 店の行の番号・登録した時刻・承認した時刻・規約の同意の版と時刻・運営のメモ（運営の書いたもの）、
 // 過去の確保・通報・運営の操作の記録（admin_actions）・取得の記録（5つの表）。
 
-import { normalizeLoginEmail } from "../domain/loginDevice";
 import type { Deps } from "../ports";
 import { changedRows } from "./d1";
+import { emailCounterKeyCondition, emailCounterPrefixes } from "./loginDevices";
 import { storeWithdrawnEventsStatement } from "./logs";
 import { clearCustomerPhonesOfWithdrawnStoreStatement, withdrawCancelReservationsStatement } from "./reservationsOfStore";
 import { publishingOfferCondition } from "./sqlFragments";
@@ -89,14 +89,10 @@ const eraseStoreStatement = (db: Db, input: WithdrawStoreInput) =>
     .bind(input.storeId, input.nowIso, input.withdrawnName, input.read.licenseKey, input.read.approvedLicenseKey);
 
 /** 鍵の頭がメールアドレスを含む数え（端末の印 `loginDevice:<email>|…` と締め出しの数え `login:<email>|…`）を消す文。 */
-const forgetEmailCountersStatement = (db: Db, storeId: string, nowIso: string, email: string) => {
-  const normalized = normalizeLoginEmail(email);
-  return db
-    .prepare(
-      `DELETE FROM rate_counters WHERE (substr(key, 1, length(?3)) = ?3 OR substr(key, 1, length(?4)) = ?4) AND ${WITHDRAWN_NOW}`,
-    )
-    .bind(storeId, nowIso, `loginDevice:${normalized}|`, `login:${normalized}|`);
-};
+const forgetEmailCountersStatement = (db: Db, storeId: string, nowIso: string, email: string) =>
+  db
+    .prepare(`DELETE FROM rate_counters WHERE ${emailCounterKeyCondition("?3", "?4")} AND ${WITHDRAWN_NOW}`)
+    .bind(storeId, nowIso, ...emailCounterPrefixes(email));
 
 /**
  * 退会のまとまり（基準 13.15〜13.17）。**文の順に意味が在る**:

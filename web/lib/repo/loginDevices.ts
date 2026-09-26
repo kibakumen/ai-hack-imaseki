@@ -15,6 +15,19 @@ type Db = Deps["db"];
 
 const deviceKey = (email: string, deviceHash: string): string => `loginDevice:${normalizeLoginEmail(email)}|${deviceHash}`;
 
+/**
+ * 鍵の頭がそのメールアドレスを含む数えの2種の頭（端末の印 `loginDevice:<email>|` と締め出しの数え `login:<email>|`）。
+ * 店の退会（repo/storeWithdrawal）とメールアドレスの変更（repo/accounts の changeOwnAccountEmail）が、前のアドレスの行を消すのに使う。
+ * 末尾の `|` まで含めて比べるので、`login:a@example.com.other|…` のような別のアドレスには当たらない。
+ */
+export const emailCounterPrefixes = (email: string): readonly [string, string] => {
+  const normalized = normalizeLoginEmail(email);
+  return [`loginDevice:${normalized}|`, `login:${normalized}|`];
+};
+
+/** 2種の頭のどちらかで始まる鍵か（SQL の条件。?A・?B に `emailCounterPrefixes` の2つを束縛する） */
+export const emailCounterKeyCondition = (a: string, b: string): string => `(substr(key, 1, length(${a})) = ${a} OR substr(key, 1, length(${b})) = ${b})`;
+
 /** そのアカウントに、この端末で通ったことを書く（通るたびに時刻を書き直す）。 */
 export const rememberLoginDevice = async (db: Db, input: { email: string; tokenHash: string; nowIso: string }): Promise<void> => {
   await db

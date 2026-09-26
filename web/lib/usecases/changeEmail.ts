@@ -12,6 +12,7 @@
 // 変えた本人の画面は残し、ほかの端末（乗っ取った側・置き忘れた端末）のセッションは止める。
 // 別のアドレスへ変えたら「メールアドレスの確認」は未確認に戻る（2026-09-26 取り込み・要件14の基準 14.27）。
 // 本人の確かめは今のパスワードのまま——確認メールは変更を止めない（何もブロックしない・基準 14.26）。
+// 別のアドレスへ変えたら、前のアドレスを鍵に含む数え（端末の印・締め出しの数え）も同じまとまりで消す（2026-09-26 レビュー）。
 
 import type { Deps } from "../ports";
 import { changeOwnAccountEmail, findAccountByEmail, findAccountById, isEmailTakenError } from "../repo/accounts";
@@ -33,7 +34,7 @@ export const changeEmail = async (deps: Deps, owner: SessionOwner, input: Change
   if (taken && taken.id !== account.id) return { ok: false, kind: "email_taken" };
 
   try {
-    await changeOwnAccountEmail(deps.db, account.id, input.email);
+    await changeOwnAccountEmail(deps.db, account.id, input.email, account.email);
   } catch (error) {
     if (!isEmailTakenError(error)) throw error;
     return { ok: false, kind: "email_taken" };

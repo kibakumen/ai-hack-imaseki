@@ -2,8 +2,10 @@
 // パスワードは元に戻せない形の1つの文字列（domain/password.ts が組む値）としてだけ置く（基準 14.4）。
 // メールアドレスの列は COLLATE NOCASE なので、= の比較が大文字小文字を区別しない（基準 12.2）。
 
+import { normalizeLoginEmail } from "../domain/loginDevice";
 import type { Deps } from "../ports";
 import type { D1PreparedStatement } from "./d1";
+import { emailCounterKeyCondition, emailCounterPrefixes } from "./loginDevices";
 
 type Db = Deps["db"];
 
@@ -85,12 +87,21 @@ export const updateAccountEmail = async (db: Db, accountId: string, email: strin
  * 別のアドレスへ変えたら「確認した時刻」（migration 0015 の列）を NULL に戻す——新しいアドレスはまだ確認していない。
  * 同じアドレス（大小の違いだけを含む）への「変更」では確認済みを残す（手続きは同じ値でも書くため）。
  * メールを送る口の有無にかかわらず書く（列が在れば害は無い・2026-09-26 に枝 feat/email-verify から取り込んだ）。
+ *
+ * 別のアドレスへ変えたら、**前のアドレス**（`previousEmail`）を鍵に含む数え（端末の印・締め出しの数え）を、書き換えと
+ * 同じまとまりで消す（2026-09-26 独立したレビューの指摘・AI判断）。残すと、あとで店が退会しても前のアドレスが表に残った
+ * （退会は今のアドレスの行しか消さない）。書き換えが UNIQUE で落ちたら、まとまりごと書かない。
  */
-export const changeOwnAccountEmail = async (db: Db, accountId: string, email: string): Promise<void> => {
-  await db
+export const changeOwnAccountEmail = async (db: Db, accountId: string, email: string, previousEmail: string): Promise<void> => {
+  const update = db
     .prepare(`UPDATE accounts SET email = ?2, email_verified_at = CASE WHEN email = ?2 COLLATE NOCASE THEN email_verified_at ELSE NULL END WHERE id = ?1`)
-    .bind(accountId, email)
-    .run();
+    .bind(accountId, email);
+  if (normalizeLoginEmail(previousEmail) === normalizeLoginEmail(email)) {
+    await update.run();
+    return;
+  }
+  const forget = db.prepare(`DELETE FROM rate_counters WHERE ${emailCounterKeyCondition("?1", "?2")}`).bind(...emailCounterPrefixes(previousEmail));
+  await db.batch([update, forget]);
 };
 
 /** 1つの文にまとめて流すための文（店の登録は店・アカウント・セッションを1度に書く）。 */
