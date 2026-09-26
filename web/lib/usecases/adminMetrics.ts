@@ -56,6 +56,8 @@ export type AdminMetrics = {
   fetch: { count: number; avgDurationMs: number; aiUsed: number; fellBack: number; noCandidates: number; fellBackRate: number };
   /** `expiredRate` は、もう終わった確保のうち自動で取り消された（期限切れの）割合。0〜1 の小数で返す */
   reservations: { total: number; expiredRate: number };
+  /** 店が取り消した確保の数と、そのうち「来ない（枠を戻す）」で取り消した数（2026-09-26 本人選択） */
+  storeCancels: { total: number; noShow: number };
   byModel: AdminMetricsByModelRow[];
   /** 用途別の実費内訳（2026-09-22・本人の指示） */
   byPurpose: AdminMetricsByPurposeRow[];
@@ -87,6 +89,7 @@ export const adminMetrics = async (deps: Deps): Promise<AdminMetrics> => {
     ai,
     fetch: { ...fetch, fellBackRate: rateOf(fetch.fellBack, fetch.count - fetch.noCandidates) },
     reservations: { total: reservations.total, expiredRate: rateOf(reservations.expired, reservations.settled) },
+    storeCancels: { total: reservations.storeCancelled, noShow: reservations.noShowCancelled },
     byModel,
     byPurpose,
     fallbackCount: fallbacks,

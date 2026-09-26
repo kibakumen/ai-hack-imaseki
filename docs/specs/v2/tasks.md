@@ -159,7 +159,8 @@ phase: tasks
 
 - [ ] 18. 店による確保の取り消し: `POST /api/store/reservations/:id/cancel`・`usecases/cancelByStore`（プッシュの口を呼ぶ・失敗しても成立）・`ArrivalsList` の確かめ
   - プッシュの実物（`adapters/webpush`）と購読の入口はタスク19。ここでは `deps.push` を呼ぶ所まで
-  - _要件: 21.1, 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 18.4, 18.5_
+  - _要件: 21.1, 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8, 18.4, 18.5, 18.16, 9.14_
+  - 21.8・18.16・9.14 は 2026-09-26 本人選択（店の取り消しに「来ない」を足す）で足した。検査は `web/tests/storeNoShow.test.ts`（受け入れ検査 r21 は書き換えていない）
   - _受け入れ検査: tests/acceptance/v2/r21-store-cancel.test.ts_
   - _担当: AI_
 

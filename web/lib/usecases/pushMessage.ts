@@ -27,13 +27,21 @@ const PUSH_SEND_TIMEOUT_MS = 4000;
 /** 文面を出す確保の状態は2つだけ。ほかの状態（確保中・完了済み・期限切れ・客の取り消し）は場面なし。 */
 const SCENES: Record<string, string> = { store_cancelled: "store_cancelled", admin_cancelled: "admin_cancelled" };
 
+/** 店が「来ない（枠を戻す）」で取り消した確保の場面（店の都合の文とは別の決まった文・基準 22.4・2026-09-26 本人選択） */
+const NO_SHOW_SCENE = "store_no_show";
+
+const sceneOf = (latest: { status: string; cancelReason: string | null } | null): string | undefined => {
+  if (latest === null) return undefined;
+  if (latest.status === "store_cancelled" && latest.cancelReason === "no_show") return NO_SHOW_SCENE;
+  return SCENES[latest.status];
+};
+
 /**
  * Service Worker が GET /api/customer/push-message で取りに来る文面。
  * 文を作るのに渡すのは**場面の名前だけ**で、客の登録の内容は渡さない（基準 22.5）。
  */
 export const pushMessage = async (deps: Deps, customerId: string): Promise<PushMessage> => {
-  const status = await findLatestReservationStatus(deps.db, customerId);
-  const scene = status === null ? undefined : SCENES[status];
+  const scene = sceneOf(await findLatestReservationStatus(deps.db, customerId));
   if (!scene) return { scene: null, title: null, body: null };
   return { scene, ...TEXTS.push(scene) };
 };

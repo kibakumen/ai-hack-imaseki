@@ -42,6 +42,8 @@ describe("arrivalRows", () => {
         expiresAt: at(20).toISOString(),
         canComplete: true,
         canCancel: true,
+        // 店が「来ない（枠が戻る）」で取り消した行だけ true（2026-09-26 本人選択）
+        noShow: false,
       },
     ]);
   });

@@ -26,6 +26,8 @@ export type ArrivalReservationRow = {
   party: number;
   code: string;
   hasNewerReservation: boolean;
+  /** 店の取り消しの理由（`no_show`＝来店なし・2026-09-26 本人選択）。無ければ null */
+  cancelReason: string | null;
 };
 
 /**
@@ -72,6 +74,7 @@ export const listStoreArrivals = async (db: Db, storeId: string, sinceIso: strin
       party: reservation.party,
       code: reservation.code,
       hasNewerReservation: Number(row.has_newer ?? 0) === 1,
+      cancelReason: reservation.cancelReason,
     };
   });
 };
@@ -141,25 +144,31 @@ export const findReservationOfStore = async (db: Db, reservationId: string, stor
   return row ? toReservationRow(row as Record<string, unknown>) : null;
 };
 
+/** 店の取り消しの理由の、表に入る値（migration 0013）。店の都合の取り消しは値を持たない（NULL）。 */
+export const STORE_CANCEL_REASON_NO_SHOW = "no_show";
+
 /**
  * 店が取り消す（基準 21.1・21.4）と、その記録。入ったら true。
  *
  * **前の状態（確保中で期限より前）を WHERE に全部入れた1つの UPDATE** なので、同じ確保へ
  * 完了済み・客の取り消し・店の取り消しが同時に来ても、状態が2回変わることはない（基準 20.22）。
  *
- * `holds_slot` は触らない——店が取り消した確保は枠を押さえたままで、残りも募集する組数も
- * 戻らない（基準 18.4・18.5。押さえている条件の3つ目は `sqlFragments.holdsSlotCondition`）。
- * 状態の変化の記録（基準 27.4）は同じ `db.batch` の並びで書く（不具合-16）。
+ * 枠の押さえ方は理由で分かれる（押さえている条件の3つ目は `sqlFragments.holdsSlotCondition`）:
+ *   店の都合（`noShow: false`） … `holds_slot` は 1 のまま＝残りも募集する組数も戻らない（基準 18.4・18.5）
+ *   来ない（`noShow: true`）    … `holds_slot` を 0 にして理由を残す＝残りが1戻る（基準 18.16・21.8・2026-09-26 本人選択）
+ * どちらも同じ1文なので、状態が変わるときだけ枠も動く（断った要求では何も動かない・基準 21.6）。
+ * 状態の変化の記録（基準 27.4）は同じ `db.batch` の並びで書き、理由も写る（不具合-16・`reservationEventStatement`）。
  */
-export const cancelReservationByStore = async (db: Db, input: { reservationId: string; storeId: string; nowIso: string }): Promise<boolean> => {
+export const cancelReservationByStore = async (db: Db, input: { reservationId: string; storeId: string; nowIso: string; noShow: boolean }): Promise<boolean> => {
   const update = db
     .prepare(
       // 別名を付けずに表の名前で条件を書く（`endPublishedOffersStatement` と同じ形。UPDATE の
       // 別名は SQLite の版に依るので、確実な側に寄せた）。
-      `UPDATE reservations SET status = 'store_cancelled', status_at = ?3` +
+      `UPDATE reservations SET status = 'store_cancelled', status_at = ?3,` +
+        ` holds_slot = CASE WHEN ?4 IS NULL THEN reservations.holds_slot ELSE 0 END, cancel_reason = ?4` +
         ` WHERE reservations.id = ?1 AND reservations.store_id = ?2 AND ${activeReservationCondition("reservations", "?3")}`,
     )
-    .bind(input.reservationId, input.storeId, input.nowIso);
+    .bind(input.reservationId, input.storeId, input.nowIso, input.noShow ? STORE_CANCEL_REASON_NO_SHOW : null);
   const [updated] = await db.batch([update, reservationEventStatement(db, { reservationId: input.reservationId, status: "store_cancelled", at: input.nowIso })]);
   return changedRows(updated) > 0;
 };

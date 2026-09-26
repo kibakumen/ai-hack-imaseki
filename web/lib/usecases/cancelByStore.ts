@@ -8,7 +8,9 @@
 //      状態の変化の記録（基準 27.4）を1つのまとまりで書く（不具合-16）
 //   4. その客へ知らせを送る（基準 22.1）
 //
-// 残りは戻らず、募集する組数も変わらない（基準 18.4・18.5）——`holds_slot` を触らないことで満たす。
+// 店の都合の取り消しでは、残りは戻らず、募集する組数も変わらない（基準 18.4・18.5）——`holds_slot` を触らないことで満たす。
+// 「来ない（枠を戻す）」（`noShow`・基準 21.8・2026-09-26 本人選択）では、同じ1文が `holds_slot` を0にして残りを1戻し、
+// 理由を確保と記録に残す（基準 18.16・27.4）。客への知らせは同じく送り、文面は来店なしの場面の文になる（基準 22.1・22.4）。
 // 取り消しは1件ずつで、同じオファーのほかの確保には触らない（基準 21.4）。
 
 import { canCancelByStore, effectiveState, type EffectiveState } from "../domain/reservation";
@@ -29,7 +31,8 @@ export type CancelByStoreResult =
  * **送信が失敗しても取り消しは成立する**（基準 22.6）——D1 の書き込みが済んだあとに送るので、
  * 送る側で何が起きても応答は 200 のままになる。
  */
-export const cancelByStore = async (deps: Deps, storeId: string, reservationId: string): Promise<CancelByStoreResult> => {
+export const cancelByStore = async (deps: Deps, storeId: string, reservationId: string, opts: { noShow?: boolean } = {}): Promise<CancelByStoreResult> => {
+  const noShow = opts.noShow === true;
   const now = deps.clock.now();
   const nowIso = now.toISOString();
 
@@ -37,7 +40,7 @@ export const cancelByStore = async (deps: Deps, storeId: string, reservationId: 
   if (!reservation) return { ok: false, kind: "not_found" };
   if (!canCancelByStore(reservation, now)) return { ok: false, kind: "state", state: effectiveState(reservation, now) };
 
-  const cancelled = await cancelReservationByStore(deps.db, { reservationId, storeId, nowIso });
+  const cancelled = await cancelReservationByStore(deps.db, { reservationId, storeId, nowIso, noShow });
   if (!cancelled) {
     // 読んでから書くまでの隙に、別の要求（完了済み・客の取り消し）が先に扱われた（基準 20.22）。
     // 今の状態を読み直して断る——状態も残りも変えていない。
@@ -46,7 +49,7 @@ export const cancelByStore = async (deps: Deps, storeId: string, reservationId: 
     return { ok: false, kind: "state", state: effectiveState(latest, deps.clock.now()) };
   }
 
-  deps.logger.log({ event: "store_cancel", id: reservationId });
+  deps.logger.log({ event: noShow ? "store_cancel_no_show" : "store_cancel", id: reservationId });
 
   // その客へ「お店の都合で取り消された」を知らせる（基準 22.1・22.6・22.7）。
   // 購読の無い客には送らない・TTL は20分・送信の失敗は飲み込む——全部 `sendCancellationPush` の側。

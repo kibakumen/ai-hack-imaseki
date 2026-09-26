@@ -6,6 +6,8 @@
 //
 //   - 完了済み（基準 20.8）… 呼び名・人数・コードを出して確かめを求め、確かめてから要求を出す
 //   - 取り消し（要件21の基準 21.2・21.3）… 客に知らせが送られることと、残りの枠が戻らないことを示して確かめを求める。理由は聞かない
+//   - 来ない（枠を戻す）（要件21の基準 21.8・2026-09-26 本人選択）… 客に知らせが送られることと、この組の枠が残りへ戻ることを
+//     示して確かめを求め、`noShow: true` だけを送る。打つ欄は置かない（基準 21.3）
 //   - 断られたとき（基準 20.20・20.21）… その確保の今の状態を、押した操作に合う文にして出し、一覧を取り直す（店-10）
 //
 // 置かない操作（基準 20.10・20.11・20.17）: 完了済みを元の状態にする操作・完了済みを取り消す操作・
@@ -35,7 +37,7 @@ import type { PartyChange } from "./useArrivalSignals";
 /** 入口 `GET /api/store/home` の `arrivals` の1行（受け入れ検査の契約 `ArrivalRow`）。型は schemas/responses の表から（設計-07）。 */
 export type ArrivalsListRow = ArrivalDto;
 
-type ArrivalAction = "complete" | "store-cancel";
+type ArrivalAction = "complete" | "store-cancel" | "store-no-show";
 
 type Props = {
   rows: ArrivalsListRow[];
@@ -55,7 +57,19 @@ type Props = {
 const ROUTE_OF = {
   complete: "POST /api/store/reservations/:id/complete",
   "store-cancel": "POST /api/store/reservations/:id/cancel",
+  // 同じ入口に、来ないことの印だけを添えて送る（基準 21.8）
+  "store-no-show": "POST /api/store/reservations/:id/cancel",
 } as const satisfies Record<ArrivalAction, string>;
+
+/** 操作ごとの本文。完了済みと店の都合の取り消しはコードも理由も送らない（基準 20.11・21.3） */
+const BODY_OF: Record<ArrivalAction, Record<string, boolean>> = { complete: {}, "store-cancel": {}, "store-no-show": { noShow: true } };
+
+/** 確かめの文と、確定のボタンの名前 */
+const confirmTextOf = (action: ArrivalAction, row: ArrivalsListRow): string => {
+  if (action === "complete") return ARRIVALS_TEXTS.confirmComplete(ARRIVALS_TEXTS.who(row.nickname), row.party, row.code);
+  return action === "store-no-show" ? ARRIVALS_TEXTS.confirmNoShow : ARRIVALS_TEXTS.confirmCancel;
+};
+const CONFIRM_LABEL_OF: Record<ArrivalAction, string> = { complete: "完了済みにする", "store-cancel": "取り消す", "store-no-show": "来ないとして取り消す" };
 
 /** 押したカードと操作、送っている最中か */
 type Pending = { action: ArrivalAction; row: ArrivalsListRow; sending: boolean };
@@ -88,7 +102,7 @@ const ConfirmPanel = ({ pending, onConfirm, onDismiss }: ConfirmProps) => {
   const { action, row, sending } = pending;
   return (
     <div className="store-confirm store-confirm--inline" role="dialog" aria-label="確かめ" data-testid={`confirm-${action}`}>
-      <p>{action === "complete" ? ARRIVALS_TEXTS.confirmComplete(ARRIVALS_TEXTS.who(row.nickname), row.party, row.code) : ARRIVALS_TEXTS.confirmCancel}</p>
+      <p>{confirmTextOf(action, row)}</p>
       {sending ? (
         <p className="store-note" role="status">
           {ARRIVALS_TEXTS.sending}
@@ -96,7 +110,7 @@ const ConfirmPanel = ({ pending, onConfirm, onDismiss }: ConfirmProps) => {
       ) : null}
       <div className="store-confirm__buttons">
         <button ref={confirmRef} type="button" className="store-btn store-btn--primary" data-testid="btn-confirm" disabled={sending} onClick={onConfirm}>
-          {action === "complete" ? "完了済みにする" : "取り消す"}
+          {CONFIRM_LABEL_OF[action]}
         </button>
         <button type="button" className="store-btn store-btn--quiet" disabled={sending} onClick={onDismiss}>
           やめる
@@ -144,7 +158,7 @@ const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refusal, on
     <div className="store-arrival__main">
       <p className="store-arrival__name">{ARRIVALS_TEXTS.who(row.nickname)}</p>
       <p className="store-arrival__meta">
-        {ARRIVALS_TEXTS.kindLabel(row.kind)}・期限 {timeInJst(row.expiresAt)}
+        {ARRIVALS_TEXTS.kindLabel(row.kind, row.noShow === true)}・期限 {timeInJst(row.expiresAt)}
       </p>
       {isLate(row) ? <p className="store-arrival__late">{ARRIVALS_TEXTS.lateUntil(lateUntilOf(row))}</p> : null}
       {partyChange ? (
@@ -173,6 +187,11 @@ const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refusal, on
         {row.canCancel ? (
           <button type="button" className="store-btn store-btn--quiet" data-testid="btn-store-cancel" disabled={pending?.sending === true} onClick={() => onAsk("store-cancel", row)}>
             取り消す
+          </button>
+        ) : null}
+        {row.canCancel ? (
+          <button type="button" className="store-btn store-btn--quiet" data-testid="btn-store-no-show" disabled={pending?.sending === true} onClick={() => onAsk("store-no-show", row)}>
+            {ARRIVALS_TEXTS.noShowButton}
           </button>
         ) : null}
       </div>
@@ -213,8 +232,8 @@ export const ArrivalsList = ({ rows, onChanged, newIds, cancelledIds, partyChang
     if (pending === null || pending.sending) return;
     const { action, row } = pending;
     setPending({ ...pending, sending: true });
-    // コードも理由も送らない（基準 20.11・要件21の基準 21.3）
-    const result = await callApi(ROUTE_OF[action], { params: { id: row.reservationId }, body: {} });
+    // コードも理由の文も送らない（基準 20.11・要件21の基準 21.3）。来ないは印だけ（基準 21.8）
+    const result = await callApi(ROUTE_OF[action], { params: { id: row.reservationId }, body: BODY_OF[action] });
     const refused = isFailure(result);
     setRefusal(refused ? { reservationId: row.reservationId, action, failure: result } : null);
     setPending(null);

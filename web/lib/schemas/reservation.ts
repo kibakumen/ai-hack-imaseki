@@ -35,6 +35,18 @@ export const partyChangeSchema = z.object({
 
 export type PartyChangeInput = z.infer<typeof partyChangeSchema>;
 
+// ---------- 店の取り消し（要件21の基準 21.3・21.8） ----------
+
+/**
+ * `POST /api/store/reservations/:id/cancel` の入力。**理由を打つ欄は持たない**（基準 21.3）——あるのは「来ない（枠を戻す）」の
+ * ボタンが送る真偽1つだけ（基準 21.8・2026-09-26 本人選択）。省けば店の都合の取り消し（残りは戻らない・基準 18.4）。
+ */
+export const storeCancelSchema = z.object({
+  noShow: z.boolean().optional(),
+});
+
+export type StoreCancelInput = z.infer<typeof storeCancelSchema>;
+
 /**
  * 確保への操作（取り消し・人数の変更・完了済み・店の取り消し）が、**今の状態と衝突して**断るときの
  * 応答（基準 10.3・20.19・21.5）。設計書「入口の一覧」の「この形を通らない断りは2つだけ」の②。

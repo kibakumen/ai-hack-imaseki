@@ -203,7 +203,7 @@ v2 の Worker `ai-hack-v2` は 2026-09-25 から止めてある（「1. 触れ�
 pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 ```
 
-2026-09-25 の監査の直しで足した migration は次の表のとおり（2026-09-26 の最終の手直しの `0012` 以降と、2026-09-26 に取り込んだメールアドレスの確認の `0015` を含む）で、どれも本番には未適用（コードはこれが当たっている前提で動く。当てずにコードだけを出すと、列や制約が無いまま動いて500になる）:
+2026-09-25 の監査の直しで足した migration は次の表のとおり（2026-09-26 の最終の手直しの `0012` 以降と、2026-09-26 の本人選択で足した `0013`、同じ日に取り込んだメールアドレスの確認の `0015` を含む）で、どれも本番には未適用（コードはこれが当たっている前提で動く。当てずにコードだけを出すと、列や制約が無いまま動いて500になる）:
 
 | migration | 中身 |
 | --- | --- |
@@ -216,6 +216,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 | `0010_store_terms.sql` | 店向けの利用規約への同意の版と時刻 `stores.terms_version`・`stores.terms_agreed_at` |
 | `0011_admin_actions.sql` | 運営の操作の記録 `admin_actions`（追加だけ・トリガーで守る）と、承認した時点の写し・運営のメモ・連絡済みの印の列。当てると、承認済みと止められている店の今の値が承認の写しとして埋まる |
 | `0012_pending_license_retention.sql` | 承認されていない店の営業許可書のうち、上げた時刻 `stores.license_uploaded_at` の無いものを、当てた時刻で埋める（上げてから30日たっても承認されない許可書を消す数えの起点・安全-20）。承認済みの店には触れない |
+| `0013_store_no_show.sql` | 店の取り消しの理由 `reservations.cancel_reason` と、状態の変化の記録の理由 `reservation_events.reason`（「来ない（枠が戻る）」・2026-09-26 本人選択）。今ある行は NULL のまま（店の都合の取り消しとして読まれ、残りは動かない）。**当てずにコードだけを出すと、確保を読む問い合わせと状態の変化の記録が落ちる** |
 | `0015_email_verification.sql` | メールアドレスの確認（2026-09-26 に枝 `feat/email-verify` から取り込んだ・その枝では `0003` だった番号を付け替えた）。`accounts.email_verified_at`（今ある行は NULL＝まだ確認していない）と、確認のリンクの控えの表 `email_verifications`（token は sha256 だけ）。メールを送る鍵（5.2 の `RESEND_API_KEY`・`MAIL_FROM`）を入れていなくても当ててよい（列と表が在っても使われないだけ） |
 | `0016_fetch_origin_without_google_coordinates.sql` | 取得の記録 `fetch_logs` を作り直し、起点の座標の列を空を許す形にして、打った場所の文字 `origin_place` と Google の場所の番号 `origin_place_id` の列を足す。**今ある行のうち、打った場所で探した行と種類の分からない行（`origin_kind` が NULL）の座標を消す**（Google で直した座標は連続30日までしか置けない・Service Specific Terms 6.3.1。記録の表を追加だけとする基準 27.7 の1回だけの例外・2026-09-26 本人選択）。現在地で探した行の座標は残す。⚠️ 消した座標は戻せない（控えを取って残すと、同じ利用条件に反する） |
 

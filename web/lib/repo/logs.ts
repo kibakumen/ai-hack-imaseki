@@ -165,12 +165,15 @@ const EVENT_ID_SEPARATOR = ":";
  * 変える文と同じ `db.batch` の並びで、その**後ろ**に置く——状態の文が当たらなかった（同時に来た操作に
  * 負けた）まとまりでは、何も足さない（不具合-16）。番号を確保と状態から決めるので、同じ時刻に2つの要求が
  * 同じ状態へ変えようとしても記録は1件に留まる。
+ *
+ * 理由（`reason`）は確保の行の `cancel_reason` をそのまま写す（2026-09-26 本人選択・「来ない（枠を戻す）」の理由を
+ * 記録にも残す・migration 0013）。店の取り消しの「来ない」だけが値を持ち、ほかの変化では空（NULL）。
  */
 export const reservationEventStatement = (db: Db, record: { reservationId: string; status: string; at: string }): D1PreparedStatement =>
   db
     .prepare(
-      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, at)` +
-        ` SELECT res.id || ?4 || ?2, res.id, ?2, ?3 FROM reservations res WHERE res.id = ?1 AND res.status = ?2 AND res.status_at = ?3`,
+      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, reason, at)` +
+        ` SELECT res.id || ?4 || ?2, res.id, ?2, res.cancel_reason, ?3 FROM reservations res WHERE res.id = ?1 AND res.status = ?2 AND res.status_at = ?3`,
     )
     .bind(record.reservationId, record.status, record.at, EVENT_ID_SEPARATOR);
 

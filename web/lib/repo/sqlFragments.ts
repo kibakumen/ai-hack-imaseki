@@ -65,14 +65,15 @@ export const expiredWithinGraceCondition = (reservationAlias: string, nowPlaceho
 
 /**
  * 枠を押さえている確保（設計書「確保の状態と、残りの数え方」の3つ）:
- * ①確保中（期限より前）②完了済みで holds_slot=1 ③店が取り消したもの（常に押さえたまま）。
+ * ①確保中（期限より前）②完了済みで holds_slot=1 ③店が取り消したもので holds_slot=1（店の都合の取り消しは押さえたまま・
+ * 基準 18.4。「来ない（枠を戻す）」で取り消したものは holds_slot=0 で押さえない・基準 18.16・2026-09-26 本人選択）。
  *
  * TS 側の正本は domain/remaining.ts の `holdsSlot`（同じ順・同じ条件）。
  */
 export const holdsSlotCondition = (reservationAlias: string, nowPlaceholder: string): string =>
   `((${activeReservationCondition(reservationAlias, nowPlaceholder)})` +
   ` OR (${reservationAlias}.status = 'completed' AND ${reservationAlias}.holds_slot = 1)` +
-  ` OR ${reservationAlias}.status = 'store_cancelled')`;
+  ` OR (${reservationAlias}.status = 'store_cancelled' AND ${reservationAlias}.holds_slot = 1))`;
 
 /**
  * 残り ＝ 募集する組数 − 枠を押さえている確保の数（要件18の基準 18.1〜18.13）。

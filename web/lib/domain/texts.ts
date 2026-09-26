@@ -130,6 +130,8 @@ const NEXT_STEP_TEXTS: Record<string, (ctx: Ctx) => string> = {
 // ---------- プッシュ（場面ごとの決まった文。中身を載せないプッシュの文面） ----------
 const PUSH_TEXTS: Record<string, () => { title: string; body: string }> = {
   store_cancelled: () => ({ title: "確保が取り消されました", body: "お店の都合で確保が取り消されました。アプリを開いて確かめてください。" }),
+  // 店が「来ない（枠を戻す）」で取り消した場面（2026-09-26 本人選択）。責める語は使わない
+  store_no_show: () => ({ title: "確保が取り消されました", body: "お店が来店なしとして確保を取り消しました。アプリを開いて確かめてください。" }),
   admin_cancelled: () => ({ title: "確保が取り消されました", body: "運営の都合で確保が取り消されました。アプリを開いて確かめてください。" }),
 };
 
@@ -247,15 +249,18 @@ const ARRIVAL_CANCEL_REFUSED_TEXTS: Record<string, string> = {
   admin_cancelled: "運営が先に取り消していました。",
 };
 
+/** 「来ない（枠を戻す）」で取り消した行の見出し（基準 20.16・21.8・2026-09-26 本人選択） */
+const ARRIVAL_NO_SHOW_LABEL = "来店なしで取り消し（枠を戻しました）";
+
 /** 断りの応答の「今の状態」（`current`）のうち、文を選ぶのに要る所だけ。 */
 type ArrivalRefusedState = { state: string; newerReservation?: boolean };
 
 export const ARRIVALS_TEXTS = {
   /** 行の見出し（基準 20.1・20.5・20.14・20.16） */
-  kindLabel: (kind: string): string => ARRIVAL_KIND_LABELS[kind] ?? "確保中",
-  /** 断られたときに一覧の下へ出す文（基準 20.20）。押した操作（完了か取り消しか）で表を選ぶ（店-10） */
-  refused: (action: "complete" | "store-cancel", current: ArrivalRefusedState): string => {
-    if (action === "store-cancel") return ARRIVAL_CANCEL_REFUSED_TEXTS[current.state] ?? ARRIVAL_CANCEL_REFUSED_TEXTS.active;
+  kindLabel: (kind: string, noShow = false): string => (kind === "store_cancelled" && noShow ? ARRIVAL_NO_SHOW_LABEL : ARRIVAL_KIND_LABELS[kind] ?? "確保中"),
+  /** 断られたときに一覧の下へ出す文（基準 20.20）。押した操作（完了か取り消しか）で表を選ぶ（店-10）。来ないは取り消しの表 */
+  refused: (action: "complete" | "store-cancel" | "store-no-show", current: ArrivalRefusedState): string => {
+    if (action !== "complete") return ARRIVAL_CANCEL_REFUSED_TEXTS[current.state] ?? ARRIVAL_CANCEL_REFUSED_TEXTS.active;
     if (current.state === "expired" && current.newerReservation === true) return ARRIVAL_COMPLETE_NEWER_TEXT;
     return ARRIVAL_COMPLETE_REFUSED_TEXTS[current.state] ?? ARRIVAL_COMPLETE_REFUSED_TEXTS.active;
   },
@@ -278,7 +283,13 @@ export const ARRIVALS_TEXTS = {
   customerCancelled: "客が取り消しました。この組の席の用意は要りません",
   /** 確かめ（店-01）。取り消しは、残りの枠が戻らないことと、来ない客は期限で枠が戻ることも言う */
   confirmComplete: (who: string, party: number, code: string): string => `${who}・${party} 名・${TERMS.reservationCode} ${code} の来店を確かめましたか。`,
-  confirmCancel: "取り消すと、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります）。この確保を取り消しますか。",
+  confirmCancel: "取り消すと、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります。来ないと分かった組の枠をすぐ空けるなら「来ない」で取り消してください）。この確保を取り消しますか。",
+  /**
+   * 「来ない（枠を戻す）」のボタンと確かめ（基準 21.8・2026-09-26 本人選択）。ボタンの語は「戻す」を避けて「枠が戻る」にした
+   * （AI判断）——一覧に「戻す」操作を置かない決め（基準 20.10・完了済みを元に戻す操作）と、受け入れ検査 r20 がその語で見張っているため。
+   */
+  noShowButton: "来ない（枠が戻る）",
+  confirmNoShow: "来店なしとして取り消すと、客に知らせが送られ、この組の枠が残りへ戻ります（ほかの客が受け取れるようになります）。この確保を取り消しますか。",
   sending: SUBMIT_TEXTS.sending,
   /** 取り直し（店-08） */
   refresh: "今すぐ更新",
@@ -286,6 +297,13 @@ export const ARRIVALS_TEXTS = {
   /** 音を鳴らせる状態にするボタン（店-07。iPhone などは画面に触れるまで音を鳴らせない） */
   unlockSound: "音を鳴らす",
   soundLockedNote: "この端末は、画面に一度触れるまで知らせの音を鳴らせません。",
+} as const;
+
+// ---------- 運営の画面の、店の取り消しの回数（横断-09・2026-09-26 本人選択の「来ない（枠を戻す）」） ----------
+
+export const ADMIN_STORE_CANCEL_TEXTS = {
+  /** 店の取り消しの回数に添える「うち来ない」（0回・古い応答では何も添えない） */
+  noShowNote: (count: number | undefined): string => (count !== undefined && count > 0 ? `・うち来ない ${count} 回` : ""),
 } as const;
 
 // ---------- 承認の状況の帯（要件12の基準 12.6・12.7・12.9。2026-09-25 監査の指摘 店-12） ----------

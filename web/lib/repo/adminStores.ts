@@ -50,6 +50,11 @@ export type AdminStoreListRow = {
   /** 店が取り消した確保の数と、受け取られた確保のうちの割合（0〜1・横断-09） */
   storeCancelled: number;
   storeCancelRate: number;
+  /**
+   * そのうち「来ない（枠を戻す）」で取り消した数（2026-09-26 本人選択）。来店なしの取り消しは枠が戻るので、
+   * 客を締め出す手として繰り返されていないかを、店の都合の取り消しと分けて見られるようにする。
+   */
+  noShowCancelled: number;
 };
 
 /** 承認した時点の写し（運営-02）。写しの無い店（未承認）は null。 */
@@ -106,6 +111,10 @@ const adminStoreClaimsExpression = (storeAlias: string): string =>
 const storeCancelledExpression = (storeAlias: string): string =>
   `(SELECT COUNT(*) FROM reservations sc WHERE sc.store_id = ${storeAlias}.id AND sc.status = 'store_cancelled')`;
 
+/** 店が「来ない（枠を戻す）」で取り消した確保の数（2026-09-26 本人選択・migration 0013 の cancel_reason）。 */
+const noShowCancelledExpression = (storeAlias: string): string =>
+  `(SELECT COUNT(*) FROM reservations ns WHERE ns.store_id = ${storeAlias}.id AND ns.status = 'store_cancelled' AND ns.cancel_reason = 'no_show')`;
+
 /** その店の確保の全部の数（店が取り消した割合の分母）。 */
 const reservationCountExpression = (storeAlias: string): string => `(SELECT COUNT(*) FROM reservations rc WHERE rc.store_id = ${storeAlias}.id)`;
 
@@ -136,6 +145,7 @@ const listColumns = (now: string): string =>
    ${changedSinceApprovalExpression("s")} AS changed_since_approval,
    ${contactedExpression("s")} AS contacted,
    ${storeCancelledExpression("s")} AS store_cancelled,
+   ${noShowCancelledExpression("s")} AS no_show_cancelled,
    ${reservationCountExpression("s")} AS reservation_count`;
 
 const toListRow = (row: Record<string, unknown>): AdminStoreListRow => {
@@ -156,6 +166,7 @@ const toListRow = (row: Record<string, unknown>): AdminStoreListRow => {
     contacted: toBoolean(row.contacted),
     storeCancelled,
     storeCancelRate: reservationCount > 0 ? storeCancelled / reservationCount : 0,
+    noShowCancelled: Number(row.no_show_cancelled ?? 0),
   };
 };
 

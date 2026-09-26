@@ -108,7 +108,7 @@ const CustomerScreens = () => {
     if (previous?.kind !== "active" || next.kind === "active") return;
     setCelebrating(false);
     if (next.kind !== "fetch") setSearching(false);
-    const message = changedMessage(next.kind);
+    const message = changedMessage(next.kind, next.reservation);
     if (message !== null) setAnnouncement(message);
   };
 

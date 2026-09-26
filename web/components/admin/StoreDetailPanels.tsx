@@ -14,7 +14,7 @@ import type { ReactNode } from "react";
 import type { AdminActionDto, AdminStoreDetailDto, ResponseOf } from "../../lib/client/api";
 import { dateTimeInJst } from "../ui/jstTime";
 import styles from "./admin.module.css";
-import { TERMS } from "../../lib/domain/texts";
+import { ADMIN_STORE_CANCEL_TEXTS, TERMS } from "../../lib/domain/texts";
 
 type StoreDetailDto = AdminStoreDetailDto;
 type StoreReports = ResponseOf<"GET /api/admin/stores/:id">["reports"];
@@ -128,7 +128,7 @@ export const StoreImpact = ({ store, reportCount }: { store: StoreDetailDto; rep
     <span className={styles.stat} data-strong={store.activeReservations > 0 ? "true" : "false"}>{`${store.activeReservations} 組が向かっています`}</span>
     <span className={styles.stat}>{`受け取り ${store.claims} 件`}</span>
     <span className={styles.stat} data-strong={reportCount > 0 ? "true" : "false"}>{`通報 ${reportCount} 件`}</span>
-    <span className={styles.stat} data-strong={store.storeCancelled > 0 ? "true" : "false"}>{`店の取り消し ${store.storeCancelled} 回（${percent(store.storeCancelRate)}）`}</span>
+    <span className={styles.stat} data-strong={store.storeCancelled > 0 ? "true" : "false"}>{`店の取り消し ${store.storeCancelled} 回（${percent(store.storeCancelRate)}）${ADMIN_STORE_CANCEL_TEXTS.noShowNote(store.noShowCancelled)}`}</span>
   </p>
 );
 

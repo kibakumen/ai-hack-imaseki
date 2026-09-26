@@ -28,3 +28,18 @@ describe("店に取り消された表示からの通報", () => {
     expect(form.textContent).toMatch(/取り消した店/);
   });
 });
+
+// 2026-09-26 本人選択（要件9の基準 9.14）: 店が「来ない（枠を戻す）」で取り消した確保は、店の都合とは別の文で伝える。
+describe("来店なしとして取り消された表示", () => {
+  it("9.14 理由が来店なしなら「お店が来店なしとして取り消しました」の旨を出し、「店の都合」とは言わない", async () => {
+    api = installFakeApi({
+      "GET /api/config/public": () => ({ json: { turnstileSiteKey: "s", vapidPublicKey: "v", contactEmail: null } }),
+      "GET /api/customer/home": () => ({ json: { ...homeFetch(), kind: "store_cancelled", reservation: { ...reservationDto({ status: "store_cancelled", storeName: "来ない店" }), cancelReason: "no_show" } } }),
+      "GET /api/customer/recent": () => ({ json: { items: [] } }),
+    });
+    render(<CustomerApp />);
+    const view = await screen.findByTestId("view-store_cancelled");
+    expect(view.textContent).toMatch(/来店なしとして取り消しました/);
+    expect(view.textContent).not.toMatch(/店の都合/);
+  });
+});
