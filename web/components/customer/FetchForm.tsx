@@ -165,7 +165,10 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       // 経路の出発地は、打った場所で探したときだけ（2026-09-25 監査の指摘 客-11）。現在地で探したときは付けない
       // ——探した時点の座標を固定の出発地にすると、歩き出したあとの経路が探した場所から引かれる。
       // そのタブの中で覚えておく（読み直しても残るように）。現在地のときは前に覚えた場所も消す。
-      const routeFrom = "place" in from ? { place: from.place } : null;
+      // 場所の候補から来た文字（Google の Places が返した文字）も覚えず、結果にも載せない（2026-09-26 独立した再レビューの指摘）。
+      // place ID が無いときに、ここから Google マップの origin へ回っていた。候補のときの出発地は、サーバーの応答
+      // （place ID と決まった文字）だけが渡す——/privacy の「候補から選んだときは文字の代わりに『探した場所』と送る」と揃える。
+      const routeFrom = "place" in from && from.placeFromCandidate !== true ? { place: from.place } : null;
       rememberOrigin(routeFrom);
       return { payload: { ...from, party: partyToSend(party), genres, budgetMax: budgetToSend(budgetMax) }, party: Number(party), from: routeFrom };
     });

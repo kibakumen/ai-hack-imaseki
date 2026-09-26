@@ -67,6 +67,8 @@ const RECENT_ENTRY_KINDS: ReadonlyArray<HomeDto["kind"]> = ["fetch", "active", "
  *      2回目の直しがチームの環境で効かなかった理由。
  * どれも無ければ null＝渡さない（嘘の起点を付けるより、マップに現在地から引かせる方がまし）。
  * **現在地で探したときは3つとも空**（サーバーは出発地を返さず、画面も覚えない・2026-09-25 監査の指摘 客-11）。
+ * **場所の候補から来た文字で探したときは 2 と 3 が空**（画面は候補の文字を覚えない・2026-09-26 独立した再レビューの指摘）。
+ * 出発地は 1 の place ID と決まった文字だけで、place ID が無ければ渡さない。
  */
 const routeFromOf = (reservation: ReservationDto | undefined, fetchFrom: ReturnType<typeof recallOrigin> | undefined) =>
   reservation === undefined ? null : (reservation.origin ?? fetchFrom ?? recallOrigin());

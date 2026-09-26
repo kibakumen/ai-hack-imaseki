@@ -93,6 +93,9 @@ describe("確保の応答の経路の出発地（客-11）", () => {
     expect((await customer.api.get("/api/customer/home")).json.reservation.origin).toEqual(expected);
   });
 
+  // 画面の側も、候補から来た文字を経路の出発地として覚えず、探した結果にも載せない（FetchForm・2026-09-26 独立した再レビューの指摘）。
+  // 以前はここで応答が出発地を付けなくても、画面の補い（結果の起点・タブの覚え）から候補の文字が Google マップの origin へ回っていた。
+  // 検査は components/customer/FetchSuggest.test.tsx。
   it("候補を選んで探し、地図の応答に place ID が無ければ、記録に何も残さず出発地も付けない（マップが現在地から引く）", async () => {
     const { at, offer } = await storeWithOffer();
     ctx.geocoder.set("番号の無い候補", at);

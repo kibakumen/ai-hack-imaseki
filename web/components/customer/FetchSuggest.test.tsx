@@ -149,6 +149,45 @@ describe("場所の欄の候補", () => {
     expect(body.placeFromCandidate).toBeUndefined();
   });
 
+  // 2026-09-26 独立した再レビューの指摘: 候補から来た文字は、place ID が無いときに経路の出発地（Google マップの origin）へ
+  // 回っていた（結果に載せる起点とタブの覚え）。候補から来た文字は覚えず、結果にも載せない。出発地はサーバーの応答
+  // （place ID と決まった文字）だけが渡す。客が打った文字は今までどおり覚える。
+  const lastOrigin = () => window.sessionStorage.getItem("imaseki.lastOrigin");
+  const renderWithResults = () => {
+    const onResults = vi.fn();
+    fake = installFetch((method, url) => {
+      if (url.pathname === "/api/customer/place-suggest") return { json: { suggestions: SIX } };
+      if (method === "POST" && url.pathname === "/api/customer/fetch/stream") return { stream: streamOfResult({ fetchId: "f1", items: [] }) };
+      return { status: 404, json: { ok: false } };
+    });
+    render(<FetchForm party="2" onPartyChange={vi.fn()} onResults={onResults} />);
+    return { field: screen.getByTestId("field-place") as HTMLInputElement, onResults };
+  };
+  const searchAndCollect = async (onResults: ReturnType<typeof vi.fn>) => {
+    fireEvent.click(screen.getByTestId("btn-fetch"));
+    await waitFor(() => expect(onResults.mock.calls.some(([result]) => result !== null)).toBe(true));
+    return onResults.mock.calls.map(([result]) => result as { from: unknown } | null).filter((result) => result !== null);
+  };
+
+  it("候補を選んで探したときは、その文字を経路の出発地として覚えず、結果にも載せない", async () => {
+    window.sessionStorage.setItem("imaseki.lastOrigin", JSON.stringify({ place: "前に打った場所" }));
+    const { field, onResults } = renderWithResults();
+    await chooseSecond(field);
+    const results = await searchAndCollect(onResults);
+    expect(results.map((result) => result.from)).not.toContainEqual({ place: "渋谷区役所" });
+    expect(results.every((result) => result.from === null)).toBe(true);
+    expect(lastOrigin()).toBeNull();
+  });
+
+  it("客が打った文字で探したときは、その文字を経路の出発地として覚え、結果にも載せる", async () => {
+    window.sessionStorage.clear();
+    const { field, onResults } = renderWithResults();
+    fireEvent.change(field, { target: { value: "恵" } });
+    const results = await searchAndCollect(onResults);
+    expect(results.every((result) => JSON.stringify(result.from) === JSON.stringify({ place: "恵" }))).toBe(true);
+    expect(JSON.parse(lastOrigin() ?? "null")).toEqual({ place: "恵" });
+  });
+
   it("↑↓ と Enter で選べ、その Enter では探さない。Esc で閉じる", async () => {
     const field = renderForm();
     fireEvent.change(field, { target: { value: "渋谷" } });
