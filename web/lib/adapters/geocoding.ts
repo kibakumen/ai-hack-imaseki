@@ -24,7 +24,7 @@ const PLACES_DENIED_MEMO_MS = 10 * 60 * 1000;
 
 type GeocodeResponse = {
   status?: unknown;
-  results?: Array<{ formatted_address?: unknown; geometry?: { location?: { lat?: unknown; lng?: unknown } } }>;
+  results?: Array<{ formatted_address?: unknown; place_id?: unknown; geometry?: { location?: { lat?: unknown; lng?: unknown } } }>;
 };
 
 type PlacesAutocompleteResponse = {
@@ -136,9 +136,12 @@ export const createGeocoder = ({ apiKey, fetch: fetchImpl = globalThis.fetch, no
       if (text.trim() === "") return { ok: false };
       const results = await askFor({ address: text, region: "jp" }, opts.signal);
       if (results === "not_found") return { ok: false, notFound: true };
-      const location = results?.[0]?.geometry?.location;
+      const first = results?.[0];
+      const location = first?.geometry?.location;
       if (typeof location?.lat !== "number" || typeof location?.lng !== "number") return { ok: false };
-      return { ok: true, lat: location.lat, lng: location.lng };
+      // place ID は取得の記録に残す（座標は Google の利用条件で30日までしか置けないが、place ID は無期限・2026-09-26）
+      const placeId = typeof first?.place_id === "string" && first.place_id !== "" ? first.place_id : null;
+      return { ok: true, lat: location.lat, lng: location.lng, ...(placeId === null ? {} : { placeId }) };
     },
 
     // 逆方向（位置 → 地名）。`results[0]` がいちばん細かい住所。

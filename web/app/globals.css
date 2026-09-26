@@ -45,6 +45,9 @@
   --color-highlight-edge: #f0b429;
   /* 済んだ知らせの文字。淡い緑の地（10〜15%）の上でも 4.5:1 を保つ濃さ（#15803d では 4.03:1 だった・横断-04） */
   --color-success: #166534;
+  /* Google Maps の帰属の文字（2026-09-26 本人選択）。Google の指定は White・#1F1F1F・#5E5E5E のどれかで、
+     地との明るさの比 4.5:1 以上。明るい配色は #5E5E5E（地 #fffdfa で 6.4:1・面 #fff7ed で 6.1:1）、暗い配色は白 */
+  --color-google-attribution: #5e5e5e;
 
   /* ---- 角丸 ---- */
   --radius-xs: 0.5rem;
@@ -108,6 +111,7 @@
     --color-highlight-text: #fde3a7;
     --color-highlight-edge: #a3690f;
     --color-success: #6ee7a8;
+    --color-google-attribution: #ffffff;
   }
 }
 
@@ -133,6 +137,7 @@
   --color-highlight-text: #fde3a7;
   --color-highlight-edge: #a3690f;
   --color-success: #6ee7a8;
+  --color-google-attribution: #ffffff;
 }
 
 * {

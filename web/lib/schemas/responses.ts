@@ -63,8 +63,11 @@ const reservationView = object({
   expiresAt: string(),
   status: string(),
   coupons: array(couponFace),
-  /** 探したときの起点。古い応答には無いので任意 */
-  origin: optional(nullable(object({ lat: number(), lng: number() }))),
+  /**
+   * 探したときの起点。古い応答には無いので任意。今のサーバーは打った場所の文字と place ID を返す（2026-09-26・
+   * Google で直した座標は30日までしか置けない）。座標の形は、それより古い版のサーバーの応答を読むためだけに残す
+   */
+  origin: optional(nullable(union([object({ place: string(), placeId: optional(string()) }), object({ lat: number(), lng: number() })]))),
 });
 
 /** 客のホーム（受け入れ検査の契約 `HomeDto`・usecases/customerHome の CustomerHome）。 */

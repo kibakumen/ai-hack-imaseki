@@ -1,7 +1,13 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "ai-hack-v2",
-  "main": ".open-next/worker.js",
+  // 入口は OpenNext の組み立てた Worker（.open-next/worker.js）を包む web/worker.mjs（2026-09-26）。定期実行の
+  // scheduled を足すため（OpenNext の公式の手順「Custom Worker」の形）。fetch はそのまま組み立てた Worker へ渡る。
+  "main": "./worker.mjs",
+  // 1日1回の定期実行（2026-09-26 本人選択）。Google で直した店の座標のうち連続30日を過ぎたものを必ず消す
+  // （Service Specific Terms 6.3.1・lib/scheduled → usecases/googleUpkeep）。時刻は UTC の 18:00＝日本時間の 3:00
+  // （客の少ない時間・AI判断）。⚠️ 公開を止めている間も、次に wrangler deploy したときから動き出す。
+  "triggers": { "crons": ["0 18 * * *"] },
   "compatibility_date": "2026-09-21",
   // 公開は 2026-09-25 から止めてある（README の「6.1 今は止めてある」・2026-09-26 の本人の依頼）。
   // workers.dev の公開の道と、版ごとの下見の URL を出さない。これが無いと、次の wrangler deploy で公開が黙って戻る。

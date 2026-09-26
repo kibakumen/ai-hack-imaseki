@@ -4,14 +4,15 @@
 //     取り直しを続け、戻ったら座標も戻す（外の一時的な障害を、元に戻らないデータの欠けにしない・レビューの指摘）
 //   ③0009 より前に保存した店も、登録の時刻を起点に手入れの対象へ入れる（デモの店は入れない・レビューの指摘）
 //   ④手入れは1時間に1回まで・応答のあとに（deps.defer）走らせる
-// 手で置いた座標（デモの店）は Google の中身ではないので触らない。取得の起点（fetch_logs）は、記録の表を
-// 追加だけにする基準 27.7（本人選択で緩めないと決めた）とぶつかるので、ここでは触らない（本人の判断待ち）。
+//   ⑤30日を過ぎた座標は件数の上限なしで全部消し、1日1回の定期実行でも間引きに関わらず消す（2026-09-26 本人選択）
+// 手で置いた座標（デモの店）は Google の中身ではないので触らない。取得の起点（fetch_logs）はここでは触らない——
+// Google から得た座標はもう書かず、既にある行は migration 0016 が1回だけ消した（2026-09-26 本人選択）。
 import fs from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { approvedStore, makeCtx, one, splitSql, T0, WEB, type Ctx } from "../../../tests/acceptance/v2/_fakes";
 import type { Deps, Geocoder } from "../ports";
-import { runGoogleUpkeep, scheduleGoogleUpkeep } from "./googleUpkeep";
+import { runGoogleUpkeep, runScheduledGoogleUpkeep, scheduleGoogleUpkeep } from "./googleUpkeep";
 
 const DAY = 24 * 60 * 60 * 1000;
 const ago = (days: number): string => new Date(new Date(T0).getTime() - days * DAY).toISOString();
@@ -136,6 +137,41 @@ describe("Google で位置に直した店の座標（30日まで）", () => {
 
     expect(asked[0]).toBe("住所-期限が迫る");
     expect(await storeRow(atRisk)).toEqual({ lat: 35.7001, lng: 139.7001, geocoded_at: T0 });
+  });
+});
+
+// 2026-09-26 本人選択: 手入れは客の取得のときにしか走らず、1回に5件までだったので、客が来ない期間や店が多い日には
+// 30日を超えて座標が残りえた（Service Specific Terms 6.3.1 は連続30日を過ぎたら消すことを求める）。
+// 消す方は件数の上限を置かずに1つの文で全部消し、1日1回の定期実行（Worker の scheduled・web/worker.mjs）でも走らせる。
+describe("30日を過ぎた座標は、取り直しの数の上限と間引きに関わらず必ず消す", () => {
+  it("取り直しの上限（1回に5件）を超えて30日を過ぎた店が並んでいても、全部の座標を消す。取った時刻は残して取り直しを続ける", async () => {
+    const overdue = await Promise.all(Array.from({ length: 8 }, (_, i) => seedStore({ address: `住所-大量-${i}`, lat: 35.1 + i / 100, lng: 139.1, geocodedAt: ago(31 + i) })));
+    const young = await seedStore({ address: "住所-29日", lat: 35.9, lng: 139.9, geocodedAt: ago(29) });
+    const handPlaced = await seedStore({ address: "住所-手置き-古い", lat: 35.8, lng: 139.8, geocodedAt: null });
+    const { geocoder, asked } = tableGeocoder(Object.fromEntries(overdue.map((_, i) => [`住所-大量-${i}`, "down" as const])));
+    await runGoogleUpkeep({ ...ctx.deps, geocoder });
+
+    expect(asked.length).toBeLessThanOrEqual(5);
+    for (const [i, id] of overdue.entries()) expect(await storeRow(id)).toEqual({ lat: null, lng: null, geocoded_at: ago(31 + i) });
+    expect(await storeRow(young)).toEqual({ lat: 35.9, lng: 139.9, geocoded_at: ago(29) });
+    expect(await storeRow(handPlaced)).toEqual({ lat: 35.8, lng: 139.8, geocoded_at: null });
+  });
+
+  it("定期実行の手入れは、1時間の間引きに当たっても30日を過ぎた座標を消す（取り直しは間引きに従う）", async () => {
+    const { geocoder, asked } = tableGeocoder({});
+    await runGoogleUpkeep({ ...ctx.deps, geocoder }); // 客の取得のついでの回（これで1時間の間引きに入る）
+    const overdue = await seedStore({ address: "住所-定期-31日", lat: 35.2, lng: 139.2, geocodedAt: ago(31) });
+    const logged: Array<{ event: string; count?: number }> = [];
+    await runScheduledGoogleUpkeep({ ...ctx.deps, geocoder, logger: { log: (entry) => logged.push(entry) } });
+
+    expect(asked).not.toContain("住所-定期-31日");
+    expect(await storeRow(overdue)).toEqual({ lat: null, lng: null, geocoded_at: ago(31) });
+    expect(logged).toContainEqual({ event: "store_coordinates_swept", count: 1 });
+  });
+
+  it("定期実行の手入れは、消せなかったら例外を外へ出す（定期実行の失敗として Cloudflare の記録に残す）", async () => {
+    const broken: Deps = { ...ctx.deps, db: { ...ctx.deps.db, prepare: () => { throw new Error("D1 が落ちた"); } } as Deps["db"] };
+    await expect(runScheduledGoogleUpkeep(broken)).rejects.toThrow();
   });
 });
 

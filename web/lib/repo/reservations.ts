@@ -55,15 +55,20 @@ export type ReservationStore = { id: string; name: string; address: string; url:
 export type ReservationOffer = { endedAt: Date | null; untilAt: Date; remaining: number; partyMax: number };
 
 /**
- * その確保を選んだ取得の起点（`fetch_logs.origin_lat/lng`・客が打った場所はサーバーがここで座標に直している）。
- * 客の画面が「Googleマップで経路を開く」の出発地に使う（2026-09-22 の本人の指摘・3回目——画面の状態や
- * `sessionStorage` に頼ると、タブが変わる・読み直す・保存を止めた端末で出発地が現在地へ戻る）。
- * 記録が読めなければ null（外部の鍵で必ず在るはずだが、無いことを理由に確保を描けなくしない）。
+ * その確保を選んだ取得の起点。客の画面が「Googleマップで経路を開く」の出発地に使う（2026-09-22 の本人の指摘・3回目——
+ * 画面の状態や `sessionStorage` に頼ると、タブが変わる・読み直す・保存を止めた端末で出発地が現在地へ戻る）。
+ *
+ * **客が打った場所の文字と、ジオコーディングの応答の place ID**（`fetch_logs.origin_place`・`origin_place_id`）で返す
+ * （2026-09-26 本人選択）。Google で直した座標は Service Specific Terms 6.3.1 で連続30日までしか置けないので、
+ * 記録にはもう書かない（migrations/0016 で既にある行からも消した）。Maps URLs は出発地を文字でも place ID
+ * （`origin_place_id`）でも受ける（lib/client/lastOrigin の routeHref）。
+ *
  * **現在地で探した取得なら null**（`fetch_logs.origin_kind = 'here'`・2026-09-25 監査の指摘 客-11）——探した時点の
  * 座標を固定の出発地にすると、歩き出した客の経路が探した場所から引かれる。付けなければマップが今の現在地から引く。
- * 種類の無い古い行（migrations/0006 より前）は、今までどおり座標を返す。
+ * 打った文字の無い古い行（migrations/0016 より前の行）と、記録が読めないとき（外部の鍵で必ず在るはずだが、無いことを
+ * 理由に確保を描けなくしない）も null。
  */
-export type ReservationOrigin = { lat: number; lng: number } | null;
+export type ReservationOrigin = { place: string; placeId?: string } | null;
 
 export type ReservationContext = { reservation: ReservationRow; store: ReservationStore; offer: ReservationOffer; origin: ReservationOrigin };
 
@@ -92,7 +97,7 @@ const CONTEXT_SQL = (where: string): string =>
   `SELECT ${RESERVATION_COLUMNS},` +
   ` s.name AS store_name, s.address AS store_address, s.url AS store_url, s.status AS store_status,` +
   ` o.ended_at, o.until_at, o.party_max, ${remainingExpression("o", "?2")} AS remaining,` +
-  ` f.origin_lat, f.origin_lng, f.origin_kind` +
+  ` f.origin_kind, f.origin_place, f.origin_place_id` +
   ` FROM reservations res` +
   ` JOIN stores s ON s.id = res.store_id` +
   ` JOIN offers o ON o.id = res.offer_id` +
@@ -100,6 +105,12 @@ const CONTEXT_SQL = (where: string): string =>
   ` LEFT JOIN fetch_logs f ON f.id = res.fetch_id` +
   ` WHERE ${where}` +
   ` ORDER BY res.created_at DESC, res.rowid DESC LIMIT 1`;
+
+/** 記録の行から経路の出発地を組む（打った場所で探して、文字が残っているときだけ）。 */
+const toOrigin = (row: Record<string, unknown>): ReservationOrigin => {
+  if (row.origin_kind !== "place" || typeof row.origin_place !== "string" || row.origin_place === "") return null;
+  return typeof row.origin_place_id === "string" && row.origin_place_id !== "" ? { place: row.origin_place, placeId: row.origin_place_id } : { place: row.origin_place };
+};
 
 const toContext = (row: Record<string, unknown>): ReservationContext => ({
   reservation: toReservationRow(row),
@@ -116,7 +127,7 @@ const toContext = (row: Record<string, unknown>): ReservationContext => ({
     remaining: Number(row.remaining ?? 0),
     partyMax: Number(row.party_max ?? 0),
   },
-  origin: row.origin_kind !== "here" && typeof row.origin_lat === "number" && typeof row.origin_lng === "number" ? { lat: row.origin_lat, lng: row.origin_lng } : null,
+  origin: toOrigin(row),
 });
 
 /** その客のいちばん新しい確保と、その店・そのオファーの今。1件も無ければ null。 */

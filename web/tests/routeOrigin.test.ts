@@ -36,16 +36,46 @@ describe("確保の応答の経路の出発地（客-11）", () => {
     expect((await one(ctx.db, "SELECT origin_kind FROM fetch_logs WHERE id = ?", fetched.json.fetchId)).origin_kind).toBe("here");
   });
 
-  it("打った場所で探して受け取った確保には、その場所の座標を出発地として付ける", async () => {
+  // 2026-09-26 本人選択: Google から得た座標は記録に書かない（Service Specific Terms 6.3.1 の30日）。出発地は
+  // 客が打った文字と、ジオコーディングの応答の place ID（無期限に置ける・Maps URLs の origin_place_id）で渡す
+  it("打った場所で探して受け取った確保には、打った文字と place ID を出発地として付ける（座標は付けない・記録にも残さない）", async () => {
     const { at, offer } = await storeWithOffer();
-    ctx.geocoder.set("経路の駅", at);
+    ctx.geocoder.set("経路の駅", { ...at, placeId: "ChIJ-route-station" });
     const customer = await registerCustomer(ctx);
     const fetched = await fetchOffers(customer.api, { party: 2, place: "経路の駅" });
     requireInResults(fetched, offer.id);
     const received = await receive(customer.api, { offerId: offer.id, party: 2, fetchId: fetched.json.fetchId });
     expect(received.status).toBe(200);
-    expect(received.json.reservation.origin).toEqual({ lat: at.lat, lng: at.lng });
-    expect((await customer.api.get("/api/customer/home")).json.reservation.origin).toEqual({ lat: at.lat, lng: at.lng });
-    expect((await one(ctx.db, "SELECT origin_kind FROM fetch_logs WHERE id = ?", fetched.json.fetchId)).origin_kind).toBe("place");
+    const expected = { place: "経路の駅", placeId: "ChIJ-route-station" };
+    expect(received.json.reservation.origin).toEqual(expected);
+    expect((await customer.api.get("/api/customer/home")).json.reservation.origin).toEqual(expected);
+    expect(await one(ctx.db, "SELECT origin_kind, origin_lat, origin_lng, origin_place, origin_place_id FROM fetch_logs WHERE id = ?", fetched.json.fetchId)).toEqual({
+      origin_kind: "place",
+      origin_lat: null,
+      origin_lng: null,
+      origin_place: "経路の駅",
+      origin_place_id: "ChIJ-route-station",
+    });
+  });
+
+  it("地図の応答に place ID が無ければ、打った文字だけを出発地として付ける", async () => {
+    const { at, offer } = await storeWithOffer();
+    ctx.geocoder.set("番号の無い駅", at);
+    const customer = await registerCustomer(ctx);
+    const fetched = await fetchOffers(customer.api, { party: 2, place: "番号の無い駅" });
+    requireInResults(fetched, offer.id);
+    const received = await receive(customer.api, { offerId: offer.id, party: 2, fetchId: fetched.json.fetchId });
+    expect(received.json.reservation.origin).toEqual({ place: "番号の無い駅" });
+  });
+
+  it("現在地（端末の座標・Google の中身ではない）で探した記録には、今までどおり座標を残す", async () => {
+    const { at } = await storeWithOffer();
+    const customer = await registerCustomer(ctx);
+    const fetched = await fetchOffers(customer.api, { party: 2, ...at });
+    const log = await one(ctx.db, "SELECT origin_lat, origin_lng, origin_place, origin_place_id FROM fetch_logs WHERE id = ?", fetched.json.fetchId);
+    expect(log.origin_lat).toBeCloseTo(at.lat, 6);
+    expect(log.origin_lng).toBeCloseTo(at.lng, 6);
+    expect(log.origin_place).toBeNull();
+    expect(log.origin_place_id).toBeNull();
   });
 });

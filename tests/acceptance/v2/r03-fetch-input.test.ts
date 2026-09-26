@@ -26,8 +26,11 @@ describeTask("11", "場所の文字と地図のサービス、人数の範囲、
     expect(ctx.geocoder.calls).toContain("渋谷駅");
     const shinjuku = await c.api.post("/api/customer/fetch", { place: "新宿駅", party: 2, genres: [], budgetMax: null });
     expect(shinjuku.json.items).toEqual([]);
-    const log = await one(ctx.db, "SELECT origin_lat, origin_lng FROM fetch_logs WHERE id = ?", shibuya.json.fetchId);
-    expect(log.origin_lat).toBeCloseTo(SHIBUYA.lat, 3);
+    // 記録には打った文字を残し、Google から得た座標は書かない（2026-09-26 本人選択・Service Specific Terms 6.3.1）
+    const log = await one(ctx.db, "SELECT origin_lat, origin_lng, origin_place FROM fetch_logs WHERE id = ?", shibuya.json.fetchId);
+    expect(log.origin_place).toBe("渋谷駅");
+    expect(log.origin_lat).toBeNull();
+    expect(log.origin_lng).toBeNull();
   });
 
   it("3.4・3.5・3.6 0件／失敗／3秒返らない（偽の時計）／日本の外、のどれでも取得を行わない（記録が増えず AI も呼ばれず place_unresolved）", async () => {

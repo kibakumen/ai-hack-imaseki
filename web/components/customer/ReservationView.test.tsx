@@ -5,7 +5,7 @@
 //
 // この検査が固定するのは4つ:
 //   1. 確保中の画面（読み直したあと＝探した結果も演出も無い状態）に経路のボタンが在る
-//   2. 出発地は確保の応答に載る起点（サーバーが `fetch_logs` から返す座標）——端末の保存に依らない
+//   2. 出発地は確保の応答に載る起点（サーバーが `fetch_logs` から返す、打った場所の文字と place ID）——端末の保存に依らない
 //   3. 応答に起点が無く、タブの覚えも無ければ `origin` を付けない（嘘の起点を付けない）
 //   4. `view-active` の中に http のリンク（`<a>`）を増やしていない（受け入れ検査 r09 の 9.1 が見ている）
 
@@ -66,6 +66,26 @@ describe("確保中の画面の経路のボタン", () => {
     return new URL(button.getAttribute("data-href") ?? "").searchParams;
   };
 
+  // 2026-09-26: サーバーは Google から得た座標を返さなくなり、打った文字と place ID を返す（Service Specific Terms 6.3.1）。
+  // Maps URLs は origin_place_id を origin と一緒に渡す決まり（origin だけでも開ける）
+  it("確保の応答の起点が打った文字と place ID なら、origin に文字・origin_place_id に番号を付けて開く", async () => {
+    fake = installHome({ ...RESERVATION, origin: { place: "新宿駅", placeId: "ChIJ-shinjuku" } });
+    render(<CustomerApp />);
+    const params = await routeParams();
+    expect(params.get("origin")).toBe("新宿駅");
+    expect(params.get("origin_place_id")).toBe("ChIJ-shinjuku");
+    expect(params.get("destination")).toBe("受け取りの店 東京都渋谷区道玄坂1-1");
+  });
+
+  it("起点が打った文字だけなら origin_place_id を付けない", async () => {
+    fake = installHome({ ...RESERVATION, origin: { place: "新宿駅" } });
+    render(<CustomerApp />);
+    const params = await routeParams();
+    expect(params.get("origin")).toBe("新宿駅");
+    expect(params.has("origin_place_id")).toBe(false);
+  });
+
+  // 端末に残った古いホーム（client/reservationCache）には、座標の起点が載っていることがある
   it("確保の応答に起点が載っていれば、その座標を出発地にして開く（探した結果も演出も無い読み直しのあと）", async () => {
     fake = installHome({ ...RESERVATION, origin: { lat: 35.6896, lng: 139.7006 } });
     render(<CustomerApp />);

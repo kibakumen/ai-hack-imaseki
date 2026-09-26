@@ -9,15 +9,19 @@
 // そこで `sessionStorage` に置いて、そのタブの中では読み直しても残るようにする。
 //
 // ⚠️ ここは**3段目の補い**（2026-09-22 の3回目の指摘のあと）。正本は**確保の応答に載る起点**
-// （`ReservationDto.origin`・サーバーが `fetch_logs` から返す座標）で、新しいタブ・別のタブ・
+// （`ReservationDto.origin`・サーバーが `fetch_logs` から返す、打った場所の文字と place ID）で、新しいタブ・別のタブ・
 // 保存を止めた端末でも渡る。ここが効くのは、古い応答や端末に残した古いホームに起点が無いときだけ。
 //
 // ⚠️ `sessionStorage` は private window や site data を止めている環境では**投げる**。
 // 例外は握りつぶして「覚えていない」として扱う——飾りなので、落ちても経路そのものは開ける。
 // ⚠️ タブを閉じれば消える（`localStorage` ではない）。**探した文脈と同じ寿命**にしてある。
 
-/** 探した起点。座標か、客が打った場所の文字（マップの `origin` はどちらも受ける）。 */
-export type SearchOrigin = { lat: number; lng: number } | { place: string };
+/**
+ * 探した起点。客が打った場所の文字（と、サーバーが返す Google の場所の番号 place ID）か、座標
+ * （マップの `origin` はどちらも受ける）。座標の形は、端末に残った古いホームと古い版のサーバーの応答を読むためだけに
+ * 残す——今のサーバーは Google で直した座標を返さない（2026-09-26・Service Specific Terms 6.3.1）。
+ */
+export type SearchOrigin = { lat: number; lng: number } | { place: string; placeId?: string };
 
 /** 経路の行き先（確保の店名と住所）。 */
 export type RouteDestination = { storeName: string; storeAddress: string };
@@ -38,6 +42,8 @@ export const routeHref = (destination: RouteDestination, from: SearchOrigin | nu
   if (target === "") return null;
   const params = new URLSearchParams({ api: "1", destination: target, travelmode: "walking" });
   if (from !== null) params.set("origin", "place" in from ? from.place : `${from.lat},${from.lng}`);
+  // Maps URLs の origin_place_id は origin と一緒に渡す決まり（「URLs that use this parameter must also include an origin」）
+  if (from !== null && "place" in from && from.placeId !== undefined && from.placeId !== "") params.set("origin_place_id", from.placeId);
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 };
 

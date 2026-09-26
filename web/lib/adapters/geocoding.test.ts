@@ -36,6 +36,14 @@ describe("adapters/geocoding", () => {
     expect(calls[0].signal).toBe(controller.signal);
   });
 
+  // 2026-09-26: 取得の記録には座標でなく place ID を残す（Service Specific Terms 6.3.1・place ID は無期限に置ける）
+  it("最初の1件に place ID があれば添える。文字でない place ID は添えない", async () => {
+    const withId = (async () => jsonResponse({ status: "OK", results: [{ place_id: "ChIJ-first", geometry: { location: { lat: 35.1, lng: 139.1 } } }] })) as unknown as typeof globalThis.fetch;
+    expect(await createGeocoder({ apiKey: "k", fetch: withId }).geocode("渋谷駅", {})).toEqual({ ok: true, lat: 35.1, lng: 139.1, placeId: "ChIJ-first" });
+    const badId = (async () => jsonResponse({ status: "OK", results: [{ place_id: 42, geometry: { location: { lat: 35.1, lng: 139.1 } } }] })) as unknown as typeof globalThis.fetch;
+    expect(await createGeocoder({ apiKey: "k", fetch: badId }).geocode("渋谷駅", {})).toEqual({ ok: true, lat: 35.1, lng: 139.1 });
+  });
+
   it("0件（ZERO_RESULTS）は、住所が位置に直らないと分かったとして答える（外の障害と分ける・設計-20 のレビュー）", async () => {
     const fetchImpl = (async () => jsonResponse({ status: "ZERO_RESULTS", results: [] })) as unknown as typeof globalThis.fetch;
     expect(await createGeocoder({ apiKey: "k", fetch: fetchImpl }).geocode("どこにもない住所", {})).toEqual({ ok: false, notFound: true });
