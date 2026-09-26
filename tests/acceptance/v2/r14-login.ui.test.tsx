@@ -32,7 +32,7 @@ describeTask("4", "ログインのフォーム", () => {
   });
 });
 
-describeTask("31", "【最終日】パスワードの変更のフォームと、ログインの画面の運営の連絡先", () => {
+describeTask("31", "パスワードの変更のフォームと、ログインの画面の運営の連絡先", () => {
   let api: FakeApi;
   afterEach(() => {
     cleanup();
