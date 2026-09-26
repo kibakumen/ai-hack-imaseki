@@ -449,3 +449,26 @@ export type HumanCheckAction = (typeof HUMAN_CHECK_ACTIONS)[keyof typeof HUMAN_C
  * ⚠️ すでに登録した店に新しい版へ同意し直してもらう仕組みは無い（AI判断・今は請求しないので、版を上げる予定が無い）。
  */
 export const STORE_TERMS_VERSION = "2026-09-26";
+
+// メールアドレスの確認（2026-09-22 に枝 feat/email-verify で足し、2026-09-26 に取り込んだ・要件14の基準 14.23〜14.28。値はどれも AI判断）
+/** 確認のリンクに載せる乱数の長さ（16バイト→base64url 22字。セッションの値と同じ） */
+export const EMAIL_VERIFY_TOKEN_BYTES = 16;
+/** 確認のリンクの期限（24時間） */
+export const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+/** リンクの token として受ける値の長さの上限（断るためではなく、長すぎる値を早く切るため） */
+export const EMAIL_VERIFY_TOKEN_MAX_LENGTH = 128;
+/**
+ * 確認メールを外（Resend）へ送る打ち切り（5秒）。枝では打ち切りを渡さずに呼んでいて、Resend が答えなければ要求が
+ * 止まり続けた（取り込みで足した・2026-09-25 監査の指摘 設計-11 と同じ raceDeadline で打ち切る）。
+ */
+export const MAIL_SEND_TIMEOUT_MS = 5000;
+/**
+ * 確認メールの送り直しは、同じアカウントで1時間に5回まで・同じ接続元で1時間に20回まで。外へメールを出す入口なので、
+ * 抑止が無いと1つのアカウントが送信元の評判と送信の枠を好きなだけ削れる（実測の裏付けは無い）。
+ * 取り込みのとき（2026-09-26）、枝の「接続元だけ」をアカウントごと＋接続元ごとの2つに改めた——枝を作った時点では
+ * アカウントで数える鍵が無かったが、監査の直し（安全-03）で `by: "account"` ができた。接続元の天井は、店の登録
+ * （接続元ごとに1時間10件）で作ったアカウントを替えながら送る形の上限（10件×5回を下回る20回）。
+ */
+export const EMAIL_VERIFY_RATE_LIMIT = 5;
+export const EMAIL_VERIFY_IP_RATE_LIMIT = 20;
+export const EMAIL_VERIFY_RATE_WINDOW_MS = 60 * 60 * 1000;

@@ -2,6 +2,7 @@
 // ホームはセッションで役割が店の要求だけが通る。
 // ⚠️ 店の情報・クーポン・許可書・カード・オファーの入口は、タスク5以降がこのまとまりへ足す。
 
+import { isEmailVerified } from "../../usecases/emailVerification";
 import { registerStore } from "../../usecases/registerStore";
 import { storeHome } from "../../usecases/storeHome";
 import { storeRegisterSchema } from "../../schemas/account";
@@ -39,7 +40,10 @@ const storeHomeRoute = defineRoute({
     // 仮のパスワードは運営からメールで平文のまま届くので、その値を知る人が決め直さずに客の電話番号を読めた。
     // 決め直せば次の取り直しで出る。
     const visible = ctx.mustChangePassword ? { ...home, arrivals: [] } : home;
-    return respond("GET /api/store/home", { ...visible, mustChangePassword: ctx.mustChangePassword });
+    // メールアドレスの確認（2026-09-26 に枝 feat/email-verify から取り込んだ）: メールを送る口が在るときだけ
+    // `emailVerified` を足す。無いときは項目そのものを足さない＝応答の形は前と変わらない（鍵を外せば表示が消えるだけ）。
+    const verified = deps.mailer ? { emailVerified: await isEmailVerified(deps, ctx.accountId) } : {};
+    return respond("GET /api/store/home", { ...visible, mustChangePassword: ctx.mustChangePassword, ...verified });
   },
 });
 

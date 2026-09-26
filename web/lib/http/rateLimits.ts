@@ -4,7 +4,7 @@
 // 入口ごとの指定（defineRoute の config）ではなく **method と path で引く表** にしてある理由:
 // 抑止はどの入口にも掛かりうるので、入口の定義に書く形だと「指定を書き忘れた入口だけ守られていない」
 // が起き、しかも黙って起きる（AI判断）。表にしておけば、守る入口の一覧が1か所で読める。
-// 外のサービス（地図・AI・外への取得・Stripe）を呼ぶ入口が全部この表に載っていることは、構造の検査
+// 外のサービス（地図・AI・外への取得・Stripe・メールの送信）を呼ぶ入口が全部この表に載っていることは、構造の検査
 // （rateLimits.test.ts）が入口の定義から辿って見張る（2026-09-25 監査の指摘 安全-03）。
 //
 // **数えは先に1回ぶんを足す**（2026-09-25 監査の指摘 安全-02）。数えは repo の1つの文で原子的に足され、
@@ -22,6 +22,9 @@ import {
   CARD_RATE_LIMIT,
   CARD_RATE_WINDOW_MS,
   CUSTOMER_REGISTER_RATE_LIMIT,
+  EMAIL_VERIFY_IP_RATE_LIMIT,
+  EMAIL_VERIFY_RATE_LIMIT,
+  EMAIL_VERIFY_RATE_WINDOW_MS,
   FETCH_IP_HOURLY_LIMIT,
   FETCH_IP_RATE_LIMIT,
   FETCH_IP_RATE_WINDOW_MS,
@@ -139,6 +142,11 @@ const HOUR_MS = 60 * 60 * 1000;
 const FETCH_IP_HOURLY_RULE: RateRule = { name: "fetchIpHour", limit: FETCH_IP_HOURLY_LIMIT, windowMs: HOUR_MS, by: "ip", counts: "requests" };
 const PLACE_SUGGEST_IP_HOURLY_RULE: RateRule = { name: "placeSuggestIpHour", limit: PLACE_SUGGEST_IP_HOURLY_LIMIT, windowMs: HOUR_MS, by: "ip", counts: "requests" };
 const PLACE_IP_HOURLY_RULE: RateRule = { name: "placeIpHour", limit: PLACE_IP_HOURLY_LIMIT, windowMs: HOUR_MS, by: "ip", counts: "requests" };
+// 確認メールの送り直し（2026-09-22 に枝 feat/email-verify で足し、2026-09-26 に取り込んだ・AI判断）。外へメールを出す入口
+// （Resend）なので、抑止が無いと1つのアカウントが送信元の評判と送信の枠を好きなだけ削れる。店と運営の入口で合わせて数える。
+// アカウントごとに加えて接続元ごとにも数える（店の登録で作ったアカウントを替えながら送る形を、接続元で止める）。
+const EMAIL_VERIFY_RULE: RateRule = { name: "emailVerify", limit: EMAIL_VERIFY_RATE_LIMIT, windowMs: EMAIL_VERIFY_RATE_WINDOW_MS, by: "account", counts: "requests" };
+const EMAIL_VERIFY_IP_RULE: RateRule = { name: "emailVerifyIp", limit: EMAIL_VERIFY_IP_RATE_LIMIT, windowMs: EMAIL_VERIFY_RATE_WINDOW_MS, by: "ip", counts: "requests" };
 
 /** 抑止を掛ける入口の一覧（`<METHOD> <path>` → 規則。1つの入口に複数あれば全部で数える）。ここに無い入口には1度も表を引かない。 */
 const RULES_BY_ROUTE: ReadonlyMap<string, readonly RateRule[]> = new Map([
@@ -164,6 +172,8 @@ const RULES_BY_ROUTE: ReadonlyMap<string, readonly RateRule[]> = new Map([
   // 店のパスワードの変更も、今のパスワードを確かめる形になれば同じ総当たりの的になる（安全-07 と揃える）。
   ["POST /api/store/password", [ACCOUNT_SECRET_RULE]],
   ["POST /api/customer/reservations", [RECEIVE_RULE, RECEIVE_IP_RULE]],
+  ["POST /api/store/email/verify", [EMAIL_VERIFY_RULE, EMAIL_VERIFY_IP_RULE]],
+  ["POST /api/admin/email/verify", [EMAIL_VERIFY_RULE, EMAIL_VERIFY_IP_RULE]],
 ]);
 
 /** その入口に掛かる規則（無ければ空）。 */

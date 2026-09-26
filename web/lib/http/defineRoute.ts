@@ -9,7 +9,7 @@ import { DEFAULT_MAX_BODY_BYTES, type HumanCheckAction } from "../schemas/limits
 import { LOGIN_DEVICE_COOKIE_NAME, parseCookies } from "./cookies";
 import { checkOrigin, identifyCustomer, identifySession, renewSession } from "./guards";
 import { admitRequest, rateRulesFor, settleCharges } from "./rateLimits";
-import { forbidden, refusal, unauthenticated } from "./refusals";
+import { forbidden, notFound, refusal, unauthenticated } from "./refusals";
 import { internalError } from "./unhandled";
 import { raceDeadline } from "../usecases/deadline";
 
@@ -65,6 +65,16 @@ export type RouteConfig<TInput, TAuth extends RouteAuth> = {
    * 超えた本文は読み切る前に 413 body_too_large で断る。広げるのはファイルを受け取る入口（営業許可書）だけ。
    */
   maxBodyBytes?: number;
+  /**
+   * 機能フラグ（2026-09-22 に枝 feat/email-verify で足し、2026-09-26 に取り込んだ）。渡すと、見分けと入力の検査の**後**・
+   * 人かどうかの確かめと連打の数えの**前**に呼び、false なら経路が無いのと同じ 404 `not_found`（`notFound()`）を返す。
+   * - 見分けを先にするのは、未ログイン 401・役割違い 403 の見え方を、ほかの入口と揃えるため（受け入れ検査 r14）
+   * - 入力の検査を先にするのは、壊れた入力が、口の有無にかかわらず同じ 400 で返るようにするため（受け入れ検査 r29 は
+   *   全部の入口に壊れた入力を送り、404 を「入力の検査に届いていない」として落とす）。取り込みで順を入れ替えた（AI判断）
+   * - 数えより前にするのは、口の無い入口への要求で抑止の数を減らさないため
+   * 渡さなければ何も変わらない（既存の入口の動きは変えない）。
+   */
+  enabled?: (deps: Deps) => boolean;
   handler: (args: RouteHandlerArgs<TInput, TAuth>) => Promise<RouteHandlerResult>;
 };
 
@@ -305,6 +315,9 @@ const handleRoute = async <TInput, TAuth extends RouteAuth>(config: RouteConfig<
   const read = await readInput(config.input, req, maxBodyBytes);
   if (!read.ok) return toResponse(read.result, renewCookies);
   const { raw, input } = read;
+
+  // 機能フラグが降りている入口は、経路が無いのと同じ 404（lib/http/app の当たらない応答と同じ形）。
+  if (config.enabled && !config.enabled(deps)) return toResponse(notFound(), renewCookies);
 
   if (config.human && humanDeadline && !(await passHumanCheck(deps, raw, humanExpectationOf(req, config.human), humanDeadline))) {
     return toResponse(refusal("human_check_failed"));

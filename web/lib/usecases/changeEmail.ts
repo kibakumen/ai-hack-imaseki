@@ -10,9 +10,11 @@
 //
 // 変えたら、今の1本以外のセッションを全部切る（2026-09-25 監査の指摘 安全-08）——ログインの ID を
 // 変えた本人の画面は残し、ほかの端末（乗っ取った側・置き忘れた端末）のセッションは止める。
+// 別のアドレスへ変えたら「メールアドレスの確認」は未確認に戻る（2026-09-26 取り込み・要件14の基準 14.27）。
+// 本人の確かめは今のパスワードのまま——確認メールは変更を止めない（何もブロックしない・基準 14.26）。
 
 import type { Deps } from "../ports";
-import { findAccountByEmail, findAccountById, isEmailTakenError, updateAccountEmail } from "../repo/accounts";
+import { changeOwnAccountEmail, findAccountByEmail, findAccountById, isEmailTakenError } from "../repo/accounts";
 import { deleteOtherSessionsOfAccount } from "../repo/sessions";
 import type { ChangeEmailInput } from "../schemas/account";
 import type { SessionOwner } from "./changePassword";
@@ -31,7 +33,7 @@ export const changeEmail = async (deps: Deps, owner: SessionOwner, input: Change
   if (taken && taken.id !== account.id) return { ok: false, kind: "email_taken" };
 
   try {
-    await updateAccountEmail(deps.db, account.id, input.email);
+    await changeOwnAccountEmail(deps.db, account.id, input.email);
   } catch (error) {
     if (!isEmailTakenError(error)) throw error;
     return { ok: false, kind: "email_taken" };

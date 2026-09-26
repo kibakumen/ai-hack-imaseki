@@ -290,6 +290,8 @@ const buildCtx = async <O extends Partial<Deps>>(db: Db, dispose: () => Promise<
     push: given.push ?? fakePush(),
     card: given.card ?? fakeCard(),
     human: given.human ?? fakeHuman(),
+    // メールを送る口は既定では持たない（鍵を入れていない公開先と同じ）。渡されたときだけ置く（2026-09-26 取り込み）
+    ...("mailer" in given ? { mailer: given.mailer } : {}),
     logger: given.logger ?? fakeLogger(),
     clock: given.clock ?? fakeClock(opts.clockStart),
     rng: given.rng ?? webcrypto.createRng(),

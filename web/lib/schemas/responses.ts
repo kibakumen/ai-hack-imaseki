@@ -143,6 +143,12 @@ const storeHome = object({
   trend: array(object({ at: string(), shown: number(), received: number() })),
   /** カードの登録を始めて（決済会社の画面を開いて）、まだ確かめていない。画面は開いたときに確かめを1回送る（2026-09-25 不具合-01） */
   cardSetupPending: boolean(),
+  /**
+   * メールアドレスを確認済みか（2026-09-26 に枝 feat/email-verify から取り込んだ）。**任意**——メールを送る口
+   * （秘密 RESEND_API_KEY と MAIL_FROM）が無い公開先では、入口が項目そのものを載せない（鍵を外せば元の形に戻る）。
+   * 画面は `false` のときだけ確認の帯を出す。
+   */
+  emailVerified: optional(boolean()),
 });
 
 const storeProfile = object({
@@ -272,6 +278,8 @@ export const RESPONSES = {
   "POST /api/register/store": object({ ok, role: literal("store") }),
   "POST /api/auth/login": object({ ok, role: oneOf(["store", "admin"]), mustChangePassword: boolean() }),
   "POST /api/auth/logout": done,
+  // メールアドレスの確認のリンクを開いた（メールを送る口が無ければ 404・2026-09-26 取り込み）
+  "GET /api/auth/verify-email": done,
 
   // 客
   "GET /api/customer/home": customerHome,
@@ -313,6 +321,7 @@ export const RESPONSES = {
   "POST /api/store/card/setup": object({ ok, url: string() }),
   "POST /api/store/card/confirm": object({ ok, cardRegistered: literal(true) }),
   "POST /api/store/email": done,
+  "POST /api/store/email/verify": done,
   "POST /api/store/password": done,
 
   // 運営
@@ -332,6 +341,7 @@ export const RESPONSES = {
   "GET /api/admin/reports": object({ items: array(adminReport) }),
   "GET /api/admin/metrics": adminMetrics,
   "POST /api/admin/email": done,
+  "POST /api/admin/email/verify": done,
   "POST /api/admin/password": done,
 } as const satisfies Record<string, ZodMiniType>;
 

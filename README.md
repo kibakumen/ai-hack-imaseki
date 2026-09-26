@@ -80,6 +80,8 @@ cp web/.dev.vars.example web/.dev.vars
 | `VAPID_PRIVATE_KEY` | Web Push（VAPID）の秘密鍵 |
 | `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile（ボット対策）のシークレットキー |
 | `ADMIN_CONTACT_EMAIL` | 運営の連絡先メールアドレス（ログイン画面と `/privacy` に出す値。秘密ではないが、公開リポジトリの `web/wrangler.jsonc` には置かず、他の秘密と同じ置き場にしている） |
+| `RESEND_API_KEY` | （任意）Resend（メールの送信）の API キー。`MAIL_FROM` と**両方**入れたときだけ、店と運営のメールアドレスの確認が動く（2026-09-26 に取り込んだ機能・要件14の基準 14.23〜14.28）。どちらかが空なら確認の入口は 404 で、画面にも確認の帯は出ない |
+| `MAIL_FROM` | （任意）確認メールの送信元（例 `イマセキ <noreply@送信元のドメイン>`）。Resend で認証済みのドメインのアドレスでなければ Resend が断る |
 
 秘密ではなく公開してよい値（Turnstile のサイトキー・VAPID の公開鍵・呼ぶモデル名）は `web/wrangler.jsonc` の `vars` に既に書かれており、手元でもそのまま読まれる。
 
@@ -91,7 +93,7 @@ cp web/.dev.vars.example web/.dev.vars
 scripts/v2-keys.sh check       # 何が入っていて何が未設定か（値は出さない）
 scripts/v2-keys.sh all         # 未設定の秘密を順に聞いて web/.dev.vars と Cloudflare の両方へ入れる
 scripts/v2-keys.sh vapid       # VAPID の鍵の組を作って入れる
-scripts/v2-keys.sh push        # web/.dev.vars の秘密（上の表の6つだけ）を Cloudflare の Worker の秘密へまとめて送る
+scripts/v2-keys.sh push        # web/.dev.vars の秘密（上の表のうち（任意）でない6つだけ）を Cloudflare の Worker の秘密へまとめて送る
 ```
 
 ⚠️ `scripts/v2-keys.sh` は入力した鍵が会話に残らないよう、本人が自分の端末で直接実行する（Claude Code の `!` 経由では実行しない）。
@@ -201,7 +203,7 @@ v2 の Worker `ai-hack-v2` は 2026-09-25 から止めてある（「1. 触れ�
 pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 ```
 
-2026-09-25 の監査の直しで足した migration は次の9本（2026-09-26 の最終の手直しの `0012` を含む）で、どれも本番には未適用（コードはこれが当たっている前提で動く。当てずにコードだけを出すと、列や制約が無いまま動いて500になる）:
+2026-09-25 の監査の直しで足した migration は次の9本（2026-09-26 の最終の手直しの `0012` を含む）と、2026-09-26 に取り込んだメールアドレスの確認の `0015` で、どれも本番には未適用（コードはこれが当たっている前提で動く。当てずにコードだけを出すと、列や制約が無いまま動いて500になる）:
 
 | migration | 中身 |
 | --- | --- |
@@ -214,6 +216,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 | `0010_store_terms.sql` | 店向けの利用規約への同意の版と時刻 `stores.terms_version`・`stores.terms_agreed_at` |
 | `0011_admin_actions.sql` | 運営の操作の記録 `admin_actions`（追加だけ・トリガーで守る）と、承認した時点の写し・運営のメモ・連絡済みの印の列。当てると、承認済みと止められている店の今の値が承認の写しとして埋まる |
 | `0012_pending_license_retention.sql` | 承認されていない店の営業許可書のうち、上げた時刻 `stores.license_uploaded_at` の無いものを、当てた時刻で埋める（上げてから30日たっても承認されない許可書を消す数えの起点・安全-20）。承認済みの店には触れない |
+| `0015_email_verification.sql` | メールアドレスの確認（2026-09-26 に枝 `feat/email-verify` から取り込んだ・その枝では `0003` だった番号を付け替えた）。`accounts.email_verified_at`（今ある行は NULL＝まだ確認していない）と、確認のリンクの控えの表 `email_verifications`（token は sha256 だけ）。メールを送る鍵（5.2 の `RESEND_API_KEY`・`MAIL_FROM`）を入れていなくても当ててよい（列と表が在っても使われないだけ） |
 
 手順:
 
@@ -238,7 +241,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
    2. 本番の D1 に未適用の migration を当てる（`migrate:remote`＝`wrangler d1 migrations apply ai-hack-v2 --remote`。手順3で当てていれば何もしない）
    3. 公開（`wrangler deploy`）
 
-   Worker を消して止めていた場合は、公開のあとに Worker の秘密（5.2 の6つ）を送る: `scripts/v2-keys.sh push`（手元を Turnstile の試験用の鍵にしているなら、5.2 の注のとおり本番の秘密鍵は別に入れる）。
+   Worker を消して止めていた場合は、公開のあとに Worker の秘密（5.2 の（任意）でない6つ）を送る: `scripts/v2-keys.sh push`（手元を Turnstile の試験用の鍵にしているなら、5.2 の注のとおり本番の秘密鍵は別に入れる）。
 7. **Google Cloud で、Geocoding API と Places API に1日の割り当て（quota）と予算アラートを置く**（安全-03。コードの側にもアプリ全体の1日の地図の上限 `MAPS_DAILY_CALL_LIMIT`（`web/lib/schemas/limits.ts`）を置いたが、割り当ては二重の備えとして残す。割り当ては、この上限より少し大きい値にする——小さいと、アプリの上限に届く前に Google が断り、客には同じ「直せなかった」が出る）。
 8. **OrcaRouter の管理画面で、本番の鍵の1日の予算が、アプリ全体の1日の AI の上限（`web/lib/schemas/limits.ts` の `AI_DAILY_BUDGET_USD`）より大きいことを確かめる**（額は公開の文書に書かない・安全-25）。鍵の予算が上限より小さいと、アプリの上限に届く前に鍵が止まる。
 9. **公開のあとの確かめ**:
@@ -246,12 +249,13 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
    - ブラウザの開発者ツールのコンソールで CSP の違反が出ないこと。`/login`（Turnstile が出てログインできる）・`/store/register`・`/me`・`/store`・`/admin`・運営の画面から営業許可書（PDF）を開く、の順に見る（安全-24）
    - 今いる店（デモの店を含む）の店舗情報を1回保存し直す（店の画像は保存のときに取って置き場に置く形になった。まだ置かれていない承認済みの店は、客が最初に開いたときに店の登録の URL から1日1回まで取りに行く・安全-19）
    - 本番の運営の連絡先 `ADMIN_CONTACT_EMAIL` が入っていること（無いと `/privacy` とログインの画面の連絡先が「準備中」のまま出る）
+   - メールアドレスの確認を動かすなら、Resend で送信元のドメインを認証し、Worker の秘密 `RESEND_API_KEY`・`MAIL_FROM` の2つを `pnpm --dir web exec wrangler secret put <名前> --name ai-hack-v2` で入れる（`scripts/v2-keys.sh push` は送らない——任意の機能なので一覧に入れていない）。入れないままなら確認の入口は 404 で、画面にも出ない
    - 止められている店の古い営業許可書の片付け（この直しより前に止めた店のファイルは置き場に残っている）は、`SELECT id, license_key, approved_license_key FROM stores WHERE status='banned'` で鍵を見て、R2 から消して列を NULL にする（本番の操作）
 
 migration の決まり:
 
 - **本番に当たった migration は書き換えない**（`0001`・`0002`、当てたあとの `0003` 以降も）。変えるときは新しい番号の migration を足す。`web/tests/deployProcedure.test.ts` が `0001`・`0002` の中身をハッシュで見張る
-- **番号は重ねない**（同じ番号の2本は、当てる順が名前の並びに任される。同じ検査が見張る）。本線に入っていない枝 `feat/email-verify` にも `0003_email_verification.sql` がある——合流させるときは、本番に当たっていない側を空いている次の番号へ付け替えてから合流する
+- **番号は重ねない**（同じ番号の2本は、当てる順が名前の並びに任される。同じ検査が見張る）。枝 `feat/email-verify` の `0003_email_verification.sql` は、2026-09-26 に `0015_email_verification.sql` へ付け替えて取り込んだ（`0013`・`0014` は並列の別の作業が使う）。ほかの枝を合流させるときも、本番に当たっていない側を空いている次の番号へ付け替えてから合流する
 - migration を当てずにコードだけを出すと、列や制約が無いまま動いて500になる（`0002` のときに起きた）。`deploy` 以外の手で公開しない
 
 ### 6.3 ログインの締め出しを解く

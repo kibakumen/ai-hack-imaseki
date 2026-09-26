@@ -49,6 +49,16 @@ export const INPUT_REFUSAL_KINDS = [
   "internal",
   // 要求の本文が大きすぎる 413（2026-09-25 監査の指摘 安全-13）。本文を読み切る前に断る。
   "body_too_large",
+  // メールアドレスの確認（2026-09-22 に枝 feat/email-verify で足し、2026-09-26 に取り込んだ・本人選択）。
+  // verification_failed … 確認のリンクが期限切れ・もう使われた・そもそも無い。**3つを同じ語で返す**
+  //                        （在る無しを教えない）。文に「不正」「誤り」「無効」を含めない（domain/texts の方針）。
+  // mail_not_sent … 確認メールを外へ送れなかった（Resend が断った・通信の失敗・打ち切り）。502 で返す。
+  // email_mismatch … 確認メールの送り先に入れたアドレスが、登録しているアドレスと違う（別のアドレスへ送る道にしない）。
+  //                   枝では invalid_input＋理由 not_allowed で返していたが、その理由の文は「選択肢から選んでください」で
+  //                   合わないので、取り込みで語を分けた（password_mismatch と同じ置き方・AI判断）。
+  "verification_failed",
+  "mail_not_sent",
+  "email_mismatch",
   // 画面の側だけで作る2つ（client/geolocation・client/api が返す）
   "location_required",
   "network",

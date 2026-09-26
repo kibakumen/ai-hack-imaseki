@@ -74,6 +74,15 @@ const DESTINATIONS: readonly Destination[] = [
     why: "店の利用料の支払いの準備のため",
   },
   {
+    // メールアドレスの確認（2026-09-26 に枝 feat/email-verify から取り込んだ）。秘密 RESEND_API_KEY と MAIL_FROM を
+    // 入れたときだけ送る（入れていない公開先では送らない）。実物は lib/adapters/resend.ts（api.resend.com へ POST）。
+    key: "resend",
+    to: "Resend（米国。運営会社の名称は運営者が確認中）",
+    what: "店と運営のログインのメールアドレスと、確認のリンクを載せたメールの本文（客の情報は含めません）",
+    when: "店か運営が「確認メールを送る」を押したとき（メールの送信を有効にしている間だけ）",
+    why: "登録したメールアドレスに届くことを確かめるため",
+  },
+  {
     key: "store-site",
     to: "店が登録したホームページ",
     what: "そのページの読み取りの要求（客の情報は含めません）",

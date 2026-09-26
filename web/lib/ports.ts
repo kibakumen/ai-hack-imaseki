@@ -139,6 +139,17 @@ export type FileStore = {
    */
   list?(prefix: string): Promise<string[]>;
 };
+/**
+ * メールを1通送る口（2026-09-22 追加・メールアドレスの確認が使う。実物は adapters/resend）。
+ *
+ * ⚠️ **任意**にしてある（`Deps.mailer`・`Deps.pitch` と同じ置き方）。秘密 `RESEND_API_KEY` と
+ * `MAIL_FROM` の**両方**が在るときだけ adapters/deps が組む。この口を持たない場面（受け入れ検査の
+ * 偽物・鍵を入れていない公開先）では、確認の入口は 404 を返し、画面は確認の UI を一切出さない
+ * ＝鍵を外せば表示が消えるだけで元に戻る（機能フラグ）。
+ */
+export type MailMessage = { to: string; subject: string; text: string };
+export type Mailer = { send(message: MailMessage, opts: { signal?: AbortSignal }): Promise<{ ok: true } | { ok: false }> };
+
 export type AppConfig = { turnstileSiteKey: string; vapidPublicKey: string; contactEmail: string | null; orcarouterModel: string };
 
 export type Deps = {
@@ -154,6 +165,8 @@ export type Deps = {
   push: PushSender;
   card: CardRegistrar;
   human: HumanCheck;
+  /** メールを送る口（任意）。無ければメールアドレスの確認の入口は 404・画面は確認の UI を出さない */
+  mailer?: Mailer;
   logger: Logger;
   clock: Clock;
   rng: Rng;

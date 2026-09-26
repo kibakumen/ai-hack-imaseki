@@ -13,10 +13,10 @@ import { SiteFooter } from "../../components/ui/SiteFooter";
 describe("送信先と個人情報の扱い", () => {
   afterEach(() => cleanup());
 
-  it("外へ送っている先（Cloudflare・Google・OrcaRouter・通知の配信元・Stripe）が、送る情報・いつ・目的つきで表に載る", () => {
+  it("外へ送っている先（Cloudflare・Google・OrcaRouter・通知の配信元・Stripe・メールの送信の Resend）が、送る情報・いつ・目的つきで表に載る", () => {
     render(<PrivacyPage />);
     const table = screen.getByTestId("privacy-destinations");
-    for (const name of ["Cloudflare", "Turnstile", "Google", "OrcaRouter", "通知", "Stripe", "音声"]) expect(table.textContent, name).toContain(name);
+    for (const name of ["Cloudflare", "Turnstile", "Google", "OrcaRouter", "通知", "Stripe", "音声", "Resend"]) expect(table.textContent, name).toContain(name);
     const headers = within(table).getAllByRole("columnheader").map((th) => th.textContent);
     expect(headers).toEqual(["送信先（事業者・国）", "送る情報", "いつ", "何のため"]);
     // AI に渡すものに呼び名と電話番号が入らないことを明記する（要件28の基準 28.3）
