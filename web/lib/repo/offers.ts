@@ -224,6 +224,8 @@ export const updateLiveOfferUntil = async (db: Db, input: OfferChange & { untilA
  * 選び直していて、残りが古いオファーに割れ、結果を見ていた客の受け取りが古い番号で断られた。同じオファーのまま
  * なので、残り・受け取られた数・実績の行は1つのまま。付けるのは公開と同じく**この文が走る時点でその店に在る**
  * クーポンだけ。確保には触れない——確保は受け取った時点のクーポンの写しを持っている（要件16の基準 16.6）。
+ * 選び直す前に結果を見た客があとで受け取っても、確保には見ていたクーポンが入る（取得の記録の写し・2026-09-26 本人発案
+ * （受諾した時点のクーポンを保障）・repo/reservationReceive）。
  */
 export const updateLiveOfferCoupons = async (db: Db, input: OfferChange & { couponIds: string[] }): Promise<boolean> => {
   const result = await db

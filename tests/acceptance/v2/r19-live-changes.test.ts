@@ -132,7 +132,7 @@ describeTask("20", "公開中の変更", () => {
 
   // 2026-09-25 監査の指摘 不具合-03 の案A（AI判断・要件19.11 を改めた）: それまで画面は「止める → 公開し直す」の
   // 2本の要求でクーポンを選び直していて、残りが古いオファーに割れ、見ていた客の受け取りが断られた。
-  it("19.11（改） 公開中のクーポンを選び直すと、同じオファーのまま見せるクーポンだけが変わる。残り・確保のクーポンはそのまま・見ていた客は受け取れる・店のものでない番号は落ちる・終わったら offer_ended", async () => {
+  it("19.11（改） 公開中のクーポンを選び直すと、同じオファーのまま見せるクーポンだけが変わる。残り・確保のクーポンはそのまま・見ていた客は見ていたクーポンで受け取れる・店のものでない番号は落ちる・終わったら offer_ended", async () => {
     ctx.clock.set(JST("15:00"));
     const s = await receivedScene(ctx, { capacity: 3, coupons: [{ name: "生ビール", note: "" }, { name: "デザート", note: "" }] });
     const [beer, dessert] = s.store.coupons;
@@ -155,10 +155,10 @@ describeTask("20", "公開中の変更", () => {
     expect((await one(ctx.db, "SELECT COUNT(*) AS n FROM offers WHERE store_id = ?", s.store.id)).n).toBe(1);
     expect(await readReservation()).toEqual(reservationBefore);
 
-    // 見ていた客は、選び直したあとのクーポンの写しで受け取れる（要件16.6: 受け取った時点のクーポンを持つ）
+    // 見ていた客は受け取れ、確保には**見ていたクーポン**が写る（要件16.6・2026-09-26 本人発案（受諾した時点のクーポンを保障））
     const received = await receive(watcher.api, { offerId: s.offer.id, party: 2, fetchId: seen.json.fetchId });
     expect(received.status).toBe(200);
-    expect(received.json.reservation.coupons.map((c: any) => c.name)).toEqual(["デザート"]);
+    expect(received.json.reservation.coupons.map((c: any) => c.name)).toEqual(["生ビール", "デザート"]);
     expect((await offerOf(s.store.api)).remaining).toBe(1);
 
     expect((await s.store.api.post("/api/store/offers/current/coupons", { couponIds: [] })).status).toBe(200);

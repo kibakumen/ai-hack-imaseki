@@ -28,6 +28,8 @@ export type ArrivalReservationRow = {
   hasNewerReservation: boolean;
   /** 店の取り消しの理由（`no_show`＝来店なし・2026-09-26 本人選択）。無ければ null */
   cancelReason: string | null;
+  /** 確保が持つクーポンの写し（客が受諾したときに見ていたもの・2026-09-26 本人発案（受諾した時点のクーポンを保障）） */
+  coupons: Array<{ name: string; note: string }>;
 };
 
 /**
@@ -75,6 +77,7 @@ export const listStoreArrivals = async (db: Db, storeId: string, sinceIso: strin
       code: reservation.code,
       hasNewerReservation: Number(row.has_newer ?? 0) === 1,
       cancelReason: reservation.cancelReason,
+      coupons: reservation.coupons,
     };
   });
 };

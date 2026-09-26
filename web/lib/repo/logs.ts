@@ -61,6 +61,13 @@ export type FetchItemRecord = {
   rank: number;
   score: number;
   reason: string;
+  /** その結果で見せたオファーの番号（migration 0017） */
+  offerId: string;
+  /**
+   * その結果で客に見せたクーポンの写し（JSON の文字列・確保の `coupons_json` と同じ形・migration 0017）。
+   * この取得の結果から受け取ったら、確保にはこの写しが入る（2026-09-26 本人発案（受諾した時点のクーポンを保障））
+   */
+  couponsJson: string;
 };
 
 /**
@@ -90,7 +97,7 @@ const INSERT_FETCH_LOG = `
   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
 `;
 
-const INSERT_FETCH_ITEM = `INSERT INTO fetch_items (id, fetch_id, store_id, rank, score, reason) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`;
+const INSERT_FETCH_ITEM = `INSERT INTO fetch_items (id, fetch_id, store_id, rank, score, reason, offer_id, coupons_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`;
 
 const INSERT_AI_CALL = `
   INSERT INTO ai_calls (id, fetch_id, purpose, cost_usd, duration_ms, succeeded, validation_failed, resolved_model, request_id, fallback_level, at)
@@ -121,7 +128,7 @@ export const fetchLogStatement = (db: Db, log: FetchLogRecord): D1PreparedStatem
 
 /** 返した店1件の記録を足す文。 */
 export const fetchItemStatement = (db: Db, item: FetchItemRecord): D1PreparedStatement =>
-  db.prepare(INSERT_FETCH_ITEM).bind(item.id, item.fetchId, item.storeId, item.rank, item.score, item.reason);
+  db.prepare(INSERT_FETCH_ITEM).bind(item.id, item.fetchId, item.storeId, item.rank, item.score, item.reason, item.offerId, item.couponsJson);
 
 /** AI の呼び出し1回の記録を足す文。 */
 export const aiCallStatement = (db: Db, call: AiCallRecord): D1PreparedStatement =>

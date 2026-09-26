@@ -307,6 +307,10 @@ const record = async (deps: Deps, input: RecordInput): Promise<string> => {
       // 倒れた取得の理由は空で残す（基準 27.2——客に出る決まった文を写すと、次のフェーズが
       // 「AI が書いた理由」と見分けられなくなる）
       reason: input.outcome.aiUsed ? item.reason : "",
+      // 客に見せたオファーとクーポンを写す。この結果から受け取ったら、確保にはこの写しが入る
+      // （2026-09-26 本人発案（受諾した時点のクーポンを保障）・repo/reservationReceive の receiveReservation）
+      offerId: item.offerId,
+      couponsJson: JSON.stringify(item.coupons),
     })),
   });
   deps.logger.log({ event: "fetch", id: fetchId, durationMs });

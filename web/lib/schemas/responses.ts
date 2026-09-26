@@ -132,6 +132,8 @@ const arrival = object({
   canCancel: boolean(),
   /** 店が「来ない（枠を戻す）」で取り消した行（基準 20.16・21.8・2026-09-26 本人選択）。古い応答には無いので任意 */
   noShow: optional(boolean()),
+  /** 確保が持つクーポン（客が受諾したときに見ていたもの・2026-09-26 本人発案（受諾した時点のクーポンを保障））。古い応答には無いので任意 */
+  coupons: optional(array(couponFace)),
 });
 
 /** 店のホーム（受け入れ検査の契約 `StoreHomeDto`・usecases/storeHome の StoreHome）。 */

@@ -160,6 +160,12 @@ const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refusal, on
       <p className="store-arrival__meta">
         {ARRIVALS_TEXTS.kindLabel(row.kind, row.noShow === true)}・期限 {timeInJst(row.expiresAt)}
       </p>
+      {/* 確保が持つクーポン（客が受諾したときに見ていたもの）。見た目は今の行の書式のまま、情報を足すだけ（2026-09-26 本人発案） */}
+      {row.coupons && row.coupons.length > 0 ? (
+        <p className="store-arrival__meta" data-testid="arrival-coupons">
+          {ARRIVALS_TEXTS.coupons(row.coupons)}
+        </p>
+      ) : null}
       {isLate(row) ? <p className="store-arrival__late">{ARRIVALS_TEXTS.lateUntil(lateUntilOf(row))}</p> : null}
       {partyChange ? (
         <p className="store-arrival__changed" role="status" data-testid={`party-changed-${row.reservationId}`}>

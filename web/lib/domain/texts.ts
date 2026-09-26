@@ -291,6 +291,12 @@ export const ARRIVALS_TEXTS = {
   who: (nickname: string | null): string => (nickname ? `${nickname} さん` : "お客さま"),
   /** 電話番号の登録が無い行（発信のリンクを付けない・横断-02） */
   noPhone: `電話番号の登録なし（${TERMS.reservationCode}で照合）`,
+  /**
+   * 確保が持つクーポン（客が受諾したときに見ていたもの・2026-09-26 本人発案（受諾した時点のクーポンを保障））。
+   * 店が途中で選び直していても、この行のクーポンを適用する
+   */
+  coupons: (coupons: ReadonlyArray<{ name: string; note: string }>): string =>
+    `クーポン: ${coupons.map((coupon) => (coupon.note === "" ? coupon.name : `${coupon.name}（${coupon.note}）`)).join("・")}`,
   /** 人数の札（呼び名から切り離して、省かずに出す・店-11） */
   party: (party: number): string => `${party}名`,
   /** 見出しと小見出し（店-02: 遅れている客は開いたまま、済んだぶんだけを畳む） */

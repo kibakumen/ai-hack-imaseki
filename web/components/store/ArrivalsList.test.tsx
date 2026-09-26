@@ -40,6 +40,7 @@ type Row = {
   expiresAt: string;
   canComplete: boolean;
   canCancel: boolean;
+  coupons?: Array<{ name: string; note: string }>;
 };
 
 const row = (over: Partial<Row> = {}): Row => ({
@@ -312,5 +313,19 @@ describe("「来ない（枠を戻す）」", () => {
     expect(screen.getByTestId("row-r1").textContent).toMatch(/来店なしでキャンセル/);
     expect(screen.getByTestId("row-r2").textContent).toMatch(/店がキャンセル/);
     expect(screen.getByTestId("row-r2").textContent).not.toMatch(/来店なし/);
+  });
+});
+
+// 2026-09-26 本人発案（受諾した時点のクーポンを保障）: 店の画面の行には、確保が持つクーポン（客が受諾したときに見ていたもの）を出す。
+// 店が途中で選び直していても、店はこの行のクーポンの適用を認める。見た目は変えず、行の情報に足すだけ。
+describe("向かっている客の行のクーポン（2026-09-26 本人発案）", () => {
+  it("確保が持つクーポンの名前と特記事項が行に出る。クーポンの無い確保には出さない", async () => {
+    await renderHome(() => [row({ coupons: [{ name: "生ビール1杯", note: "1組1回" }, { name: "デザート", note: "" }] }), row({ reservationId: "r2", nickname: "すずき", coupons: [] })]);
+    const coupons = within(screen.getByTestId("row-r1")).getByTestId("arrival-coupons");
+    expect(coupons.textContent).toMatch(/クーポン/);
+    expect(coupons.textContent).toMatch(/生ビール1杯/);
+    expect(coupons.textContent).toMatch(/1組1回/);
+    expect(coupons.textContent).toMatch(/デザート/);
+    expect(within(screen.getByTestId("row-r2")).queryByTestId("arrival-coupons")).toBeNull();
   });
 });

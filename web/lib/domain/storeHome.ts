@@ -47,6 +47,11 @@ export type ArrivalView = {
   canCancel: boolean;
   /** 店が「来ない（枠を戻す）」で取り消した行（基準 20.16・21.8・2026-09-26 本人選択）。店の画面は来店なしの印を出す */
   noShow: boolean;
+  /**
+   * 確保が持つクーポン（客が受諾したときに見ていたもの・要件16の基準 16.6・2026-09-26 本人発案（受諾した時点のクーポンを保障））。
+   * 店が途中で選び直していても、店はこのクーポンの適用を認める
+   */
+  coupons: Array<{ name: string; note: string }>;
 };
 
 /** 公開のフォームの初めの値。中身を埋めるのはタスク9（`publishPrefill`）。 */
@@ -190,6 +195,8 @@ export type ArrivalRowInput = {
   hasNewerReservation: boolean;
   /** 店の取り消しの理由（`no_show`＝来店なし）。無ければ null（省いても null と同じ） */
   cancelReason?: string | null;
+  /** 確保が持つクーポンの写し（省いても空と同じ） */
+  coupons?: ReadonlyArray<{ name: string; note: string }>;
 };
 
 /**
@@ -239,4 +246,5 @@ export const arrivalRows = (rows: readonly ArrivalRowInput[], now: Date, options
       // 止められている店に操作を出さないのは、完了済み（基準 20.23）と同じ扱い。
       canCancel: canCancelByStore(row, now) && !options.storeBanned,
       noShow: kind === "store_cancelled" && row.cancelReason === "no_show",
+      coupons: (row.coupons ?? []).map((coupon) => ({ name: coupon.name, note: coupon.note })),
     }));

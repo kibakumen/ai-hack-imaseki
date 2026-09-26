@@ -119,6 +119,14 @@ export const findLastFetchAt = async (db: Db, customerId: string): Promise<Date 
 
 // ---------- 書く（受け取り・受け取り直し） ----------
 
+/**
+ * 確保に写すクーポン（`receiveReservation` の INSERT の中の式・?3＝取得の番号・?8＝受け取った時点の写し・?11＝受け取り直しの元の確保）。
+ * 受け取り直しなら元の確保の写し、受け取りならその取得の結果で見せた写し（同じオファーのもの）。どちらも無ければ受け取った時点の写し。
+ */
+const SEEN_COUPONS =
+  `CASE WHEN ?11 IS NOT NULL THEN COALESCE((SELECT prev.coupons_json FROM reservations prev WHERE prev.id = ?11), ?8)` +
+  ` ELSE COALESCE((SELECT fi.coupons_json FROM fetch_items fi WHERE fi.fetch_id = ?3 AND fi.offer_id = o.id AND fi.coupons_json IS NOT NULL LIMIT 1), ?8) END`;
+
 export type NewReservation = {
   id: string;
   offerId: string;
@@ -128,7 +136,10 @@ export type NewReservation = {
   code: string;
   nowIso: string;
   expiresAtIso: string;
-  /** 受け取った時点のクーポンの写し（JSON の文字列） */
+  /**
+   * 受け取った時点のクーポンの写し（JSON の文字列）。**写しの無いときの控え**——受け取りは取得の記録の写し（客が見たクーポン）、
+   * 受け取り直しは元の確保の写しを先に使う（`receiveReservation` の注）
+   */
   couponsJson: string;
   /** 同じ客が同じオファーを押さえられる件数（取得をまたいで・安全-06。値の正本は schemas/limits の RECEIVES_PER_OFFER_MAX） */
   receivesPerOfferMax: number;
@@ -161,6 +172,12 @@ export type NewReservation = {
  * 店の状況も見る（止められている店から受け取らせない）。運営が店を止めるとオファーも終わるので、
  * これは受け取れる状態の判断を二重に持つものではない（設計書「オファーの状態」）。
  *
+ * クーポンは**客が見たもの**を写す（要件16の基準 16.6・2026-09-26 本人発案（受諾した時点のクーポンを保障））:
+ *   - 受け取り … その取得の結果で見せたクーポン（`fetch_items.coupons_json`・migration 0017）。店が結果のあとに選び直していても、
+ *     見せたものが入る。同じ1文の中で記録の表（追加だけ）から読むので、受け取りと店の選び直しが同時に来ても変わらない
+ *   - 受け取り直し（結果を経ない・基準 11.10）… 元の確保のクーポンを引き継ぐ（客が受諾したときに見たものは、元の確保が持っている・AI判断）
+ *   - どちらの写しも無い（0017 より前の記録・見せたオファーと違うオファーの番号）… 今までどおり受け取った時点のクーポン（`couponsJson`）
+ *
  * 客の電話番号は**受け取った時点の値を確保の行に写す**（`customer_phone`・安全-17 の案1）。店の一覧はこの写しを
  * 読むので、あとから客が番号を入れ直しても、前に受け取った店へは渡らない。仮の番号かどうかは写したあとで
  * `domain/storeHome` が見る（判断を SQL に置かない）。
@@ -172,7 +189,7 @@ export const receiveReservation = async (db: Db, input: NewReservation): Promise
   const insert = db
     .prepare(
       `INSERT INTO reservations (id, offer_id, store_id, customer_id, fetch_id, party, code, created_at, expires_at, status, status_at, holds_slot, completed_after_expiry, coupons_json, customer_phone)` +
-        ` SELECT ?1, o.id, o.store_id, ?2, ?3, ?4, ?5, ?6, ?7, 'active', ?6, 1, 0, ?8, c.phone` +
+        ` SELECT ?1, o.id, o.store_id, ?2, ?3, ?4, ?5, ?6, ?7, 'active', ?6, 1, 0, ${SEEN_COUPONS}, c.phone` +
         ` FROM offers o JOIN stores s ON s.id = o.store_id JOIN customers c ON c.id = ?2` +
         ` WHERE o.id = ?9` +
         ` AND s.status = 'approved'` +
