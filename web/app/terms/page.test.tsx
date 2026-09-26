@@ -45,4 +45,16 @@ describe("客向けの利用規約（Google マップの機能）", () => {
     render(<SiteFooter />);
     expect(screen.getByRole("link", { name: "利用規約" }).getAttribute("href")).toBe("/terms");
   });
+
+  // 2026-09-26 本人選択（AI提示）: 事業者の名称・住所は公開を再開するまで「準備中」のまま。/privacy と2つの利用規約は
+  // 同じ正本（lib/domain/texts の OPERATOR_IDENTITY）の表記を出し、公開の歯止め（scripts/deploy-guard.mjs）が準備中のままの公開を止める
+  it("客向けと店向けの利用規約の問い合わせ先に、事業者の表記（今は準備中）が出る", () => {
+    for (const Page of [TermsPage, StoreTermsPage]) {
+      render(<Page />);
+      const contact = screen.getByTestId("terms-contact");
+      expect(within(contact).getByTestId("operator-identity").textContent).toMatch(/事業者: イマセキの運営者（名称・住所・代表者は準備中です/);
+      cleanup();
+    }
+  });
 });
+

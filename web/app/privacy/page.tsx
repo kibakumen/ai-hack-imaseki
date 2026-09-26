@@ -5,10 +5,12 @@
 // 表の中身は実装から数えた送信先（lib/adapters の呼び出し先・画面が読み込む札・画面から開く外の URL）。
 // **送信先を足したら、この表も直す**（表に無い送信は、客には無いのと同じに見える）。
 //
-// ⚠️ 事業者の名称・住所・代表者は、運営者が決めて書き足す（コードからは分からない・準備中と明記する）。
+// ⚠️ 事業者の名称・住所・代表者は、運営者が決めて lib/domain/texts の OPERATOR_IDENTITY に書き足す（コードからは分からない・準備中と明記する）。
+//    公開を再開するまで準備中のまま（2026-09-26 本人選択（AI提示））。準備中のままの公開は scripts/deploy-guard.mjs が止める。
 
 import type { Metadata } from "next";
 import { ContactEmail } from "../../components/ui/ContactEmail";
+import { OperatorIdentity } from "../../components/ui/OperatorIdentity";
 import "./privacy.css";
 
 export const metadata: Metadata = { title: "送信先と個人情報の扱い" };
@@ -138,7 +140,9 @@ export default function PrivacyPage() {
       <section aria-labelledby="privacy-appi-head">
         <h2 id="privacy-appi-head">個人情報保護法にもとづく公表事項</h2>
         <ul>
-          <li>事業者: イマセキの運営者（名称・住所・代表者は準備中です。下の連絡先へお問い合わせください）</li>
+          <li>
+            <OperatorIdentity />
+          </li>
           <li>利用目的: 上の表の「何のため」のとおりです。</li>
           <li>開示・訂正・利用停止・消去の求め: 下の連絡先へメールでお知らせください。ご本人であることを確かめたうえで応じます。消去は画面からもできます。</li>
           <li>苦情・問い合わせの申出先: 下の連絡先</li>

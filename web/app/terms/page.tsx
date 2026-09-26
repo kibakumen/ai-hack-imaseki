@@ -11,6 +11,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ContactEmail } from "../../components/ui/ContactEmail";
+import { OperatorIdentity } from "../../components/ui/OperatorIdentity";
 import { GoogleMapsTerms } from "../../components/ui/GoogleMapsTerms";
 import "./terms.css";
 
@@ -36,6 +37,10 @@ export default function TermsPage() {
 
       <section data-testid="terms-contact">
         <h2>問い合わせ先</h2>
+        {/* 事業者の表記（2026-09-26 本人選択（AI提示）: 公開を再開するまで準備中。準備中のままの公開は scripts/deploy-guard.mjs が止める） */}
+        <p>
+          <OperatorIdentity />
+        </p>
         <p>
           連絡先: <ContactEmail />
         </p>

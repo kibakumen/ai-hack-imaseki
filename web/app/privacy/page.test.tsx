@@ -43,4 +43,10 @@ describe("送信先と個人情報の扱い", () => {
     render(<SiteFooter />);
     expect(screen.getByRole("link", { name: /送信先と個人情報/ }).getAttribute("href")).toBe("/privacy");
   });
+
+  it("個人情報保護法の公表事項の事業者は、利用規約と同じ正本の表記（今は準備中）を出す（2026-09-26 本人選択（AI提示））", () => {
+    render(<PrivacyPage />);
+    expect(screen.getByTestId("operator-identity").textContent).toMatch(/事業者: イマセキの運営者（名称・住所・代表者は準備中です/);
+  });
 });
+

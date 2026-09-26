@@ -189,14 +189,14 @@ pnpm exec vitest run                      # 自動テスト（web/ の単体テ�
 v2 の Worker `ai-hack-v2` は 2026-09-25 から止めてある（「1. 触れる場所」）。止め方は2通りで、どちらでも D1 と R2 の中身は残る:
 
 - **公開の道を切る**: Cloudflare の管理画面で Worker `ai-hack-v2` の設定から workers.dev の公開を切る（Worker の秘密は残る）
-- **Worker を消す**: `pnpm --dir web exec wrangler delete ai-hack-v2`。Worker の秘密も消えるので、再開のときに送り直す（6.2 の手順6）
+- **Worker を消す**: `pnpm --dir web exec wrangler delete ai-hack-v2`。Worker の秘密も消えるので、再開のときに送り直す（6.2 の手順7）
 
 止めたら、公開先へ `curl -s -o /dev/null -w '%{http_code}' <公開先>` を当て、200 以外が返ることを確かめる。速成版の Worker `ai-hack-sekiari` も止める（古い鍵が公開の履歴に残っている・監査の指摘 安全-05）。
 
 止めている間は、設定でも公開が戻らないようにしてある（2026-09-26）:
 
 - `web/wrangler.jsonc` の `workers_dev: false`・`preview_urls: false`——`wrangler deploy` を打っても workers.dev の公開と版ごとの下見の URL は出ない
-- `web/package.json` の `deploy` は、最初に `web/scripts/deploy-guard.mjs` を通る。合図 `ALLOW_DEPLOY=1` が無ければ、組み立ても migration も公開もせずに失敗で止まる
+- `web/package.json` の `deploy` は、最初に `web/scripts/deploy-guard.mjs` を通る。合図 `ALLOW_DEPLOY=1` が無ければ、組み立ても migration も公開もせずに失敗で止まる。合図があっても、事業者の表記が「準備中」のままなら止まる（6.2 の手順6・2026-09-26）
 
 ### 6.2 再開の手順（この順番を守る）
 
@@ -242,16 +242,17 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 
 4. **運営とデモ店のパスワードを入れ替え、セッションを消す**（公開の前に。値は公開のリポジトリの履歴に残っている・安全-01）。運営は 5.3 の「乗っ取られた運営を取り返すとき」の手順で、今いる運営の一覧を流して番号を確かめ、`--account-id <番号>` の3つの文（メールの入れ替え・パスワードの入れ替え・その運営のセッションの削除）を流す。デモ店は 5.3 の「本番のデモ店のパスワードを入れ替えるとき」。新しい値は審査員へ公開されない経路で渡す。
 5. **Cloudflare の管理画面で、本番の Turnstile のウィジェットの許すホスト名から `localhost` を外す**（安全-23。手元は 5.2 の試験用の鍵を使う）。
-6. **公開の道を決めてから、合図を付けて公開する**。止めている間の設定（6.1）のままだと、公開しても workers.dev からは届かない。workers.dev で出すなら `web/wrangler.jsonc` の `workers_dev` を `true` に戻し、独自のドメインで出すなら `routes` を足す（どちらにするかは公開のときに本人の手で選ぶ）。そのうえで `ALLOW_DEPLOY=1 pnpm --dir web run deploy`。中では次の順に実行する（`web/package.json` の `deploy`）:
-   0. 歯止め（`web/scripts/deploy-guard.mjs`。合図が無ければここで止まる）
+6. **事業者の表記を埋める**（2026-09-26 本人選択（AI提示）: 事業者の名称・住所は公開を再開するまで「準備中」のまま置いてある）。`web/lib/domain/texts.ts` の `OPERATOR_IDENTITY` に、事業者の名称・住所・代表者を文字列のまま書き入れる。`/privacy`（個人情報保護法の公表事項）・客向けの利用規約（`/terms`）・店向けの利用規約（`/store/terms`）の3つが同じ表記を出す。**埋めないまま流すと、次の手順の歯止め（`web/scripts/deploy-guard.mjs`）が合図があっても止める**（3つのページがこの表記を使っていることも確かめる・`web/tests/deployProcedure.test.ts`）。店向けの利用規約の文面が変わるので、版（`STORE_TERMS_VERSION`）を上げるかもこのとき決める
+7. **公開の道を決めてから、合図を付けて公開する**。止めている間の設定（6.1）のままだと、公開しても workers.dev からは届かない。workers.dev で出すなら `web/wrangler.jsonc` の `workers_dev` を `true` に戻し、独自のドメインで出すなら `routes` を足す（どちらにするかは公開のときに本人の手で選ぶ）。そのうえで `ALLOW_DEPLOY=1 pnpm --dir web run deploy`。中では次の順に実行する（`web/package.json` の `deploy`）:
+   0. 歯止め（`web/scripts/deploy-guard.mjs`。合図が無いとき・事業者の表記が準備中のままのときはここで止まる）
    1. OpenNext のビルド（`opennextjs-cloudflare build`）
    2. 本番の D1 に未適用の migration を当てる（`migrate:remote`＝`wrangler d1 migrations apply ai-hack-v2 --remote`。手順3で当てていれば何もしない）
    3. 公開（`wrangler deploy`）
 
    Worker を消して止めていた場合は、公開のあとに Worker の秘密（5.2 の（任意）でない6つ）を送る: `scripts/v2-keys.sh push`（手元を Turnstile の試験用の鍵にしているなら、5.2 の注のとおり本番の秘密鍵は別に入れる）。
-7. **Google Cloud で、Geocoding API と Places API に1日の割り当て（quota）と予算アラートを置く**（安全-03。コードの側にもアプリ全体の1日の地図の上限 `MAPS_DAILY_CALL_LIMIT`（`web/lib/schemas/limits.ts`）を置いたが、割り当ては二重の備えとして残す。割り当ては、この上限より少し大きい値にする——小さいと、アプリの上限に届く前に Google が断り、客には同じ「直せなかった」が出る）。
-8. **OrcaRouter の管理画面で、本番の鍵の1日の予算が、アプリ全体の1日の AI の上限（`web/lib/schemas/limits.ts` の `AI_DAILY_BUDGET_USD`）より大きいことを確かめる**（額は公開の文書に書かない・安全-25）。鍵の予算が上限より小さいと、アプリの上限に届く前に鍵が止まる。
-9. **公開のあとの確かめ**:
+8. **Google Cloud で、Geocoding API と Places API に1日の割り当て（quota）と予算アラートを置く**（安全-03。コードの側にもアプリ全体の1日の地図の上限 `MAPS_DAILY_CALL_LIMIT`（`web/lib/schemas/limits.ts`）を置いたが、割り当ては二重の備えとして残す。割り当ては、この上限より少し大きい値にする——小さいと、アプリの上限に届く前に Google が断り、客には同じ「直せなかった」が出る）。
+9. **OrcaRouter の管理画面で、本番の鍵の1日の予算が、アプリ全体の1日の AI の上限（`web/lib/schemas/limits.ts` の `AI_DAILY_BUDGET_USD`）より大きいことを確かめる**（額は公開の文書に書かない・安全-25）。鍵の予算が上限より小さいと、アプリの上限に届く前に鍵が止まる。
+10. **公開のあとの確かめ**:
    - Cloudflare のダッシュボードで Workers Logs（`web/wrangler.jsonc` の `observability`）が見えること。想定外の例外は `unhandled_error`、AI の1日の上限に届いた日は `ai_daily_budget_reached` の1行が残る。呼び出しごとの記録は切ってあり（`invocation_logs: false`・`redact_query_string: true`）、問い合わせ文字列つきの URL（`/api/customer/place?lat=…`・`/api/customer/place-suggest?q=…`）が1行も無いことも確かめる（要件27）
    - ブラウザの開発者ツールのコンソールで CSP の違反が出ないこと。`/login`（Turnstile が出てログインできる）・`/store/register`・`/me`・`/store`・`/admin`・運営の画面から営業許可書（PDF）を開く、の順に見る（安全-24）
    - 今いる店（デモの店を含む）の店舗情報を1回保存し直す（店の画像は保存のときに取って置き場に置く形になった。まだ置かれていない承認済みの店は、客が最初に開いたときに店の登録の URL から1日1回まで取りに行く・安全-19）

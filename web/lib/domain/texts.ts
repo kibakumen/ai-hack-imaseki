@@ -417,3 +417,27 @@ export const MAIL_TEXTS = {
     text: ["イマセキ に登録したメールアドレスの確認です。", "次のリンクを開くと確認が完了します（24時間まで有効）。", "", link, "", "このメールに覚えがない場合は、そのまま捨ててください。"].join("\n"),
   }),
 } as const;
+
+// ---------- 事業者の表記（/privacy の個人情報保護法の公表事項・客向けの利用規約・店向けの利用規約が共用する正本） ----------
+//
+// 2026-09-26 本人選択（AI提示）: 事業者の名称・住所は、公開を再開するまで「準備中」のまま置く。公開の歯止め
+// （`web/scripts/deploy-guard.mjs`）は、下の3つのどれかが空のまま（＝画面が「準備中」のまま）なら公開を止める。
+// 再開するときは README の「6.2 再開の手順」の「事業者の表記を埋める」で、ここに書き入れる。
+//
+// ⚠️ 歯止めはこの `OPERATOR_IDENTITY` の宣言を文字として読む（組み立ての前に走るため）。値は1行の文字列の
+//    リテラルのまま書く（式や別の定数にすると読めず、歯止めは「読めない」として止める）。
+
+export type OperatorIdentity = { name: string; address: string; representative: string };
+
+export const OPERATOR_IDENTITY: OperatorIdentity = { name: "", address: "", representative: "" };
+
+/** 準備中のときの表記（3つのどれかが空のあいだ） */
+export const OPERATOR_PENDING_TEXT = "イマセキの運営者（名称・住所・代表者は準備中です。下の連絡先へお問い合わせください）";
+
+/** 3つとも埋まっているか（空白だけは空とみなす） */
+export const isOperatorIdentityFilled = (identity: OperatorIdentity): boolean =>
+  [identity.name, identity.address, identity.representative].every((value) => value.trim() !== "");
+
+/** 画面に出す事業者の表記（「事業者: 」のあとに続く部分） */
+export const operatorIdentityText = (identity: OperatorIdentity = OPERATOR_IDENTITY): string =>
+  isOperatorIdentityFilled(identity) ? `${identity.name}（${identity.address}・代表者 ${identity.representative}）` : OPERATOR_PENDING_TEXT;

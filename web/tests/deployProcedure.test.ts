@@ -7,7 +7,9 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { rateKeyFor, rateRulesFor } from "../lib/http/rateLimits";
 
@@ -116,11 +118,66 @@ describe("公開を止めている間（2026-09-26）", () => {
     expect(refused.stderr).toContain("ALLOW_DEPLOY=1");
     expect(refused.stderr).toContain("README");
     expect(runGuard({ ALLOW_DEPLOY: "yes" }).status).not.toBe(0);
-    expect(runGuard({ ALLOW_DEPLOY: "1" }).status).toBe(0);
+  });
+
+  // 2026-09-26 本人選択（AI提示）: 事業者の名称・住所は公開を再開するまで「準備中」のまま。歯止めは、合図があっても
+  // /privacy と利用規約の事業者の表記が「準備中」のままなら止める（再開の手順で埋め忘れたまま公開しない）
+  it("合図があっても、事業者の表記が準備中のままなら失敗で止まり、埋める場所と README の手順を出す", () => {
+    const refused = runGuard({ ALLOW_DEPLOY: "1" });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain("事業者");
+    expect(refused.stderr).toContain("lib/domain/texts.ts");
+    expect(refused.stderr).toContain("README");
+  });
+
+  describe("事業者の表記の確かめ（operatorIdentityProblems）", () => {
+    const guardModule = async () => (await import(pathToFileURL(path.join(WEB, "scripts", "deploy-guard.mjs")).href)) as { operatorIdentityProblems: (webRoot: string) => string[] };
+    const PAGES = ["app/privacy/page.tsx", "app/terms/page.tsx", "app/store/terms/page.tsx"];
+    /** 事業者の表記の正本と3つのページだけを持つ、仮の web の直下を作る */
+    const fakeWeb = (identity: string, pages: Record<string, string> = {}) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "operator-"));
+      fs.mkdirSync(path.join(root, "lib", "domain"), { recursive: true });
+      fs.writeFileSync(path.join(root, "lib", "domain", "texts.ts"), identity);
+      for (const page of PAGES) {
+        fs.mkdirSync(path.dirname(path.join(root, page)), { recursive: true });
+        fs.writeFileSync(path.join(root, page), pages[page] ?? "<li>事業者: <OperatorIdentity /></li>");
+      }
+      return root;
+    };
+    const filled = `export const OPERATOR_IDENTITY: OperatorIdentity = { name: "株式会社イマセキ", address: "東京都渋谷区渋谷1-2-3", representative: "山田 太郎" };`;
+
+    it("今のリポジトリは準備中なので、名称・住所・代表者の3つが挙がる。3つのページは正本の表記を使っている", async () => {
+      const { operatorIdentityProblems } = await guardModule();
+      const problems = operatorIdentityProblems(WEB);
+      expect(problems.join("\n")).toMatch(/name/);
+      expect(problems.join("\n")).toMatch(/address/);
+      expect(problems.join("\n")).toMatch(/representative/);
+      for (const page of PAGES) expect(problems.join("\n")).not.toContain(page);
+    });
+
+    it("3つとも埋まり、3つのページが正本の表記を使っていれば、何も挙がらない", async () => {
+      const { operatorIdentityProblems } = await guardModule();
+      expect(operatorIdentityProblems(fakeWeb(filled))).toEqual([]);
+    });
+
+    it("1つでも空・空白だけなら挙がる。正本が読めない（宣言が無い）ときも挙がる（読めないものを通さない）", async () => {
+      const { operatorIdentityProblems } = await guardModule();
+      expect(operatorIdentityProblems(fakeWeb(filled.replace("東京都渋谷区渋谷1-2-3", "  ")))).toEqual([expect.stringContaining("address")]);
+      expect(operatorIdentityProblems(fakeWeb("export const SOMETHING_ELSE = 1;")).length).toBeGreaterThan(0);
+    });
+
+    it("ページが正本の表記を使わず、自分で「準備中」を書いていたら挙がる", async () => {
+      const { operatorIdentityProblems } = await guardModule();
+      const problems = operatorIdentityProblems(fakeWeb(filled, { "app/terms/page.tsx": "<li>事業者: 準備中です</li>" }));
+      expect(problems).toEqual([expect.stringContaining("app/terms/page.tsx")]);
+    });
   });
 
   it("README の6節は、合図つきの deploy と、workers.dev を戻すかの判断を再開の手順に書いている", () => {
     expect(deploySection).toContain("ALLOW_DEPLOY=1 pnpm --dir web run deploy");
     expect(deploySection).toContain("workers_dev");
+     // 2026-09-26 本人選択（AI提示）: 再開の手順に「事業者の表記を埋める」を置く
+    expect(deploySection).toContain("事業者の表記を埋める");
+    expect(deploySection).toContain("web/lib/domain/texts.ts");
   });
 });

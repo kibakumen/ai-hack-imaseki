@@ -325,7 +325,7 @@ export const AI_LINE_DAILY_CALL_LIMIT = Math.floor(AI_DAILY_CALL_LIMIT * AI_LINE
  * アプリ全体の1日（日本時間）の、地図のサービス（Geocoding・Places）を呼ぶ回数の上限（2026-09-26 のレビュー・安全-03 の残り・AI判断）。
  * 連打の抑止は客ごと・接続元ごとなので、接続元を替えれば天井が無い。届いたら、その日の残りは地図を呼ばずに
  * 「直せなかった」と同じ倒れ方をする（候補は空・地名は出さない・場所の文字では探せず現在地で探す）。
- * Google Cloud の割り当て（README 6.2 の手順7）は二重の備えとして残す。2000 回は Geocoding の単価で1日およそ10米ドルの天井。
+ * Google Cloud の割り当て（README 6.2 の手順8）は二重の備えとして残す。2000 回は Geocoding の単価で1日およそ10米ドルの天井。
  */
 export const MAPS_DAILY_CALL_LIMIT = 2000;
 /** 同じ店の、カードの登録の開始と確かめ（Stripe を呼ぶ）は、合わせて10分に10回まで（安全-03 の構造の検査・AI判断） */
