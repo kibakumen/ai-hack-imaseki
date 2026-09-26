@@ -112,8 +112,11 @@ export const readLicenseAsAdmin = async (deps: Deps, storeId: string, actor: Adm
 // 表から先に外し、そのあとでファイルを消す（逆だと、途中で落ちたとき表が無いファイルを指す）。消せなかったファイルは
 // 記録に残し、どこからも指されていないファイルの掃除（usecases/licenseSweep・1日に1回）が消す（安全-20 のレビュー）。
 
-/** 置き場からファイルを消す。消せなくても手続きは続ける（表からはもう外してある）。 */
-const deleteLicenseFiles = async (deps: Deps, storeId: string, keys: ReadonlyArray<string | null>) => {
+/**
+ * 置き場からファイルを消す。消せなくても手続きは続ける（表からはもう外してある）。
+ * 店の退会（usecases/withdrawStore）も、表から外したあとでこれを呼ぶ（2026-09-26）。
+ */
+export const deleteLicenseFiles = async (deps: Deps, storeId: string, keys: ReadonlyArray<string | null>) => {
   for (const key of new Set(keys.filter((k): k is string => k !== null))) {
     try {
       await deps.files.delete(key);

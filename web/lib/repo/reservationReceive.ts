@@ -15,7 +15,7 @@ type Db = Deps["db"];
 export const findOfferForReceive = async (db: Db, offerId: string, nowIso: string): Promise<{ offer: ReservationOffer; storeBanned: boolean } | null> => {
   const row = await db
     .prepare(
-      `SELECT o.ended_at, o.until_at, o.party_max, ${remainingExpression("o", "?2")} AS remaining, s.status AS store_status` +
+      `SELECT o.ended_at, o.until_at, o.party_max, ${remainingExpression("o", "?2")} AS remaining, s.status AS store_status, s.withdrawn_at AS store_withdrawn_at` +
         ` FROM offers o JOIN stores s ON s.id = o.store_id WHERE o.id = ?1`,
     )
     .bind(offerId, nowIso)
@@ -29,7 +29,9 @@ export const findOfferForReceive = async (db: Db, offerId: string, nowIso: strin
       remaining: Number(r.remaining ?? 0),
       partyMax: Number(r.party_max ?? 0),
     },
-    storeBanned: r.store_status === "banned",
+    // 退会した店（2026-09-26）は状況が banned でも「運営に取り消された」とは言わない。オファーは退会と同時に終わっているので、
+    // 断りの理由は「受け付けは終わりました」に倒れる
+    storeBanned: r.store_status === "banned" && (r.store_withdrawn_at === null || r.store_withdrawn_at === undefined),
   };
 };
 

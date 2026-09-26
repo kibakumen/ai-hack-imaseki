@@ -63,7 +63,9 @@ const shownByPublishingOffer = (couponId: string, storeId: string, now: string):
  */
 export const insertCouponWithinLimit = async (db: Db, coupon: NewCoupon, max: number): Promise<boolean> => {
   const result = await db
-    .prepare(`INSERT INTO coupons (id, store_id, name, note, created_at) SELECT ?1, ?2, ?3, ?4, ?5 WHERE (SELECT COUNT(*) FROM coupons WHERE store_id = ?2) < ?6`)
+    .prepare(`INSERT INTO coupons (id, store_id, name, note, created_at) SELECT ?1, ?2, ?3, ?4, ?5 WHERE (SELECT COUNT(*) FROM coupons WHERE store_id = ?2) < ?6` +
+        // 退会した店には入れない（退会と同時に走った作成が、消したクーポンを1件戻さないように・2026-09-26）
+        ` AND NOT EXISTS (SELECT 1 FROM stores WHERE id = ?2 AND withdrawn_at IS NOT NULL)`)
     .bind(coupon.id, coupon.storeId, coupon.name, coupon.note, coupon.createdAtIso, max)
     .run();
   return changedRows(result) > 0;

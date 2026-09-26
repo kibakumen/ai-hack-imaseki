@@ -12,6 +12,7 @@
 
 import type { Deps } from "../ports";
 import { findStoreStatus, restoreBannedStore, type RestoredStatus } from "../repo/adminStoreActions";
+import { isWithdrawnStore } from "../repo/storeWithdrawal";
 import type { StoreStatus } from "../repo/stores";
 import { newAdminAction, type AdminActor } from "./adminActionRecord";
 import { currentStateRefusal } from "./adminStoreConflict";
@@ -29,7 +30,8 @@ export type RestoreStoreResult =
  */
 export const restoreStore = async (deps: Deps, storeId: string, actor: AdminActor, reason: string): Promise<RestoreStoreResult> => {
   const status = await findStoreStatus(deps.db, storeId);
-  if (!status) return { ok: false, kind: "not_found" };
+  // 退会した店は、戻す相手（アカウント・店舗情報）がもう無い。在らない店と同じ 404 に倒す（2026-09-26 本人発案の店の退会）
+  if (!status || (await isWithdrawnStore(deps.db, storeId))) return { ok: false, kind: "not_found" };
   if (status !== "banned") return { ok: false, kind: "state", state: status };
 
   // 読んでから書くまでの間に状況が動いた（同時に来た操作）なら、当たらない。変わった行の数が

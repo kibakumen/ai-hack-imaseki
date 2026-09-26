@@ -214,6 +214,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 | `0010_store_terms.sql` | 店向けの利用規約への同意の版と時刻 `stores.terms_version`・`stores.terms_agreed_at` |
 | `0011_admin_actions.sql` | 運営の操作の記録 `admin_actions`（追加だけ・トリガーで守る）と、承認した時点の写し・運営のメモ・連絡済みの印の列。当てると、承認済みと止められている店の今の値が承認の写しとして埋まる |
 | `0012_pending_license_retention.sql` | 承認されていない店の営業許可書のうち、上げた時刻 `stores.license_uploaded_at` の無いものを、当てた時刻で埋める（上げてから30日たっても承認されない許可書を消す数えの起点・安全-20）。承認済みの店には触れない |
+| `0014_store_withdrawal.sql` | 店が退会した時刻 `stores.withdrawn_at`（2026-09-26 本人発案の店の退会・今ある行は NULL）。当てずに出すと運営の一覧と詳細が500になる。上の「9本」の数えの後に足したもの |
 
 手順:
 

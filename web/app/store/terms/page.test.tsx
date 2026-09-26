@@ -26,4 +26,17 @@ describe("店向けの利用規約（店-21）", () => {
     expect(screen.getByTestId("contact-email")).toBeTruthy();
     for (const id of ["terms-card", "terms-ban", "terms-customer-data", "terms-license", "terms-withdraw", "terms-contact"]) expect(screen.getByTestId(id), id).toBeTruthy();
   });
+
+  it("退会の節は、店の画面から退会できること・消えるもの・残るもの（「退会した店」）・登録し直せることを書く（2026-09-26 本人発案（店の退会）・要件13の基準 13.13〜13.19）", () => {
+    render(<StoreTermsPage />);
+    const withdraw = screen.getByTestId("terms-withdraw").textContent ?? "";
+    expect(withdraw).toMatch(/退会の手続きへ/);
+    expect(withdraw).toMatch(/今のパスワード/);
+    expect(withdraw).toMatch(/営業許可書/);
+    expect(withdraw).toMatch(/クーポン/);
+    expect(withdraw).toMatch(/退会した店/);
+    expect(withdraw).toMatch(/通知/);
+    expect(withdraw).toMatch(/登録し直せます/);
+    expect(withdraw).not.toMatch(/今は下の連絡先へのメールで受け付けます/);
+  });
 });

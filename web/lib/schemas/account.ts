@@ -62,8 +62,15 @@ export const changeEmailSchema = z.object({ email: emailSchema, currentPassword:
  */
 export const changeOwnPasswordSchema = z.object({ currentPassword: currentPasswordSchema, password: passwordSchema });
 
+/**
+ * 店の退会（2026-09-26 本人発案・要件13の基準 13.14）。取り返しがつかないので、今のパスワードの再入力を求める
+ * （メールアドレスの変更と同じ確かめ。セッションを盗まれただけでは店を消せないようにする）。
+ */
+export const storeWithdrawSchema = z.object({ currentPassword: currentPasswordSchema });
+
 export type StoreRegisterInput = z.infer<typeof storeRegisterSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
 export type ChangeOwnPasswordInput = z.infer<typeof changeOwnPasswordSchema>;
+export type StoreWithdrawInput = z.infer<typeof storeWithdrawSchema>;

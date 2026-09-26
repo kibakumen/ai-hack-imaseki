@@ -1,8 +1,10 @@
 // 店のアカウントの画面（2026-09-22 追加）: ログインのメールアドレスの変更と、パスワードの変更への道。
 // パスワードの変更そのものは `/store/password`（仮のパスワードで入った店と同じ画面）で行う。
+// 2026-09-26 本人発案: いちばん下に店の退会（WithdrawPanel・今のパスワードの再入力と確かめの2段）を置く。
 import type { Metadata } from "next";
 import { EmailForm } from "../../../components/auth/EmailForm";
 import { StoreNav } from "../../../components/store/StoreNav";
+import { WithdrawPanel } from "../../../components/store/WithdrawPanel";
 
 export const metadata: Metadata = { title: "アカウント" };
 
@@ -23,6 +25,7 @@ export default function StoreAccountPage() {
           </a>
         </p>
       </section>
+      <WithdrawPanel />
     </main>
   );
 }

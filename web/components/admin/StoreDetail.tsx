@@ -32,7 +32,8 @@ import { TempPasswordPanel } from "./TempPasswordPanel";
 import { SubmitButton } from "../ui/Submit";
 import { useSubmit, type Submit } from "../ui/useSubmit";
 import styles from "./admin.module.css";
-import { TERMS } from "../../lib/domain/texts";
+import { TERMS, WITHDRAWN_STORE_LABEL } from "../../lib/domain/texts";
+import { dateTimeInJst } from "../ui/jstTime";
 
 // 応答の型は、サーバーと同じ定義（schemas/responses の表）から作る——手で写さない（2026-09-25 監査の指摘 設計-07）。
 type DetailResponse = ResponseOf<"GET /api/admin/stores/:id">;
@@ -235,6 +236,22 @@ const NoticeLine = ({ notice }: { notice: Notice | null }) => {
   );
 };
 
+/**
+ * 退会した店の操作の面（2026-09-26 本人発案の店の退会）。アカウント・店舗情報・許可書がもう無いので、戻す操作も
+ * 仮のパスワードも出さない（入口も断る）。残っている記録（確保・通報・操作の履歴）は、この画面の他の面で読める。
+ */
+const WithdrawnNote = ({ withdrawnAt }: { withdrawnAt: string }) => (
+  <section className={styles.panel} aria-labelledby="store-actions-title">
+    <h2 id="store-actions-title" className={styles.panelTitle}>
+      操作
+    </h2>
+    <p data-testid="store-withdrawn">
+      この店は {dateTimeInJst(withdrawnAt)} に退会しました。アカウント・店舗情報・営業許可書・クーポンは消え、店名は伏せてあります。
+      確保・通報・操作の履歴は残っています。戻す操作はありません（同じメールアドレスで登録し直した店は、新しい店として承認を待ちます）。
+    </p>
+  </section>
+);
+
 /** 操作の面（承認・取り消し・戻す・仮のパスワード）。状況ごとに出す操作を1つに絞る。 */
 const Operations = ({ store, onDone, notice }: OperationProps & { notice: Notice | null }) => (
   <section className={styles.panel} aria-labelledby="store-actions-title">
@@ -299,7 +316,7 @@ export const StoreDetail = ({ storeId, listQuery }: Props) => {
           <h1>{store.name}</h1>
           <p data-testid="store-status">
             <span className={styles.badge} data-status={store.status}>
-              {STATUS_LABELS[store.status]}
+              {store.withdrawnAt ? WITHDRAWN_STORE_LABEL : STATUS_LABELS[store.status]}
             </span>
           </p>
           {store.changedSinceApproval && (
@@ -322,7 +339,7 @@ export const StoreDetail = ({ storeId, listQuery }: Props) => {
 
         <div className={styles.detailSide}>
           <StoreDocuments store={store} />
-          <Operations store={store} onDone={onDone} notice={notice} />
+          {store.withdrawnAt ? <WithdrawnNote withdrawnAt={store.withdrawnAt} /> : <Operations store={store} onDone={onDone} notice={notice} />}
           <StoreReportsPanel reports={reports} />
         </div>
       </div>

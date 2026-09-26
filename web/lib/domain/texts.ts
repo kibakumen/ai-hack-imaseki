@@ -20,6 +20,14 @@ export const TERMS = {
   reservationCode: "確保番号",
   storeProfile: "店舗情報",
 } as const;
+/**
+ * 退会した店の、伏せたあとの店名（2026-09-26 本人発案の店の退会・要件13の基準 13.16）。店の行は記録のために残し、
+ * 店名だけをこの語に置き換える（repo/storeWithdrawal）。客の見返し・運営の一覧と通報の一覧は、店の行の店名を読むので、
+ * どこも何も足さずにこの語を出す。語の正本は TERMS とは別に置く（TERMS は画面の語の4つに閉じている・web/tests/terms.test.ts）。
+ */
+export const WITHDRAWN_STORE_NAME = "退会した店";
+/** 運営の画面の、退会した店の状況の札（表の状況は「登録取り消し済み」のまま・migrations/0014）。 */
+export const WITHDRAWN_STORE_LABEL = "退会済み";
 const str = (v: unknown, fallback = ""): string => (v === undefined || v === null ? fallback : String(v));
 
 // ---------- 入力の断り（kind） ----------
@@ -54,7 +62,11 @@ const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   // ⚠️ 20.25 店の画面に出す文（店が運営に止められている間の「完了済み」の断り）。
   // RECEIVE_REFUSAL_TEXTS の同じ綴りの語とは**読み手が違う**——あちらは客に出す文（その店から
   // 受け取れない）で、こちらは店の人に出す文（自分の店が止められていてこの操作ができない）。
-  store_banned: () => "運営に登録を取り消されているため、完了済みにできません。",
+  // 2026-09-26: 店の退会の入口も、登録取り消し済みの店をこの語で断る（`ctx.action` が "withdraw"）。退会は運営への連絡で受ける。
+  store_banned: (ctx) =>
+    ctx.action === "withdraw"
+      ? "登録取り消し済みの間は、この画面から退会できません。下の連絡先へお知らせください。"
+      : "運営に登録を取り消されているため、完了済みにできません。",
   human_check_failed: () => "人による操作かを確かめられませんでした。ページを読み込み直して、もう一度お試しください。",
   rate_limited: () => "しばらく待ってからお試しください。",
   body_too_large: () => "送る内容が大きすぎます。短くしてからお試しください。",

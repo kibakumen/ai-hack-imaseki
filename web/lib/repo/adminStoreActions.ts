@@ -98,13 +98,14 @@ export type RestoredStatus = "approved" | "pending";
  *
  * 終わったオファーと取り消された確保は戻さない（基準 25.10）——この文は `stores` だけを触る。
  * 承認した時点の写しも取り直さない（戻すのは審査のやり直しではない。やり直すのは承認待ちへ戻った店の承認）。
+ * 退会した店（`withdrawn_at` が在る）には当たらない——アカウントも店舗情報も消えていて、戻しても誰も使えない（2026-09-26）。
  */
 export const restoreBannedStore = async (db: Db, storeId: string, action: NewAdminAction): Promise<RestoredStatus | null> => {
   const [restored] = await db.batch([
     db
       .prepare(
         `UPDATE stores SET status = CASE WHEN approved_name IS NULL THEN 'pending' ELSE 'approved' END
-          WHERE id = ?1 AND status = 'banned' RETURNING status`,
+          WHERE id = ?1 AND status = 'banned' AND withdrawn_at IS NULL RETURNING status`,
       )
       .bind(storeId),
     insertAdminActionIfChangedStatement(db, action),

@@ -50,6 +50,8 @@ export type AdminStoreListRow = {
   /** 店が取り消した確保の数と、受け取られた確保のうちの割合（0〜1・横断-09） */
   storeCancelled: number;
   storeCancelRate: number;
+  /** 店が退会した時刻（2026-09-26 本人発案の店の退会）。状況は banned のまま残るので、これで「退会済み」を見分ける */
+  withdrawnAt: string | null;
 };
 
 /** 承認した時点の写し（運営-02）。写しの無い店（未承認）は null。 */
@@ -129,7 +131,7 @@ export const contactedExpression = (s: string): string =>
 
 /** 一覧と詳細が共通で読む列（別名 `s` の stores・`a` の accounts、「今」は `now` の置き場所）。 */
 const listColumns = (now: string): string =>
-  `s.id, s.name, s.address, s.status, s.created_at, s.budget_min, a.email,
+  `s.id, s.name, s.address, s.status, s.created_at, s.budget_min, s.withdrawn_at, a.email,
    EXISTS (SELECT 1 FROM offers o WHERE o.store_id = s.id AND ${publishingOfferCondition("o", now)}) AS publishing,
    ${adminStoreClaimsExpression("s")} AS claims,
    ${adminStorePublishingRemainingExpression("s", now)} AS offer_remaining,
@@ -156,6 +158,7 @@ const toListRow = (row: Record<string, unknown>): AdminStoreListRow => {
     contacted: toBoolean(row.contacted),
     storeCancelled,
     storeCancelRate: reservationCount > 0 ? storeCancelled / reservationCount : 0,
+    withdrawnAt: typeof row.withdrawn_at === "string" && row.withdrawn_at !== "" ? row.withdrawn_at : null,
   };
 };
 
@@ -190,7 +193,7 @@ export const listStoresForAdmin = async (
 
 /**
  * いちばん上の集計（基準 24.8・24.9）。絞り込みや検索とは別に、全体の数を返す。
- * `awaiting` は未承認のうち「連絡済み」の印の無い店（運営-05）、`total` は登録されている店の全部（運営-11）。
+ * `awaiting` は未承認のうち「連絡済み」の印の無い店（運営-05）、`total` は登録されている店の全部（運営-11。退会した店は数えない・2026-09-26）。
  */
 export const summarizeStoresForAdmin = async (db: Db, nowIso: string): Promise<AdminStoreSummary> => {
   const row = await db
@@ -199,7 +202,7 @@ export const summarizeStoresForAdmin = async (db: Db, nowIso: string): Promise<A
          (SELECT COUNT(*) FROM offers o WHERE ${publishingOfferCondition("o", "?1")}) AS publishing,
          (SELECT COUNT(*) FROM stores WHERE status = 'pending') AS pending,
          (SELECT COUNT(*) FROM stores s WHERE s.status = 'pending' AND ${contactedExpression("s")} = 0) AS awaiting,
-         (SELECT COUNT(*) FROM stores) AS total`,
+         (SELECT COUNT(*) FROM stores WHERE withdrawn_at IS NULL) AS total`,
     )
     .bind(nowIso)
     .first();
@@ -236,7 +239,7 @@ export const findStoreForAdmin = async (db: Db, storeId: string, nowIso: string)
               s.url, s.genres, s.menus, s.budget_max, s.license_key, s.card_registered_at, s.license_uploaded_at,
               s.approved_at, s.approved_name, s.approved_address, s.approved_license_key, s.admin_note, s.contacted_at,
               (SELECT COUNT(*) FROM reservations ar WHERE ar.store_id = s.id AND ${activeReservationCondition("ar", "?2")}) AS active_reservations,
-              (SELECT COUNT(*) FROM stores d WHERE d.id <> s.id
+              (SELECT COUNT(*) FROM stores d WHERE d.id <> s.id AND d.withdrawn_at IS NULL AND s.withdrawn_at IS NULL
                   AND (d.name = s.name OR (COALESCE(s.address, '') <> '' AND d.address = s.address))) AS duplicates
          FROM stores s
          LEFT JOIN accounts a ON a.store_id = s.id AND a.role = 'store'

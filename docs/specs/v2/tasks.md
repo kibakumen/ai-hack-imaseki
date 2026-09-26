@@ -98,7 +98,8 @@ phase: tasks
 
 - [ ] 7. 営業許可書とカード・店のホームの帯: `GET/POST /api/store/license`・`POST /api/store/card/{setup,confirm}`・`adapters/{files,stripe}`・`domain/fileType`・`GET /api/store/home`（承認の状況・チェックリスト・`missingProfile`）・`components/store/{StoreHome,StatusBanner,SetupChecklist,DocumentsPanel}`
   - `GET /api/admin/stores/:id/license` の読み口もここ（同じ手続き `readLicense`・運営の見分けはタスク4のセッション）
-  - _要件: 12.6, 12.7, 12.8, 12.9, 12.10, 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.8, 13.9, 13.12_
+  - 店の退会（2026-09-26 本人発案（店の退会）・`POST /api/store/withdraw`・`usecases/withdrawStore`・`repo/storeWithdrawal`・`components/store/WithdrawPanel`・migration 0014）もここに割り当てる。受け入れ検査は承認のあと固定なので足さず、検査は `web/lib/usecases/withdrawStore.test.ts`・`web/components/store/WithdrawPanel.test.tsx`・`web/components/admin/withdrawnStore.test.tsx` に置いた
+  - _要件: 12.6, 12.7, 12.8, 12.9, 12.10, 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.8, 13.9, 13.12, 13.13, 13.14, 13.15, 13.16, 13.17, 13.18, 13.19, 13.20_
   - _受け入れ検査: tests/acceptance/v2/r13-license-card.test.ts_
   - _担当: AI_
 

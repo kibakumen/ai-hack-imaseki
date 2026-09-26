@@ -205,3 +205,24 @@ export const adminCancelledEventsStatement = (db: Db, storeId: string, nowIso: s
         ` WHERE res.store_id = ?1 AND ${activeReservationCondition("res", "?2")}`,
     )
     .bind(storeId, nowIso, ADMIN_CANCELLED_EVENT_ID_SUFFIX);
+
+/** 店の退会で取り消された確保の記録の番号も、確保の番号から決める（上の運営の停止と同じ理由）。 */
+const STORE_WITHDRAWN_EVENT_ID_SUFFIX = ":store_withdrawn";
+
+/**
+ * 店が退会したときに取り消される確保の、状態の変化の記録（基準 27.4・2026-09-26 本人発案の店の退会）。
+ * 状態は「店が取り消した」（`store_cancelled`）——客への文面は「お店の都合で取り消されました」になる。
+ *
+ * 運営の停止の記録と同じく、**確保の状態を書き換える文より前**に並べる（まだ確保中の行を選ぶ）。
+ * 退会の1文目（店の行に退会の時刻 ?2 を入れる文）が当たったまとまりでだけ行を足す——`withdrawn_at = ?2` の条件が、
+ * 1文目が当たらなかった（パスワードの確かめのあとで状況が動いた）ときに記録だけが増える形を塞ぐ。
+ */
+export const storeWithdrawnEventsStatement = (db: Db, storeId: string, nowIso: string) =>
+  db
+    .prepare(
+      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, at)` +
+        ` SELECT res.id || ?3, res.id, 'store_cancelled', ?2 FROM reservations res` +
+        ` WHERE res.store_id = ?1 AND ${activeReservationCondition("res", "?2")}` +
+        ` AND EXISTS (SELECT 1 FROM stores ws WHERE ws.id = ?1 AND ws.withdrawn_at = ?2)`,
+    )
+    .bind(storeId, nowIso, STORE_WITHDRAWN_EVENT_ID_SUFFIX);

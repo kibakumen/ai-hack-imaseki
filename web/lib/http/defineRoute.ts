@@ -95,9 +95,17 @@ const rawResponse = (status: number, raw: NonNullable<RouteHandlerResult["raw"]>
 
 const invalidInput = (fields: Array<{ name: string; reason: FieldReason }>): RouteHandlerResult => refusal("invalid_input", { fields });
 
-/** 組み立てた結果を応答へ（JSON かファイルか）。見分けのあとに延ばしたセッションの Set-Cookie も足す。 */
+/** Set-Cookie の値の名前（`name=value; …` の `name`）。 */
+const cookieNameOf = (cookie: string): string => cookie.split("=", 1)[0] ?? "";
+
+/**
+ * 組み立てた結果を応答へ（JSON かファイルか）。見分けのあとに延ばしたセッションの Set-Cookie も足す。
+ * 手続きが同じ名前の Cookie を返していれば、延ばした方は足さない——店の退会はセッションの Cookie を Max-Age=0 で消すので、
+ * 後ろに延ばした Cookie を並べるとブラウザでは後の方が勝ち、消えずに残った（2026-09-26 店の退会のレビュー）。
+ */
 const toResponse = (result: RouteHandlerResult, extraCookies: string[] = []): Response => {
-  const cookies = [...(result.cookies ?? []), ...extraCookies];
+  const own = new Set((result.cookies ?? []).map(cookieNameOf));
+  const cookies = [...(result.cookies ?? []), ...extraCookies.filter((cookie) => !own.has(cookieNameOf(cookie)))];
   return result.raw ? rawResponse(result.status, result.raw, cookies) : jsonResponse(result.status, result.body, cookies);
 };
 

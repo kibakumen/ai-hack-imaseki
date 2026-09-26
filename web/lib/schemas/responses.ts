@@ -195,6 +195,9 @@ const adminStoreRow = object({
   contacted: boolean(),
   storeCancelled: number(),
   storeCancelRate: number(),
+  // 店が退会した時刻（2026-09-26 本人発案の店の退会）。退会していなければ null。状況は banned のまま残るので、
+  // 運営の画面はこれで「退会済み」を見分ける。この項目より前に作った画面の検査の値には無いので任意
+  withdrawnAt: optional(nullable(string())),
 });
 
 const adminStoreDetail = object({
@@ -314,6 +317,8 @@ export const RESPONSES = {
   "POST /api/store/card/confirm": object({ ok, cardRegistered: literal(true) }),
   "POST /api/store/email": done,
   "POST /api/store/password": done,
+  // 店の退会（2026-09-26 本人発案）。取り消した確保の数を返す
+  "POST /api/store/withdraw": object({ ok, cancelled: number() }),
 
   // 運営
   "GET /api/admin/stores": object({ items: array(adminStoreRow), summary: object({ publishing: number(), pending: number(), awaiting: number(), total: number() }) }),
