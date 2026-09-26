@@ -39,6 +39,9 @@ export const CANCELLED_VIEW_MS = 3 * 60 * 60 * 1000;
  */
 export const COMPLETED_VIEW_MS = 30 * 60 * 1000;
 
+/** 店の取り消しの理由のうち、客の画面の文を変えるもの（表の値・migration 0013） */
+const NO_SHOW = "no_show";
+
 /** 確保1件ぶん（表の列と同じ名前。時刻は Date で受け取る——lib/domain は Date を作らない）。 */
 export type HomeReservationRow = {
   id: string;
@@ -52,6 +55,8 @@ export type HomeReservationRow = {
   /** 状態が最後に変わった時刻（受け取った時は受け取った時刻） */
   statusAt: Date;
   status: string;
+  /** 店の取り消しの理由（`no_show`＝来店なし・基準 9.14・2026-09-26 本人選択）。無ければ null（省いても null と同じ） */
+  cancelReason?: string | null;
   /** 受け取った時点でそのオファーが見せていたクーポンの写し（基準 16.6） */
   coupons: Array<{ name: string; note: string }>;
   /** その確保を選んだ取得の起点（記録 `fetch_logs` から）。読めなければ null（省いても null と同じ） */
@@ -92,6 +97,11 @@ export type ReservationView = {
    * 受け入れ検査の契約 `ReservationDto` は `toMatchObject` で見ているので、項目を足しても通る。
    */
   origin: { lat: number; lng: number } | null;
+  /**
+   * 店が「来ない（枠を戻す）」で取り消した確保だけに載る（基準 9.14・2026-09-26 本人選択）。客の画面は
+   * 「お店が来店なしとして取り消しました」を出す。店の都合の取り消しとほかの状態では載らない。
+   */
+  cancelReason?: "no_show";
 };
 
 /** 期限切れの表示の中身（基準 11.5〜11.9）。`partyMax` は「何名まで」が下がっていたときだけ。 */
@@ -121,6 +131,7 @@ const toView = (row: HomeReservationRow, state: EffectiveState, showCode: boolea
   status: state,
   coupons: row.coupons,
   origin: row.origin ?? null,
+  ...(state === "store_cancelled" && row.cancelReason === NO_SHOW ? { cancelReason: NO_SHOW } : {}),
 });
 
 /**

@@ -10,7 +10,7 @@ import Link from "next/link";
 import type { AdminStoreRowDto } from "../../lib/client/api";
 import { dateTimeInJst } from "../ui/jstTime";
 import styles from "./admin.module.css";
-import { TERMS } from "../../lib/domain/texts";
+import { ADMIN_STORE_CANCEL_TEXTS, TERMS } from "../../lib/domain/texts";
 
 export type SortKey = "created_desc" | "claims_desc" | "price_asc" | "remaining_desc";
 
@@ -64,7 +64,7 @@ export const StoreCard = ({ store, sortKey, href }: Props) => (
       <Stat testId="stat-claims" active={sortKey === "claims_desc"}>{`受け取り ${store.claims} 件`}</Stat>
       <Stat testId="stat-budget" active={sortKey === "price_asc"}>{store.budgetMin === null ? "予算 未設定" : `予算 ${store.budgetMin}円〜`}</Stat>
       <Stat testId="stat-remaining" active={sortKey === "remaining_desc"}>{store.offerRemaining === null ? "公開中のオファーなし" : `残り ${store.offerRemaining} 枠`}</Stat>
-      {store.storeCancelled > 0 && <Stat testId="stat-store-cancel" strong>{`店の取り消し ${store.storeCancelled} 回（${percent(store.storeCancelRate)}）`}</Stat>}
+      {store.storeCancelled > 0 && <Stat testId="stat-store-cancel" strong>{`店の取り消し ${store.storeCancelled} 回（${percent(store.storeCancelRate)}）${ADMIN_STORE_CANCEL_TEXTS.noShowNote(store.noShowCancelled)}`}</Stat>}
     </span>
   </li>
 );

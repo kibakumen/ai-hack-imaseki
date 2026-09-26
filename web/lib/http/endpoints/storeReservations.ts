@@ -14,6 +14,7 @@
 // 2026-09-25 監査の指摘 設計-11: この頭の注は、並行したタスク（17・18）が「あとでここへ足す」と書いた予告のまま
 // import の前後の2か所に分かれて残っていた（足し終えたあとも）。実態に合わせて1つにまとめた。
 
+import { storeCancelSchema } from "../../schemas/reservation";
 import { cancelByStore } from "../../usecases/cancelByStore";
 import { completeReservation } from "../../usecases/completeReservation";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
@@ -39,15 +40,17 @@ const completeReservationRoute = defineRoute({
 /**
  * 店による確保の取り消し（要件21）。
  *
- * 入力は取らない——**理由の欄は無い**（基準 21.3）。本文なしの要求でも通る（画面は確かめだけを出す）。
+ * **理由を打つ欄は無い**（基準 21.3）。本文なしの要求でも通る（画面は確かめだけを出す）。入力は「来ない（枠を戻す）」の
+ * ボタンが送る `noShow: true` の1つだけ（任意の真偽・基準 21.8・2026-09-26 本人選択）で、無ければ店の都合の取り消し。
  * 確保中でなければ、状態も残りも変えずに今の状態を返して断る（基準 21.5〜21.7）。
  */
 const storeCancelReservationRoute = defineRoute({
   method: "POST",
   path: "/api/store/reservations/:id/cancel",
   auth: "store",
-  handler: async ({ params, deps, ctx }) => {
-    const result = await cancelByStore(deps, ctx.storeId, params.id);
+  input: storeCancelSchema,
+  handler: async ({ input, params, deps, ctx }) => {
+    const result = await cancelByStore(deps, ctx.storeId, params.id, { noShow: input.noShow === true });
     if (result.ok) return respond("POST /api/store/reservations/:id/cancel", { ok: true });
     if (result.kind === "not_found") return notFound();
     // 確保への操作の断りは「今の状態を返す」形（設計書「入力の断りの応答の形」の境界の②）。

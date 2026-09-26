@@ -45,6 +45,8 @@ export type ReservationRow = {
   status: string;
   statusAt: Date;
   holdsSlot: number;
+  /** 店の取り消しの理由（`no_show`＝来店なし・migration 0013）。店の都合の取り消しとほかの状態では null */
+  cancelReason: string | null;
   coupons: Array<{ name: string; note: string }>;
 };
 
@@ -70,7 +72,7 @@ export type ReservationContext = { reservation: ReservationRow; store: Reservati
 /** 確保の列（`res` の別名で読む。列の名前を写さないため、読む側はこれを使う）。 */
 export const RESERVATION_COLUMNS =
   `res.id, res.offer_id, res.store_id, res.customer_id, res.fetch_id, res.party, res.code,` +
-  ` res.created_at, res.expires_at, res.status, res.status_at, res.holds_slot, res.coupons_json`;
+  ` res.created_at, res.expires_at, res.status, res.status_at, res.holds_slot, res.cancel_reason, res.coupons_json`;
 
 export const toReservationRow = (row: Record<string, unknown>): ReservationRow => ({
   id: row.id as string,
@@ -85,6 +87,7 @@ export const toReservationRow = (row: Record<string, unknown>): ReservationRow =
   status: row.status as string,
   statusAt: new Date(row.status_at as string),
   holdsSlot: Number(row.holds_slot ?? 0),
+  cancelReason: (row.cancel_reason as string | null | undefined) ?? null,
   coupons: parseCoupons(row.coupons_json),
 });
 

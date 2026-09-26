@@ -271,3 +271,35 @@ describe("タブのタイトル（店-07 のレビュー）", () => {
     expect(document.title).toBe("店のホーム");
   });
 });
+
+// 2026-09-26 本人選択（安全-06 の残り・要件21の基準 21.8・要件20の基準 20.16）: 店の取り消しに「来ない（枠を戻す）」を足した。
+describe("「来ない（枠を戻す）」", () => {
+  it("21.8 確保中の行に「来ない」が在り、確かめに枠が戻ることと知らせが送られることを出し、確かめてから noShow を送る", async () => {
+    await renderHome(() => [row()], { "POST /api/store/reservations/:id/cancel": () => ({ json: { ok: true } }) });
+    const card = screen.getByTestId("row-r1");
+    fireEvent.click(within(card).getByTestId("btn-store-no-show"));
+    const confirm = await screen.findByTestId("confirm-store-no-show");
+    expect(confirm.textContent).toMatch(/枠.*戻/);
+    expect(confirm.textContent).toMatch(/知らせ/);
+    expect(confirm.querySelectorAll("input, textarea")).toHaveLength(0);
+    expect(api!.calls.filter((c) => c.path.endsWith("/cancel"))).toHaveLength(0);
+    fireEvent.click(within(confirm).getByTestId("btn-confirm"));
+    await waitFor(() => expect(api!.calls.filter((c) => c.path.endsWith("/cancel"))).toHaveLength(1));
+    expect(api!.calls.find((c) => c.path.endsWith("/cancel"))!.body).toEqual({ noShow: true });
+  });
+
+  it("21.1 取り消せない行（canCancel が false）には「来ない」を出さない", async () => {
+    await renderHome(() => [row({ kind: "expired", canCancel: false })]);
+    expect(within(screen.getByTestId("row-r1")).queryByTestId("btn-store-no-show")).toBeNull();
+  });
+
+  it("20.16 来ないで取り消した行は「来店なしで取り消し」と出る（店の都合の取り消しは「店が取り消し」のまま）", async () => {
+    await renderHome(() => [
+      { ...row({ kind: "store_cancelled", canComplete: false, canCancel: false }), noShow: true } as any,
+      row({ reservationId: "r2", kind: "store_cancelled", canComplete: false, canCancel: false }),
+    ]);
+    expect(screen.getByTestId("row-r1").textContent).toMatch(/来店なしで取り消し/);
+    expect(screen.getByTestId("row-r2").textContent).toMatch(/店が取り消し/);
+    expect(screen.getByTestId("row-r2").textContent).not.toMatch(/来店なし/);
+  });
+});

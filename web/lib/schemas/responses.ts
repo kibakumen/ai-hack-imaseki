@@ -65,6 +65,8 @@ const reservationView = object({
   coupons: array(couponFace),
   /** 探したときの起点。古い応答には無いので任意 */
   origin: optional(nullable(object({ lat: number(), lng: number() }))),
+  /** 店が「来ない（枠を戻す）」で取り消した確保だけに載る（基準 9.14・2026-09-26 本人選択） */
+  cancelReason: optional(oneOf(["no_show"])),
 });
 
 /** 客のホーム（受け入れ検査の契約 `HomeDto`・usecases/customerHome の CustomerHome）。 */
@@ -125,6 +127,8 @@ const arrival = object({
   expiresAt: string(),
   canComplete: boolean(),
   canCancel: boolean(),
+  /** 店が「来ない（枠を戻す）」で取り消した行（基準 20.16・21.8・2026-09-26 本人選択）。古い応答には無いので任意 */
+  noShow: optional(boolean()),
 });
 
 /** 店のホーム（受け入れ検査の契約 `StoreHomeDto`・usecases/storeHome の StoreHome）。 */
@@ -195,6 +199,8 @@ const adminStoreRow = object({
   contacted: boolean(),
   storeCancelled: number(),
   storeCancelRate: number(),
+  /** そのうち「来ない（枠を戻す）」で取り消した数（2026-09-26 本人選択）。古い応答には無いので任意 */
+  noShowCancelled: optional(number()),
 });
 
 const adminStoreDetail = object({
@@ -239,6 +245,11 @@ const adminMetrics = object({
   /** `fellBack` は候補が在るのに点数順になった取得、`noCandidates` は候補0件で AI を呼ばなかった取得（不具合-10） */
   fetch: object({ count: number(), avgDurationMs: number(), aiUsed: number(), fellBack: number(), noCandidates: number(), fellBackRate: number() }),
   reservations: object({ total: number(), expiredRate: number() }),
+  /**
+   * 店が取り消した確保の数と、そのうち「来ない（枠を戻す）」で取り消した数（2026-09-26 本人選択）。`reservations` の形は
+   * 受け入れ検査 r33 が固定しているので別の項目にした。古い応答には無いので任意
+   */
+  storeCancels: optional(object({ total: number(), noShow: number() })),
   byModel: array(
     object({
       model: nullable(string()),

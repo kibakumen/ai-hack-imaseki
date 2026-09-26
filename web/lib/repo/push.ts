@@ -66,12 +66,14 @@ export const hasPushSubscription = async (db: Db, customerId: string): Promise<b
  * その客の**いちばん新しい**確保の状態（無ければ null）。文面の場面を決めるのに使う。
  * 新しい確保を受け取り直した客には、古い取り消しの文面を返さない——だから状態で絞らず、
  * 最後の1件を取ってから場面に直す（判断は usecases/pushMessage）。
+ * 店の取り消しの理由（`cancel_reason`・migration 0013）も返す——「来ない（枠を戻す）」は別の文面にするため（2026-09-26 本人選択）。
  */
-export const findLatestReservationStatus = async (db: Db, customerId: string): Promise<string | null> => {
+export const findLatestReservationStatus = async (db: Db, customerId: string): Promise<{ status: string; cancelReason: string | null } | null> => {
   const row = await db
-    .prepare(`SELECT status FROM reservations WHERE customer_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1`)
+    .prepare(`SELECT status, cancel_reason FROM reservations WHERE customer_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1`)
     .bind(customerId)
     .first();
-  const status = (row as { status?: unknown } | null)?.status;
-  return typeof status === "string" ? status : null;
+  const found = row as { status?: unknown; cancel_reason?: unknown } | null;
+  if (typeof found?.status !== "string") return null;
+  return { status: found.status, cancelReason: typeof found.cancel_reason === "string" ? found.cancel_reason : null };
 };
