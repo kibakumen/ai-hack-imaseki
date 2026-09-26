@@ -9,12 +9,20 @@ type Db = Deps["db"];
 
 export type EmailVerificationRow = { tokenHash: string; accountId: string; email: string; expiresAtIso: string };
 
-/** 同じアカウントの古い行を消してから1行置く（1つの文にまとめて流す）。 */
+/**
+ * 同じアカウントの古い行を消してから1行置く（1つの文にまとめて流す）。
+ * 置くのは、そのアカウントがまだ在って同じアドレスのときだけ（2026-09-26 の合流の直し・AI判断）——店の退会
+ * （repo/storeWithdrawal）がアカウントと控えの行を消したのと同時に走った発行が、消えたアカウントのメールアドレスを
+ * 控えの行に書き戻さないため。
+ */
 export const replaceEmailVerification = async (db: Db, row: EmailVerificationRow & { createdAtIso: string }): Promise<void> => {
   await db.batch([
     db.prepare(`DELETE FROM email_verifications WHERE account_id = ?1`).bind(row.accountId),
     db
-      .prepare(`INSERT INTO email_verifications (token_hash, account_id, email, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5)`)
+      .prepare(
+        `INSERT INTO email_verifications (token_hash, account_id, email, expires_at, created_at)` +
+          ` SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM accounts WHERE id = ?2 AND email = ?3)`,
+      )
       .bind(row.tokenHash, row.accountId, row.email, row.expiresAtIso, row.createdAtIso),
   ]);
 };

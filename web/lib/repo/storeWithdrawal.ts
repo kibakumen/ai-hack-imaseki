@@ -6,7 +6,7 @@
 // 状況は 'banned' に倒す（承認済みだけを出す読みと承認待ちの数から外れる）。退会したかは `withdrawn_at` で見分ける。
 //
 // 消すもの（1つのまとまり `db.batch`）: 店舗情報・許可書の鍵・カードの控え・承認の写しの店名と住所と許可書・クーポン・
-// 店のアカウントとそのセッション・端末の印とログインの数え（鍵にメールアドレスを含む）。公開中のオファーは終わらせ、
+// 店のアカウントとそのセッション・メールアドレスの確認の控え・端末の印とログインの数え（鍵にメールアドレスを含む）。公開中のオファーは終わらせ、
 // 確保中の確保は「店が取り消した」にする。置き場のファイル（許可書・画像）は手続き（usecases/withdrawStore）が消す。
 // 残すもの: 店の行の番号・登録した時刻・承認した時刻・規約の同意の版と時刻・運営のメモ（運営の書いたもの）、
 // 過去の確保・通報・運営の操作の記録（admin_actions）・取得の記録（5つの表）。
@@ -107,8 +107,9 @@ const forgetEmailCountersStatement = (db: Db, storeId: string, nowIso: string, e
  *   5. 店の確保に写した客の電話番号を空にする（見る店がもう無い）
  *   6. クーポンを消す
  *   7. メールアドレスを鍵に含む数え（端末の印・締め出し）を消す
- *   8. 店のアカウントのセッションを消す（アカウントを指しているので 9 より前）
- *   9. 店のアカウントを消す（メールアドレスが空き、同じアドレスで新しい店を登録できる）
+ *   8. メールアドレスの確認の控え（`email_verifications`・migration 0015。メールアドレスを持つ）を消す（アカウントの番号で選ぶので 10 より前）
+ *   9. 店のアカウントのセッションを消す（アカウントを指しているので 10 より前）
+ *  10. 店のアカウントを消す（メールアドレスが空き、同じアドレスで新しい店を登録できる）
  */
 export const withdrawStoreRecords = async (db: Db, input: WithdrawStoreInput): Promise<WithdrawStoreResult> => {
   const { storeId, nowIso } = input;
@@ -122,6 +123,9 @@ export const withdrawStoreRecords = async (db: Db, input: WithdrawStoreInput): P
     clearCustomerPhonesOfWithdrawnStoreStatement(db, storeId, nowIso),
     db.prepare(`DELETE FROM coupons WHERE store_id = ?1 AND ${WITHDRAWN_NOW}`).bind(storeId, nowIso),
     ...(input.read.email ? [forgetEmailCountersStatement(db, storeId, nowIso, input.read.email)] : []),
+    db
+      .prepare(`DELETE FROM email_verifications WHERE account_id IN (SELECT id FROM accounts WHERE store_id = ?1 AND role = 'store') AND ${WITHDRAWN_NOW}`)
+      .bind(storeId, nowIso),
     db
       .prepare(`DELETE FROM sessions WHERE account_id IN (SELECT id FROM accounts WHERE store_id = ?1 AND role = 'store') AND ${WITHDRAWN_NOW}`)
       .bind(storeId, nowIso),

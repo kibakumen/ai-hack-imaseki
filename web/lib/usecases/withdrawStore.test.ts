@@ -24,6 +24,8 @@ import {
 } from "../../../tests/acceptance/v2/_fakes";
 import { WITHDRAWN_STORE_NAME } from "../domain/texts";
 import { insertCouponWithinLimit } from "../repo/coupons";
+import { replaceEmailVerification } from "../repo/emailVerifications";
+import { runScheduledGoogleUpkeep } from "./googleUpkeep";
 import { markCardRegistered, updateStoreLicense, updateStoreProfile } from "../repo/stores";
 
 let ctx: Ctx;
@@ -68,10 +70,29 @@ describe("店の退会の入口（基準 13.13〜13.20）", () => {
     const published = await store.api.post("/api/store/offers", { capacity: 2, partyMax: 4, couponIds: store.coupons.map((c) => c.id) });
     expect([200, 201]).toContain(published.status);
     expect(filesOf(store.id).length).toBeGreaterThan(0);
+    // メールアドレスの確認のリンクを送った後の店（migration 0015 の控えの行はメールアドレスを持つ・2026-09-26 の合流の直し）
+    const account = await one(ctx.db, "SELECT id FROM accounts WHERE store_id = ? AND role = 'store'", store.id);
+    await replaceEmailVerification(ctx.db, {
+      tokenHash: "withdraw-test-token-hash",
+      accountId: account?.id as string,
+      email: store.email,
+      expiresAtIso: new Date(Date.parse(T0) + 24 * HOUR).toISOString(),
+      createdAtIso: T0,
+    });
 
     const r = await store.api.post(WITHDRAW, { currentPassword: store.password });
     expect(r.status, r.text).toBe(200);
     expect(r.json).toEqual({ ok: true, cancelled: 0 });
+    expect(await rows(ctx.db, "SELECT token_hash FROM email_verifications WHERE account_id = ?", account?.id)).toEqual([]);
+    // 退会と同時に走った確認メールの発行が、消えたアカウントの控えの行を書き戻さない
+    await replaceEmailVerification(ctx.db, {
+      tokenHash: "withdraw-test-token-hash-late",
+      accountId: account?.id as string,
+      email: store.email,
+      expiresAtIso: new Date(Date.parse(T0) + 24 * HOUR).toISOString(),
+      createdAtIso: T0,
+    });
+    expect(await rows(ctx.db, "SELECT token_hash FROM email_verifications WHERE account_id = ?", account?.id)).toEqual([]);
     // 端末のセッションの Cookie も消す（Max-Age=0）
     expect(r.setCookies.some((c) => /Max-Age=0/i.test(c))).toBe(true);
 
@@ -105,7 +126,7 @@ describe("店の退会の入口（基準 13.13〜13.20）", () => {
     const offer = await one(ctx.db, "SELECT ended_at, end_reason FROM offers WHERE id = ?", published.json.offer.id);
     expect(offer?.ended_at).toBeTruthy();
     expect(offer?.end_reason).toBe("withdrawn");
-    // 店のメールアドレス・住所・URL は D1 のどこにも残らない（端末の印の行も消える）
+    // 店のメールアドレス・住所・URL は D1 のどこにも残らない（端末の印の行も、メールアドレスの確認の控えの行も消える）
     const all = await snapshot(ctx.db);
     expect(all).not.toContain(store.email);
     expect(all).not.toContain(store.profile.address);
@@ -145,6 +166,11 @@ describe("店の退会の入口（基準 13.13〜13.20）", () => {
 
     expect(await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", scene.reservation.id)).toMatchObject({ status: "store_cancelled" });
     expect(await rows(ctx.db, "SELECT id FROM reservation_events WHERE reservation_id = ? AND status = 'store_cancelled'", scene.reservation.id)).toHaveLength(1);
+    // 退会の取り消しは「来ない（枠が戻る）」ではない（migration 0013・基準 18.16）: 理由は空（店の都合）で、枠は押さえたまま。
+    // オファーごと同じまとまりで終わるので、枠が戻らないことは客に見えない（2026-09-26 の合流の直し）
+    expect(await one(ctx.db, "SELECT cancel_reason, holds_slot FROM reservations WHERE id = ?", scene.reservation.id)).toMatchObject({ cancel_reason: null, holds_slot: 1 });
+    expect(await rows(ctx.db, "SELECT reason FROM reservation_events WHERE reservation_id = ? AND status = 'store_cancelled'", scene.reservation.id)).toEqual([{ reason: null }]);
+    expect(await one(ctx.db, "SELECT ended_at, end_reason FROM offers WHERE id = ?", scene.offer.id)).toMatchObject({ end_reason: "withdrawn" });
     expect(ctx.push.calls.length).toBe(pushesBefore + 1);
     // 知らせの文面は「お店の都合で取り消された」（運営の都合ではない）
     const message = await scene.customer.api.get("/api/customer/push-message");
@@ -265,5 +291,27 @@ describe("店の退会の入口（基準 13.13〜13.20）", () => {
     const temp = ctx.api(login.setCookies[0]!.split(";")[0]!);
     expect((await temp.post(WITHDRAW, { currentPassword: issued.json.tempPassword })).status).toBe(403);
     expect(await rows(ctx.db, "SELECT id FROM accounts WHERE store_id = ?", store.id)).toHaveLength(1);
+  });
+});
+
+describe("退会した店と Google の座標の手入れ（2026-09-26 の合流の直し・Service Specific Terms 6.3.1）", () => {
+  it("退会で店の座標と取った時刻が消え、手入れと定期実行は退会した店に触れない（地図にも聞かない）", async () => {
+    const store = await approvedStore(ctx, { name: "座標のある退会する店" });
+    // 30日を過ぎた Google の座標を持つ店（取り直しと消去の両方の対象になる形）
+    const overdue = new Date(Date.parse(T0) - 31 * 24 * HOUR).toISOString();
+    await ctx.db.prepare("UPDATE stores SET lat = 35.1, lng = 139.1, geocoded_at = ?2 WHERE id = ?1").bind(store.id, overdue).run();
+    expect((await store.api.post(WITHDRAW, { currentPassword: store.password })).status).toBe(200);
+
+    const erased = await one(ctx.db, "SELECT * FROM stores WHERE id = ?", store.id);
+    expect(erased).toMatchObject({ address: null, lat: null, lng: null, geocoded_at: null });
+
+    const asked: string[] = [];
+    await ctx.db.prepare("DELETE FROM rate_counters WHERE key LIKE 'upkeep:%'").run();
+    await runScheduledGoogleUpkeep({
+      ...ctx.deps,
+      geocoder: { geocode: async (text) => (asked.push(text), { ok: true, lat: 35.6, lng: 139.7 }) },
+    });
+    expect(asked).not.toContain(store.profile.address);
+    expect(await one(ctx.db, "SELECT * FROM stores WHERE id = ?", store.id)).toEqual(erased);
   });
 });
