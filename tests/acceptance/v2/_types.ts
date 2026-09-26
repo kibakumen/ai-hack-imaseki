@@ -83,6 +83,12 @@ export type FileStore = {
   /** 前置きで始まる鍵の一覧（任意。営業許可書の掃除が使う・2026-09-25 安全-20 のレビュー） */
   list?(prefix: string): Promise<string[]>;
 };
+/**
+ * メールを1通送る口（任意の口・2026-09-26 に枝 feat/email-verify から取り込んだ）。本番は秘密 RESEND_API_KEY と MAIL_FROM の
+ * 両方が在るときだけ持つ。持たない場面（受け入れ検査の既定・鍵を入れていない公開先）では、メールアドレスの確認の入口は
+ * 404 not_found で無いのと同じに見え、店のホームに `emailVerified` が載らない。`signal` は打ち切りの合図。
+ */
+export type Mailer = { send(message: { to: string; subject: string; text: string }, opts: { signal?: AbortSignal }): Promise<{ ok: true } | { ok: false }> };
 export type AppConfig = { turnstileSiteKey: string; vapidPublicKey: string; contactEmail: string | null; orcarouterModel: string };
 
 export type Deps = {
@@ -95,6 +101,7 @@ export type Deps = {
   push: PushSender;
   card: CardRegistrar;
   human: HumanCheck;
+  mailer?: Mailer;
   logger: Logger;
   clock: Clock;
   rng: Rng;
@@ -162,6 +169,8 @@ export type StoreHomeDto = {
   trend: Array<{ at: string; shown: number; received: number }>;
   /** カードの登録を始めた（決済会社の画面を開いた）が、まだ確かめていない。画面は開いたときに確かめを1回送る（2026-09-25 不具合-01） */
   cardSetupPending: boolean;
+  /** メールアドレスを確認済みか。メールを送る口（`Deps.mailer`）が在るときだけ載る（2026-09-26 取り込み） */
+  emailVerified?: boolean;
 };
 export type OfferDto = {
   id: string;

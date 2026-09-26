@@ -92,10 +92,11 @@ const jsonOf = async (res: Response) => (await res.json()) as { ok: boolean; err
 
 const LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /**
- * 外のサービスの口（地図・AI・紹介文・外への取得・Stripe・Web プッシュ）。人かどうかの確かめ（Turnstile）は
+ * 外のサービスの口（地図・AI・紹介文・外への取得・Stripe・Web プッシュ・メールの送信）。人かどうかの確かめ（Turnstile）は
  * 手続きでなく defineRoute が呼ぶので、下で「human の入口は全部表に載っている」として別に見る。
+ * メールの送信（`mailer`・Resend）は 2026-09-26 に足した（枝 feat/email-verify の取り込み）。
  */
-const BILLED_PORT = /\bdeps\.(geocoder|ai|pitch|storeImage|card|push)\b/;
+const BILLED_PORT = /\bdeps\.(geocoder|ai|pitch|storeImage|card|push|mailer)\b/;
 
 /** ファイルの最上位の宣言（const・function）を、名前 → 本文に分ける */
 const topLevelDeclarations = (text: string): Map<string, string> => {
@@ -283,6 +284,8 @@ describe("抑止を掛ける入口と鍵", () => {
       "PUT /api/store/profile",
       "POST /api/store/card/setup",
       "POST /api/store/reservations/:id/cancel",
+      "POST /api/store/email/verify",
+      "POST /api/admin/email/verify",
     ]) {
       expect(found, route).toContain(route);
     }

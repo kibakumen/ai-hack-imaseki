@@ -21,6 +21,10 @@ const STATUS_BY_KIND: Record<ServerRefusalKind, number> = {
   file_too_large: 400,
   place_unresolved: 400,
   human_check_failed: 400,
+  // 確認のリンクが期限切れ・使用済み・無い（在る無しを教えない同じ語・メールアドレスの確認・2026-09-26 取り込み）
+  verification_failed: 400,
+  // 確認メールの送り先が登録しているアドレスと違う（入れ直せば通る）
+  email_mismatch: 400,
   // 見分け
   login_failed: 401,
   unauthenticated: 401,
@@ -48,6 +52,9 @@ const STATUS_BY_KIND: Record<ServerRefusalKind, number> = {
   body_too_large: 413,
   rate_limited: 429,
   internal: 500,
+  // 外のサービス（メールの送信・Resend）が断った・届かなかった・打ち切った（メールアドレスの確認・2026-09-26 取り込み）。
+  // こちらの誤りではなく、入れ直しても直らないので 4xx にしない。
+  mail_not_sent: 502,
 };
 
 /** 断りの語の状態コード。 */

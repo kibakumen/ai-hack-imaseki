@@ -71,9 +71,26 @@ export const listAdminAccounts = async (db: Db): Promise<AdminSummary[]> => {
   return ((result.results ?? []) as Array<Record<string, unknown>>).map((row) => ({ id: row.id as string, email: row.email as string }));
 };
 
-/** メールアドレスだけを置き換える（2026-09-22 追加）。重複は表の UNIQUE が例外で教える（呼ぶ側が受ける）。 */
+/**
+ * メールアドレスだけを置き換える（2026-09-22 追加）。重複は表の UNIQUE が例外で教える（呼ぶ側が受ける）。
+ * 運営の投入（usecases/seedAdmin・本番へ流す文を出す）も使うので、migration 0015 の列には触れない——
+ * 0015 を当てる前の本番でも、乗っ取られた運営を取り返す文が流れるように（2026-09-26 取り込みのときの AI判断）。
+ */
 export const updateAccountEmail = async (db: Db, accountId: string, email: string): Promise<void> => {
   await db.prepare(`UPDATE accounts SET email = ?2 WHERE id = ?1`).bind(accountId, email).run();
+};
+
+/**
+ * 本人が画面からメールアドレスを変える（usecases/changeEmail）。重複は表の UNIQUE が例外で教える。
+ * 別のアドレスへ変えたら「確認した時刻」（migration 0015 の列）を NULL に戻す——新しいアドレスはまだ確認していない。
+ * 同じアドレス（大小の違いだけを含む）への「変更」では確認済みを残す（手続きは同じ値でも書くため）。
+ * メールを送る口の有無にかかわらず書く（列が在れば害は無い・2026-09-26 に枝 feat/email-verify から取り込んだ）。
+ */
+export const changeOwnAccountEmail = async (db: Db, accountId: string, email: string): Promise<void> => {
+  await db
+    .prepare(`UPDATE accounts SET email = ?2, email_verified_at = CASE WHEN email = ?2 COLLATE NOCASE THEN email_verified_at ELSE NULL END WHERE id = ?1`)
+    .bind(accountId, email)
+    .run();
 };
 
 /** 1つの文にまとめて流すための文（店の登録は店・アカウント・セッションを1度に書く）。 */

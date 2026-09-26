@@ -15,6 +15,7 @@ import { useLoad } from "../../lib/client/useLoad";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
 import { LoadView } from "../ui/LoadState";
 import { ArrivalsList } from "./ArrivalsList";
+import { EmailVerifyBanner } from "./EmailVerifyBanner";
 import { confirmCardSetup, takeAutoConfirmTurn } from "./cardReturn";
 import { SoundUnlock } from "./SoundUnlock";
 import { useArrivalSignals, type ArrivalSignals } from "./useArrivalSignals";
@@ -64,6 +65,9 @@ const HomeBody = ({ home, onChanged, signals, updatedAt }: HomeBodyProps) => {
   return (
     <>
       <StatusBanner status={home.status} />
+
+      {/* メールアドレスの確認（2026-09-26 に枝 feat/email-verify から取り込んだ）。`false` のときだけ——項目が無い（鍵を入れていない）なら出ない。 */}
+      {home.emailVerified === false && <EmailVerifyBanner endpoint="POST /api/store/email/verify" />}
 
       {home.status === "pending" && <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />}
 

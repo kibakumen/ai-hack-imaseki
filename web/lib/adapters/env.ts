@@ -21,6 +21,13 @@ export type Secrets = {
   stripeSecretKey: string;
   vapidPrivateKey: string;
   turnstileSecretKey: string;
+  /**
+   * メールを送る口の2つ（2026-09-22 追加・メールアドレスの確認）。**両方**が在るときだけ
+   * adapters/deps が `mailer` を組む。どちらかが空なら確認の機能は丸ごと無い（機能フラグ）。
+   * 送信元アドレスは公開の値ではないが、`wrangler.jsonc` の vars は3つ固定（構造の検査）なので秘密側に置く。
+   */
+  resendApiKey: string;
+  mailFrom: string;
 };
 
 export type Env = { config: AppConfig; secrets: Secrets };
@@ -48,6 +55,8 @@ export const readEnv = (env: RawEnv): Env => ({
     stripeSecretKey: text(env.STRIPE_SECRET_KEY) ?? "",
     vapidPrivateKey: text(env.VAPID_PRIVATE_KEY) ?? "",
     turnstileSecretKey: text(env.TURNSTILE_SECRET_KEY) ?? "",
+    resendApiKey: text(env.RESEND_API_KEY) ?? "",
+    mailFrom: text(env.MAIL_FROM) ?? "",
   },
 });
 
