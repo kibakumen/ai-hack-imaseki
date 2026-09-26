@@ -66,6 +66,13 @@ describe("メールを送る口が無い（受け入れ検査の既定・鍵を�
     expect(await snapshot(ctx.db, { except: ["rate_counters", "sessions"] })).toBe(before);
   });
 
+  // 2026-09-26 本人選択（AI提示）: 運営のアカウントの画面にも確認の案内を置く。確認の状態を読む入口も、口が無ければ 404（画面に帯が出ない）
+  it("運営の確認の状態を読む入口（GET /api/admin/email/verify）も 404 not_found", async () => {
+    const r = await ctx.admin!.api.get("/api/admin/email/verify");
+    expect(r.status).toBe(404);
+    expect(r.json).toEqual({ ok: false, error: { kind: "not_found" } });
+  });
+
   it("口が無い入口への要求は、連打の抑止の数を減らさない（数える前に 404）", async () => {
     const s = await registerStore(ctx);
     for (let i = 0; i < EMAIL_VERIFY_RATE_LIMIT + 1; i++) expect((await s.api.post("/api/store/email/verify", { email: s.email })).status).toBe(404);
@@ -208,6 +215,25 @@ describe("メールを送る口が在る", () => {
     expect((await ctx.api().get(`/api/auth/verify-email?token=${encodeURIComponent(token)}`)).status).toBe(400);
     const acc = await ctx.db.prepare("SELECT email_verified_at FROM accounts WHERE email = ?1").bind("unei-2@example.com").first();
     expect(acc.email_verified_at).toBeNull();
+  });
+
+  it("運営の確認の状態を読む入口は、確認する前は verified:false・リンクを開いたあとは true。店のセッションは 403・未ログインは 401。応答は形の表どおり", async () => {
+    const admin = ctx.admin!;
+    // 前の検査がアドレスを変えていることがあるので、今のアドレスを表から読む（変えたあとは未確認に戻っている）
+    const { email } = await ctx.db.prepare("SELECT email FROM accounts WHERE role = 'admin' LIMIT 1").first();
+    const before = await admin.api.get("/api/admin/email/verify");
+    expect(before.status).toBe(200);
+    expect(before.json).toEqual({ ok: true, verified: false });
+    expect(RESPONSES["GET /api/admin/email/verify"].safeParse(before.json).success).toBe(true);
+    mailer.result = { ok: true };
+    const sentBefore = mailer.sent.length;
+    expect((await admin.api.post("/api/admin/email/verify", { email })).status).toBe(200);
+    const token = tokenIn(mailer.sent[sentBefore]);
+    expect((await ctx.api().get(`/api/auth/verify-email?token=${encodeURIComponent(token)}`)).status).toBe(200);
+    expect((await admin.api.get("/api/admin/email/verify")).json).toEqual({ ok: true, verified: true });
+    const s = await registerStore(ctx);
+    expect((await s.api.get("/api/admin/email/verify")).status).toBe(403);
+    expect((await ctx.api().get("/api/admin/email/verify")).status).toBe(401);
   });
 
   it("確認メールの送り直しは、同じアカウントで1時間に上限まで。次は 429 で、外へは送らない", async () => {

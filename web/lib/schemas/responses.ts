@@ -367,6 +367,8 @@ export const RESPONSES = {
   "GET /api/admin/metrics": adminMetrics,
   "POST /api/admin/email": done,
   "POST /api/admin/email/verify": done,
+  /** 運営の確認の状態（2026-09-26・運営のアカウントの画面の確認の案内）。メールを送る口が無ければ入口ごと 404 */
+  "GET /api/admin/email/verify": object({ ok, verified: boolean() }),
   "POST /api/admin/password": done,
 } as const satisfies Record<string, ZodMiniType>;
 
