@@ -14,6 +14,8 @@
 //   - 設計書どおり「点数順で出した割合」「予備のモデルが答えた割合」を出し、各数字に1行の説明を付ける（運営-08）
 //   - 候補0件で AI を呼ばなかった取得を、点数順で出した取得と別の行にする（不具合-10）
 //   - 内部の言い方（「倒れた」「受け皿」）を画面に出さない（運営-08）
+//
+// 2026-09-26 本人選択（AI提示）: 効果を示す数字を「来店した割合（確保のうち完了済み）」に決め、最上段に置いた（要件33）。
 
 import { callApi, type AdminMetricsDto, type ApiFailure } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
@@ -92,7 +94,23 @@ const Bar = ({ label, valueLabel, ratio }: { label: string; valueLabel: string; 
 /** 呼び出しが1件も無いときに出す文（本人の指示: 0 の棒を並べない）。 */
 const NoCallsYet = () => <p className={styles.noData}>まだ呼び出しがありません</p>;
 
-/** いちばん上の実費の合計（運営-08）。「今日いくら使ったか」を最初に見せる。 */
+/**
+ * 最上段の「来店した割合」（効果を示す数字・要件33・2026-09-26 本人選択（AI提示））。もう終わった確保のうち完了済みの割合。
+ * 見た目は実費の合計の札と同じ作り。古い応答（`visits` が無い）では「—」と出す。
+ */
+const VisitRate = ({ data }: { data: MetricsResponse }) => (
+  <dl data-testid="visit-rate" className={styles.summaryTiles}>
+    <div className={styles.tile}>
+      <dt className={styles.tileLabel}>来店した割合</dt>
+      <dd className={`${styles.tileValue} ${styles.tabularNums}`}>{data.visits ? percent(data.visits.rate) : "—"}</dd>
+      <dd className={styles.tileLabel}>
+        {data.visits ? `終わった確保 ${data.visits.settled} 件のうち、完了済み ${data.visits.completed} 件（向かっている途中の確保は入れません）` : "まだ数えていません"}
+      </dd>
+    </div>
+  </dl>
+);
+
+/** 実費の合計（運営-08）。「今日いくら使ったか」を来店した割合のすぐ下に見せる。 */
 const CostTotals = ({ data }: { data: MetricsResponse }) => (
   <dl data-testid="cost-totals" className={styles.summaryTiles}>
     <div className={styles.tile}>
@@ -224,6 +242,7 @@ export const Metrics = () => {
                 読み直す
               </button>
             </p>
+            <VisitRate data={data} />
             <CostTotals data={data} />
             <ByModelSection rows={data.byModel} fallbackCount={data.fallbackCount} fallbackRate={data.fallbackRate} />
             {/* 古い形の応答は `byPurpose` を持たない——無ければ空として扱う（0件と同じ「まだ呼び出しがありません」表示）。 */}

@@ -135,6 +135,15 @@ describe("運営の数字（要件33の基準 33.4）", () => {
     expect(m.json.reservations.expiredRate).toBeCloseTo(1 / 3, 9);
   });
 
+  // 2026-09-26 本人選択（AI提示）: 効果を示す数字は「来店した割合」。数字の画面の最上段に置く（要件33）
+  it("来店した割合は、もう終わった確保のうち完了済みの割合。まだ確保中の行は分母に入れない。時間が進むと分母が増える", async () => {
+    ctx.clock.set(T0);
+    expect((await admin.get("/api/admin/metrics")).json.visits).toEqual({ completed: 1, settled: 3, rate: 1 / 3 });
+    ctx.clock.set(at(31 * MINUTE));
+    expect((await admin.get("/api/admin/metrics")).json.visits).toEqual({ completed: 1, settled: 4, rate: 1 / 4 });
+    ctx.clock.set(T0);
+  });
+
   it("時間が進んで期限を過ぎた確保が増えると、割合も増える（期限切れは列に持たず時刻から導く）", async () => {
     ctx.clock.set(at(31 * MINUTE));
     const m = await admin.get("/api/admin/metrics");
@@ -179,6 +188,7 @@ describe("記録がまだ1行も無いとき（タスク11 が記録を足す前
       expect(m.json.ai).toEqual({ calls: 0, avgCostUsd: 0, avgDurationMs: 0, succeeded: 0, failed: 0 });
       expect(m.json.fetch).toEqual({ count: 0, avgDurationMs: 0, aiUsed: 0, fellBack: 0, noCandidates: 0, fellBackRate: 0 });
       expect(m.json.reservations).toEqual({ total: 0, expiredRate: 0 });
+      expect(m.json.visits).toEqual({ completed: 0, settled: 0, rate: 0 });
       expect(m.json.cost).toEqual({ totalUsd: 0, totalCalls: 0, todayUsd: 0, todayCalls: 0 });
       expect(m.json.fallbackRate).toBe(0);
     } finally {

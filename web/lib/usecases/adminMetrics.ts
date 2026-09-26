@@ -56,6 +56,12 @@ export type AdminMetrics = {
   fetch: { count: number; avgDurationMs: number; aiUsed: number; fellBack: number; noCandidates: number; fellBackRate: number };
   /** `expiredRate` は、もう終わった確保のうち自動で取り消された（期限切れの）割合。0〜1 の小数で返す */
   reservations: { total: number; expiredRate: number };
+  /**
+   * 来店した割合（効果を示す数字・2026-09-26 本人選択（AI提示）・画面の最上段）。`rate` は、もう終わった確保（`settled`・
+   * まだ確保中の行を除く）のうち完了済み（`completed`）の割合。分母は自動で取り消された割合と同じ（AI判断: 向かっている途中の
+   * 客を「来なかった」側に数えると、昼のピークほど割合が低く見える）。0〜1 の小数
+   */
+  visits: { completed: number; settled: number; rate: number };
   /** 店が取り消した確保の数と、そのうち「来ない（枠を戻す）」で取り消した数（2026-09-26 本人選択） */
   /** 店が選んだキャンセル（`total`）・そのうち来店なし（`noShow`）・退会でキャンセル（`withdrawn`。`total` に入れない・2026-09-26 本人選択） */
   storeCancels: { total: number; noShow: number; withdrawn: number };
@@ -90,6 +96,7 @@ export const adminMetrics = async (deps: Deps): Promise<AdminMetrics> => {
     ai,
     fetch: { ...fetch, fellBackRate: rateOf(fetch.fellBack, fetch.count - fetch.noCandidates) },
     reservations: { total: reservations.total, expiredRate: rateOf(reservations.expired, reservations.settled) },
+    visits: { completed: reservations.completed, settled: reservations.settled, rate: rateOf(reservations.completed, reservations.settled) },
     storeCancels: { total: reservations.storeCancelled, noShow: reservations.noShowCancelled, withdrawn: reservations.withdrawnCancelled },
     byModel,
     byPurpose,

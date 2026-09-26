@@ -66,4 +66,20 @@ describe("数字の画面", () => {
     const descriptions = grid.querySelectorAll("[data-testid='metric-help']");
     expect(descriptions.length).toBe(grid.querySelectorAll("dt").length);
   });
+
+  // 2026-09-26 本人選択（AI提示）: 効果を示す数字は「来店した割合（確保のうち完了済み）」。数字の画面の最上段に置く（要件33）
+  it("最上段（実費の合計より上）に、来店した割合と、その件数（完了済み／終わった確保）が出る", async () => {
+    api = installFakeApi({ "GET /api/admin/metrics": () => ({ json: metrics({ visits: { completed: 12, settled: 40, rate: 0.3 } }) }) });
+    render(<Metrics />);
+    const visit = await screen.findByTestId("visit-rate");
+    expect(visit.textContent).toMatch(/来店した割合/);
+    expect(visit.textContent).toMatch(/30%/);
+    expect(visit.textContent).toMatch(/12/);
+    expect(visit.textContent).toMatch(/40/);
+    const totals = screen.getByTestId("cost-totals");
+    expect(visit.compareDocumentPosition(totals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const main = screen.getByRole("main");
+    const firstBlock = [...main.children].find((child) => child.tagName !== "H1" && child.getAttribute("data-testid") !== null && child.getAttribute("data-testid") !== "metrics-toolbar");
+    expect(firstBlock?.getAttribute("data-testid")).toBe("visit-rate");
+  });
 });

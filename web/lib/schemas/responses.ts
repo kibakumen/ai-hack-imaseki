@@ -261,6 +261,8 @@ const adminMetrics = object({
   /** `fellBack` は候補が在るのに点数順になった取得、`noCandidates` は候補0件で AI を呼ばなかった取得（不具合-10） */
   fetch: object({ count: number(), avgDurationMs: number(), aiUsed: number(), fellBack: number(), noCandidates: number(), fellBackRate: number() }),
   reservations: object({ total: number(), expiredRate: number() }),
+  /** 来店した割合（効果を示す数字・2026-09-26 本人選択（AI提示））。古い応答には無いので任意 */
+  visits: optional(object({ completed: number(), settled: number(), rate: number() })),
   /**
    * 店が取り消した確保の数と、そのうち「来ない（枠を戻す）」で取り消した数（2026-09-26 本人選択）。`reservations` の形は
    * 受け入れ検査 r33 が固定しているので別の項目にした。古い応答には無いので任意
