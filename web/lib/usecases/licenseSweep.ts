@@ -27,7 +27,7 @@ export const LICENSE_KEY_PREFIX = "licenses/";
 const IN_FLIGHT_GRACE_MS = 60 * 60 * 1000;
 /** 掃除の間引き（1日に1回・AI判断） */
 const SWEEP_KEY = "upkeep:license-orphans";
-const SWEEP_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const SWEEP_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** 鍵の3つ目の区切りの頭の、置いた時刻（ミリ秒・13桁） */
 const PLACED_AT = /^licenses\/[^/]+\/(\d{13})-/;
 

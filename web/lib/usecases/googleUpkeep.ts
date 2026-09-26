@@ -43,7 +43,7 @@ const REGEOCODE_AFTER_DAYS = 25;
 const REGEOCODE_PER_RUN = 5;
 /** 手入れの間引き（連打の抑止と同じ表 rate_counters に、この鍵で1時間に1回だけ通す） */
 const UPKEEP_KEY = "upkeep:google-terms";
-const UPKEEP_WINDOW_MS = 60 * 60 * 1000;
+export const UPKEEP_WINDOW_MS = 60 * 60 * 1000;
 
 /** 取り直しの答え。`not_found` は住所のせい（取り直しても直らない）、`unavailable` は外の障害（また試す） */
 type RegeocodeAnswer = { kind: "found"; lat: number; lng: number } | { kind: "not_found" } | { kind: "unavailable" };

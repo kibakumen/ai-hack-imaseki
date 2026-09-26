@@ -10,6 +10,7 @@
 // ——同じ書式なので辞書順と時刻の順が一致する。「今」は呼ぶ側が束縛する（SQLite の datetime('now') は使わない）。
 
 import type { Deps } from "../ports";
+import { changedRows } from "./d1";
 
 type Db = Deps["db"];
 
@@ -61,6 +62,16 @@ export const hitRateCounter = async (db: Db, key: string, hit: RateHit): Promise
  */
 export const refundRateCounter = async (db: Db, key: string, windowStartIso: string): Promise<void> => {
   await db.prepare(`UPDATE rate_counters SET count = count - 1 WHERE key = ?1 AND window_start = ?2 AND count > 0`).bind(key, windowStartIso).run();
+};
+
+/**
+ * 窓の始まりが `beforeIso` 以前の行を全部消し、消した行の数を返す（1日1回の定期実行・usecases/rateCounterSweep）。
+ * 鍵に接続元や日付を含む行（`aiLineDaily:<IP>:<日>` など）は、窓が明けても誰も消さずに増え続けていた
+ * （2026-09-26 独立したレビューの指摘）。窓の始まりが今より後の壊れた行（数字で始まらない値を含む）は、ここでは触らない。
+ */
+export const deleteRateCountersBefore = async (db: Db, beforeIso: string): Promise<number> => {
+  const result = await db.prepare(`DELETE FROM rate_counters WHERE window_start <= ?1`).bind(beforeIso).run();
+  return changedRows(result);
 };
 
 /** その鍵の数を消す（ログインが通ったとき＝失敗の続きが切れたとき・基準 30.4 の「続く」）。 */

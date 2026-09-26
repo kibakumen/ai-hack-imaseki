@@ -270,6 +270,13 @@ export const LOGIN_IP_FAILURE_LIMIT = 30;
  * 同じ回線の他人が30回間違えても、その回線の店と運営が締め出されないように。通るたびに期間を延ばす。
  */
 export const LOGIN_DEVICE_TRUST_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * 数えの表 rate_counters の行を残す長さ（2026-09-26 独立したレビューの指摘・AI判断）。1日1回の定期実行（lib/scheduled）が、
+ * 窓の始まりがこれより古い行を消す。**実際に使われている規則のいちばん長い窓**にする——今は端末の印の信頼期間（30日）で、
+ * 入口の抑止（最長1時間）・回線ごとの AI の取り分と地図の上限（2日）・間引き（1日）はどれもこれより短い。
+ * これより短くすると、窓の中の数え（まだ効いている端末の印）まで消える。一致は web/tests/rateCounterSweep.test.ts が見張る。
+ */
+export const RATE_COUNTER_RETENTION_MS = LOGIN_DEVICE_TRUST_MS;
 /** 端末の印のバイト数（16バイト＝22字の base64url。セッションと同じ強さ） */
 export const LOGIN_DEVICE_BYTES = 16;
 /**

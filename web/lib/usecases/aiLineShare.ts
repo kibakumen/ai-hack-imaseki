@@ -20,7 +20,7 @@ import { hitRateCounter } from "../repo/rateCounters";
 import { AI_LINE_DAILY_CALL_LIMIT } from "../schemas/limits";
 import { startOfJstDayIso } from "./aiBudget";
 
-const COUNTER_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
+export const COUNTER_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
 
 /** その回線のその日の AI の数えを、1回ぶん足してから「呼んでよいか」を返す口。 */
 export type AiLineMeter = { take: () => Promise<boolean> };

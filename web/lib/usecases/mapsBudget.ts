@@ -14,7 +14,7 @@ import { hitRateCounter } from "../repo/rateCounters";
 import { MAPS_DAILY_CALL_LIMIT } from "../schemas/limits";
 import { startOfJstDayIso } from "./aiBudget";
 
-const COUNTER_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
+export const COUNTER_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
 
 /** その時刻を含む日本時間の1日の数えの鍵。 */
 export const mapsDailyKey = (now: Date): string => `mapsDaily:${startOfJstDayIso(now)}`;
