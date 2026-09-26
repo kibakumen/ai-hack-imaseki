@@ -220,7 +220,7 @@ describe("読み上げと焦点（客-08）", () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
     expect(screen.getByTestId("view-store_cancelled")).toBeTruthy();
-    expect(liveText()).toMatch(/取り消されました/);
+    expect(liveText()).toMatch(/キャンセルされました/);
   });
 });
 

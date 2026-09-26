@@ -11,7 +11,7 @@ type AdminCancelledViewProps = {
 };
 
 /** 見出しと読み上げ（liveMessages）に同じ文を使う。運営の操作の呼び方は TERMS の「登録を取り消す」（横断-11） */
-export const ADMIN_CANCELLED_TEXT = "運営がこのお店の登録を取り消したため、確保が取り消されました";
+export const ADMIN_CANCELLED_TEXT = "運営がこのお店の登録を取り消したため、確保がキャンセルされました";
 
 export const AdminCancelledView = ({ reservation, onSearchAgain }: AdminCancelledViewProps) => (
   <section data-testid="view-admin_cancelled">

@@ -160,7 +160,7 @@ const MESSAGE_URL = "/api/customer/push-message";
 /** 通知を押したときに開く画面（優先の順の4で取り消しの表示が出る・基準 22.12） */
 const APP_URL = "/me";
 /** 文面が取れなかったときの共通の文（送るのは取り消しの2つの場面だけなので、これで足りる） */
-const FALLBACK_NOTICE = { title: "確保が取り消されました", body: "席の確保が取り消されました。アプリを開いて確かめてください。" };
+const FALLBACK_NOTICE = { title: "確保がキャンセルされました", body: "席の確保がキャンセルされました。アプリを開いて確かめてください。" };
 
 const readNotice = async () => {
   try {

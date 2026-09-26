@@ -97,7 +97,7 @@ describe("確保中の表示の2つの操作", () => {
     fireEvent.click(within(form).getByTestId("btn-change-party"));
 
     await waitFor(() => expect(within(form).getByTestId("msg-form")).toBeTruthy());
-    expect(within(form).getByTestId("msg-form").textContent).toMatch(/受け入れ|取り消し/);
+    expect(within(form).getByTestId("msg-form").textContent).toMatch(/受け入れ|キャンセル/);
     expect(within(form).getByTestId("msg-form").textContent).toMatch(/探し直/);
     expect(within(form).queryByTestId("msg-party")).toBeNull();
   });

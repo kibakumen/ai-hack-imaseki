@@ -39,7 +39,7 @@ describe("来店なしとして取り消された表示", () => {
     });
     render(<CustomerApp />);
     const view = await screen.findByTestId("view-store_cancelled");
-    expect(view.textContent).toMatch(/来店なしとして取り消しました/);
+    expect(view.textContent).toMatch(/来店なしでキャンセルしました/);
     expect(view.textContent).not.toMatch(/店の都合/);
   });
 });

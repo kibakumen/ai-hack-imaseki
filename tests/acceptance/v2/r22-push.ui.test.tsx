@@ -44,7 +44,7 @@ describeTask("19", "通知の許可の求め", () => {
     const prompt = await screen.findByTestId("push-prompt");
     expect(prompt.textContent).toMatch(/店/);
     expect(prompt.textContent).toMatch(/運営/);
-    expect(prompt.textContent).toMatch(/取り消され/);
+    expect(prompt.textContent).toMatch(/キャンセルされ/);
     expect(prompt.textContent).toMatch(/だけ/);
     expect(prompt.textContent).toMatch(/届かない/);
     expect(prompt.textContent).toMatch(/開/);

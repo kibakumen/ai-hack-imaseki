@@ -132,7 +132,7 @@ describeTask("19", "Web プッシュを送る場面と送らない場面", () =>
     expect(shown.at(-1).title).toBe("運営が停止");
     fetchMode = "fail";
     await waitUntil(listeners.push);
-    expect(shown.at(-1).body).toMatch(/取り消されました/);
+    expect(shown.at(-1).body).toMatch(/キャンセルされました/);
     expect(shown.at(-1).body).toMatch(/開いて/);
     await waitUntil(listeners.notificationclick);
     expect(opened.at(-1)).toMatch(/\/me$/);

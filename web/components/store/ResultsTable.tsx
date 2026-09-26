@@ -67,7 +67,7 @@ const TotalsCard = ({ title, totals }: { title: string; totals: Totals }) => (
   <section className="store-card store-results__total">
     <h2>
       {title}
-      <span className="store-note">（公開 {totals.offers} 件・取り消し {totals.cancelled} 組）</span>
+      <span className="store-note">（公開 {totals.offers} 件・キャンセル {totals.cancelled} 組）</span>
     </h2>
     <Funnel shown={totals.shown} received={totals.received} completed={totals.completed} />
   </section>
@@ -100,7 +100,7 @@ const ResultCard = ({ item }: { item: ResultRow }) => (
     </p>
     <Funnel shown={item.shown} received={item.received} completed={item.completed} />
     <p className="store-note">
-      取り消し {item.cancelled.total}（客 {item.cancelled.customer}・期限 {item.cancelled.expired}・店 {item.cancelled.store}・運営 {item.cancelled.admin}）
+      キャンセル {item.cancelled.total}（客 {item.cancelled.customer}・期限 {item.cancelled.expired}・店 {item.cancelled.store}・運営 {item.cancelled.admin}）
     </p>
   </li>
 );

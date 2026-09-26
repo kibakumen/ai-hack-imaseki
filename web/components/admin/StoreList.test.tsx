@@ -91,7 +91,7 @@ describe("カードの数値の札と件数（運営-10・運営-11・運営-05�
     expect(card.textContent).toMatch(/受け取り 5 件/);
     expect(card.textContent).toMatch(/予算 1200円〜/);
     expect(card.textContent).toMatch(/残り 3 枠/);
-    expect(card.textContent).toMatch(/店の取り消し 2 回（40%）/);
+    expect(card.textContent).toMatch(/店のキャンセル 2 回（40%）/);
     expect(within(card).getByTestId("stat-claims").getAttribute("data-active")).toBe("true");
     expect(within(card).getByTestId("stat-created").getAttribute("data-active")).toBe("false");
   });

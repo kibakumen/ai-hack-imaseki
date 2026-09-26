@@ -69,7 +69,7 @@ const confirmTextOf = (action: ArrivalAction, row: ArrivalsListRow): string => {
   if (action === "complete") return ARRIVALS_TEXTS.confirmComplete(ARRIVALS_TEXTS.who(row.nickname), row.party, row.code);
   return action === "store-no-show" ? ARRIVALS_TEXTS.confirmNoShow : ARRIVALS_TEXTS.confirmCancel;
 };
-const CONFIRM_LABEL_OF: Record<ArrivalAction, string> = { complete: "完了済みにする", "store-cancel": "取り消す", "store-no-show": "来ないとして取り消す" };
+const CONFIRM_LABEL_OF: Record<ArrivalAction, string> = { complete: "完了済みにする", "store-cancel": "キャンセルする", "store-no-show": "来店なしでキャンセルする" };
 
 /** 押したカードと操作、送っている最中か */
 type Pending = { action: ArrivalAction; row: ArrivalsListRow; sending: boolean };
@@ -186,13 +186,19 @@ const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refusal, on
         ) : null}
         {row.canCancel ? (
           <button type="button" className="store-btn store-btn--quiet" data-testid="btn-store-cancel" disabled={pending?.sending === true} onClick={() => onAsk("store-cancel", row)}>
-            取り消す
+            {ARRIVALS_TEXTS.cancelButton}
           </button>
         ) : null}
         {row.canCancel ? (
           <button type="button" className="store-btn store-btn--quiet" data-testid="btn-store-no-show" disabled={pending?.sending === true} onClick={() => onAsk("store-no-show", row)}>
             {ARRIVALS_TEXTS.noShowButton}
           </button>
+        ) : null}
+        {/* 来店なしのキャンセルだけ枠が戻ることを、ボタンの下で言う（2026-09-26 本人発案（キャンセルの語）） */}
+        {row.canCancel ? (
+          <p className="store-arrival__note" data-testid="no-show-note">
+            {ARRIVALS_TEXTS.noShowNote}
+          </p>
         ) : null}
       </div>
     </div>

@@ -141,7 +141,7 @@ describe("客の変更の合図（横断-08）", () => {
     // 畳んだ中に入れると、店から見れば確保中のカードが黙って消えたのと同じになる（横断-08 のレビュー）
     expect(card.closest("details")).toBeNull();
     expect(card.className).toMatch(/store-arrival--done/);
-    expect(within(card).getByTestId("customer-cancelled-r1").textContent).toMatch(/客が取り消しました/);
+    expect(within(card).getByTestId("customer-cancelled-r1").textContent).toMatch(/客がキャンセルしました/);
     expect(within(card).queryByTestId("btn-complete")).toBeNull();
     expect(within(card).queryByTestId("btn-store-cancel")).toBeNull();
     expect(card.textContent).not.toMatch(/電話番号の登録なし/);
@@ -288,18 +288,29 @@ describe("「来ない（枠を戻す）」", () => {
     expect(api!.calls.find((c) => c.path.endsWith("/cancel"))!.body).toEqual({ noShow: true });
   });
 
+  // 2026-09-26 本人発案（キャンセルの語）: 店都合は「キャンセル」、来ない客は「来店なしでキャンセル」、その下に補足
+  it("確保中の行のボタンは「キャンセル」と「来店なしでキャンセル」で、その下に「来店なしは枠が戻ります」の補足が出る（一覧に「戻す」の文字は無い）", async () => {
+    await renderHome(() => [row()]);
+    const card = screen.getByTestId("row-r1");
+    expect(within(card).getByTestId("btn-store-cancel").textContent).toBe("キャンセル");
+    expect(within(card).getByTestId("btn-store-no-show").textContent).toBe("来店なしでキャンセル");
+    expect(within(card).getByTestId("no-show-note").textContent).toBe("来店なしは枠が戻ります");
+    expect(card.textContent).not.toMatch(/戻す/);
+  });
+
   it("21.1 取り消せない行（canCancel が false）には「来ない」を出さない", async () => {
     await renderHome(() => [row({ kind: "expired", canCancel: false })]);
     expect(within(screen.getByTestId("row-r1")).queryByTestId("btn-store-no-show")).toBeNull();
+    expect(within(screen.getByTestId("row-r1")).queryByTestId("no-show-note")).toBeNull();
   });
 
-  it("20.16 来ないで取り消した行は「来店なしで取り消し」と出る（店の都合の取り消しは「店が取り消し」のまま）", async () => {
+  it("20.16 来ないで取り消した行は「来店なしでキャンセル」と出る（店の都合の取り消しは「店がキャンセル」のまま）", async () => {
     await renderHome(() => [
       { ...row({ kind: "store_cancelled", canComplete: false, canCancel: false }), noShow: true } as any,
       row({ reservationId: "r2", kind: "store_cancelled", canComplete: false, canCancel: false }),
     ]);
-    expect(screen.getByTestId("row-r1").textContent).toMatch(/来店なしで取り消し/);
-    expect(screen.getByTestId("row-r2").textContent).toMatch(/店が取り消し/);
+    expect(screen.getByTestId("row-r1").textContent).toMatch(/来店なしでキャンセル/);
+    expect(screen.getByTestId("row-r2").textContent).toMatch(/店がキャンセル/);
     expect(screen.getByTestId("row-r2").textContent).not.toMatch(/来店なし/);
   });
 });

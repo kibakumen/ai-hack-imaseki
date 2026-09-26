@@ -73,7 +73,7 @@ describeTask("17", "向かっている客の一覧（画面）", () => {
     arrivals = [];
     fireEvent.click(within(screen.getByTestId(TID.row("r1"))).getByTestId(TID.btn("complete")));
     fireEvent.click(within(await screen.findByTestId("confirm-complete")).getByTestId(TID.btn("confirm")));
-    await waitFor(() => expect(screen.getByTestId("arrivals").textContent).toMatch(/客が取り消し|取り消され/));
+    await waitFor(() => expect(screen.getByTestId("arrivals").textContent).toMatch(/客がキャンセル|キャンセルされ/));
     await waitFor(() => expect(api.calls.filter((c) => c.path === "/api/store/home").length).toBeGreaterThan(before));
   });
 
@@ -115,7 +115,7 @@ describeTask("18", "店の取り消し（画面）: 21.2 確かめ、21.3 理由
     fireEvent.click(within(screen.getByTestId(TID.row("r1"))).getByTestId(TID.btn("store-cancel")));
     fireEvent.click(within(await screen.findByTestId("confirm-store-cancel")).getByTestId(TID.btn("confirm")));
     const message = await screen.findByTestId(TID.msgForm);
-    expect(message.textContent).toMatch(/取り消せ/);
+    expect(message.textContent).toMatch(/キャンセルでき/);
     expect(message.textContent).not.toMatch(/完了済み|20分を過ぎた/);
   });
 

@@ -28,7 +28,7 @@ export type PushPromptProps = {
 const DeliveryNote = () => (
   <details className="push-prompt__more">
     <summary>届かない端末について</summary>
-    <p>端末や設定によっては通知が届かないことがあります（iPhone は、ホーム画面に追加して開いた場合だけ届きます）。届かなくても、この画面を開けば取り消しは分かります。</p>
+    <p>端末や設定によっては通知が届かないことがあります（iPhone は、ホーム画面に追加して開いた場合だけ届きます）。届かなくても、この画面を開けばキャンセルは分かります。</p>
   </details>
 );
 
@@ -36,7 +36,7 @@ const DeliveryNote = () => (
 const unsupportedText = (): string =>
   isIosBrowser()
     ? "このブラウザには通知が届きません。今の確保はこの画面（Safari）で見てください。次から、ホーム画面に追加したアイコンで開くと通知が届きます（追加した側では登録をやり直します）。"
-    : "このブラウザには通知が届きません。この画面を開けば取り消しは分かります。";
+    : "このブラウザには通知が届きません。この画面を開けばキャンセルは分かります。";
 
 export const PushPrompt = ({ due }: PushPromptProps) => {
   // 最初の描画で端末の覚えを読む（読み直さない。押した時にこの場で閉じる）。
@@ -56,8 +56,8 @@ export const PushPrompt = ({ due }: PushPromptProps) => {
   };
 
   return (
-    <section className="push-prompt" data-testid="push-prompt" aria-label="取り消しの通知">
-      <p className="push-prompt__lead">お店の都合や、運営がお店の登録を取り消したことで確保が取り消されたときだけ、通知でお知らせします。</p>
+    <section className="push-prompt" data-testid="push-prompt" aria-label="キャンセルの通知">
+      <p className="push-prompt__lead">お店の都合や、運営がお店の登録を取り消したことで確保がキャンセルされたときだけ、通知でお知らせします。</p>
       {supported ? (
         <p className="push-prompt__actions">
           <button type="button" data-testid="btn-push-allow" onClick={allow}>

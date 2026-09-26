@@ -53,7 +53,7 @@ describe("確保中の残り時間（客-06）と期限を過ぎたときの扱�
     await renderHome(homeFetch({ kind: "active", reservation: reservationDto() }));
     const view = await screen.findByTestId("view-active");
     const rule = within(view).getByTestId("reservation-expiry-rule");
-    expect(rule.textContent).toMatch(/自動で取り消され/);
+    expect(rule.textContent).toMatch(/自動でキャンセルされ/);
     expect(rule.textContent).toMatch(/20分/);
     expect(rule.textContent).toMatch(/お店の判断/);
   });

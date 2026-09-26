@@ -54,7 +54,7 @@ describeTask("14", "受け取りの画面と断りの表示", () => {
     fireEvent.click(screen.getByTestId(TID.btn("fetch")));
     const card = await screen.findByTestId(TID.card("o1"));
     expect((within(card).getByTestId(TID.btn("receive")) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByTestId("result-list").textContent).toMatch(/取り消す/);
+    expect(screen.getByTestId("result-list").textContent).toMatch(/キャンセルする/);
   });
 
   it("8.6 5種の断りで、押したカードの中に断りが出て、ほかのカードは残り、「何名まで」が応答の値に直り、次の一手を押すと取得の画面（人数つき）へ行く。ホームが確保中なら確保中の表示に切り替わる", async () => {

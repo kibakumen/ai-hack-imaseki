@@ -70,7 +70,7 @@ describe("取り消し・戻すの理由と、止めたときの影響（運営-
     fireEvent.click(go);
     await waitFor(() => expect(postsTo("/ban")).toHaveLength(1));
     expect(postsTo("/ban")[0].body).toEqual({ reason: "通報が3件続いたため" });
-    expect((await screen.findByTestId("action-result")).textContent).toMatch(/3 組の確保を取り消し、2 人に通知しました/);
+    expect((await screen.findByTestId("action-result")).textContent).toMatch(/3 組の確保をキャンセルし、2 人に通知しました/);
   });
 
   it("「戻せない操作」とは書かず、戻せるもの（店の承認）と戻せないもの（オファーと確保）を分けて書く", async () => {
@@ -78,7 +78,7 @@ describe("取り消し・戻すの理由と、止めたときの影響（運営-
     render(<StoreDetail storeId="store-1" />);
     const form = await screen.findByTestId("form-ban");
     expect(form.textContent).not.toMatch(/戻せない操作です/);
-    expect(form.textContent).toMatch(/取り消したオファーと確保は戻せません（店の承認は戻せます）/);
+    expect(form.textContent).toMatch(/終わったオファーとキャンセルした確保は戻せません（店の承認は戻せます）/);
   });
 
   it("戻すにも理由を求める", async () => {
@@ -268,7 +268,7 @@ describe("審査と停止の判断材料（運営-02・運営-03・運営-05・�
     expect(impact.textContent).toMatch(/残り 2 枠/);
     expect(impact.textContent).toMatch(/2 組が向かっています/);
     expect(impact.textContent).toMatch(/通報 4 件/);
-    expect(impact.textContent).toMatch(/店の取り消し 3 回（25%）/);
+    expect(impact.textContent).toMatch(/店のキャンセル 3 回（25%）/);
     const reports = screen.getByTestId("store-reports");
     expect(reports.textContent).toMatch(/来たら閉まっていた/);
     expect(reports.textContent).toMatch(/a1b2c3/);

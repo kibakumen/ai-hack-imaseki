@@ -128,7 +128,7 @@ export const StoreImpact = ({ store, reportCount }: { store: StoreDetailDto; rep
     <span className={styles.stat} data-strong={store.activeReservations > 0 ? "true" : "false"}>{`${store.activeReservations} 組が向かっています`}</span>
     <span className={styles.stat}>{`受け取り ${store.claims} 件`}</span>
     <span className={styles.stat} data-strong={reportCount > 0 ? "true" : "false"}>{`通報 ${reportCount} 件`}</span>
-    <span className={styles.stat} data-strong={store.storeCancelled > 0 ? "true" : "false"}>{`店の取り消し ${store.storeCancelled} 回（${percent(store.storeCancelRate)}）${ADMIN_STORE_CANCEL_TEXTS.noShowNote(store.noShowCancelled)}`}</span>
+    <span className={styles.stat} data-strong={store.storeCancelled > 0 ? "true" : "false"}>{`${ADMIN_STORE_CANCEL_TEXTS.count(store.storeCancelled, percent(store.storeCancelRate))}${ADMIN_STORE_CANCEL_TEXTS.noShowNote(store.noShowCancelled)}`}</span>
     {(store.withdrawnCancelled ?? 0) > 0 && <span className={styles.stat}>{ADMIN_STORE_CANCEL_TEXTS.withdrawn(store.withdrawnCancelled ?? 0)}</span>}
   </p>
 );
@@ -170,7 +170,7 @@ const ACTION_LABELS: Record<AdminActionDto["action"], string> = {
 /** 記録に添えた数を、読める1行にする（取り消した組数・通知した人数・連絡済みか）。 */
 const detailText = (entry: AdminActionDto): string => {
   const d = entry.detail;
-  if (entry.action === "ban") return `${d.cancelled ?? 0} 組を取り消し、${d.notified ?? 0} 人に通知`;
+  if (entry.action === "ban") return `${d.cancelled ?? 0} 組の確保をキャンセルし、${d.notified ?? 0} 人に通知`;
   if (entry.action === "note") return d.contacted ? "連絡済みにした" : "";
   if (entry.action === "view_license") return d.approved ? "承認した時点の許可書" : "";
   return "";

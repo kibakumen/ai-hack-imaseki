@@ -57,7 +57,7 @@ const WithdrawConfirm = ({ activeCount, publishing, onWithdrawn, onCancel }: Con
       </ul>
       {activeCount > 0 ? (
         <p data-testid="withdraw-active">
-          <strong>今向かっているお客さま {activeCount} 組の確保は取り消され、お客さまに通知されます。</strong>
+          <strong>今向かっているお客さま {activeCount} 組の確保はキャンセルされ、お客さまに通知されます。</strong>
         </p>
       ) : null}
       {publishing ? <p>公開中のオファーは、退会と同時に終わります。</p> : null}
@@ -127,7 +127,7 @@ export const WithdrawPanel = () => {
       <h2>退会</h2>
       {withdrawn !== null ? (
         <p data-testid="withdrawn" role="status">
-          退会しました。{withdrawn > 0 ? `向かっていたお客さま ${withdrawn} 組の確保を取り消し、お知らせしました。` : ""}
+          退会しました。{withdrawn > 0 ? `向かっていたお客さま ${withdrawn} 組の確保をキャンセルし、お知らせしました。` : ""}
           ご利用ありがとうございました。<Link href="/">トップへ</Link>
         </p>
       ) : (

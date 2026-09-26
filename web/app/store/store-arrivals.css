@@ -85,11 +85,19 @@
   margin: 0;
 }
 
-/* 「完了」と、その真下の「取り消す」は離す（6px だったので押し損ねた・横断-13） */
+/* 「完了」と、その真下の「キャンセル」は離す（6px だったので押し損ねた・横断-13） */
 .store-arrival__actions {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+/* 「来店なしでキャンセル」の真下の補足（枠が戻るのはこちらだけ・2026-09-26 本人発案）。ボタンに寄せるため間隔を詰める */
+.store-arrival__note {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: -0.75rem 0 0;
+  max-width: 10rem;
 }
 
 .store-past {

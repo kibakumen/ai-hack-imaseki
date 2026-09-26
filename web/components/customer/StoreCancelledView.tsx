@@ -18,8 +18,8 @@ type StoreCancelledViewProps = {
 };
 
 /** 店が「来ない（枠を戻す）」で取り消した確保の見出し（基準 9.14・2026-09-26 本人選択）。責める語は使わない */
-export const NO_SHOW_CANCELLED_TEXT = "お店が来店なしとして取り消しました";
-export const STORE_CANCELLED_TEXT = "店の都合で確保が取り消されました";
+export const NO_SHOW_CANCELLED_TEXT = "お店が来店なしでキャンセルしました";
+export const STORE_CANCELLED_TEXT = "店の都合で確保がキャンセルされました";
 
 export const StoreCancelledView = ({ reservation, onSearchAgain, children = null }: StoreCancelledViewProps) => (
   <section data-testid="view-store_cancelled">

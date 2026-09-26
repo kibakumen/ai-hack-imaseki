@@ -40,7 +40,7 @@ export const HomeScreenHint = () => {
 
   return (
     <p className="home-screen-hint" data-testid="home-screen-hint">
-      <span>iPhone は、共有ボタンから「ホーム画面に追加」して開くと、確保が取り消されたときの通知を受け取れます（追加した側では登録をやり直します）。</span>
+      <span>iPhone は、共有ボタンから「ホーム画面に追加」して開くと、確保がキャンセルされたときの通知を受け取れます（追加した側では登録をやり直します）。</span>
       <button type="button" data-testid="btn-home-hint-close" onClick={close}>
         閉じる
       </button>

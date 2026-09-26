@@ -56,7 +56,7 @@ type ReservationViewProps = {
 export const RESERVATION_CODE_ID = "reservation-code";
 
 /** 期限を過ぎたときの扱い（横断-07 の案A）。20分は `domain/reservation` の EXPIRED_GRACE_MS（店が完了済みにできる幅） */
-export const EXPIRY_RULE_TEXT = "期限を過ぎると、確保は自動で取り消されます。過ぎてから20分以内なら、この画面をお店に見せれば、お店の判断で入れることがあります。";
+export const EXPIRY_RULE_TEXT = "期限を過ぎると、確保は自動でキャンセルされます。過ぎてから20分以内なら、この画面をお店に見せれば、お店の判断で入れることがあります。";
 
 export const ReservationView = ({ reservation, onSearchMore, onChanged, pushPromptDue = false, children = null, from = null }: ReservationViewProps) => {
   return (

@@ -35,11 +35,14 @@ const RETIRED: Array<[RegExp, string]> = [
   [/止める条件/, `「${TERMS.storeBan}条件」`],
   [/お店の情報|店の情報/, `「${TERMS.storeProfile}」`],
   [/(?<!セキュリティ|QR)コード/, `客と店の両方で「${TERMS.reservationCode}」`],
+  // 確保の取り消しは「キャンセル」（2026-09-26 本人発案（キャンセルの語））。店の登録の取り消し（運営の操作「登録を取り消す」・
+  // 店の状況「登録取り消し済み」）は別の操作・状態なので残す——「登録を／登録が／登録の／登録」に続く「取り消」だけを許す
+  [/(?<!登録を|登録が|登録の|登録)取り消/, `確保については「${TERMS.reservationCancel}」（店の登録は「${TERMS.storeBan}」）`],
 ];
 
 describe("用語の統一（横断-11）", () => {
-  it("正本の語は4つ（登録を取り消す／登録取り消し済み／確保番号／店舗情報）", () => {
-    expect(TERMS).toEqual({ storeBan: "登録を取り消す", storeBanned: "登録取り消し済み", reservationCode: "確保番号", storeProfile: "店舗情報" });
+  it("正本の語は5つ（登録を取り消す／登録取り消し済み／確保番号／店舗情報／キャンセル）", () => {
+    expect(TERMS).toEqual({ storeBan: "登録を取り消す", storeBanned: "登録取り消し済み", reservationCode: "確保番号", storeProfile: "店舗情報", reservationCancel: "キャンセル" });
   });
 
   it("画面に出る文字に、揃える前の言い方が残っていない", () => {

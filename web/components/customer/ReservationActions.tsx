@@ -103,11 +103,11 @@ const CancelButton = ({ reservationId, onChanged }: { reservationId: string; onC
   return (
     <div data-testid="form-cancel">
       <button type="button" data-testid="btn-cancel" onClick={() => setConfirming(true)}>
-        確保を取り消す
+        確保をキャンセル
       </button>
       {confirming && (
-        <div className="claim-confirm" data-testid="confirm-cancel" role="group" aria-label="取り消す前の確かめ">
-          <p>この確保を取り消すと、{TERMS.reservationCode}は使えなくなります。取り消しますか。</p>
+        <div className="claim-confirm" data-testid="confirm-cancel" role="group" aria-label="キャンセルする前の確かめ">
+          <p>この確保をキャンセルすると、{TERMS.reservationCode}は使えなくなります。キャンセルしますか。</p>
           {/* 送り終えるまで確かめを開いたままにし、「取り消す」を止める（横断-03。閉じてから送ると2度押せた） */}
           <SubmitButton
             type="button"
@@ -117,7 +117,7 @@ const CancelButton = ({ reservationId, onChanged }: { reservationId: string; onC
               void submit({}, SUBMIT_TEXTS.reservationCancelled).then(() => setConfirming(false));
             }}
           >
-            取り消す
+            キャンセルする
           </SubmitButton>
           <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
             やめる

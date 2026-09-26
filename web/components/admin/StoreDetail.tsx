@@ -130,14 +130,14 @@ const BAN: ReasonedOperation = {
   path: "ban",
   formTestId: "form-ban",
   title: "登録の取り消し",
-  lead: "取り消したオファーと確保は戻せません（店の承認は戻せます）。押すと先に確かめが出ます。",
+  lead: "終わったオファーとキャンセルした確保は戻せません（店の承認は戻せます）。押すと先に確かめが出ます。",
   buttonTestId: "btn-ban",
   buttonLabel: "登録を取り消す",
   confirmTestId: "confirm-ban",
   // 営業許可書も消えることを先に言う（2026-09-25 安全-20 のレビュー。戻すときは承認待ちになり、店の上げ直しと承認のやり直しが要る）
   confirmText: (store) =>
-    `今 ${store.activeReservations} 組が向かっています。公開中のオファーが終わり、確保中のお客さまの確保はすべて取り消されます（知らせを受け取れる方には通知が届きます）。営業許可書のファイルも消えるため、あとで戻すときは承認待ちになり、店の上げ直しと承認のやり直しが要ります。登録を取り消しますか。`,
-  reasonLabel: "取り消す理由（記録に残ります。店への連絡にも使えます）",
+    `今 ${store.activeReservations} 組が向かっています。公開中のオファーが終わり、確保中のお客さまの確保はすべてキャンセルされます（知らせを受け取れる方には通知が届きます）。営業許可書のファイルも消えるため、あとで戻すときは承認待ちになり、店の上げ直しと承認のやり直しが要ります。登録を取り消しますか。`,
+  reasonLabel: "登録を取り消す理由（記録に残ります。店への連絡にも使えます）",
   danger: true,
 };
 
@@ -150,7 +150,7 @@ const RESTORE: ReasonedOperation = {
   buttonLabel: "承認済みに戻す",
   confirmTestId: "confirm-restore",
   // 何が戻らないかを先に見せる（基準 25.10。止めるときと同じ、押す前に結果を知らせる形）
-  confirmText: () => "終わったオファーと取り消されたお客さまの確保は戻りません。この店は公開し直せるようになります。戻しますか。",
+  confirmText: () => "終わったオファーとキャンセルされたお客さまの確保は戻りません。この店は公開し直せるようになります。戻しますか。",
   reasonLabel: "戻す理由（記録に残ります）",
   danger: false,
 };
@@ -162,9 +162,9 @@ const RESTORE: ReasonedOperation = {
 const RESTORE_TO_PENDING: ReasonedOperation = {
   ...RESTORE,
   title: "登録の取り消しを戻す（承認待ちへ）",
-  lead: "取り消したときに営業許可書を消したため、戻すと承認待ちになります。店が許可書を上げ直したら、確かめてから承認してください。",
+  lead: "登録を取り消したときに営業許可書を消したため、戻すと承認待ちになります。店が許可書を上げ直したら、確かめてから承認してください。",
   buttonLabel: "承認待ちに戻す",
-  confirmText: () => "終わったオファーと取り消されたお客さまの確保は戻りません。この店は承認待ちに戻り、営業許可書を上げ直して承認されるまで公開できません。戻しますか。",
+  confirmText: () => "終わったオファーとキャンセルされたお客さまの確保は戻りません。この店は承認待ちに戻り、営業許可書を上げ直して承認されるまで公開できません。戻しますか。",
 };
 
 /** 戻す操作の文。承認の写しが残っていれば承認済みへ、無ければ承認待ちへ戻る（サーバーの restoreBannedStore と同じ見分け） */
@@ -172,7 +172,7 @@ const restoreOperation = (store: StoreDetailDto): ReasonedOperation => (store.ap
 
 /** 止めたあとの1行（運営-03）。 */
 const banResultText = (response: ResponseOf<"POST /api/admin/stores/:id/ban">): string =>
-  `登録を取り消しました。${response.cancelled} 組の確保を取り消し、${response.notified} 人に通知しました。`;
+  `登録を取り消しました。${response.cancelled} 組の確保をキャンセルし、${response.notified} 人に通知しました。`;
 
 /** 戻したあとの1行。戻した先はサーバーが返す（安全-20 のレビュー） */
 const restoreResultText = (response: ResponseOf<"POST /api/admin/stores/:id/restore">): string =>

@@ -209,7 +209,7 @@ const ResultCard = ({ item, index, onReceive, refusal = null, onNextStep, holdin
  */
 const HoldNotice = () => (
   <p className="offer-hold" data-testid="result-hold-notice">
-    今の確保を取り消すと受け取れます。
+    今の確保をキャンセルすると受け取れます。
   </p>
 );
 

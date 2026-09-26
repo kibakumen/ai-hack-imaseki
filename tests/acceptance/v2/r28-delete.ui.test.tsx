@@ -39,7 +39,7 @@ describeTask("32", "登録の消去（画面）", () => {
     await waitFor(() => expect(JSON.stringify(window.localStorage)).toContain("77778888"));
     fireEvent.click(screen.getByTestId(TID.btn("delete-account")));
     fireEvent.click(within(await screen.findByTestId("confirm-delete")).getByTestId(TID.btn("confirm")));
-    await waitFor(() => expect(screen.getByTestId(TID.form("delete")).querySelector(`[data-testid="${TID.msgForm}"]`)!.textContent).toMatch(/取り消/));
+    await waitFor(() => expect(screen.getByTestId(TID.form("delete")).querySelector(`[data-testid="${TID.msgForm}"]`)!.textContent).toMatch(/キャンセル/));
     expect(screen.getByTestId(TID.view("active"))).toBeTruthy();
     refuse = false;
     fireEvent.click(screen.getByTestId(TID.btn("delete-account")));

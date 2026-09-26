@@ -57,7 +57,7 @@ describeTask("14", "確保中の表示と取り直し", () => {
       await renderApp(() => ({ json: { ...homeFetch(), kind, reservation: { ...reservation, status: kind === "completed" ? "completed" : kind } } }));
       const view = await screen.findByTestId(TID.view(kind));
       expect(view.textContent).toMatch(re);
-      expect(view.textContent).toMatch(/取り消され|完了/);
+      expect(view.textContent).toMatch(/キャンセルされ|完了/);
       if (kind !== "completed") expect(screen.getByTestId(TID.btn("search-again"))).toBeTruthy();
       expect(screen.queryByTestId(TID.view("active"))).toBeNull();
       cleanup();

@@ -12,13 +12,16 @@ type Ctx = Record<string, unknown>;
 //   確保ごとの8桁の番号 … 客も店も「確保番号」（店の確かめの「コード」をやめる）
 //   店の情報の画面      … タブの「店舗情報」に揃える（見出しの「お店の情報」、案内の「店の情報」をやめる）
 // 指摘には「語は本人が選ぶ」とあるので、本人が別の語を選べる。決めの記録（選ばなかった案と理由）と、仕様の語との
-// 対応は docs/specs/v2/requirements.md の用語の節「画面に出す語」。語を変えるときは、ここと、そこと、design.md の
+// 対応は docs/specs/v2/requirements.md の用語の節「画面に出す語」。確保の「取り消し」を「キャンセル」に揃えたのは 2026-09-26 本人発案。語を変えるときは、ここと、そこと、design.md の
 // 「画面と入口」の注と、受け入れ検査 r12（12.9）・r20（20.25）の照合する語を一緒に直す。
 export const TERMS = {
   storeBan: "登録を取り消す",
   storeBanned: "登録取り消し済み",
   reservationCode: "確保番号",
   storeProfile: "店舗情報",
+  // 確保を取り消す操作と状態（客・店・運営・期限切れのどれでも）は「キャンセル」（2026-09-26 本人発案（キャンセルの語））。
+  // 店の登録の取り消し（上の2つ）は別の操作・状態なので「取り消し」のまま
+  reservationCancel: "キャンセル",
 } as const;
 /**
  * 退会した店の、伏せたあとの店名（2026-09-26 本人発案の店の退会・要件13の基準 13.16）。店の行は記録のために残し、
@@ -39,7 +42,7 @@ const str = (v: unknown, fallback = ""): string => (v === undefined || v === nul
 // ---------- 入力の断り（kind） ----------
 const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   invalid_input: () => "入れた内容を確かめてください。",
-  party_over_max: () => "この店では受け入れられません。確保を取り消して探し直せます。",
+  party_over_max: () => "この店では受け入れられません。確保をキャンセルして探し直せます。",
   email_taken: () => "このメールアドレスは登録済みです。",
   limit_reached: () => "これ以上は追加できません（上限に達しています）。",
   coupon_in_use: () => "公開中のオファーが見せているクーポンは変えられません。",
@@ -64,7 +67,7 @@ const INPUT_REFUSAL_TEXTS: Record<string, (ctx: Ctx) => string> = {
   // 言い方**にしてある（設計書 637 行の文案「お店でこの画面を見せられる間は消せません」に、
   // 基準 28.5 が求める次の一手を足した）。RECEIVE_REFUSAL_TEXTS の同じ綴りの語とは別の文
   // ——あちらは受け取りを断られた場面の文で、次の一手が「確保中の表示へ戻る」になる。
-  has_active_reservation: () => "お店でこの画面を見せられる間は、登録を消せません。先に確保を取り消すか、期限が切れて20分たってからお試しください。",
+  has_active_reservation: () => "お店でこの画面を見せられる間は、登録を消せません。先に確保をキャンセルするか、期限が切れて20分たってからお試しください。",
   // ⚠️ 20.25 店の画面に出す文（店が運営に止められている間の「完了済み」の断り）。
   // RECEIVE_REFUSAL_TEXTS の同じ綴りの語とは**読み手が違う**——あちらは客に出す文（その店から
   // 受け取れない）で、こちらは店の人に出す文（自分の店が止められていてこの操作ができない）。
@@ -147,10 +150,10 @@ const NEXT_STEP_TEXTS: Record<string, (ctx: Ctx) => string> = {
 
 // ---------- プッシュ（場面ごとの決まった文。中身を載せないプッシュの文面） ----------
 const PUSH_TEXTS: Record<string, () => { title: string; body: string }> = {
-  store_cancelled: () => ({ title: "確保が取り消されました", body: "お店の都合で確保が取り消されました。アプリを開いて確かめてください。" }),
+  store_cancelled: () => ({ title: "確保がキャンセルされました", body: "お店の都合で確保がキャンセルされました。アプリを開いて確かめてください。" }),
   // 店が「来ない（枠を戻す）」で取り消した場面（2026-09-26 本人選択）。責める語は使わない
-  store_no_show: () => ({ title: "確保が取り消されました", body: "お店が来店なしとして確保を取り消しました。アプリを開いて確かめてください。" }),
-  admin_cancelled: () => ({ title: "確保が取り消されました", body: "運営の都合で確保が取り消されました。アプリを開いて確かめてください。" }),
+  store_no_show: () => ({ title: "確保がキャンセルされました", body: "お店が来店なしで確保をキャンセルしました。アプリを開いて確かめてください。" }),
+  admin_cancelled: () => ({ title: "確保がキャンセルされました", body: "運営の都合で確保がキャンセルされました。アプリを開いて確かめてください。" }),
 };
 
 // ---------- ジャンルの選択肢の表示（チェックの並び） ----------
@@ -179,7 +182,7 @@ export const SUBMIT_TEXTS = {
   uploading: "上げています…",
   searching: "探しています…",
   /** 客が確保を取り消した（画面は取得の画面へ切り替わるので、何が起きたかを1文で添える） */
-  reservationCancelled: "確保を取り消しました。",
+  reservationCancelled: "確保をキャンセルしました。",
   partyChanged: (party: number): string => `人数を ${party} 名に変えました。`,
   reportSent: "運営に知らせました。ありがとうございます。",
   couponCreated: "クーポンを作りました。",
@@ -238,8 +241,8 @@ const ARRIVAL_KIND_LABELS: Record<string, string> = {
   active: "確保中",
   expired: "期限切れ",
   completed: "完了済み",
-  store_cancelled: "店が取り消し",
-  customer_cancelled: "客が取り消しました",
+  store_cancelled: "店がキャンセル",
+  customer_cancelled: "客がキャンセルしました",
 };
 
 /**
@@ -251,24 +254,24 @@ const ARRIVAL_COMPLETE_REFUSED_TEXTS: Record<string, string> = {
   active: "この確保の状態が変わったため、完了済みにできませんでした。",
   expired: "期限切れから20分を過ぎたため、完了済みにできませんでした。",
   completed: "この確保はすでに完了済みです。",
-  customer_cancelled: "客が取り消していたため、完了済みにできませんでした。",
-  store_cancelled: "この確保は取り消されていました。",
-  admin_cancelled: "運営が取り消していたため、完了済みにできませんでした。",
+  customer_cancelled: "客がキャンセルしていたため、完了済みにできませんでした。",
+  store_cancelled: "この確保はキャンセルされていました。",
+  admin_cancelled: "運営がキャンセルしていたため、完了済みにできませんでした。",
 };
 /** 期限から20分以内でも、客が新しく確保し直した行（基準 20.12）。20分を過ぎたとは言わない */
 const ARRIVAL_COMPLETE_NEWER_TEXT = "この客はあとから確保し直したため、この行は完了済みにできません。新しい確保の行で完了にしてください。";
 
 const ARRIVAL_CANCEL_REFUSED_TEXTS: Record<string, string> = {
-  active: "この確保の状態が変わったため、取り消せませんでした。",
-  expired: "期限が過ぎているため、取り消せません。期限が過ぎた確保は自動で終わり、枠も戻っています。",
-  completed: "この確保はすでに完了済みのため、取り消せません。",
-  customer_cancelled: "客が先に取り消していました。",
-  store_cancelled: "この確保はすでに取り消されています。",
-  admin_cancelled: "運営が先に取り消していました。",
+  active: "この確保の状態が変わったため、キャンセルできませんでした。",
+  expired: "期限が過ぎているため、キャンセルできません。期限が過ぎた確保は自動で終わり、枠も戻っています。",
+  completed: "この確保はすでに完了済みのため、キャンセルできません。",
+  customer_cancelled: "客が先にキャンセルしていました。",
+  store_cancelled: "この確保はすでにキャンセルされています。",
+  admin_cancelled: "運営が先にキャンセルしていました。",
 };
 
 /** 「来ない（枠を戻す）」で取り消した行の見出し（基準 20.16・21.8・2026-09-26 本人選択） */
-const ARRIVAL_NO_SHOW_LABEL = "来店なしで取り消し（枠を戻しました）";
+const ARRIVAL_NO_SHOW_LABEL = "来店なしでキャンセル（枠が戻りました）";
 
 /** 断りの応答の「今の状態」（`current`）のうち、文を選ぶのに要る所だけ。 */
 type ArrivalRefusedState = { state: string; newerReservation?: boolean };
@@ -298,16 +301,20 @@ export const ARRIVALS_TEXTS = {
   /** 人数の変更の印（横断-08 の案B） */
   partyChanged: (from: number, to: number): string => `人数が変わりました ${from}→${to} 名`,
   /** 客が取り消した行の印（横断-08 の案A。10分で一覧から消える） */
-  customerCancelled: "客が取り消しました。この組の席の用意は要りません",
+  customerCancelled: "客がキャンセルしました。この組の席の用意は要りません",
   /** 確かめ（店-01）。取り消しは、残りの枠が戻らないことと、来ない客は期限で枠が戻ることも言う */
   confirmComplete: (who: string, party: number, code: string): string => `${who}・${party} 名・${TERMS.reservationCode} ${code} の来店を確かめましたか。`,
-  confirmCancel: "取り消すと、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります。来ないと分かった組の枠をすぐ空けるなら「来ない」で取り消してください）。この確保を取り消しますか。",
+  confirmCancel: "キャンセルすると、客に知らせが送られます。残りの枠は戻りません（来ない客は、期限が来れば自動で枠が戻ります。来ないと分かった組の枠をすぐ空けるなら「来店なしでキャンセル」を押してください）。この確保をキャンセルしますか。",
+  /** 店の都合のキャンセルのボタン（2026-09-26 本人発案（キャンセルの語）） */
+  cancelButton: "キャンセル",
   /**
-   * 「来ない（枠を戻す）」のボタンと確かめ（基準 21.8・2026-09-26 本人選択）。ボタンの語は「戻す」を避けて「枠が戻る」にした
-   * （AI判断）——一覧に「戻す」操作を置かない決め（基準 20.10・完了済みを元に戻す操作）と、受け入れ検査 r20 がその語で見張っているため。
+   * 「来ない（枠を戻す）」のボタンと補足と確かめ（基準 21.8・2026-09-26 本人選択）。ボタンの語は同日の本人発案で「来店なしでキャンセル」
+   * にし、枠が戻ることはボタンの下の補足で言う。補足も「戻す」を避けて「戻ります」にした（AI判断）——一覧に「戻す」操作を置かない決め
+   * （基準 20.10・完了済みを元に戻す操作）と、受け入れ検査 r20 がその語で見張っているため。
    */
-  noShowButton: "来ない（枠が戻る）",
-  confirmNoShow: "来店なしとして取り消すと、客に知らせが送られ、この組の枠が残りへ戻ります（ほかの客が受け取れるようになります）。この確保を取り消しますか。",
+  noShowButton: "来店なしでキャンセル",
+  noShowNote: "来店なしは枠が戻ります",
+  confirmNoShow: "来店なしでキャンセルすると、客に知らせが送られ、この組の枠が残りへ戻ります（ほかの客が受け取れるようになります）。この確保をキャンセルしますか。",
   sending: SUBMIT_TEXTS.sending,
   /** 取り直し（店-08） */
   refresh: "今すぐ更新",
@@ -320,8 +327,10 @@ export const ARRIVALS_TEXTS = {
 // ---------- 運営の画面の、店の取り消しの回数（横断-09・2026-09-26 本人選択の「来ない（枠を戻す）」） ----------
 
 export const ADMIN_STORE_CANCEL_TEXTS = {
-  /** 店の取り消しの回数に添える「うち来ない」（0回・古い応答では何も添えない） */
-  noShowNote: (count: number | undefined): string => (count !== undefined && count > 0 ? `・うち来ない ${count} 回` : ""),
+  /** 店のキャンセルの回数の札（店が選んだキャンセル。退会の巻き添えは入れない・2026-09-26） */
+  count: (count: number, rate: string): string => `店のキャンセル ${count} 回（${rate}）`,
+  /** 店のキャンセルの回数に添える「うち来店なし」（0回・古い応答では何も添えない） */
+  noShowNote: (count: number | undefined): string => (count !== undefined && count > 0 ? `・うち来店なし ${count} 回` : ""),
   /** 店の退会の巻き添えで取り消した数（店の取り消しとは別に出す・2026-09-26 本人選択） */
   withdrawn: (count: number): string => `退会でキャンセル ${count} 件`,
 } as const;
@@ -335,7 +344,7 @@ export const STORE_STATUS_TEXTS = {
   pendingDetail: "承認は、営業許可書とカードの登録が揃ったあと、運営が許可書を確かめてから行います。分からないことは運営へ連絡してください:",
   banned: "運営に登録を取り消されているため、オファーは公開できません。",
   bannedDetail:
-    "向かっていた客の確保は取り消され、客には通知済みです。期限切れの方を完了にすることもできません。登録を取り消された理由と戻す手続きは、運営へ連絡してください:",
+    "向かっていた客の確保はキャンセルされ、客には通知済みです。期限切れの方を完了にすることもできません。登録を取り消された理由と戻す手続きは、運営へ連絡してください:",
 } as const;
 
 // ---------- 書類の画面の説明（2026-09-25 監査の指摘 安全-20・店-21） ----------
@@ -384,9 +393,9 @@ const RESERVATION_STATUS_LABELS: Record<string, string> = {
   active: "確保中",
   expired: "期限切れ",
   completed: "完了済み",
-  customer_cancelled: "取り消し（自分で）",
-  store_cancelled: "取り消し（お店の都合）",
-  admin_cancelled: "取り消し（運営の都合）",
+  customer_cancelled: "キャンセル（自分で）",
+  store_cancelled: "キャンセル（お店の都合）",
+  admin_cancelled: "キャンセル（運営の都合）",
 };
 
 export const RESERVATION_STATUS_TEXTS = {
