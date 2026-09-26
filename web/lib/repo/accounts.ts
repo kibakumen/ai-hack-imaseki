@@ -75,11 +75,19 @@ export const listAdminAccounts = async (db: Db): Promise<AdminSummary[]> => {
 
 /**
  * メールアドレスだけを置き換える（2026-09-22 追加）。重複は表の UNIQUE が例外で教える（呼ぶ側が受ける）。
- * 運営の投入（usecases/seedAdmin・本番へ流す文を出す）も使うので、migration 0015 の列には触れない——
- * 0015 を当てる前の本番でも、乗っ取られた運営を取り返す文が流れるように（2026-09-26 取り込みのときの AI判断）。
+ * 使うのは運営の投入（usecases/seedAdmin・本番へ流す文を `--print` で出す）。
+ *
+ * アドレスが変わるときは、同じ文で「確認した時刻」（migration 0015 の `email_verified_at`）を NULL に戻す
+ * （changeOwnAccountEmail と同じ CASE の形・2026-09-26 独立したレビューの指摘・AI判断）。それまでは 0015 を当てる前の本番でも
+ * 流れるよう列に触れなかったが、差し替えた新しいアドレスが確認済みに見えた。
+ * ⚠️ そのため、この文は **0015 を当てたあとの本番**でしか流れない（README 5.4 の手順は、migration を当てる手順3のあとに
+ * 運営を取り返す手順4を置いている。当てる前に流すと、列が無いと断られて何も変わらない）。
  */
 export const updateAccountEmail = async (db: Db, accountId: string, email: string): Promise<void> => {
-  await db.prepare(`UPDATE accounts SET email = ?2 WHERE id = ?1`).bind(accountId, email).run();
+  await db
+    .prepare(`UPDATE accounts SET email = ?2, email_verified_at = CASE WHEN email = ?2 COLLATE NOCASE THEN email_verified_at ELSE NULL END WHERE id = ?1`)
+    .bind(accountId, email)
+    .run();
 };
 
 /**

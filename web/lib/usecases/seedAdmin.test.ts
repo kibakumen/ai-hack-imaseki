@@ -80,6 +80,21 @@ describe("seedAdmin", () => {
     expect((await one<{ role: string }>(ctx.db, "SELECT role FROM accounts WHERE id = ?", account!.id))!.role).toBe("store");
   });
 
+  // 2026-09-26 独立したレビューの指摘（AI判断）: 番号を指してメールアドレスを差し替えても「確認した時刻」（migration 0015）が
+  // 残り、確認していない新しいアドレスが確認済みに見えた。アドレスが変わるときだけ、同じ文で NULL に戻す。
+  it("番号を指して別のアドレスへ差し替えたら、メールアドレスの確認は未確認に戻る。同じアドレス（大小の違いだけ）なら確認済みのまま", async () => {
+    const created = await seedAdmin(ctx.deps, { email: "seed-v@example.com", password: "admin-pass-1234" });
+    const verifiedAt = "2026-09-20T00:00:00.000Z";
+    await ctx.db.prepare("UPDATE accounts SET email_verified_at = ?2 WHERE id = ?1").bind(created.accountId, verifiedAt).run();
+    const verifiedOf = async () => (await one<{ email: string; email_verified_at: string | null }>(ctx.db, "SELECT email, email_verified_at FROM accounts WHERE id = ?", created.accountId))!;
+
+    await seedAdmin(ctx.deps, { email: "Seed-V@example.com", password: "admin-pass-5678", accountId: created.accountId });
+    expect(await verifiedOf()).toEqual({ email: "Seed-V@example.com", email_verified_at: verifiedAt });
+
+    await seedAdmin(ctx.deps, { email: "seed-v2@example.com", password: "admin-pass-9012", accountId: created.accountId });
+    expect(await verifiedOf()).toEqual({ email: "seed-v2@example.com", email_verified_at: null });
+  });
+
   it("番号を指したとき、そのメールアドレスが別のアカウントに使われていれば断る", async () => {
     const target = await one<{ id: string }>(ctx.db, "SELECT id FROM accounts WHERE email = ?", "seed-a@example.com");
     await expect(seedAdmin(ctx.deps, { email: "seed-store@example.com", password: "admin-pass-1234", accountId: target!.id })).rejects.toThrow();

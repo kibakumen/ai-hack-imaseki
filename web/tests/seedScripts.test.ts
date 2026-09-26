@@ -8,6 +8,7 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
+import { openDb } from "../../tests/acceptance/v2/_fakes";
 
 const run = promisify(execFile);
 const SCRIPTS = path.resolve(__dirname, "..", "scripts");
@@ -52,7 +53,7 @@ describe("seed-demo.mjs --print", () => {
     async () => {
       const commands = sqlsOf(await print("seed-demo.mjs", [...demoArgs, "--admin-account-id", "admin-acc-1"]));
       expect(commands[0]).toBe(LIST_ADMINS);
-      expect(commands.some((c) => c.includes("UPDATE accounts SET email = 'demo-admin@example.com' WHERE id = 'admin-acc-1'"))).toBe(true);
+      expect(commands.some((c) => c.includes("UPDATE accounts SET email = 'demo-admin@example.com',") && c.includes("WHERE id = 'admin-acc-1'"))).toBe(true);
       expect(commands.some((c) => c.includes("DELETE FROM sessions WHERE account_id = 'admin-acc-1'"))).toBe(true);
       expect(commands.some((c) => c.includes("INSERT INTO accounts") && c.includes("'admin'"))).toBe(false);
     },
@@ -119,8 +120,36 @@ describe("seed-admin.mjs --print", () => {
     async () => {
       const commands = sqlsOf(await print("seed-admin.mjs", ["--email", "admin@example.com", "--password", PASSWORD, "--account-id", "admin-acc-1"]));
       expect(commands[0]).toBe(LIST_ADMINS);
-      expect(commands.some((c) => c.includes("UPDATE accounts SET email = 'admin@example.com' WHERE id = 'admin-acc-1'"))).toBe(true);
+      expect(commands.some((c) => c.includes("UPDATE accounts SET email = 'admin@example.com',") && c.includes("WHERE id = 'admin-acc-1'"))).toBe(true);
       expect(commands.some((c) => c.includes("DELETE FROM sessions WHERE account_id = 'admin-acc-1'"))).toBe(true);
+    },
+    TIMEOUT_MS,
+  );
+
+  // 2026-09-26 独立したレビューの指摘（AI判断）: 取り返しの文は、アドレスが変わるときにメールアドレスの確認（migration 0015 の
+  // email_verified_at）を未確認へ戻す。0015 を当てたあとの本番で、出した文をそのまま流して取り返せることを、手元の D1
+  // （migration を全部当てたもの）に流して確かめる。wrangler も本番も使わない（文は手元の D1 に直接流す）。
+  it(
+    "取り返しの文を migration を全部当てた D1 に流すと、アドレスとパスワードが入れ替わり、確認は未確認に戻り、その運営のセッションが消える",
+    async () => {
+      const { db, dispose } = await openDb();
+      try {
+        await db
+          .prepare("INSERT INTO accounts (id, email, password_hash, role, store_id, email_verified_at) VALUES ('admin-acc-1', 'attacker@example.com', 'old-hash', 'admin', NULL, '2026-09-20T00:00:00.000Z')")
+          .run();
+        await db.prepare("INSERT INTO sessions (token_hash, account_id, expires_at, created_at) VALUES ('hijacked', 'admin-acc-1', '2099-01-01T00:00:00.000Z', '2026-09-20T00:00:00.000Z')").run();
+        const commands = sqlsOf(await print("seed-admin.mjs", ["--email", "admin@example.com", "--password", PASSWORD, "--account-id", "admin-acc-1"]));
+        // 先頭は読むだけの一覧の文。残りを順に流す（本番で人が貼る順）
+        for (const sql of commands.slice(1)) await db.exec(sql);
+
+        const account = await db.prepare("SELECT email, password_hash, email_verified_at FROM accounts WHERE id = 'admin-acc-1'").first<{ email: string; password_hash: string; email_verified_at: string | null }>();
+        expect(account?.email).toBe("admin@example.com");
+        expect(account?.password_hash).toMatch(/^pbkdf2-sha256\$100000\$/);
+        expect(account?.email_verified_at).toBeNull();
+        expect(await db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE account_id = 'admin-acc-1'").first<{ n: number }>()).toEqual({ n: 0 });
+      } finally {
+        await dispose();
+      }
     },
     TIMEOUT_MS,
   );
