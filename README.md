@@ -4,6 +4,8 @@
 AI HACK 2026 の提出物。Next.js（`web/`）＋ Cloudflare Workers（D1・R2）＋ OrcaRouter 経由の AI。
 仕様の正本は `docs/specs/v2/`（`requirements.md`・`design.md`・`tasks.md`）。2026-09-25 の監査の直しで変えた基準の一覧と理由は `docs/specs/v2/CHANGES-2026-09-25.md`。v1 のデモ（`demo/`）と速成版（`sprint/`）はこのアプリからは触らない。v1 の説明書 `docs/architecture.md` は v1 の記録で、今の製品の説明ではない。
 
+`docs/specs/`（意図・要件・設計・タスク表・承認と監査の記録）と `docs/views/`（段ごとの図解）は、AI 駆動開発の過程の記録として意図して公開している（本人の原文の引用・監査の採点・承認の記録を含む・2026-09-26 本人選択）。このリポジトリの開発ハーネス（/dev）は提出で役目を終えて閉じたので、`docs/specs/v2/approvals.json` の指紋は今の文書と合わないまま残してある。
+
 ## 1. 触れる場所
 
 **公開していたデモは、2026-09-25 から停止中。** 同日の監査で、公開の版に運営のアカウントを誰でも乗っ取れる穴などが見つかったため（監査の指摘 安全-01 ほか）、安全のために止めた。直した版を出し直すまで、公開先の URL はここに載せない。いま触るなら、手元で動かす（「5. 手元で動かす」）。出し直すときの順番は「6. 公開の手順」の 6.2。
@@ -239,7 +241,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 
 4. **運営とデモ店のパスワードを入れ替え、セッションを消す**（公開の前に。値は公開のリポジトリの履歴に残っている・安全-01）。運営は 5.3 の「乗っ取られた運営を取り返すとき」の手順で、今いる運営の一覧を流して番号を確かめ、`--account-id <番号>` の3つの文（メールの入れ替え・パスワードの入れ替え・その運営のセッションの削除）を流す。デモ店は 5.3 の「本番のデモ店のパスワードを入れ替えるとき」。新しい値は審査員へ公開されない経路で渡す。
 5. **Cloudflare の管理画面で、本番の Turnstile のウィジェットの許すホスト名から `localhost` を外す**（安全-23。手元は 5.2 の試験用の鍵を使う）。
-6. **公開の道を決めてから、合図を付けて公開する**。止めている間の設定（6.1）のままだと、公開しても workers.dev からは届かない。workers.dev で出すなら `web/wrangler.jsonc` の `workers_dev` を `true` に戻し、独自のドメインで出すなら `routes` を足す（どちらにするかは本人が決める）。そのうえで `ALLOW_DEPLOY=1 pnpm --dir web run deploy`。中では次の順に実行する（`web/package.json` の `deploy`）:
+6. **公開の道を決めてから、合図を付けて公開する**。止めている間の設定（6.1）のままだと、公開しても workers.dev からは届かない。workers.dev で出すなら `web/wrangler.jsonc` の `workers_dev` を `true` に戻し、独自のドメインで出すなら `routes` を足す（どちらにするかは公開のときに本人の手で選ぶ）。そのうえで `ALLOW_DEPLOY=1 pnpm --dir web run deploy`。中では次の順に実行する（`web/package.json` の `deploy`）:
    0. 歯止め（`web/scripts/deploy-guard.mjs`。合図が無ければここで止まる）
    1. OpenNext のビルド（`opennextjs-cloudflare build`）
    2. 本番の D1 に未適用の migration を当てる（`migrate:remote`＝`wrangler d1 migrations apply ai-hack-v2 --remote`。手順3で当てていれば何もしない）
