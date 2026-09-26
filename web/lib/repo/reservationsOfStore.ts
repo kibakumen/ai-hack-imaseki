@@ -194,3 +194,36 @@ export const adminCancelReservationsStatement = (db: Db, storeId: string, nowIso
         ` RETURNING reservations.id AS id, reservations.customer_id AS customer_id`,
     )
     .bind(storeId, nowIso);
+
+// ---------- 店が退会する（2026-09-26 本人発案・要件13の基準 13.17） ----------
+
+/**
+ * その店の確保中の確保を全部「店が取り消した」にする1つの UPDATE。運営の停止（上）と同じく `db.batch` の並びに入れ、
+ * 取り消した行（番号と客の番号）を返す——知らせの相手は、この文が実際に取り消した行から決める（不具合-13 と同じ理由）。
+ *
+ * 状態を `admin_cancelled` でなく `store_cancelled` にするのは、客への文面を「お店の都合で取り消されました」にするため
+ * （退会は運営の判断ではない・AI判断）。オファーは同じまとまりで終わるので、残りの数え方（`store_cancelled` は枠を押さえる）は
+ * 客に見えない。退会の1文目が当たったまとまりでだけ当たる（`withdrawn_at = ?2`・repo/storeWithdrawal の注）。
+ */
+export const withdrawCancelReservationsStatement = (db: Db, storeId: string, nowIso: string) =>
+  db
+    .prepare(
+      `UPDATE reservations SET status = 'store_cancelled', status_at = ?2` +
+        ` WHERE reservations.store_id = ?1 AND ${activeReservationCondition("reservations", "?2")}` +
+        ` AND EXISTS (SELECT 1 FROM stores ws WHERE ws.id = ?1 AND ws.withdrawn_at = ?2)` +
+        ` RETURNING reservations.id AS id, reservations.customer_id AS customer_id`,
+    )
+    .bind(storeId, nowIso);
+
+/**
+ * その店の確保に写した客の電話番号を空にする（退会のまとまりの中）。写しは店の画面に出すためだけのもの（安全-17）で、
+ * 見る店がもう無い。運営の画面にも客の画面にも出ない値なので、残す理由が無い（AI判断）。
+ */
+export const clearCustomerPhonesOfWithdrawnStoreStatement = (db: Db, storeId: string, nowIso: string) =>
+  db
+    .prepare(
+      `UPDATE reservations SET customer_phone = NULL` +
+        ` WHERE reservations.store_id = ?1 AND reservations.customer_phone IS NOT NULL` +
+        ` AND EXISTS (SELECT 1 FROM stores ws WHERE ws.id = ?1 AND ws.withdrawn_at = ?2)`,
+    )
+    .bind(storeId, nowIso);

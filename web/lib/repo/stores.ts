@@ -11,6 +11,14 @@ type Db = Deps["db"];
 
 export type StoreStatus = "pending" | "approved" | "banned";
 
+/**
+ * 店が自分の行に書く文に足す条件（2026-09-26 本人発案の店の退会・レビューの指摘）。退会の手続きと同時に走った
+ * 店舗情報の保存・許可書の上げ直し・カードの登録が、伏せた行に店名や許可書の鍵を書き戻さないようにする
+ * （見分けは退会の前に通っているので、入口の見分けだけでは防げない）。当たらなかった上げ直しのファイルは、
+ * 指されていないファイルの掃除（usecases/licenseSweep）が消す。
+ */
+const NOT_WITHDRAWN = "withdrawn_at IS NULL";
+
 /** `createdAtIso` は店の登録の時刻（同点・同距離のときの並び・要件6の基準 6.4。タスク9 で追加）。 */
 /**
  * 新しい店の行。`terms` は同意した店向けの利用規約の版と時刻（登録の画面を通った店だけ・店-21 のレビュー）。
@@ -83,7 +91,7 @@ export const findStoreProfile = async (db: Db, storeId: string): Promise<StorePr
 export const updateStoreProfile = async (db: Db, storeId: string, profile: StoreProfileRecord & { geocodedAt?: string | null }): Promise<void> => {
   await db
     .prepare(
-      `UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8, lat = ?9, lng = ?10, geocoded_at = ?11 WHERE id = ?1`,
+      `UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8, lat = ?9, lng = ?10, geocoded_at = ?11 WHERE id = ?1 AND ${NOT_WITHDRAWN}`,
     )
     .bind(
       storeId,
@@ -127,7 +135,7 @@ export const updateStoreDetails = async (db: Db, storeId: string, profile: Omit<
   const result = await db
     .prepare(
       `UPDATE stores SET name = ?2, address = ?3, url = ?4, genres = ?5, menus = ?6, budget_min = ?7, budget_max = ?8 WHERE id = ?1
-          AND address = ?3 AND lat IS NOT NULL AND lng IS NOT NULL`,
+          AND address = ?3 AND lat IS NOT NULL AND lng IS NOT NULL AND ${NOT_WITHDRAWN}`,
     )
     .bind(storeId, profile.name, profile.address, profile.url, JSON.stringify(profile.genres), JSON.stringify(profile.menus), profile.budgetMin, profile.budgetMax)
     .run();
@@ -202,7 +210,7 @@ export const findStoreHomeRow = async (db: Db, storeId: string): Promise<StoreHo
  */
 export const updateStoreLicense = async (db: Db, storeId: string, licenseKey: string, licenseMime: string, uploadedAtIso: string): Promise<void> => {
   await db
-    .prepare(`UPDATE stores SET license_key = ?2, license_mime = ?3, license_uploaded_at = ?4 WHERE id = ?1`)
+    .prepare(`UPDATE stores SET license_key = ?2, license_mime = ?3, license_uploaded_at = ?4 WHERE id = ?1 AND ${NOT_WITHDRAWN}`)
     .bind(storeId, licenseKey, licenseMime, uploadedAtIso)
     .run();
 };
@@ -291,7 +299,7 @@ export const clearPendingStoreLicense = async (db: Db, storeId: string, licenseK
 
 /** カードの登録の口を開いた印。戻ってきた要求を突き合わせるために持つ（カードの値そのものは持たない）。 */
 export const saveCardSetupSession = async (db: Db, storeId: string, sessionId: string): Promise<void> => {
-  await db.prepare(`UPDATE stores SET card_setup_session_id = ?2 WHERE id = ?1`).bind(storeId, sessionId).run();
+  await db.prepare(`UPDATE stores SET card_setup_session_id = ?2 WHERE id = ?1 AND ${NOT_WITHDRAWN}`).bind(storeId, sessionId).run();
 };
 
 /**
@@ -317,5 +325,5 @@ export const findCardSetupSession = async (db: Db, storeId: string): Promise<str
  * 確かめ終えた控えの番号は消す（画面が開くたびに確かめ直さない・不具合-01）。
  */
 export const markCardRegistered = async (db: Db, storeId: string, atIso: string): Promise<void> => {
-  await db.prepare(`UPDATE stores SET card_registered_at = ?2, card_setup_session_id = NULL WHERE id = ?1`).bind(storeId, atIso).run();
+  await db.prepare(`UPDATE stores SET card_registered_at = ?2, card_setup_session_id = NULL WHERE id = ?1 AND ${NOT_WITHDRAWN}`).bind(storeId, atIso).run();
 };

@@ -71,9 +71,16 @@ export const emailVerifySchema = z.object({ email: emailSchema });
 /** 確認のリンクの token（問い合わせ文字列）。長すぎる値は早く切る（実際の値は16バイトの base64url＝22字）。 */
 export const emailVerifyConfirmSchema = z.object({ token: z.string().min(1).max(EMAIL_VERIFY_TOKEN_MAX_LENGTH) });
 
+/**
+ * 店の退会（2026-09-26 本人発案・要件13の基準 13.14）。取り返しがつかないので、今のパスワードの再入力を求める
+ * （メールアドレスの変更と同じ確かめ。セッションを盗まれただけでは店を消せないようにする）。
+ */
+export const storeWithdrawSchema = z.object({ currentPassword: currentPasswordSchema });
+
 export type StoreRegisterInput = z.infer<typeof storeRegisterSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
 export type ChangeOwnPasswordInput = z.infer<typeof changeOwnPasswordSchema>;
 export type EmailVerifyInput = z.infer<typeof emailVerifySchema>;
+export type StoreWithdrawInput = z.infer<typeof storeWithdrawSchema>;

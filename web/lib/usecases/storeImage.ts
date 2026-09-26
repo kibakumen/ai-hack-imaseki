@@ -72,6 +72,17 @@ export const refreshStoreImage = async (deps: Deps, storeId: string, change: Sto
 };
 
 /**
+ * 店の画像を置き場から消す（2026-09-26 本人発案の店の退会）。画像は飾りなので、消せなくても退会は成り立たせ、記録だけ残す。
+ */
+export const discardStoreImage = async (deps: Deps, storeId: string): Promise<void> => {
+  try {
+    await deps.files.delete(imageKeyOf(storeId));
+  } catch {
+    deps.logger.log({ event: "store_image_discard_failed", id: storeId });
+  }
+};
+
+/**
  * 置き場にまだ画像が無い店の画像を、店の登録の URL から取って置く（埋め戻し・レビュー）。店ごとに1日1回まで——
  * 数えは連打の抑止の表の1文で原子的に足すので、同時に何人が開いても外へ出るのは1回。取れなければ null。
  * 画像は飾りなので、置き場や表が落ちても例外を外へ出さない（入口は 404 を返すだけ）。

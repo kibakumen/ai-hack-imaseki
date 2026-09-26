@@ -2,7 +2,7 @@
 
 // 運営の店の一覧の1枚（2026-09-25 監査の指摘 運営-10 で一覧から分けた）。
 // 店名・状態・公開中の印・住所・メールアドレスに加えて、並び替えの元になる数（登録日・受け取り・予算・残り枠）と
-// 店が取り消した回数（横断-09）を小さな札で出し、今選んでいる並びの元の札を目立たせる——並べた結果が
+// 店が取り消した回数（横断-09）を小さな札で出し（退会した店は状況の札を「退会済み」にする・2026-09-26）、今選んでいる並びの元の札を目立たせる——並べた結果が
 // 正しいかを、カードを見て確かめられるようにする。承認後に変更あり（運営-02）・連絡済み（運営-05）の印も出す。
 // ⚠️ 色の値はここに書かない（構造の検査 34）。全部 `admin.module.css` が持つ。
 
@@ -10,7 +10,7 @@ import Link from "next/link";
 import type { AdminStoreRowDto } from "../../lib/client/api";
 import { dateTimeInJst } from "../ui/jstTime";
 import styles from "./admin.module.css";
-import { ADMIN_STORE_CANCEL_TEXTS, TERMS } from "../../lib/domain/texts";
+import { ADMIN_STORE_CANCEL_TEXTS, TERMS, WITHDRAWN_STORE_LABEL } from "../../lib/domain/texts";
 
 export type SortKey = "created_desc" | "claims_desc" | "price_asc" | "remaining_desc";
 
@@ -43,7 +43,7 @@ export const StoreCard = ({ store, sortKey, href }: Props) => (
     <div className={styles.cardHead}>
       <Link href={href}>{store.name}</Link>
       <span className={styles.badge} data-status={store.status}>
-        {STATUS_LABELS[store.status]}
+        {store.withdrawnAt ? WITHDRAWN_STORE_LABEL : STATUS_LABELS[store.status]}
       </span>
       {store.publishing && (
         <span className={styles.badge} data-status="publishing">
