@@ -169,6 +169,20 @@ describe("30日を過ぎた座標は、取り直しの数の上限と間引き�
     expect(logged).toContainEqual({ event: "store_coordinates_swept", count: 1 });
   });
 
+  // 2026-09-26 独立したレビューの指摘（AI判断）: 定期実行は1日1回なので、30日で消すしきい値のままだと、30日に1時間足りない
+  // 座標は次の回（1日後）まで残り、最長で約31日になった。定期実行は「上限30日 − 定期実行の間隔1日」＝29日を過ぎた座標を消す。
+  it("定期実行の手入れは、29日を過ぎた座標を消す（29日＋23時間の座標は、次の定期実行を待たずに今回で消える）。29日に届かない座標は残す", async () => {
+    const HOUR = 60 * 60 * 1000;
+    const agoMs = (ms: number): string => new Date(new Date(T0).getTime() - ms).toISOString();
+    const almostThirty = await seedStore({ address: "住所-29日23時間", lat: 35.3, lng: 139.3, geocodedAt: agoMs(29 * DAY + 23 * HOUR) });
+    const underTwentyNine = await seedStore({ address: "住所-28日23時間", lat: 35.4, lng: 139.4, geocodedAt: agoMs(28 * DAY + 23 * HOUR) });
+    const { geocoder } = tableGeocoder({ "住所-29日23時間": "down", "住所-28日23時間": "down" });
+    await runScheduledGoogleUpkeep({ ...ctx.deps, geocoder });
+
+    expect(await storeRow(almostThirty)).toEqual({ lat: null, lng: null, geocoded_at: agoMs(29 * DAY + 23 * HOUR) });
+    expect(await storeRow(underTwentyNine)).toEqual({ lat: 35.4, lng: 139.4, geocoded_at: agoMs(28 * DAY + 23 * HOUR) });
+  });
+
   it("定期実行の手入れは、消せなかったら例外を外へ出す（定期実行の失敗として Cloudflare の記録に残す）", async () => {
     const broken: Deps = { ...ctx.deps, db: { ...ctx.deps.db, prepare: () => { throw new Error("D1 が落ちた"); } } as Deps["db"] };
     await expect(runScheduledGoogleUpkeep(broken)).rejects.toThrow();
