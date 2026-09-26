@@ -68,6 +68,7 @@ const numbersOf = (data: MetricsResponse): Metric[] => [
   { label: "候補が無く AI を呼ばなかった取得", value: times(data.fetch.noCandidates), help: "近くに出せるオファーが無かった取得。AI は呼ばない決まりで、点数順で出したのとは別に数えます。" },
   { label: "確保の数", value: `${data.reservations.total} 件`, help: "受け取られた確保の全部。" },
   { label: "店が「来ない」で取り消した確保", value: `${data.storeCancels?.noShow ?? 0} 件`, help: `店が取り消した確保（${data.storeCancels?.total ?? 0} 件）のうち、来ないと判断して取り消し、枠を戻したもの。` },
+  { label: "退会でキャンセルした確保", value: `${data.storeCancels?.withdrawn ?? 0} 件`, help: "店が退会したときに、向かっていたお客さまの確保をキャンセルしたもの。店が選んだキャンセルには数えません。" },
   { label: "確保のうち自動で取り消された割合", value: percent(data.reservations.expiredRate), help: "もう終わった確保のうち、期限までに来店が無かった割合（向かっている途中の確保は入れません）。" },
   { label: "予備のモデルが答えた割合", value: percent(data.fallbackRate), help: "全部の呼び出しのうち、最初のモデルの代わりに予備のモデルが答えた割合。" },
 ];

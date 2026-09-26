@@ -18,7 +18,7 @@
 import type { Deps } from "../ports";
 import type { AdminStoreFilter } from "../schemas/admin";
 import { parseStringList } from "./d1";
-import { activeReservationCondition, publishingOfferCondition, remainingExpression } from "./sqlFragments";
+import { activeReservationCondition, publishingOfferCondition, remainingExpression, storeChosenCancelCondition, withdrawnCancelCondition } from "./sqlFragments";
 import type { StoreStatus } from "./stores";
 
 type Db = Deps["db"];
@@ -55,6 +55,8 @@ export type AdminStoreListRow = {
    * 客を締め出す手として繰り返されていないかを、店の都合の取り消しと分けて見られるようにする。
    */
   noShowCancelled: number;
+  /** 店の退会の巻き添えで取り消した確保の数（「退会でキャンセル」・2026-09-26 本人選択）。上の2つには入れない */
+  withdrawnCancelled: number;
   /** 店が退会した時刻（2026-09-26 本人発案の店の退会）。状況は banned のまま残るので、これで「退会済み」を見分ける */
   withdrawnAt: string | null;
 };
@@ -109,9 +111,16 @@ const toBoolean = (value: unknown): boolean => value === 1 || value === true || 
 const adminStoreClaimsExpression = (storeAlias: string): string =>
   `(SELECT COUNT(*) FROM reservations cr WHERE cr.store_id = ${storeAlias}.id AND cr.status = 'completed')`;
 
-/** 店が取り消した確保の数（横断-09）。「最終手段」のはずの取り消しを繰り返す店を見つけるため。 */
+/**
+ * 店が取り消した確保の数（横断-09）。「最終手段」のはずの取り消しを繰り返す店を見つけるため。
+ * 退会の巻き添えで取り消した確保は、店が選んだ取り消しではないので入れない（2026-09-26 本人選択・下の数で別に出す）。
+ */
 const storeCancelledExpression = (storeAlias: string): string =>
-  `(SELECT COUNT(*) FROM reservations sc WHERE sc.store_id = ${storeAlias}.id AND sc.status = 'store_cancelled')`;
+  `(SELECT COUNT(*) FROM reservations sc WHERE sc.store_id = ${storeAlias}.id AND ${storeChosenCancelCondition("sc")})`;
+
+/** 店の退会の巻き添えで取り消した確保の数（「退会でキャンセル」・2026-09-26 本人選択）。 */
+const withdrawnCancelledExpression = (storeAlias: string): string =>
+  `(SELECT COUNT(*) FROM reservations wc WHERE wc.store_id = ${storeAlias}.id AND ${withdrawnCancelCondition("wc")})`;
 
 /** 店が「来ない（枠を戻す）」で取り消した確保の数（2026-09-26 本人選択・migration 0013 の cancel_reason）。 */
 const noShowCancelledExpression = (storeAlias: string): string =>
@@ -148,6 +157,7 @@ const listColumns = (now: string): string =>
    ${contactedExpression("s")} AS contacted,
    ${storeCancelledExpression("s")} AS store_cancelled,
    ${noShowCancelledExpression("s")} AS no_show_cancelled,
+   ${withdrawnCancelledExpression("s")} AS withdrawn_cancelled,
    ${reservationCountExpression("s")} AS reservation_count`;
 
 const toListRow = (row: Record<string, unknown>): AdminStoreListRow => {
@@ -169,6 +179,7 @@ const toListRow = (row: Record<string, unknown>): AdminStoreListRow => {
     storeCancelled,
     storeCancelRate: reservationCount > 0 ? storeCancelled / reservationCount : 0,
     noShowCancelled: Number(row.no_show_cancelled ?? 0),
+    withdrawnCancelled: Number(row.withdrawn_cancelled ?? 0),
     withdrawnAt: typeof row.withdrawn_at === "string" && row.withdrawn_at !== "" ? row.withdrawn_at : null,
   };
 };

@@ -1101,7 +1101,7 @@ flowchart LR
 - **記録**: `reservation_events.reason`（migration 0013）へ、状態の変化の記録を足す文（`reservationEventStatement`）が確保の行の `cancel_reason` を写す。追加だけの表のまま（基準 27.7）
 - **客の画面**: ホームの確保に `cancelReason: "no_show"` が載り、店に取り消された表示の見出しと読み上げが「お店が来店なしとして取り消しました」になる。Web プッシュの場面は `store_no_show`（決まった文・呼び名と電話番号を含めない・基準 22.4・22.5）
 - **店の画面**: 確保中の行に「来ない（枠が戻る）」のボタン。押したカードの中で「客に知らせが送られ、この組の枠が残りへ戻る」を確かめてから送る。取り消した行の見出しは「来店なしで取り消し（枠を戻しました）」（応答の行に `noShow`）。ボタンの語に「戻す」を使わないのは、一覧に戻す操作を置かない決め（基準 20.10）と受け入れ検査 r20 の見張りの語を避けるため（AI判断）
-- **運営の数字**: 店の一覧と詳細の「店の取り消し N 回」に「うち来ない M 回」を添え（`noShowCancelled`）、数字の画面に「店が『来ない』で取り消した確保」（`storeCancels`）を足す。来店なしの取り消しは枠が戻るので、客を締め出す手として繰り返されていないかを店の都合と分けて見る
+- **運営の数字**: 店の一覧と詳細の「店の取り消し N 回」に「うち来ない M 回」を添え（`noShowCancelled`）、数字の画面に「店が『来ない』で取り消した確保」（`storeCancels`）を足す。来店なしの取り消しは枠が戻るので、客を締め出す手として繰り返されていないかを店の都合と分けて見る。店の退会の巻き添えで取り消した確保（`cancel_reason = 'withdrawn'`・2026-09-26 本人選択）は「店の取り消し」に数えず、`withdrawnCancelled`・`storeCancels.withdrawn` の「退会でキャンセル」として分けて出す（`repo/sqlFragments` の `storeChosenCancelCondition`・`withdrawnCancelCondition`）
 - 検査: `web/tests/storeNoShow.test.ts`（入口から残り・記録・客のホーム・プッシュ・店の一覧・運営の数字まで）・`web/components/store/ArrivalsList.test.tsx`・`web/components/customer/StoreCancelledReport.test.tsx`
 
 ### 回線ごとの AI の取り分（安全-03 の残り・要件30の補足）

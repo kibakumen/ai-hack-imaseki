@@ -26,6 +26,7 @@ const ROW = {
   contacted: false,
   storeCancelled: 1,
   storeCancelRate: 0.25,
+  withdrawnCancelled: 2,
   withdrawnAt: "2026-09-26T03:00:00.000Z",
 };
 
@@ -63,6 +64,22 @@ describe("運営の画面の退会した店", () => {
     const row = screen.getByTestId("row-store-w");
     expect(row.textContent).toContain("退会済み");
     expect(row.textContent).not.toContain("登録取り消し済み");
+  });
+
+  // 2026-09-26 本人選択: 退会の巻き添えの取り消しは「店の取り消し」に混ぜず、「退会でキャンセル」として分けて出す
+  it("一覧のカードと詳細は、退会でキャンセルした数を店の取り消しと分けて出す", async () => {
+    render(
+      <ul>
+        <StoreCard store={ROW} sortKey="created_desc" href="/admin/stores/store-w" />
+      </ul>,
+    );
+    expect(screen.getByTestId("stat-withdrawn-cancel").textContent).toBe("退会でキャンセル 2 件");
+    expect(screen.getByTestId("stat-store-cancel").textContent).toContain(" 1 回");
+    cleanup();
+
+    api = installFakeApi({ "GET /api/admin/stores/:id": () => ({ json: { store: DETAIL, reports: { count: 0, latest: [] }, history: [] } }) });
+    render(<StoreDetail storeId="store-w" />);
+    expect((await screen.findByTestId("store-impact")).textContent).toContain("退会でキャンセル 2 件");
   });
 
   it("詳細は「退会済み」と退会の時刻を出し、戻す操作を出さない", async () => {

@@ -7,7 +7,7 @@
 import type { Deps } from "../ports";
 import { changedRows } from "./d1";
 import { reservationEventStatement } from "./logs";
-import { activeReservationCondition, expiredWithinGraceCondition, remainingExpression } from "./sqlFragments";
+import { activeReservationCondition, expiredWithinGraceCondition, remainingExpression, STORE_CANCEL_REASON_WITHDRAWN } from "./sqlFragments";
 import { RESERVATION_COLUMNS, toReservationRow, type ReservationRow } from "./reservations";
 
 type Db = Deps["db"];
@@ -204,16 +204,17 @@ export const adminCancelReservationsStatement = (db: Db, storeId: string, nowIso
  * 状態を `admin_cancelled` でなく `store_cancelled` にするのは、客への文面を「お店の都合で取り消されました」にするため
  * （退会は運営の判断ではない・AI判断）。オファーは同じまとまりで終わるので、残りの数え方（`store_cancelled` は枠を押さえる）は
  * 客に見えない。退会の1文目が当たったまとまりでだけ当たる（`withdrawn_at = ?2`・repo/storeWithdrawal の注）。
+ * 理由は `withdrawn`（運営の数字で店の取り消しと分けて数える・2026-09-26 本人選択）。客の画面は理由を見ず「店の都合」を出す。
  */
 export const withdrawCancelReservationsStatement = (db: Db, storeId: string, nowIso: string) =>
   db
     .prepare(
-      `UPDATE reservations SET status = 'store_cancelled', status_at = ?2` +
+      `UPDATE reservations SET status = 'store_cancelled', status_at = ?2, cancel_reason = ?3` +
         ` WHERE reservations.store_id = ?1 AND ${activeReservationCondition("reservations", "?2")}` +
         ` AND EXISTS (SELECT 1 FROM stores ws WHERE ws.id = ?1 AND ws.withdrawn_at = ?2)` +
         ` RETURNING reservations.id AS id, reservations.customer_id AS customer_id`,
     )
-    .bind(storeId, nowIso);
+    .bind(storeId, nowIso, STORE_CANCEL_REASON_WITHDRAWN);
 
 /**
  * その店の確保に写した客の電話番号を空にする（退会のまとまりの中）。写しは店の画面に出すためだけのもの（安全-17）で、

@@ -16,7 +16,7 @@
 
 import type { Deps } from "../ports";
 import type { D1PreparedStatement } from "./d1";
-import { activeReservationCondition, expiredReservationCondition } from "./sqlFragments";
+import { activeReservationCondition, expiredReservationCondition, STORE_CANCEL_REASON_WITHDRAWN } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -240,6 +240,7 @@ const STORE_WITHDRAWN_EVENT_ID_SUFFIX = ":store_withdrawn";
 /**
  * 店が退会したときに取り消される確保の、状態の変化の記録（基準 27.4・2026-09-26 本人発案の店の退会）。
  * 状態は「店が取り消した」（`store_cancelled`）——客への文面は「お店の都合で取り消されました」になる。
+ * 理由は `withdrawn`（確保の行の `cancel_reason` と同じ・2026-09-26 本人選択）。
  *
  * 運営の停止の記録と同じく、**確保の状態を書き換える文より前**に並べる（まだ確保中の行を選ぶ）。
  * 退会の1文目（店の行に退会の時刻 ?2 を入れる文）が当たったまとまりでだけ行を足す——`withdrawn_at = ?2` の条件が、
@@ -248,9 +249,9 @@ const STORE_WITHDRAWN_EVENT_ID_SUFFIX = ":store_withdrawn";
 export const storeWithdrawnEventsStatement = (db: Db, storeId: string, nowIso: string) =>
   db
     .prepare(
-      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, at)` +
-        ` SELECT res.id || ?3, res.id, 'store_cancelled', ?2 FROM reservations res` +
+      `INSERT OR IGNORE INTO reservation_events (id, reservation_id, status, reason, at)` +
+        ` SELECT res.id || ?3, res.id, 'store_cancelled', ?4, ?2 FROM reservations res` +
         ` WHERE res.store_id = ?1 AND ${activeReservationCondition("res", "?2")}` +
         ` AND EXISTS (SELECT 1 FROM stores ws WHERE ws.id = ?1 AND ws.withdrawn_at = ?2)`,
     )
-    .bind(storeId, nowIso, STORE_WITHDRAWN_EVENT_ID_SUFFIX);
+    .bind(storeId, nowIso, STORE_WITHDRAWN_EVENT_ID_SUFFIX, STORE_CANCEL_REASON_WITHDRAWN);

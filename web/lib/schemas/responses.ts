@@ -210,6 +210,8 @@ const adminStoreRow = object({
   storeCancelRate: number(),
   /** そのうち「来ない（枠を戻す）」で取り消した数（2026-09-26 本人選択）。古い応答には無いので任意 */
   noShowCancelled: optional(number()),
+  /** 店の退会の巻き添えで取り消した数（「退会でキャンセル」・上の2つに入れない・2026-09-26 本人選択）。古い応答には無いので任意 */
+  withdrawnCancelled: optional(number()),
   // 店が退会した時刻（2026-09-26 本人発案の店の退会）。退会していなければ null。状況は banned のまま残るので、
   // 運営の画面はこれで「退会済み」を見分ける。この項目より前に作った画面の検査の値には無いので任意
   withdrawnAt: optional(nullable(string())),
@@ -261,7 +263,7 @@ const adminMetrics = object({
    * 店が取り消した確保の数と、そのうち「来ない（枠を戻す）」で取り消した数（2026-09-26 本人選択）。`reservations` の形は
    * 受け入れ検査 r33 が固定しているので別の項目にした。古い応答には無いので任意
    */
-  storeCancels: optional(object({ total: number(), noShow: number() })),
+  storeCancels: optional(object({ total: number(), noShow: number(), withdrawn: optional(number()) })),
   byModel: array(
     object({
       model: nullable(string()),

@@ -50,6 +50,15 @@ describe("数字の画面", () => {
     expect(container.textContent).not.toMatch(/倒れた|受け皿/);
   });
 
+  // 2026-09-26 本人選択: 退会の巻き添えで取り消した確保は、店の取り消しに混ぜず「退会でキャンセル」として分けて出す
+  it("退会でキャンセルした確保を、店のキャンセルとは別の行で出す", async () => {
+    api = installFakeApi({ "GET /api/admin/metrics": () => ({ json: metrics({ storeCancels: { total: 4, noShow: 1, withdrawn: 3 } }) }) });
+    render(<Metrics />);
+    const grid = await screen.findByTestId("metrics");
+    const row = [...grid.querySelectorAll("dt")].find((dt) => dt.textContent === "退会でキャンセルした確保");
+    expect(row?.nextElementSibling?.textContent).toContain("3 件");
+  });
+
   it("各数字に1行の説明が付く", async () => {
     api = installFakeApi({ "GET /api/admin/metrics": () => ({ json: metrics() }) });
     render(<Metrics />);

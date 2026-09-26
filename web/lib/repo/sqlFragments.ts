@@ -91,3 +91,19 @@ export const remainingExpression = (offerAlias: string, nowPlaceholder: string):
  */
 export const receivableCondition = (offerAlias: string, nowPlaceholder: string): string =>
   `((${publishingOfferCondition(offerAlias, nowPlaceholder)}) AND ${remainingExpression(offerAlias, nowPlaceholder)} >= 1)`;
+
+// ---------- 店の取り消しの数え分け（2026-09-26 本人選択） ----------
+
+/**
+ * 店の退会の巻き添えで取り消した確保の理由（`reservations.cancel_reason`・`reservation_events.reason`）。店が自分で選んだ
+ * 取り消しではないので、運営の「店のキャンセル N 回」に数えず「退会でキャンセル」として分けて数える。
+ * 列（migration 0013）は CHECK の無い TEXT なので、値を足すのに migration は要らない。
+ */
+export const STORE_CANCEL_REASON_WITHDRAWN = "withdrawn";
+
+/** 店が自分で選んだ取り消し（店の都合・来店なし）か。退会の巻き添えは入れない。 */
+export const storeChosenCancelCondition = (alias: string): string =>
+  `(${alias}.status = 'store_cancelled' AND (${alias}.cancel_reason IS NULL OR ${alias}.cancel_reason <> '${STORE_CANCEL_REASON_WITHDRAWN}'))`;
+
+/** 店の退会の巻き添えで取り消した確保か。 */
+export const withdrawnCancelCondition = (alias: string): string => `(${alias}.status = 'store_cancelled' AND ${alias}.cancel_reason = '${STORE_CANCEL_REASON_WITHDRAWN}')`;

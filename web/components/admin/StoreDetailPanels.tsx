@@ -129,6 +129,7 @@ export const StoreImpact = ({ store, reportCount }: { store: StoreDetailDto; rep
     <span className={styles.stat}>{`受け取り ${store.claims} 件`}</span>
     <span className={styles.stat} data-strong={reportCount > 0 ? "true" : "false"}>{`通報 ${reportCount} 件`}</span>
     <span className={styles.stat} data-strong={store.storeCancelled > 0 ? "true" : "false"}>{`店の取り消し ${store.storeCancelled} 回（${percent(store.storeCancelRate)}）${ADMIN_STORE_CANCEL_TEXTS.noShowNote(store.noShowCancelled)}`}</span>
+    {(store.withdrawnCancelled ?? 0) > 0 && <span className={styles.stat}>{ADMIN_STORE_CANCEL_TEXTS.withdrawn(store.withdrawnCancelled ?? 0)}</span>}
   </p>
 );
 

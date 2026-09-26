@@ -322,6 +322,8 @@ export const ARRIVALS_TEXTS = {
 export const ADMIN_STORE_CANCEL_TEXTS = {
   /** 店の取り消しの回数に添える「うち来ない」（0回・古い応答では何も添えない） */
   noShowNote: (count: number | undefined): string => (count !== undefined && count > 0 ? `・うち来ない ${count} 回` : ""),
+  /** 店の退会の巻き添えで取り消した数（店の取り消しとは別に出す・2026-09-26 本人選択） */
+  withdrawn: (count: number): string => `退会でキャンセル ${count} 件`,
 } as const;
 
 // ---------- 承認の状況の帯（要件12の基準 12.6・12.7・12.9。2026-09-25 監査の指摘 店-12） ----------

@@ -11,7 +11,7 @@
 //    AVG と SUM は NULL を返すので、読む側で 0 に倒す（下の toNumber）。
 
 import type { Deps } from "../ports";
-import { activeReservationCondition, expiredReservationCondition } from "./sqlFragments";
+import { activeReservationCondition, expiredReservationCondition, storeChosenCancelCondition, withdrawnCancelCondition } from "./sqlFragments";
 
 type Db = Deps["db"];
 
@@ -55,8 +55,11 @@ export type CostTotals = { costUsd: number; calls: number };
  * 確保の数と、自動で取り消された（期限切れの）数。`settled` は**もう終わった**確保の数
  * （まだ確保中の行を除いた数・割合の分母・不具合-10）。
  */
-/** `storeCancelled` は店が取り消した確保の数、`noShowCancelled` はそのうち「来ない（枠を戻す）」の数（2026-09-26 本人選択） */
-export type ReservationTotals = { total: number; expired: number; settled: number; storeCancelled: number; noShowCancelled: number };
+/**
+ * `storeCancelled` は店が取り消した確保の数、`noShowCancelled` はそのうち「来ない（枠を戻す）」の数（2026-09-26 本人選択）。
+ * `withdrawnCancelled` は店の退会の巻き添えで取り消した確保の数で、`storeCancelled` には入れない（同日の本人選択）。
+ */
+export type ReservationTotals = { total: number; expired: number; settled: number; storeCancelled: number; noShowCancelled: number; withdrawnCancelled: number };
 
 /**
  * `resolved_model` で括った1行（タスク28 の続き・第4周の追記）。`model` が null の行は、
@@ -172,13 +175,14 @@ export const reservationTotals = async (db: Db, nowIso: string): Promise<Reserva
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN ${expiredReservationCondition("reservations", "?1")} THEN 1 ELSE 0 END) AS expired,
               SUM(CASE WHEN ${activeReservationCondition("reservations", "?1")} THEN 0 ELSE 1 END) AS settled,
-              SUM(CASE WHEN reservations.status = 'store_cancelled' THEN 1 ELSE 0 END) AS store_cancelled,
-              SUM(CASE WHEN reservations.status = 'store_cancelled' AND reservations.cancel_reason = 'no_show' THEN 1 ELSE 0 END) AS no_show
+              SUM(CASE WHEN ${storeChosenCancelCondition("reservations")} THEN 1 ELSE 0 END) AS store_cancelled,
+              SUM(CASE WHEN reservations.status = 'store_cancelled' AND reservations.cancel_reason = 'no_show' THEN 1 ELSE 0 END) AS no_show,
+              SUM(CASE WHEN ${withdrawnCancelCondition("reservations")} THEN 1 ELSE 0 END) AS withdrawn
          FROM reservations`,
     )
     .bind(nowIso)
     .first();
-  return { total: toNumber(row?.total), expired: toNumber(row?.expired), settled: toNumber(row?.settled), storeCancelled: toNumber(row?.store_cancelled), noShowCancelled: toNumber(row?.no_show) };
+  return { total: toNumber(row?.total), expired: toNumber(row?.expired), settled: toNumber(row?.settled), storeCancelled: toNumber(row?.store_cancelled), noShowCancelled: toNumber(row?.no_show), withdrawnCancelled: toNumber(row?.withdrawn) };
 };
 
 /**

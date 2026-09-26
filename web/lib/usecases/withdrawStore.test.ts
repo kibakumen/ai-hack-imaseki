@@ -166,10 +166,10 @@ describe("店の退会の入口（基準 13.13〜13.20）", () => {
 
     expect(await one(ctx.db, "SELECT status FROM reservations WHERE id = ?", scene.reservation.id)).toMatchObject({ status: "store_cancelled" });
     expect(await rows(ctx.db, "SELECT id FROM reservation_events WHERE reservation_id = ? AND status = 'store_cancelled'", scene.reservation.id)).toHaveLength(1);
-    // 退会の取り消しは「来ない（枠が戻る）」ではない（migration 0013・基準 18.16）: 理由は空（店の都合）で、枠は押さえたまま。
-    // オファーごと同じまとまりで終わるので、枠が戻らないことは客に見えない（2026-09-26 の合流の直し）
-    expect(await one(ctx.db, "SELECT cancel_reason, holds_slot FROM reservations WHERE id = ?", scene.reservation.id)).toMatchObject({ cancel_reason: null, holds_slot: 1 });
-    expect(await rows(ctx.db, "SELECT reason FROM reservation_events WHERE reservation_id = ? AND status = 'store_cancelled'", scene.reservation.id)).toEqual([{ reason: null }]);
+    // 退会の取り消しは「来ない（枠が戻る）」ではない（migration 0013・基準 18.16）: 枠は押さえたまま。理由は「退会」（withdrawn）で、
+    // 運営の「店の取り消し」に数えず分けて数える（2026-09-26 本人選択）。オファーごと同じまとまりで終わるので、枠が戻らないことは客に見えない
+    expect(await one(ctx.db, "SELECT cancel_reason, holds_slot FROM reservations WHERE id = ?", scene.reservation.id)).toMatchObject({ cancel_reason: "withdrawn", holds_slot: 1 });
+    expect(await rows(ctx.db, "SELECT reason FROM reservation_events WHERE reservation_id = ? AND status = 'store_cancelled'", scene.reservation.id)).toEqual([{ reason: "withdrawn" }]);
     expect(await one(ctx.db, "SELECT ended_at, end_reason FROM offers WHERE id = ?", scene.offer.id)).toMatchObject({ end_reason: "withdrawn" });
     expect(ctx.push.calls.length).toBe(pushesBefore + 1);
     // 知らせの文面は「お店の都合で取り消された」（運営の都合ではない）
@@ -182,6 +182,23 @@ describe("店の退会の入口（基準 13.13〜13.20）", () => {
     expect(home.json.reservation.storeName).toBe(WITHDRAWN_STORE_NAME);
     const history = await scene.customer.api.get("/api/customer/history");
     expect(history.json.items[0]).toMatchObject({ storeName: WITHDRAWN_STORE_NAME, storeAddress: "", storeUrl: null });
+  });
+
+  // 2026-09-26 本人選択: 退会の巻き添えで取り消した確保は、店が自分で選んだ取り消しではない。運営の「店の取り消し N 回」
+  // （最終手段を繰り返す店を見つける数字）に混ぜず、「退会でキャンセル」として分けて出す。
+  it("退会で取り消した確保は、運営の「店の取り消し」に数えず、「退会でキャンセル」として分けて数える（一覧・詳細・数字）", async () => {
+    const scene = await receivedScene(ctx, { storeName: "退会の数えを確かめる店" });
+    const admin = ctx.admin!.api;
+    const metricsBefore = (await admin.get("/api/admin/metrics")).json;
+
+    expect((await scene.store.api.post(WITHDRAW, { currentPassword: scene.store.password })).status).toBe(200);
+
+    const row = (await admin.get("/api/admin/stores")).json.items.find((item: { id: string }) => item.id === scene.store.id);
+    expect(row).toMatchObject({ storeCancelled: 0, storeCancelRate: 0, withdrawnCancelled: 1 });
+    expect((await admin.get(`/api/admin/stores/${scene.store.id}`)).json.store).toMatchObject({ storeCancelled: 0, withdrawnCancelled: 1 });
+    const metrics = (await admin.get("/api/admin/metrics")).json;
+    expect(metrics.storeCancels.total).toBe(metricsBefore.storeCancels.total);
+    expect(metrics.storeCancels.withdrawn).toBe((metricsBefore.storeCancels.withdrawn ?? 0) + 1);
   });
 
   it("13.18 退会した店のセッションは効かず、同じパスワードでもログインできず、二重の退会は 401 で何も変えない", async () => {
