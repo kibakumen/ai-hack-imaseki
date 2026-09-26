@@ -10,6 +10,7 @@
 
 import type { Metadata } from "next";
 import { ContactEmail } from "../../../components/ui/ContactEmail";
+import { GoogleMapsTerms } from "../../../components/ui/GoogleMapsTerms";
 import { STORE_TERMS_VERSION } from "../../../lib/schemas/limits";
 import "./terms.css";
 
@@ -34,6 +35,9 @@ export default function StoreTermsPage() {
           <li>店舗情報（店名・住所・ジャンル・おすすめメニュー・予算の幅）は、お客さまの画面に出ます。事実と違う内容を載せないでください。</li>
         </ul>
       </section>
+
+      {/* Google Maps Platform の利用規約 3.2.2(a)(i) の知らせ（2026-09-26・客向けの利用規約と共用） */}
+      <GoogleMapsTerms />
 
       <section data-testid="terms-card">
         <h2>カードを預かる目的と請求</h2>

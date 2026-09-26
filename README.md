@@ -37,7 +37,7 @@ AI HACK 2026 の提出物。Next.js（`web/`）＋ Cloudflare Workers（D1・R2�
 
 - 客・店・運営、用途の異なる3つの画面を1つの Next.js アプリ（`web/`）にまとめ、Cloudflare Workers 上で動かす。データは D1、営業許可書と店の画像は R2、AI は OrcaRouter 経由の1か所だけを通す。
 - 判断はすべて副作用のない関数（`web/lib/domain/`）に集約している。画面の部品や API の入口は、その関数が返した結果をそのまま描くだけで、自分では判断しない。
-- オファーの受付終了や確保の期限切れは、状態として保存せず、読むたびに「今の時刻」と比べて導く。だから段階配信を進めるための定期実行のジョブ（Cron Triggers・Durable Objects の alarm）を1つも持たない。応答のあとに回す小さな手入れ（Google で直した店の位置の取り直し・どの店からも指されていない営業許可書の掃除）は、要求のついでに `waitUntil` で走る。
+- オファーの受付終了や確保の期限切れは、状態として保存せず、読むたびに「今の時刻」と比べて導く。だから段階配信を進めるための定期実行のジョブ（Cron Triggers・Durable Objects の alarm）は持たない。応答のあとに回す小さな手入れ（Google で直した店の位置の取り直し・どの店からも指されていない営業許可書の掃除）は、要求のついでに `waitUntil` で走る。定期実行は1本だけで、1日1回、Google で直した店の位置のうち連続30日を過ぎたものを必ず消す（Google Maps Platform の Service Specific Terms 6.3.1。客が来ない日も期限を守るため・`web/wrangler.jsonc` の `triggers.crons` → `web/worker.mjs` → `web/lib/scheduled.ts`）。
 - 外部サービス（OrcaRouter・Google Maps の Geocoding と Places・Stripe・Web Push・Cloudflare Turnstile・R2）は、1サービスにつき1ファイルの差し替え口（`web/lib/adapters/`）からしか呼ばない。自動テストはこの口を偽物に差し替えて走らせる。どこへ何を送るかの一覧は `/privacy`（`web/app/privacy/page.tsx`）。
 - AI が判断に関わるのは2か所だけ。決定論の絞り込みで上位10件まで絞った候補から最大5件を選んで理由を書く「店の選定」と、選ばれた店ごとの紹介文の生成・検査。紹介文の生成モデルと検査モデルは別ベンダーに分けてあり（`web/lib/adapters/orcarouter.ts` の `JUDGE_MODEL`。書き手と検査官の口は `orcarouterPitch.ts`）、書いた本人に採点させない。**呼び出しの数には上限がある**——店の選定は取得1回につき1回、紹介文は1店につき書き手と検査官を合わせて4回まで、取得1回の合計は21回まで（要件7の基準 7.2・`web/lib/usecases/writePitch.ts` の `AI_CALLS_PER_FETCH_MAX`）。アプリ全体でも、その日（日本時間）の AI の実費か回数が上限に届いたら、選定は点数順・紹介文は決まった文に倒す（値は `web/lib/schemas/limits.ts`）。
 - ログインなしで叩ける3つの入口（客の登録・店の登録・ログイン）に Cloudflare Turnstile を置き、確認が取れないときも拒否する。客の識別子は HttpOnly の Cookie に置き、画面のコードからは読めない。店と運営は自前のセッション（Cookie と D1。使うたびに延びるが、作ってから14日で必ず切れる）でログインする。連打の抑止は、外のサービスを呼ぶ入口とログインに掛けてある（表は `web/lib/http/rateLimits.ts`）。全部の応答に CSP などの守りの見出しを付けている。
@@ -203,7 +203,7 @@ v2 の Worker `ai-hack-v2` は 2026-09-25 から止めてある（「1. 触れ�
 pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 ```
 
-2026-09-25 の監査の直しで足した migration は次の9本（2026-09-26 の最終の手直しの `0012` を含む）と、2026-09-26 に取り込んだメールアドレスの確認の `0015` で、どれも本番には未適用（コードはこれが当たっている前提で動く。当てずにコードだけを出すと、列や制約が無いまま動いて500になる）:
+2026-09-25 の監査の直しで足した migration は次の表のとおり（2026-09-26 の最終の手直しの `0012` 以降と、2026-09-26 に取り込んだメールアドレスの確認の `0015` を含む）で、どれも本番には未適用（コードはこれが当たっている前提で動く。当てずにコードだけを出すと、列や制約が無いまま動いて500になる）:
 
 | migration | 中身 |
 | --- | --- |
@@ -217,6 +217,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 | `0011_admin_actions.sql` | 運営の操作の記録 `admin_actions`（追加だけ・トリガーで守る）と、承認した時点の写し・運営のメモ・連絡済みの印の列。当てると、承認済みと止められている店の今の値が承認の写しとして埋まる |
 | `0012_pending_license_retention.sql` | 承認されていない店の営業許可書のうち、上げた時刻 `stores.license_uploaded_at` の無いものを、当てた時刻で埋める（上げてから30日たっても承認されない許可書を消す数えの起点・安全-20）。承認済みの店には触れない |
 | `0015_email_verification.sql` | メールアドレスの確認（2026-09-26 に枝 `feat/email-verify` から取り込んだ・その枝では `0003` だった番号を付け替えた）。`accounts.email_verified_at`（今ある行は NULL＝まだ確認していない）と、確認のリンクの控えの表 `email_verifications`（token は sha256 だけ）。メールを送る鍵（5.2 の `RESEND_API_KEY`・`MAIL_FROM`）を入れていなくても当ててよい（列と表が在っても使われないだけ） |
+| `0016_fetch_origin_without_google_coordinates.sql` | 取得の記録 `fetch_logs` を作り直し、起点の座標の列を空を許す形にして、打った場所の文字 `origin_place` と Google の場所の番号 `origin_place_id` の列を足す。**今ある行のうち、打った場所で探した行と種類の分からない行（`origin_kind` が NULL）の座標を消す**（Google で直した座標は連続30日までしか置けない・Service Specific Terms 6.3.1。記録の表を追加だけとする基準 27.7 の1回だけの例外・2026-09-26 本人選択）。現在地で探した行の座標は残す。⚠️ 消した座標は戻せない（控えを取って残すと、同じ利用条件に反する） |
 
 手順:
 
@@ -248,6 +249,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
    - Cloudflare のダッシュボードで Workers Logs（`web/wrangler.jsonc` の `observability`）が見えること。想定外の例外は `unhandled_error`、AI の1日の上限に届いた日は `ai_daily_budget_reached` の1行が残る。呼び出しごとの記録は切ってあり（`invocation_logs: false`・`redact_query_string: true`）、問い合わせ文字列つきの URL（`/api/customer/place?lat=…`・`/api/customer/place-suggest?q=…`）が1行も無いことも確かめる（要件27）
    - ブラウザの開発者ツールのコンソールで CSP の違反が出ないこと。`/login`（Turnstile が出てログインできる）・`/store/register`・`/me`・`/store`・`/admin`・運営の画面から営業許可書（PDF）を開く、の順に見る（安全-24）
    - 今いる店（デモの店を含む）の店舗情報を1回保存し直す（店の画像は保存のときに取って置き場に置く形になった。まだ置かれていない承認済みの店は、客が最初に開いたときに店の登録の URL から1日1回まで取りに行く・安全-19）
+   - Cloudflare のダッシュボードの Worker の Triggers に、Cron Triggers が1本（`0 18 * * *`＝日本時間の3時）出ていること。30日を過ぎた店の位置を消した日は、Workers Logs に `store_coordinates_swept` の1行が残る。落ちた日は `scheduled_failed`（2026-09-26）
    - 本番の運営の連絡先 `ADMIN_CONTACT_EMAIL` が入っていること（無いと `/privacy` とログインの画面の連絡先が「準備中」のまま出る）
    - メールアドレスの確認を動かすなら、Resend で送信元のドメインを認証し、Worker の秘密 `RESEND_API_KEY`・`MAIL_FROM` の2つを `pnpm --dir web exec wrangler secret put <名前> --name ai-hack-v2` で入れる（`scripts/v2-keys.sh push` は送らない——任意の機能なので一覧に入れていない）。入れないままなら確認の入口は 404 で、画面にも出ない
    - 止められている店の古い営業許可書の片付け（この直しより前に止めた店のファイルは置き場に残っている）は、`SELECT id, license_key, approved_license_key FROM stores WHERE status='banned'` で鍵を見て、R2 から消して列を NULL にする（本番の操作）

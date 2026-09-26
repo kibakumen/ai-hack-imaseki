@@ -110,9 +110,11 @@
 }
 
 /* Google の地図サービスの帰属の表示（2026-09-25 監査の指摘 設計-20）。候補の一覧の下端と、現在地の地名の横に出す。
-   Google の指定（Roboto かその代わりの sans-serif・太さ 400・12〜16px・読める濃さ）に合わせ、いつも見えるようにする */
+   Google の指定（Roboto かその代わりの sans-serif・太さ 400・12〜16px）に合わせ、いつも見えるようにする。
+   色は Google が許す3色（White・#1F1F1F・#5E5E5E）のどれかで 4.5:1 以上——明るい配色は #5E5E5E・暗い配色は白
+   （2026-09-26 本人選択。値は app/globals.css の --color-google-attribution）。それまでの --color-text-muted は許された色でなかった */
 .google-attribution {
-  color: var(--color-text-muted);
+  color: var(--color-google-attribution);
   font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 0.75rem;
   font-weight: 400;

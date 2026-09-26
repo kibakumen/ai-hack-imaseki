@@ -123,7 +123,7 @@ describe("取得の入口 POST /api/customer/fetch", () => {
   });
 
   it("3.2・3.4・3.5・3.6 場所の文字が現在地に優先し、直せない・失敗・日本の外では取得を行わない", async () => {
-    geocoder.set("渋谷駅", SHIBUYA);
+    geocoder.set("渋谷駅", { ...SHIBUYA, placeId: "ChIJ-shibuya" });
     geocoder.set("失敗する場所", "fail");
     geocoder.set("サンフランシスコ", { lat: 37.77, lng: -122.41 });
     await seedStore(db, { id: "s-place" });
@@ -132,8 +132,10 @@ describe("取得の入口 POST /api/customer/fetch", () => {
     const ok = await search({ place: "渋谷駅", lat: 35.0, lng: 135.0 });
     expect(ok.status).toBe(200);
     expect(items(ok).map((i) => i.storeId)).toEqual(["s-place"]);
-    const log = await one(db, "SELECT origin_lat, origin_lng FROM fetch_logs WHERE id = ?1", ok.json.fetchId);
-    expect(log?.origin_lat).toBeCloseTo(SHIBUYA.lat, 4);
+    // Google から得た座標は記録に書かない（Service Specific Terms 6.3.1 の30日・2026-09-26 本人選択）。
+    // 残すのは客が打った文字と、応答の place ID（無期限に置ける）だけ
+    const log = await one(db, "SELECT origin_lat, origin_lng, origin_kind, origin_place, origin_place_id FROM fetch_logs WHERE id = ?1", ok.json.fetchId);
+    expect(log).toEqual({ origin_lat: null, origin_lng: null, origin_kind: "place", origin_place: "渋谷駅", origin_place_id: "ChIJ-shibuya" });
 
     for (const place of ["どこにもない場所", "失敗する場所", "サンフランシスコ"]) {
       const before = (await rows(db, "SELECT id FROM fetch_logs")).length;

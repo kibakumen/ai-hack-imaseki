@@ -1,0 +1,24 @@
+/* 客向けの利用規約（/terms・2026-09-26）の見た目。店向け（app/store/terms/terms.css）と同じ組み方。
+   色は `app/globals.css` の変数だけを使う（要件32の基準 32.3）。 */
+.customer-terms {
+  display: grid;
+  gap: 1rem;
+  margin: 0 auto;
+  max-width: 44rem;
+  padding: 1rem;
+}
+
+.customer-terms__lead {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.customer-terms h2 {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.customer-terms p {
+  margin: 0;
+}

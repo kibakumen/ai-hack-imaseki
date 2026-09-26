@@ -69,8 +69,17 @@ const toCandidate = (origin: Point, row: CandidateRow) => ({
 
 type Candidate = ReturnType<typeof toCandidate>;
 
-/** 決まった起点と、その種類（現在地か、打った場所か・記録に残して経路の出発地に使う・客-11）。 */
-type ResolvedOrigin = { ok: true; origin: Point; kind: "here" | "place" };
+/**
+ * 記録に残す起点（客-11・2026-09-26 本人選択）。
+ *   here  … 端末の現在地の座標（ブラウザの位置情報。Google の中身ではないので座標を残す）
+ *   place … 客が打った文字と、ジオコーディングの応答の place ID。**Google から得た座標は残さない**——
+ *           Service Specific Terms 6.3.1 は Geocoding の緯度と経度を連続30日までに限り、記録は期限なく残すため。
+ *           place ID は無期限に置ける（経路の出発地は文字と place ID で渡す・repo/reservations）。
+ */
+export type LoggedOrigin = { kind: "here"; lat: number; lng: number } | { kind: "place"; place: string; placeId: string | null };
+
+/** 決まった起点（探すのに使う座標）と、記録に残す起点。 */
+type ResolvedOrigin = { ok: true; origin: Point; logged: LoggedOrigin };
 
 /** 起点を決める（基準 3.2・3.4・3.5・3.6）。文字があれば現在地は使わない。 */
 const resolveOrigin = async (deps: Deps, input: FetchInput): Promise<ResolvedOrigin | { ok: false; refusal: FetchOffersResult }> => {
@@ -82,9 +91,13 @@ const resolveOrigin = async (deps: Deps, input: FetchInput): Promise<ResolvedOri
     const point = { lat: answer.value.lat, lng: answer.value.lng };
     // 日本の外は「位置に直せなかった」として扱う（基準 3.6）
     if (!inJapan(point)) return { ok: false, refusal: PLACE_UNRESOLVED };
-    return { ok: true, origin: point, kind: "place" };
+    // 座標は探すのにだけ使い（この要求の中で捨てる）、記録には打った文字と place ID を残す
+    return { ok: true, origin: point, logged: { kind: "place", place, placeId: answer.value.placeId ?? null } };
   }
-  if (typeof input.lat === "number" && typeof input.lng === "number") return { ok: true, origin: { lat: input.lat, lng: input.lng }, kind: "here" };
+  if (typeof input.lat === "number" && typeof input.lng === "number") {
+    const here = { lat: input.lat, lng: input.lng };
+    return { ok: true, origin: here, logged: { kind: "here", ...here } };
+  }
   return { ok: false, refusal: ORIGIN_MISSING };
 };
 
@@ -197,7 +210,7 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   const coupons = await findCouponsForStores(deps.db, selections.map((selection) => selection.storeId));
   const items = buildItems(selections, ranked, coupons);
 
-  const fetchId = await record(deps, { customerId, input, origin, originKind: resolved.kind, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
+  const fetchId = await record(deps, { customerId, input, origin: resolved.logged, genres, budgetMax, startedAt, nowIso, candidateCount: candidates.length, items, ranked, outcome });
   // Google から来た店の座標の30日の手入れ（1時間に1回まで・応答のあとに走る・設計-20）
   scheduleGoogleUpkeep(deps);
   // 営業許可書の掃除と、承認されないまま30日たった許可書の片付け（1日に1回まで・応答のあとに走る・安全-20）。
@@ -238,8 +251,7 @@ const buildPitchTargets = (items: readonly FetchResultItem[], ranked: readonly C
 type RecordInput = {
   customerId: string;
   input: FetchInput;
-  origin: Point;
-  originKind: "here" | "place";
+  origin: LoggedOrigin;
   genres: string[];
   budgetMax: number | null;
   startedAt: Date;
@@ -264,9 +276,11 @@ const record = async (deps: Deps, input: RecordInput): Promise<string> => {
     log: {
       id: fetchId,
       customerId: input.customerId,
-      originLat: input.origin.lat,
-      originLng: input.origin.lng,
-      originKind: input.originKind,
+      originLat: input.origin.kind === "here" ? input.origin.lat : null,
+      originLng: input.origin.kind === "here" ? input.origin.lng : null,
+      originKind: input.origin.kind,
+      originPlace: input.origin.kind === "place" ? input.origin.place : null,
+      originPlaceId: input.origin.kind === "place" ? input.origin.placeId : null,
       party: input.input.party,
       genres: JSON.stringify(input.genres),
       budgetMax: input.budgetMax,

@@ -55,8 +55,14 @@ export type HomeReservationRow = {
   /** 受け取った時点でそのオファーが見せていたクーポンの写し（基準 16.6） */
   coupons: Array<{ name: string; note: string }>;
   /** その確保を選んだ取得の起点（記録 `fetch_logs` から）。読めなければ null（省いても null と同じ） */
-  origin?: { lat: number; lng: number } | null;
+  origin?: RouteOrigin | null;
 };
+
+/**
+ * 経路の出発地（客が打った場所の文字と、Google の場所の番号 place ID）。Google から得た座標は持たない
+ * （Service Specific Terms 6.3.1・2026-09-26 本人選択。repo/reservations の ReservationOrigin と同じ形）。
+ */
+export type RouteOrigin = { place: string; placeId?: string };
 
 /** その確保のオファーの今（受け取り直せるかの判断に使う）。見つからなければ null。 */
 export type HomeOfferRow = (OfferState & { partyMax: number }) | null;
@@ -87,11 +93,12 @@ export type ReservationView = {
   status: EffectiveState;
   coupons: Array<{ name: string; note: string }>;
   /**
-   * 探したときの起点（座標）。客の画面が経路の出発地に使う（2026-09-22 の本人の指摘・3回目）。
+   * 探したときの起点（打った場所の文字と place ID）。客の画面が経路の出発地に使う（2026-09-22 の本人の指摘・3回目）。
    * 応答に載せるので、画面の状態や端末の保存に依らずどのタブ・どの読み直しでも同じ出発地が渡る。
    * 受け入れ検査の契約 `ReservationDto` は `toMatchObject` で見ているので、項目を足しても通る。
+   * 2026-09-26 から座標は載せない（Google で直した座標は30日までしか置けない・Service Specific Terms 6.3.1）。
    */
-  origin: { lat: number; lng: number } | null;
+  origin: RouteOrigin | null;
 };
 
 /** 期限切れの表示の中身（基準 11.5〜11.9）。`partyMax` は「何名まで」が下がっていたときだけ。 */

@@ -2,11 +2,11 @@
 // 利用条件は、Geocoding で得た緯度と経度を連続30日までしか手元に置けないとしている。ここは読み書きの文だけを持ち、
 // いつ・何日で・どの失敗で消すか、は手続き（usecases/googleUpkeep）が決める。
 //
-// ⚠️ 記録の表（fetch_logs など5つ）には触らない。取得の起点の座標も Google から来たもの（客が打った場所）を含むが、
-// 丸めると記録の表を「追加だけ」にする基準 27.7 を緩めることになる（本人選択で緩めないと決めた・要件27 の補足）。
-// そこは本人の判断待ち（設計-20 のレビュー）。
+// ⚠️ 記録の表（fetch_logs など5つ）には触らない。取得の起点は、2026-09-26 の本人選択で Google から得た座標を
+// 書かない形に変え（usecases/fetchOffers）、既にある行は migration 0016 が1回だけ消した（基準 27.7 の1回だけの例外）。
 
 import type { Deps } from "../ports";
+import { changedRows } from "./d1";
 
 type Db = Deps["db"];
 
@@ -57,4 +57,18 @@ export const expireStoreCoordinates = async (db: Db, store: { id: string; geocod
     ? `UPDATE stores SET lat = NULL, lng = NULL WHERE id = ?1 AND geocoded_at = ?2`
     : `UPDATE stores SET lat = NULL, lng = NULL, geocoded_at = NULL WHERE id = ?1 AND geocoded_at = ?2`;
   await db.prepare(sql).bind(store.id, store.geocodedAt).run();
+};
+
+/**
+ * `beforeIso` より前に Google で位置に直した座標を、**件数の上限なしで**全部消す（消した店の数を返す）。
+ * 取った時刻は残す——取り直しの列に置いたままにして、住所から取り直せたら座標も戻る（`retry: true` と同じ扱い）。
+ * 取り直し（1回に数件）が追いつかなくても、連続30日を超えて座標を置かないための歯止め（Service Specific Terms 6.3.1・
+ * 2026-09-26 本人選択）。手で置いた座標（取った時刻が無い＝デモの店）は選ばない。
+ */
+export const expireOverdueStoreCoordinates = async (db: Db, beforeIso: string): Promise<number> => {
+  const result = await db
+    .prepare(`UPDATE stores SET lat = NULL, lng = NULL WHERE geocoded_at IS NOT NULL AND geocoded_at < ?1 AND (lat IS NOT NULL OR lng IS NOT NULL)`)
+    .bind(beforeIso)
+    .run();
+  return changedRows(result);
 };

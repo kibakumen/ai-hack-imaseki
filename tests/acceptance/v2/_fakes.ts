@@ -111,20 +111,21 @@ export const splitSql = (sql: string): string[] => {
  * `web/migrations/*.sql` を番号順に流す。**migration を流す道具はここ1つ**（2026-09-25 設計-19）——
  * 以前は同じ `split(";")` が3か所に写されていて、`;` を含む文やトリガーを足すと写しのどれかだけが壊れた。
  * web/ の単体の検査も `openDb` かこの関数を使う。
+ * `before` を渡すと、その名前より前の migration だけを流す（既にある行へ当てる migration を検査するため・2026-09-26）。
  */
-export const applyMigrations = async (db: Db): Promise<void> => {
+export const applyMigrations = async (db: Db, opts: { before?: string } = {}): Promise<void> => {
   const dir = path.join(WEB, "migrations");
-  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql") && (opts.before === undefined || f < opts.before)).sort()) {
     for (const statement of splitSql(fs.readFileSync(path.join(dir, file), "utf8"))) await db.prepare(statement).run();
   }
 };
-export const openDb = async (): Promise<{ db: Db; dispose: () => Promise<void> }> => {
+export const openDb = async (opts: { before?: string } = {}): Promise<{ db: Db; dispose: () => Promise<void> }> => {
   const { getPlatformProxy } = await import("wrangler");
   const persist = fs.mkdtempSync(path.join(os.tmpdir(), "ai-hack-v2-"));
   const proxy = await getPlatformProxy<{ DB: Db }>({ configPath: path.join(WEB, "wrangler.jsonc"), persist: { path: persist } });
   const db = proxy.env.DB;
   if (!db) throw new Error("web/wrangler.jsonc に D1 の束縛 DB がありません");
-  await applyMigrations(db);
+  await applyMigrations(db, opts);
   return {
     db,
     dispose: async () => {

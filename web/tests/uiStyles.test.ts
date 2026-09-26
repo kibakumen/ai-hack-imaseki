@@ -48,6 +48,9 @@ const TEXT_PAIRS: Array<[string, string, string]> = [
   // ホバーした縁だけ（soft）の札。地は --hover-soft-bg（横断-04 のレビュー: 12% では明るい配色で 4.46:1 だった）
   ["--color-accent-strong", "--hover-soft-bg", "ホバーした札の橙の文字（ナビ・ログアウト・ダイヤルの▲▼）"],
   ["--hover-soft-text", "--hover-soft-bg", "ホバーした行の文字"],
+  // Google Maps の帰属（候補の一覧の地は --color-background・現在地の案内は面の上にも載る・2026-09-26）
+  ["--color-google-attribution", "--color-background", "Google Maps の帰属の文字"],
+  ["--color-google-attribution", "--color-surface", "面の上の Google Maps の帰属の文字"],
 ];
 
 /** 明るい橙を塗ってよい、文字を載せない飾り（増やすときは、そこに文字が載らないことを確かめてから足す）。 */
@@ -400,5 +403,27 @@ describe("欄の規則が赤枠を打ち消さない（横断-05 のレビュー
         .map((cls) => `${path.basename(rule.file)}: .${cls}`);
     });
     expect(offenders).toEqual([]);
+  });
+});
+
+// 2026-09-26 本人選択: Google Maps の帰属の文字の色は、Google が許す3色（White・#1F1F1F・#5E5E5E）のどれか。
+// 4.5:1 は上の「明るさの比」の組で見る。ここは、許された色であることと、帰属の class がその変数で塗られていることを見る。
+describe("Google Maps の帰属の色", () => {
+  const ALLOWED = ["#ffffff", "#1f1f1f", "#5e5e5e"];
+  it("明るい配色は #5E5E5E・暗い配色は白（どちらも Google が許す色）", () => {
+    expect(palette("light")["--color-google-attribution"]?.toLowerCase()).toBe("#5e5e5e");
+    expect(palette("dark")["--color-google-attribution"]?.toLowerCase()).toBe("#ffffff");
+    for (const theme of ["light", "dark"] as const) expect(ALLOWED).toContain(palette(theme)["--color-google-attribution"]?.toLowerCase());
+  });
+
+  it("端末が暗い設定のときの分岐も白にしている（手で選んだ「暗い」と同じ値）", () => {
+    const systemDark = RULES.find((r) => r.file === GLOBALS && r.selector === ':root:not([data-theme="light"])' && r.at.some((a) => /prefers-color-scheme:\s*dark/.test(a)));
+    expect(systemDark && declOf(systemDark, "--color-google-attribution")?.toLowerCase()).toBe("#ffffff");
+  });
+
+  it(".google-attribution の文字は --color-google-attribution で塗る", () => {
+    const rule = RULES.find((r) => r.selector === ".google-attribution" && r.at.length === 0);
+    expect(rule, ".google-attribution の規則が無い").toBeDefined();
+    expect(declOf(rule!, "color")).toBe("var(--color-google-attribution)");
   });
 });

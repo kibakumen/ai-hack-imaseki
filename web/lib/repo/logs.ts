@@ -24,13 +24,22 @@ type Db = Deps["db"];
 export type FetchLogRecord = {
   id: string;
   customerId: string;
-  originLat: number;
-  originLng: number;
+  /**
+   * 起点の座標。**端末の現在地で探したとき（here）だけ**入れ、打った場所で探したとき（place）は null
+   * （migrations/0016・2026-09-26 本人選択）——Google で直した座標は Service Specific Terms 6.3.1 で連続30日までしか
+   * 置けないが、この記録は期限なく残す。
+   */
+  originLat: number | null;
+  originLng: number | null;
   /**
    * 起点の種類（migrations/0006・2026-09-25 監査の指摘 客-11）。here＝端末の現在地・place＝客が打った場所。
    * 確保の応答が経路の出発地を付けるか（打った場所のときだけ）を、これで決める。
    */
   originKind: "here" | "place";
+  /** 客が打った場所の文字（place のときだけ・migrations/0016） */
+  originPlace: string | null;
+  /** ジオコーディングの応答の place ID（place のときで、応答にあったときだけ。place ID は無期限に置ける） */
+  originPlaceId: string | null;
   party: number;
   /** その回の好みのジャンルを JSON の文字列にしたもの */
   genres: string;
@@ -77,8 +86,8 @@ export type AiCallRecord = {
 };
 
 const INSERT_FETCH_LOG = `
-  INSERT INTO fetch_logs (id, customer_id, origin_lat, origin_lng, party, genres, budget_max, candidate_count, returned_count, ai_used, duration_ms, at, origin_kind)
-  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+  INSERT INTO fetch_logs (id, customer_id, origin_lat, origin_lng, party, genres, budget_max, candidate_count, returned_count, ai_used, duration_ms, at, origin_kind, origin_place, origin_place_id)
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
 `;
 
 const INSERT_FETCH_ITEM = `INSERT INTO fetch_items (id, fetch_id, store_id, rank, score, reason) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`;
@@ -92,7 +101,23 @@ const INSERT_AI_CALL = `
 export const fetchLogStatement = (db: Db, log: FetchLogRecord): D1PreparedStatement =>
   db
     .prepare(INSERT_FETCH_LOG)
-    .bind(log.id, log.customerId, log.originLat, log.originLng, log.party, log.genres, log.budgetMax, log.candidateCount, log.returnedCount, log.aiUsed, log.durationMs, log.at, log.originKind);
+    .bind(
+      log.id,
+      log.customerId,
+      log.originLat,
+      log.originLng,
+      log.party,
+      log.genres,
+      log.budgetMax,
+      log.candidateCount,
+      log.returnedCount,
+      log.aiUsed,
+      log.durationMs,
+      log.at,
+      log.originKind,
+      log.originPlace,
+      log.originPlaceId,
+    );
 
 /** 返した店1件の記録を足す文。 */
 export const fetchItemStatement = (db: Db, item: FetchItemRecord): D1PreparedStatement =>

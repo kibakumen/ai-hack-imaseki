@@ -154,7 +154,8 @@ type ReverseAnswer = { label: string } | "none" | "fail" | "hang";
 export type FakeGeocoder = Required<Geocoder> & {
   /** 地名 → 位置（geocode）の呼ばれた文字 */
   calls: string[];
-  set: (text: string, result: { lat: number; lng: number } | "none" | "fail" | "hang") => void;
+  /** `placeId` は Google の場所の番号（place ID）を返す実物の真似（2026-09-26 取得の記録の起点を place ID で残す） */
+  set: (text: string, result: { lat: number; lng: number; placeId?: string } | "none" | "fail" | "hang") => void;
   /** 位置 → 地名（reverse）の呼ばれた位置 */
   reverseCalls: Array<{ lat: number; lng: number }>;
   /** 逆引きの返し方（既定は、どこでも「渋谷駅周辺」） */
@@ -169,7 +170,7 @@ export type FakeGeocoder = Required<Geocoder> & {
  * 受け入れ検査が一度も通っていなかった。無い形を試したいときは `{ reverse: false, suggest: false }`。
  */
 export const fakeGeocoder = (opts: { reverse?: boolean; suggest?: boolean } = {}): FakeGeocoder => {
-  const table = new Map<string, { lat: number; lng: number } | "none" | "fail" | "hang">();
+  const table = new Map<string, { lat: number; lng: number; placeId?: string } | "none" | "fail" | "hang">();
   const suggestTable = new Map<string, string[] | "fail" | "hang">();
   let reverseAnswer: ReverseAnswer = { label: "渋谷駅周辺" };
   const g: FakeGeocoder = {
@@ -191,7 +192,7 @@ export const fakeGeocoder = (opts: { reverse?: boolean; suggest?: boolean } = {}
       if (r === "none") return { ok: false };
       if (r === "fail") throw new Error("geocoder failure");
       if (r === "hang") return hangUntilAbort(opts?.signal, { ok: false } as const);
-      return { ok: true, lat: r.lat, lng: r.lng };
+      return { ok: true, lat: r.lat, lng: r.lng, ...(r.placeId === undefined ? {} : { placeId: r.placeId }) };
     },
     reverse: async (point, opts) => {
       g.reverseCalls.push({ lat: point.lat, lng: point.lng });

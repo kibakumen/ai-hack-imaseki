@@ -52,7 +52,7 @@ export const EraseRegistration = ({ onDeleted }: EraseRegistrationProps) => {
         <div className="erase-registration__confirm" data-testid="confirm-delete" role="group" aria-label="登録を消す前の確かめ">
           <p>
             呼び名・電話番号・好みのジャンル・予算の上限と、通知の宛先を消します。この端末からは探せなくなり、次に開くとはじめからになります。
-            探したときの記録（起点の緯度経度など）は集計のために残ります。消したあとに戻すことはできません。
+            探したときの記録（探した場所など）は集計のために残ります。消したあとに戻すことはできません。
           </p>
           <SubmitButton type="button" data-testid="btn-confirm" busy={erase.busy} onClick={() => void remove()}>
             消す

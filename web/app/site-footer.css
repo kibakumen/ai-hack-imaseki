@@ -1,5 +1,9 @@
 /* どの画面の下にも置く1行（components/ui/SiteFooter・2026-09-25 安全-18）。本文より小さく淡く、邪魔にしない。 */
 .site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  justify-content: center;
   font-size: 0.75rem;
   margin: 0 auto;
   max-width: 40rem;
