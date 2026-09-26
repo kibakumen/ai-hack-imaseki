@@ -31,6 +31,14 @@ describe("送信先と個人情報の扱い", () => {
     for (const heading of ["事業者", "利用目的", "開示", "苦情", "安全管理"]) expect(body, heading).toContain(heading);
   });
 
+  // 2026-09-26 本人選択: 場所の候補（Google が返した文字）を選んで探したときは、その文字を記録に残さない（place ID だけ）
+  it("探したときの記録に、場所の候補や現在地の地名（Google の文字）を残さないことを、保存するものと消したあとも残るものの両方に書く", () => {
+    render(<PrivacyPage />);
+    expect(screen.getByTestId("privacy-destinations").textContent).toMatch(/候補[^。]*地名[^。]*残しません/);
+    const erase = screen.getByRole("heading", { name: "保存しているものと、消し方" }).parentElement?.textContent ?? "";
+    expect(erase).toMatch(/候補[^。]*地名[^。]*残しません/);
+  });
+
   it("どの画面の下にも、この一覧へのリンクを置く", () => {
     render(<SiteFooter />);
     expect(screen.getByRole("link", { name: /送信先と個人情報/ }).getAttribute("href")).toBe("/privacy");

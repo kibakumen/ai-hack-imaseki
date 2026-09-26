@@ -9,7 +9,7 @@ import { PlaceField } from "./PlaceField";
 /** 候補は Google から来た3件（候補の入口は呼ばない） */
 vi.mock("../../lib/client/placeSuggest", () => ({ usePlaceSuggestions: () => ["渋谷駅", "渋谷ヒカリエ", "渋谷区役所"] }));
 
-const baseProps = { place: "", onPlaceChange: () => {}, locate: "idle" as const, hereLabel: null, away: false, onUseLocation: () => {}, failure: null };
+const baseProps = { place: "", onPlaceChange: () => {}, onChooseCandidate: () => {}, locate: "idle" as const, hereLabel: null, away: false, onUseLocation: () => {}, failure: null };
 
 afterEach(() => cleanup());
 

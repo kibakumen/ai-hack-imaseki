@@ -220,7 +220,7 @@ pnpm --dir web exec wrangler d1 migrations list ai-hack-v2 --remote
 | `0013_store_no_show.sql` | 店の取り消しの理由 `reservations.cancel_reason` と、状態の変化の記録の理由 `reservation_events.reason`（「来ない（枠が戻る）」・2026-09-26 本人選択）。今ある行は NULL のまま（店の都合の取り消しとして読まれ、残りは動かない）。**当てずにコードだけを出すと、確保を読む問い合わせと状態の変化の記録が落ちる** |
 | `0014_store_withdrawal.sql` | 店が退会した時刻 `stores.withdrawn_at`（2026-09-26 本人発案の店の退会・今ある行は NULL）。当てずに出すと運営の一覧と詳細が500になる |
 | `0015_email_verification.sql` | メールアドレスの確認（2026-09-26 に枝 `feat/email-verify` から取り込んだ・その枝では `0003` だった番号を付け替えた）。`accounts.email_verified_at`（今ある行は NULL＝まだ確認していない）と、確認のリンクの控えの表 `email_verifications`（token は sha256 だけ）。メールを送る鍵（5.2 の `RESEND_API_KEY`・`MAIL_FROM`）を入れていなくても当ててよい（列と表が在っても使われないだけ） |
-| `0016_fetch_origin_without_google_coordinates.sql` | 取得の記録 `fetch_logs` を作り直し、起点の座標の列を空を許す形にして、打った場所の文字 `origin_place` と Google の場所の番号 `origin_place_id` の列を足す。**今ある行のうち、打った場所で探した行と種類の分からない行（`origin_kind` が NULL）の座標を消す**（Google で直した座標は連続30日までしか置けない・Service Specific Terms 6.3.1。記録の表を追加だけとする基準 27.7 の1回だけの例外・2026-09-26 本人選択）。現在地で探した行の座標は残す。⚠️ 消した座標は戻せない（控えを取って残すと、同じ利用条件に反する） |
+| `0016_fetch_origin_without_google_coordinates.sql` | 取得の記録 `fetch_logs` を作り直し、起点の座標の列を空を許す形にして、客が自分で打った場所の文字 `origin_place`（場所の候補から選んだ文字は書かない・今ある行は全部空から始まる）と Google の場所の番号 `origin_place_id` の列を足す。**今ある行のうち、打った場所で探した行と種類の分からない行（`origin_kind` が NULL）の座標を消す**（Google で直した座標は連続30日までしか置けない・Service Specific Terms 6.3.1。記録の表を追加だけとする基準 27.7 の1回だけの例外・2026-09-26 本人選択）。現在地で探した行の座標は残す。⚠️ 消した座標は戻せない（控えを取って残すと、同じ利用条件に反する） |
 
 手順:
 

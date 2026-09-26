@@ -21,6 +21,11 @@
 //   7. こだわり条件の**いちばん下に電話番号（任意）**（`PhoneField`）。
 //   8. 先頭に**声で入れる**ボタン（2026-09-25 監査の指摘 客-16・`VoiceInput`。聞き取った人数・予算・ジャンルを欄へ入れる）。
 //
+// 2026-09-26 本人選択: 欄の文字が Google から来たか（場所の候補を選んだ・現在地の地名を入れた）を覚え、そのまま探すときは
+//   印（placeFromCandidate）を添える。サーバーはその文字を記録に書かない（期限なく残すのは place ID だけ）。
+//   客が全部消した・頭から打ち直した（頭の文字が変わった）ら客の文字として扱う。書き足し・途中の直しは Google の文字のまま
+//   （区別できないものは書かない側へ倒す・AI判断）。
+//
 // 現在地が取れなくても押せる（取れなければ押した時に場所を求める・基準 3.7・3.8）。
 // 送る前に自分では検査せず、入口が返した断りを InputRefusal に描かせる（設計書「入力の誤りの出し方」
 // の規則5）。入力欄の属性（maxLength・min・max）は打ち間違いを減らす補助で、正本ではない。
@@ -45,6 +50,18 @@ export type { FetchOrigin, FetchResult } from "./useOfferSearch";
 export { phoneToShow, phoneToStore } from "./PhoneField";
 
 const FIELD_NAMES = ["place", "party", "genres", "budgetMax"];
+
+/** 場所の欄の文字と、その文字が Google から来たか（場所の候補・現在地の地名）。 */
+type PlaceInput = { text: string; fromCandidate: boolean };
+
+/**
+ * 客が欄を打った（消した）あとの欄。空になった・頭の文字が変わった（全部選んで打ち直した）ら客の文字。
+ * それ以外（書き足し・途中の直し）は、前が Google の文字なら Google の文字のまま（AI判断）。
+ */
+export const typedPlace = (current: PlaceInput, text: string): PlaceInput => ({
+  text,
+  fromCandidate: current.fromCandidate && text.trim() !== "" && text.trim()[0] === current.text.trim()[0],
+});
 
 /** 数にならない文字はそのまま送り、判定は入口の検査に任せる（画面は送る前に自分で検査しない）。 */
 const toNumber = (raw: string): number | string => {
@@ -92,13 +109,16 @@ type FetchFormProps = {
 };
 
 export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults = false, collapsed = false }: FetchFormProps) => {
-  const [place, setPlace] = useState("");
+  const [placeInput, setPlaceInput] = useState<PlaceInput>({ text: "", fromCandidate: false });
+  const place = placeInput.text;
+  const typePlace = (text: string) => setPlaceInput((current) => typedPlace(current, text));
+  const choosePlace = (text: string) => setPlaceInput({ text, fromCandidate: true });
   const [genres, setGenres] = useState<string[]>(profile?.genres ?? []);
   const [budgetMax, setBudgetMax] = useState(profile?.budgetMax == null ? "" : String(profile.budgetMax));
   const { pending, failure, search } = useOfferSearch(onResults);
   const phone = useOptionalPhone(profile);
   // 地名が取れたら欄へ入れる。客がもう自分で書き換えていたら上書きしない（書きかけを消さない）。
-  const fillHereLabel = useCallback((label: string) => setPlace((current) => (current.trim() === "" ? label : current)), []);
+  const fillHereLabel = useCallback((label: string) => setPlaceInput((current) => (current.text.trim() === "" ? { text: label, fromCandidate: true } : current)), []);
   const location = useHereLocation(fillHereLabel);
   const { hereLabel } = location;
 
@@ -118,7 +138,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
   /** 「現在地を使う」: 取り直さずに済むなら、持っている現在地の地名をそのまま欄へ戻す。 */
   const backToHere = () => {
     if (location.here !== null && hereLabel !== null) {
-      setPlace(hereLabel);
+      choosePlace(hereLabel);
       return;
     }
     location.locateNow();
@@ -128,10 +148,11 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
    * 起点を決める（基準 3.1・3.2）。
    * 欄が空か、現在地の地名がそのまま入っているなら**座標**を送る。客が書き換えていれば文字を送る。
    */
-  const origin = async (): Promise<{ place: string } | Point | ApiFailure> => {
+  const origin = async (): Promise<{ place: string; placeFromCandidate?: true } | Point | ApiFailure> => {
     const trimmed = place.trim();
     const useCoordinates = trimmed === "" || (hereLabel !== null && trimmed === hereLabel);
-    return useCoordinates ? location.pointForSearch() : { place: trimmed };
+    if (useCoordinates) return location.pointForSearch();
+    return placeInput.fromCandidate ? { place: trimmed, placeFromCandidate: true } : { place: trimmed };
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -144,7 +165,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       // 経路の出発地は、打った場所で探したときだけ（2026-09-25 監査の指摘 客-11）。現在地で探したときは付けない
       // ——探した時点の座標を固定の出発地にすると、歩き出したあとの経路が探した場所から引かれる。
       // そのタブの中で覚えておく（読み直しても残るように）。現在地のときは前に覚えた場所も消す。
-      const routeFrom = "place" in from ? from : null;
+      const routeFrom = "place" in from ? { place: from.place } : null;
       rememberOrigin(routeFrom);
       return { payload: { ...from, party: partyToSend(party), genres, budgetMax: budgetToSend(budgetMax) }, party: Number(party), from: routeFrom };
     });
@@ -157,7 +178,7 @@ export const FetchForm = ({ profile, party, onPartyChange, onResults, noResults 
       {/* 先頭にワンタップで声で入れる（2026-09-25 監査の指摘 客-16・本人の第1回の指摘「歩きながら音声で入れたい」） */}
       <VoiceInput onApply={applySpoken} />
 
-      <PlaceField place={place} onPlaceChange={setPlace} locate={location.locate} hereLabel={hereLabel} away={away} onUseLocation={backToHere} failure={failure} />
+      <PlaceField place={place} onPlaceChange={typePlace} onChooseCandidate={choosePlace} locate={location.locate} hereLabel={hereLabel} away={away} onUseLocation={backToHere} failure={failure} />
 
       {/* 人数は「今すぐ探す」の直前（客-07）。ボタンの文言にも今の人数を載せ、1名のまま押したことに気づけるようにする */}
       <PartyStepper party={party} onPartyChange={onPartyChange} failure={failure} />

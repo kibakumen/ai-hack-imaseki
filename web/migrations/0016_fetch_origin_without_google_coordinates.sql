@@ -7,8 +7,11 @@
 --
 -- それまでは、客が場所の文字で探すと、サーバーが Google で直した座標を fetch_logs.origin_lat/lng に期限なく残していた。
 -- このあとは:
---   origin_kind = 'place' … 座標は書かない（NULL）。客が打った文字（origin_place）と、ジオコーディングの応答の
---                           place ID（origin_place_id・応答に無ければ NULL）だけを残す
+--   origin_kind = 'place' … 座標は書かない（NULL）。ジオコーディングの応答の place ID（origin_place_id・応答に無ければ NULL）と、
+--                           客が自分で打った文字（origin_place）だけを残す。場所の候補から選んだ文字・現在地の地名（Google が
+--                           返した文字）は書かない（NULL・画面の印 placeFromCandidate で分ける・2026-09-26 本人選択）
+--   ⚠️ 今ある行の origin_place は、下の写しで**全部 NULL** から始まる（この列はここで初めて作る）。本番に当たる前の行には
+--      Google の文字は1つも入らない。0016 と候補の直しの間のコードが手元の D1 に書いた行だけは区別できないが、本番には無い。
 --   origin_kind = 'here'  … 端末の現在地（ブラウザの位置情報）の座標。Google の中身ではないので今までどおり残す
 --
 -- ⚠️ **記録の表を「追加だけ」とする基準 27.7 の、1回だけの例外**（2026-09-26 本人選択。requirements.md の要件27 の注）。

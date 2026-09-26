@@ -75,9 +75,11 @@ type Candidate = ReturnType<typeof toCandidate>;
  *   here  … 端末の現在地の座標（ブラウザの位置情報。Google の中身ではないので座標を残す）
  *   place … 客が打った文字と、ジオコーディングの応答の place ID。**Google から得た座標は残さない**——
  *           Service Specific Terms 6.3.1 は Geocoding の緯度と経度を連続30日までに限り、記録は期限なく残すため。
- *           place ID は無期限に置ける（経路の出発地は文字と place ID で渡す・repo/reservations）。
+ *           place ID は無期限に置ける（経路の出発地は place ID を優先して渡す・repo/reservations）。
+ *           **文字が Google から来たとき（場所の候補・現在地の地名。画面の印 `placeFromCandidate`）は文字も残さない**
+ *           （`place` が null・2026-09-26 本人選択）。Google の文字を期限なく置かないため。
  */
-export type LoggedOrigin = { kind: "here"; lat: number; lng: number } | { kind: "place"; place: string; placeId: string | null };
+export type LoggedOrigin = { kind: "here"; lat: number; lng: number } | { kind: "place"; place: string | null; placeId: string | null };
 
 /** 決まった起点（探すのに使う座標）と、記録に残す起点。 */
 type ResolvedOrigin = { ok: true; origin: Point; logged: LoggedOrigin };
@@ -92,8 +94,9 @@ const resolveOrigin = async (deps: Deps, input: FetchInput): Promise<ResolvedOri
     const point = { lat: answer.value.lat, lng: answer.value.lng };
     // 日本の外は「位置に直せなかった」として扱う（基準 3.6）
     if (!inJapan(point)) return { ok: false, refusal: PLACE_UNRESOLVED };
-    // 座標は探すのにだけ使い（この要求の中で捨てる）、記録には打った文字と place ID を残す
-    return { ok: true, origin: point, logged: { kind: "place", place, placeId: answer.value.placeId ?? null } };
+    // 座標は探すのにだけ使い（この要求の中で捨てる）、記録には place ID と、客が自分で打った文字のときだけその文字を残す
+    const typed = input.placeFromCandidate !== true;
+    return { ok: true, origin: point, logged: { kind: "place", place: typed ? place : null, placeId: answer.value.placeId ?? null } };
   }
   if (typeof input.lat === "number" && typeof input.lng === "number") {
     const here = { lat: input.lat, lng: input.lng };

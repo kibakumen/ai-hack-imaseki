@@ -142,11 +142,11 @@ describe("seed-admin.mjs --print", () => {
         // 先頭は読むだけの一覧の文。残りを順に流す（本番で人が貼る順）
         for (const sql of commands.slice(1)) await db.exec(sql);
 
-        const account = await db.prepare("SELECT email, password_hash, email_verified_at FROM accounts WHERE id = 'admin-acc-1'").first<{ email: string; password_hash: string; email_verified_at: string | null }>();
+        const account = (await db.prepare("SELECT email, password_hash, email_verified_at FROM accounts WHERE id = 'admin-acc-1'").first()) as { email: string; password_hash: string; email_verified_at: string | null } | null;
         expect(account?.email).toBe("admin@example.com");
         expect(account?.password_hash).toMatch(/^pbkdf2-sha256\$100000\$/);
         expect(account?.email_verified_at).toBeNull();
-        expect(await db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE account_id = 'admin-acc-1'").first<{ n: number }>()).toEqual({ n: 0 });
+        expect(await db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE account_id = 'admin-acc-1'").first()).toEqual({ n: 0 });
       } finally {
         await dispose();
       }

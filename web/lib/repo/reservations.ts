@@ -14,6 +14,7 @@
 // `RESERVATION_COLUMNS` と `toReservationRow` を使い回す。
 
 import type { ReservationStateRow } from "../domain/reservation";
+import { ROUTE_ORIGIN_LABEL } from "../domain/texts";
 import type { Deps } from "../ports";
 import { changedRows, parseJsonArray } from "./d1";
 import { reservationEventStatement } from "./logs";
@@ -61,7 +62,8 @@ export type ReservationOffer = { endedAt: Date | null; untilAt: Date; remaining:
  * 画面の状態や `sessionStorage` に頼ると、タブが変わる・読み直す・保存を止めた端末で出発地が現在地へ戻る）。
  *
  * **客が打った場所の文字と、ジオコーディングの応答の place ID**（`fetch_logs.origin_place`・`origin_place_id`）で返す
- * （2026-09-26 本人選択）。Google で直した座標は Service Specific Terms 6.3.1 で連続30日までしか置けないので、
+ * （2026-09-26 本人選択）。場所の候補（Google の文字）を選んで探した行は文字を残していないので、place ID と決まった文字
+ * （`ROUTE_ORIGIN_LABEL`）で返す（同日の本人選択）。Google で直した座標は Service Specific Terms 6.3.1 で連続30日までしか置けないので、
  * 記録にはもう書かない（migrations/0016 で既にある行からも消した）。Maps URLs は出発地を文字でも place ID
  * （`origin_place_id`）でも受ける（lib/client/lastOrigin の routeHref）。
  *
@@ -109,10 +111,19 @@ const CONTEXT_SQL = (where: string): string =>
   ` WHERE ${where}` +
   ` ORDER BY res.created_at DESC, res.rowid DESC LIMIT 1`;
 
-/** 記録の行から経路の出発地を組む（打った場所で探して、文字が残っているときだけ）。 */
+const nonEmpty = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+
+/**
+ * 記録の行から経路の出発地を組む（打った場所で探して、文字か place ID が残っているときだけ）。
+ * place ID を優先する。文字が無い（候補を選んで探した・2026-09-26 本人選択）ときは、Maps URLs が origin_place_id と一緒に
+ * 求める origin に決まった文字（`ROUTE_ORIGIN_LABEL`）を入れる——マップは place ID の場所から引く。
+ */
 const toOrigin = (row: Record<string, unknown>): ReservationOrigin => {
-  if (row.origin_kind !== "place" || typeof row.origin_place !== "string" || row.origin_place === "") return null;
-  return typeof row.origin_place_id === "string" && row.origin_place_id !== "" ? { place: row.origin_place, placeId: row.origin_place_id } : { place: row.origin_place };
+  if (row.origin_kind !== "place") return null;
+  const place = nonEmpty(row.origin_place);
+  const placeId = nonEmpty(row.origin_place_id);
+  if (placeId !== null) return { place: place ?? ROUTE_ORIGIN_LABEL, placeId };
+  return place !== null ? { place } : null;
 };
 
 const toContext = (row: Record<string, unknown>): ReservationContext => ({

@@ -26,6 +26,12 @@ export const TERMS = {
  * どこも何も足さずにこの語を出す。語の正本は TERMS とは別に置く（TERMS は画面の語の4つに閉じている・web/tests/terms.test.ts）。
  */
 export const WITHDRAWN_STORE_NAME = "退会した店";
+/**
+ * 経路のリンクの出発地の文字（Maps URLs の `origin`）のうち、客が打った文字が無いときに入れる決まった文字（2026-09-26 本人選択）。
+ * 場所の候補を選んで探したときは Google の文字を記録に残さないので、place ID（`origin_place_id`）だけで出発地を指す。
+ * Maps URLs は origin_place_id を使うとき origin も必須で、マップは place ID の場所から引く（repo/reservations の toOrigin）。
+ */
+export const ROUTE_ORIGIN_LABEL = "探した場所";
 /** 運営の画面の、退会した店の状況の札（表の状況は「登録取り消し済み」のまま・migrations/0014）。 */
 export const WITHDRAWN_STORE_LABEL = "退会済み";
 const str = (v: unknown, fallback = ""): string => (v === undefined || v === null ? fallback : String(v));

@@ -150,6 +150,23 @@ describe("場所の欄と現在地", () => {
     expect(fetchBody(fake!.calls)[0].lat).toBeUndefined();
   });
 
+  // 2026-09-26 本人選択: 現在地の地名（Google の逆ジオコーディングの formatted_address）も Google から来た文字。欄の地名に
+  // 書き足して探したときは候補から来た印を添え、頭から打ち直した（全部選んで打った）ときは客の文字として印を付けない。
+  it("現在地の地名に書き足して探すと、候補から来た印を添える。頭から打ち直した文字には付けない", async () => {
+    const field = renderForm();
+    await waitFor(() => expect(field.value).toBe(LABEL));
+    fireEvent.change(field, { target: { value: `${LABEL} の近く` } });
+    fireEvent.click(screen.getByTestId("btn-fetch"));
+    await waitFor(() => expect(fetchBody(fake!.calls)).toHaveLength(1));
+    expect(fetchBody(fake!.calls)[0]).toMatchObject({ place: `${LABEL} の近く`, placeFromCandidate: true });
+
+    fireEvent.change(field, { target: { value: "渋谷駅" } });
+    fireEvent.click(screen.getByTestId("btn-fetch"));
+    await waitFor(() => expect(fetchBody(fake!.calls)).toHaveLength(2));
+    expect(fetchBody(fake!.calls)[1].place).toBe("渋谷駅");
+    expect(fetchBody(fake!.calls)[1].placeFromCandidate).toBeUndefined();
+  });
+
   it("書き換えている間は「現在地を使う」が強調され、押すと現在地の地名へ戻る", async () => {
     const field = renderForm();
     await waitFor(() => expect(field.value).toBe(LABEL));

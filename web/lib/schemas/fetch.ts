@@ -18,6 +18,11 @@ import { BUDGET_MAX_MAX, BUDGET_MAX_MIN, CUSTOMER_GENRES_MAX, PARTY_MAX, PARTY_M
  */
 export const fetchSchema = z.object({
   place: z.string().max(PLACE_MAX).nullable().optional(),
+  /**
+   * 場所の文字が、Google が返した文字（場所の候補・現在地の地名）から来たか（2026-09-26 本人選択）。真なら記録に文字を書かない
+   * （期限なく残すのは place ID だけ）。画面が付ける印で、無ければ客が自分で打った文字として扱う。
+   */
+  placeFromCandidate: z.boolean().optional(),
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),
   party: z.int().min(PARTY_MIN).max(PARTY_MAX),

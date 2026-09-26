@@ -7,6 +7,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { approvedStore, fetchOffers, makeCtx, one, publishOffer, receive, registerCustomer, requireInResults, spot, type Ctx } from "../../tests/acceptance/v2/_fakes";
+import { ROUTE_ORIGIN_LABEL } from "../lib/domain/texts";
 
 describe("確保の応答の経路の出発地（客-11）", () => {
   let ctx: Ctx;
@@ -66,6 +67,41 @@ describe("確保の応答の経路の出発地（客-11）", () => {
     requireInResults(fetched, offer.id);
     const received = await receive(customer.api, { offerId: offer.id, party: 2, fetchId: fetched.json.fetchId });
     expect(received.json.reservation.origin).toEqual({ place: "番号の無い駅" });
+  });
+
+  // 2026-09-26 本人選択: 場所の候補（Google の Places が返した文字）を選んで探したときは、その文字を記録に書かない。
+  // 期限なく残すのは place ID だけ。経路のリンクは place ID を優先し、origin には決まった文字を入れる（Maps URLs は
+  // origin_place_id を使うとき origin も要る）。候補から来た文字かどうかは画面が送る印（placeFromCandidate）で分ける。
+  const fromCandidate = (place: string) => ({ party: 2, place, placeFromCandidate: true }) as Parameters<typeof fetchOffers>[1];
+
+  it("候補を選んで探したときは、記録に文字を書かず place ID だけを残す。出発地は place ID と決まった文字で付ける", async () => {
+    const { at, offer } = await storeWithOffer();
+    ctx.geocoder.set("東京都渋谷区渋谷２丁目 候補の駅", { ...at, placeId: "ChIJ-candidate" });
+    const customer = await registerCustomer(ctx);
+    const fetched = await fetchOffers(customer.api, fromCandidate("東京都渋谷区渋谷２丁目 候補の駅"));
+    requireInResults(fetched, offer.id);
+    expect(await one(ctx.db, "SELECT origin_kind, origin_lat, origin_lng, origin_place, origin_place_id FROM fetch_logs WHERE id = ?", fetched.json.fetchId)).toEqual({
+      origin_kind: "place",
+      origin_lat: null,
+      origin_lng: null,
+      origin_place: null,
+      origin_place_id: "ChIJ-candidate",
+    });
+    const received = await receive(customer.api, { offerId: offer.id, party: 2, fetchId: fetched.json.fetchId });
+    const expected = { place: ROUTE_ORIGIN_LABEL, placeId: "ChIJ-candidate" };
+    expect(received.json.reservation.origin).toEqual(expected);
+    expect((await customer.api.get("/api/customer/home")).json.reservation.origin).toEqual(expected);
+  });
+
+  it("候補を選んで探し、地図の応答に place ID が無ければ、記録に何も残さず出発地も付けない（マップが現在地から引く）", async () => {
+    const { at, offer } = await storeWithOffer();
+    ctx.geocoder.set("番号の無い候補", at);
+    const customer = await registerCustomer(ctx);
+    const fetched = await fetchOffers(customer.api, fromCandidate("番号の無い候補"));
+    requireInResults(fetched, offer.id);
+    expect(await one(ctx.db, "SELECT origin_kind, origin_place, origin_place_id FROM fetch_logs WHERE id = ?", fetched.json.fetchId)).toEqual({ origin_kind: "place", origin_place: null, origin_place_id: null });
+    const received = await receive(customer.api, { offerId: offer.id, party: 2, fetchId: fetched.json.fetchId });
+    expect(received.json.reservation.origin ?? null).toBeNull();
   });
 
   it("現在地（端末の座標・Google の中身ではない）で探した記録には、今までどおり座標を残す", async () => {

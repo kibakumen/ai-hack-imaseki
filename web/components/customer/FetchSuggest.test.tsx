@@ -113,6 +113,42 @@ describe("場所の欄の候補", () => {
     expect(fetchCalls(fake!.calls)[0].body?.place).toBe("渋谷区役所");
   });
 
+  // 2026-09-26 本人選択: 候補（Google の Places が返した文字）を選んで探したときは、その文字をサーバーの記録に書かせない。
+  // 画面は「欄の文字が候補から来た」印（placeFromCandidate）を添えて送る。客が全部消して打ち直したら客の文字（印を付けない）。
+  const chooseSecond = async (field: HTMLInputElement) => {
+    fireEvent.change(field, { target: { value: "渋谷" } });
+    await vi.advanceTimersByTimeAsync(300);
+    fireEvent.click((await screen.findAllByTestId("place-suggestion"))[1]);
+  };
+  const sentBody = async () => {
+    fireEvent.click(screen.getByTestId("btn-fetch"));
+    await waitFor(() => expect(fetchCalls(fake!.calls)).toHaveLength(1));
+    return fetchCalls(fake!.calls)[0].body ?? {};
+  };
+
+  it("候補を選んで探すと、候補から来た印を添えて送る", async () => {
+    const field = renderForm();
+    await chooseSecond(field);
+    expect(await sentBody()).toMatchObject({ place: "渋谷区役所", placeFromCandidate: true });
+  });
+
+  it("選んだ候補に書き足しても候補から来た文字のまま（印を添える）", async () => {
+    const field = renderForm();
+    await chooseSecond(field);
+    fireEvent.change(field, { target: { value: "渋谷区役所前" } });
+    expect(await sentBody()).toMatchObject({ place: "渋谷区役所前", placeFromCandidate: true });
+  });
+
+  it("候補を選ばずに打った文字には印を付けない。選んだあと全部消して打ち直した文字にも付けない", async () => {
+    const field = renderForm();
+    await chooseSecond(field);
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.change(field, { target: { value: "恵比寿" } });
+    const body = await sentBody();
+    expect(body.place).toBe("恵比寿");
+    expect(body.placeFromCandidate).toBeUndefined();
+  });
+
   it("↑↓ と Enter で選べ、その Enter では探さない。Esc で閉じる", async () => {
     const field = renderForm();
     fireEvent.change(field, { target: { value: "渋谷" } });

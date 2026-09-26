@@ -46,7 +46,10 @@ const locateText = (locate: LocateState, hereLabel: string | null): string | nul
 
 type PlaceFieldProps = {
   place: string;
+  /** 客が欄に打った（消した）とき */
   onPlaceChange: (place: string) => void;
+  /** 客が候補を選んだとき（Google が返した文字。記録に書かせない印を付ける・2026-09-26 本人選択） */
+  onChooseCandidate: (place: string) => void;
   locate: LocateState;
   hereLabel: string | null;
   /** 欄の中身が現在地から離れたか（離れている間は「現在地を使う」を強調する） */
@@ -56,7 +59,7 @@ type PlaceFieldProps = {
   failure: ApiFailure | null;
 };
 
-export const PlaceField = ({ place, onPlaceChange, locate, hereLabel, away, onUseLocation, failure }: PlaceFieldProps) => {
+export const PlaceField = ({ place, onPlaceChange, onChooseCandidate, locate, hereLabel, away, onUseLocation, failure }: PlaceFieldProps) => {
   // 候補。`typing` は客が自分で打っている最中か（現在地の地名を自動で入れた直後や候補を選んだ直後は
   // false＝聞きに行かない）。`suggestOpen` は一覧を見せているか、`activeIndex` はキーボードで選んでいる行。
   const [typing, setTyping] = useState(false);
@@ -73,7 +76,7 @@ export const PlaceField = ({ place, onPlaceChange, locate, hereLabel, away, onUs
 
   /** 候補を1つ選ぶ: 欄にその文字を入れ、一覧を閉じる（選んだ文字を打ち直すまで、また聞きに行かない）。 */
   const chooseSuggestion = (text: string) => {
-    onPlaceChange(text);
+    onChooseCandidate(text);
     setTyping(false);
     closeList();
   };
