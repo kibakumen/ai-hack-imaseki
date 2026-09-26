@@ -61,6 +61,12 @@ export type WritePitchInput = {
    * `cost_usd` の合計は実際より少なく出ることがある（時間切れの打ち切りも同じ・要件33 の補足）。
    */
   signal?: AbortSignal;
+  /**
+   * AI を1回呼ぶ直前に聞く口（任意・usecases/aiLineShare の回線ごとの取り分・2026-09-26 本人選択）。1回ぶんを数えてから
+   * 答え、false なら呼ばずに決まった文へ倒す。呼んでいないので記録（ai_calls）も残さない——呼んでいない回を失敗として
+   * 残すと、アプリ全体の1日の回数（aiBudget）を空の行で食う。
+   */
+  takeCall?: () => Promise<boolean>;
 };
 
 /**
@@ -147,16 +153,22 @@ export const writePitch = async (deps: Deps, input: WritePitchInput): Promise<Wr
   const left = (): number => deadline - deps.clock.now().getTime();
   /** もう頼まない（1店の割り振りを使い切った・客が閉じた） */
   const stopped = (): boolean => left() <= 0 || input.signal?.aborted === true;
+  /**
+   * もう1回呼んでよいか。止まっていないこと・その回線の取り分があること（口が無ければ数えない。1回ぶんを数えてから答える）。
+   * 数えを待つ間にも時間は進むので、数えのあとでもう一度「止まっていないか」を見る（割り振りを使い切った後に打ち切りの
+   * 長さを負で作らない）。
+   */
+  const mayCall = async (): Promise<boolean> => !stopped() && (input.takeCall ? await input.takeCall() : true) && !stopped();
   let critique: string | null = null;
   try {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      if (stopped()) break;
+      if (!(await mayCall())) break;
       const written = await writeOnce(deps, writer, input, critique, Math.min(WRITE_TIMEOUT_MS, left()));
       if ("critique" in written) {
         critique = written.critique;
         continue;
       }
-      if (stopped()) break;
+      if (!(await mayCall())) break;
       const judged = await judgeOnce(deps, writer, input, written.text, Math.min(JUDGE_TIMEOUT_MS, left()));
       if (judged.ok) return { storeId: target.storeId, reason: written.text, source: "persona" };
       critique = judged.critique;

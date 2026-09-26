@@ -23,6 +23,7 @@ import { fallbackPitch } from "../domain/pitch";
 import type { FetchInput } from "../schemas/fetch";
 import type { StreamLineDto } from "../schemas/responses";
 import { aiBudgetLeft } from "./aiBudget";
+import { aiLineMeter } from "./aiLineShare";
 import { fetchOffers, type FetchOffersResult } from "./fetchOffers";
 import { writePitch, type PitchSource, type PitchTarget } from "./writePitch";
 
@@ -44,9 +45,12 @@ export const NDJSON_CONTENT_TYPE = "application/x-ndjson; charset=utf-8";
 
 /**
  * @param opts.signal 要求の打ち切りの合図（客の切断。入口が `req.signal` を渡す）。鳴ったら紹介文の AI を止める（設計-18）
+ * @param opts.ip 要求の接続元（cf-connecting-ip）。回線ごとの AI の取り分を数える（2026-09-26 本人選択・usecases/aiLineShare）。
+ *   取り分を使い切った回線では、紹介文の AI を呼ばずに決まった文で返す（選定の AI はアプリ全体の上限にだけ従う）
  */
-export const buildOffersStream = async (deps: Deps, customerId: string, input: FetchInput, opts: { signal?: AbortSignal } = {}): Promise<StreamOffersResult> => {
-  const result = await fetchOffers(deps, customerId, input);
+export const buildOffersStream = async (deps: Deps, customerId: string, input: FetchInput, opts: { signal?: AbortSignal; ip?: string | null } = {}): Promise<StreamOffersResult> => {
+  const aiLine = aiLineMeter(deps, opts.ip ?? null);
+  const result = await fetchOffers(deps, customerId, input, { aiLine });
   if (!result.ok) return result;
 
   const encoder = new TextEncoder();
@@ -111,7 +115,15 @@ export const buildOffersStream = async (deps: Deps, customerId: string, input: F
       const jobs = targets.map(async (target: PitchTarget, index: number) => {
         if (index > 0) await deps.clock.after(index * PITCH_STAGGER_MS);
         if (finished || clientGone.signal.aborted) return;
-        const pitch = await writePitch(deps, { fetchId: result.fetchId, party: input.party, genres: [...(input.genres ?? [])], budgetMax: input.budgetMax ?? null, target, signal: clientGone.signal });
+        const pitch = await writePitch(deps, {
+          fetchId: result.fetchId,
+          party: input.party,
+          genres: [...(input.genres ?? [])],
+          budgetMax: input.budgetMax ?? null,
+          target,
+          signal: clientGone.signal,
+          ...(aiLine ? { takeCall: aiLine.take } : {}),
+        });
         sendPitch(pitch.storeId, pitch.reason, pitch.source);
       });
       const settled = Promise.allSettled(jobs);

@@ -15,6 +15,7 @@ import { insertFetchRecord, type AiCallRecord } from "../repo/logs";
 import type { FetchInput } from "../schemas/fetch";
 import { ID_BYTES } from "../schemas/limits";
 import { aiBudgetLeft } from "./aiBudget";
+import type { AiLineMeter } from "./aiLineShare";
 import { scheduleGoogleUpkeep } from "./googleUpkeep";
 import { scheduleLicenseSweep } from "./licenseSweep";
 import { raceDeadline } from "./deadline";
@@ -171,7 +172,7 @@ const buildItems = (selections: readonly Selection[], ranked: readonly Candidate
  * 客の登録には一切書き込まない——その回だけの好み・予算・起点を残さないのは、書き戻す場所を
  * 持たないことで守る（基準 3.14・3.15）。
  */
-export const fetchOffers = async (deps: Deps, customerId: string, input: FetchInput): Promise<FetchOffersResult> => {
+export const fetchOffers = async (deps: Deps, customerId: string, input: FetchInput, opts: { aiLine?: AiLineMeter | null } = {}): Promise<FetchOffersResult> => {
   // 打ち切りの合図（地図の3秒・AI の6秒）は、それぞれ呼ぶ直前に作る（resolveOrigin・askAi）。
   const resolved = await resolveOrigin(deps, input);
   if (!resolved.ok) return resolved.refusal;
@@ -192,6 +193,8 @@ export const fetchOffers = async (deps: Deps, customerId: string, input: FetchIn
   // 候補が0件なら AI を呼ばない（基準 7.11・6.6）。アプリ全体のその日の AI の予算が尽きていても呼ばない（安全-03）
   // ——どちらも AI が落ちたときと同じく点数順に倒す。
   const askable = ranked.length > 0 && (await aiBudgetLeft(deps));
+  // 選定の1回も、その回線がその日に使った AI として数える（取り分では止めない・2026-09-26 本人選択・usecases/aiLineShare）
+  if (askable) await opts.aiLine?.take();
   const outcome: AiOutcome = askable ? await askAi(deps, input, ranked) : { selections: [], aiUsed: false, call: null };
   const selections = outcome.aiUsed ? inScoreOrder(outcome.selections, rankedIds) : fallbackResult(rankedIds);
   const coupons = await findCouponsForStores(deps.db, selections.map((selection) => selection.storeId));
