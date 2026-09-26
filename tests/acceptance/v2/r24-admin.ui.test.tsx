@@ -118,7 +118,7 @@ describeTask("8", "店の一覧と詳細の画面", () => {
     const confirm = await screen.findByTestId("confirm-ban");
     expect(confirm.textContent).toMatch(/オファー/);
     expect(confirm.textContent).toMatch(/確保/);
-    expect(confirm.textContent).toMatch(/取り消/);
+    expect(confirm.textContent).toMatch(/確保[^。]*キャンセルされ/);
     fireEvent.change(within(confirm).getByTestId("field-reason"), { target: { value: "通報が続いたため" } });
     fireEvent.click(within(confirm).getByTestId(TID.btn("confirm")));
     await waitFor(() => expect(api.calls.filter((c) => c.path.endsWith("/ban"))).toHaveLength(1));

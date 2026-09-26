@@ -46,7 +46,7 @@ describeTask("15", "確保中の表示の取り消しと人数の変更", () => 
     fireEvent.click(within(form).getByTestId(TID.btn("change-party")));
     await waitFor(() => expect(within(form).getByTestId(TID.msgForm)).toBeTruthy());
     await waitFor(() => expect(within(form).queryByTestId(TID.msg("party"))).toBeNull());
-    expect(within(form).getByTestId(TID.msgForm).textContent).toMatch(/受け入れ|取り消し/);
+    expect(within(form).getByTestId(TID.msgForm).textContent).toMatch(/受け入れ|キャンセル/);
     expect(within(form).getByTestId(TID.msgForm).textContent).toMatch(/探し直/);
     expect(within(view).getByTestId("reservation-party").textContent).toMatch(/2\s*名/);
     expect(screen.getByTestId(TID.view("active"))).toBeTruthy();

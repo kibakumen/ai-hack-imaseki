@@ -80,7 +80,7 @@ export const listAdminAccounts = async (db: Db): Promise<AdminSummary[]> => {
  * アドレスが変わるときは、同じ文で「確認した時刻」（migration 0015 の `email_verified_at`）を NULL に戻す
  * （changeOwnAccountEmail と同じ CASE の形・2026-09-26 独立したレビューの指摘・AI判断）。それまでは 0015 を当てる前の本番でも
  * 流れるよう列に触れなかったが、差し替えた新しいアドレスが確認済みに見えた。
- * ⚠️ そのため、この文は **0015 を当てたあとの本番**でしか流れない（README 5.4 の手順は、migration を当てる手順3のあとに
+ * ⚠️ そのため、この文は **0015 を当てたあとの本番**でしか流れない（README 6.2 の手順は、migration を当てる手順3のあとに
  * 運営を取り返す手順4を置いている。当てる前に流すと、列が無いと断られて何も変わらない）。
  */
 export const updateAccountEmail = async (db: Db, accountId: string, email: string): Promise<void> => {
