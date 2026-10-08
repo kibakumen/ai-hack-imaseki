@@ -6,7 +6,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { installFakeApi, offerDto, storeHomeDto, type FakeApi } from "../../../tests/acceptance/v2/_fakes";
+import { installFakeApi, invalidInput, offerDto, storeHomeDto, type FakeApi } from "../../../tests/acceptance/v2/_fakes";
 import { StoreHome } from "./StoreHome";
 
 let api: FakeApi | null = null;
@@ -37,6 +37,20 @@ const renderCard = async (home: Record<string, unknown>, routes: Record<string, 
   });
   render(<StoreHome />);
   return screen.findByTestId("offer-card");
+};
+
+/**
+ * 「数を変える」のシートを開く（2026-10-08 案C: 欄・ダイヤル・クーポン・受付を締める・更新するはシートの中）。
+ * 閉じたシートの中は inert なので、押す前に必ず開く。
+ */
+const openTune = (card: HTMLElement) => {
+  fireEvent.click(within(card).getByRole("button", { name: /数を変える/ }));
+  expect(within(card).getByRole("dialog", { name: "数を変える" }).closest("[inert]")).toBeNull();
+};
+/** 押せる状態（inert の中に無い）であることを確かめてから返す */
+const live = <T extends Element>(el: T): T => {
+  expect(el.closest("[inert]"), "閉じたシートの中の部品を押そうとしている").toBeNull();
+  return el;
 };
 
 const posts = () => api!.calls.filter((c) => c.method === "POST").map((c) => c.path);
@@ -84,13 +98,15 @@ describe("配信数のダイヤルの範囲と「受付を締める」（店-09�
       { offer: offerDto({ capacity: 5, remaining: 3 }) },
       { "POST /api/store/offers/current/reduce": () => ({ json: { ok: true, offer: offerDto({ capacity: 2, remaining: 0 }) } }) },
     );
-    fireEvent.click(within(card).getByTestId("btn-close-intake"));
+    openTune(card);
+    fireEvent.click(live(within(card).getByTestId("btn-close-intake")));
     await waitFor(() => expect(posts()).toEqual(["/api/store/offers/current/reduce"]));
     expect(api!.calls.find((c) => c.path === "/api/store/offers/current/reduce")!.body).toEqual({ count: 3 });
     cleanup();
     api!.restore();
     const full = await renderCard({ offer: offerDto({ capacity: 5, remaining: 0 }) });
-    expect((within(full).getByTestId("btn-close-intake") as HTMLButtonElement).disabled).toBe(true);
+    openTune(full);
+    expect((live(within(full).getByTestId("btn-close-intake")) as HTMLButtonElement).disabled).toBe(true);
   });
 
   // レビューの指摘（2026-09-25）: 誰も受け取っていないオファーで「受付を締める」を押すと配信数が0になる。
@@ -104,9 +120,10 @@ describe("配信数のダイヤルの範囲と「受付を締める」（店-09�
     expect(dial.querySelector(".store-dial__item--on")?.textContent).toBe("0");
     expect([...dial.querySelectorAll(".store-dial__item")].map((e) => e.textContent)[0]).toBe("0");
 
-    fireEvent.click(dial.querySelector(".store-dial__step--down")!);
+    openTune(card);
+    fireEvent.click(live(dial.querySelector(".store-dial__step--down")!));
     expect(dial.querySelector(".store-dial__item--on")?.textContent).toBe("1");
-    fireEvent.click(within(card).getByTestId("btn-update"));
+    fireEvent.click(live(within(card).getByTestId("btn-update")));
     await waitFor(() => expect(posts()).toEqual(["/api/store/offers/current/add"]));
     expect(api!.calls.find((c) => c.path === "/api/store/offers/current/add")!.body).toEqual({ count: 1 });
   });
@@ -134,8 +151,9 @@ describe("見せるクーポンの選択は、札に触っていない間はサ�
   /** 何名までを1つ変えて送る（通る）→ カードがホームを取り直す */
   const reloadHome = async (card: HTMLElement) => {
     const before = homeLoads();
-    fireEvent.change(within(card).getByTestId("field-partyMax"), { target: { value: "5" } });
-    fireEvent.submit(within(card).getByTestId("form-party-max"));
+    if (within(card).getByRole("dialog", { name: "数を変える", hidden: true }).closest("[inert]")) openTune(card);
+    fireEvent.change(live(within(card).getByTestId("field-partyMax")), { target: { value: "5" } });
+    fireEvent.submit(live(within(card).getByTestId("form-party-max")));
     await waitFor(() => expect(homeLoads()).toBeGreaterThan(before));
   };
   const checked = (id: string) => within(screen.getByTestId("offer-card")).getByTestId(`offer-coupon-${id}`).getAttribute("aria-checked");
@@ -155,11 +173,32 @@ describe("見せるクーポンの選択は、札に触っていない間はサ�
   it("札に触って送っていない選択は、取り直しでも消さない（「1 項目を変えます」のまま）", async () => {
     const server = { ids: ["c1"] };
     const card = await renderWithServer(server);
-    fireEvent.click(within(card).getByTestId("offer-coupon-c2"));
+    openTune(card);
+    fireEvent.click(live(within(card).getByTestId("offer-coupon-c2")));
     await reloadHome(card);
     expect(checked("c1")).toBe("true");
     expect(checked("c2")).toBe("true");
     expect(sticky()).toBe("true");
+  });
+});
+
+// 2026-10-08 のレビューの指摘: 送っている間に「閉じる」を押せ、断りの文が閉じた（inert の）シートの中に出て見えなかった
+describe("数を変えるシートと断り", () => {
+  it("送っている間は「閉じる」を押せず、断られたらシートは開いたままで、断りの文が見える所に出る", async () => {
+    const card = await renderCard(
+      { offer: offerDto({ partyMax: 4 }) },
+      { "POST /api/store/offers/current/party-max": () => invalidInput([{ name: "partyMax", reason: "out_of_range" }]) },
+    );
+    openTune(card);
+    fireEvent.change(live(within(card).getByTestId("field-partyMax")), { target: { value: "5" } });
+    fireEvent.click(live(within(card).getByTestId("btn-update")));
+    const close = within(card).getByRole("button", { name: "閉じる" }) as HTMLButtonElement;
+    expect(close.disabled).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    const message = await within(card).findByTestId("msg-partyMax");
+    expect(live(message).textContent!.length).toBeGreaterThan(0);
+    expect(within(card).getByRole("dialog", { name: "数を変える" }).closest("[inert]")).toBeNull();
+    expect((within(card).getByRole("button", { name: "閉じる" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
@@ -183,7 +222,8 @@ describe("残りが0のときのバッジ（店-16）", () => {
 describe("終了タイマーの畳み方（店-05・店-06）", () => {
   it("何時までの欄は初め畳まれている。終了タイマーの無いオファーは「自動で HH:MM に終了」と出る", async () => {
     const card = await renderCard({ offer: offerDto({ untilSet: false, untilAt: "2026-09-22T18:00:00.000Z" }) });
-    const toggle = within(card).getByRole("button", { name: /終了タイマー/ });
+    openTune(card);
+    const toggle = live(within(card).getByRole("button", { name: /終了タイマー/ }));
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(within(card).getByTestId("form-until").textContent).toMatch(/自動で 03:00 に終了/);
     fireEvent.click(toggle);
@@ -202,7 +242,8 @@ describe("「更新する」は変えたところがある間だけ画面の下�
     const card = await renderCard({ offer: offerDto({ partyMax: 4 }) });
     const foot = within(card).getByTestId("offer-update-bar");
     expect(foot.getAttribute("data-sticky")).toBe("false");
-    fireEvent.change(within(card).getByTestId("field-partyMax"), { target: { value: "5" } });
+    openTune(card);
+    fireEvent.change(live(within(card).getByTestId("field-partyMax")), { target: { value: "5" } });
     expect(within(card).getByTestId("offer-update-bar").getAttribute("data-sticky")).toBe("true");
   });
 });

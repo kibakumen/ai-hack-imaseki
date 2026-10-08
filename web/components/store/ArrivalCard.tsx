@@ -49,13 +49,19 @@ const lateUntilOf = (row: ArrivalDto): string => timeInJst(new Date(Date.parse(r
 /** 確保番号を4桁ずつに区切る（読み上げて照らし合わせやすく） */
 export const codeInGroups = (code: string): string => code.replace(/(\d{4})(?=\d)/g, "$1 ");
 
-type ConfirmProps = { pending: Pending; onConfirm: () => void; onDismiss: () => void };
+type ConfirmProps = {
+  pending: Pending;
+  onConfirm: () => void;
+  onDismiss: () => void;
+  /** シートの中に出すとき（シートが role=dialog なので、ここは group にして二重にしない） */
+  inSheet?: boolean;
+};
 
 /**
  * 押す前の確かめ。完了済みは呼び名・人数・コードを出す（基準 20.8）。取り消しは、客に知らせが行くことと、
  * 残りの枠が戻るか戻らないかを示す（基準 21.2・21.8・18.4）。開いたら確定のボタンへ焦点を移す（店-01）。
  */
-const ConfirmPanel = ({ pending, onConfirm, onDismiss }: ConfirmProps) => {
+const ConfirmPanel = ({ pending, onConfirm, onDismiss, inSheet = false }: ConfirmProps) => {
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     confirmRef.current?.focus();
@@ -63,7 +69,7 @@ const ConfirmPanel = ({ pending, onConfirm, onDismiss }: ConfirmProps) => {
   const { action, row, sending } = pending;
   const danger = action !== "complete";
   return (
-    <div className={danger ? "store-confirm store-confirm--inline store-confirm--danger" : "store-confirm store-confirm--inline"} role="dialog" aria-label="確かめ" data-testid={`confirm-${action}`}>
+    <div className={danger ? "store-confirm store-confirm--inline store-confirm--danger" : "store-confirm store-confirm--inline"} role={inSheet ? "group" : "dialog"} aria-label="確かめ" data-testid={`confirm-${action}`}>
       <p className="store-confirm__ask">{confirmTextOf(action, row)}</p>
       {sending ? (
         <p className="store-note" role="status">
@@ -145,7 +151,7 @@ const MoreSheet = ({ row, open, onClose, pending, onAsk, onConfirm, onDismiss }:
     <BottomSheet
       open={open}
       onClose={onClose}
-      label="その他の操作"
+      label={`${ARRIVALS_TEXTS.who(row.nickname)}（${TERMS.reservationCode} ${codeInGroups(row.code)}）のその他の操作`}
       keepMounted
       foot={
         <button type="button" className="store-btn store-btn--text store-btn--wide" onClick={onClose}>
@@ -176,7 +182,7 @@ const MoreSheet = ({ row, open, onClose, pending, onAsk, onConfirm, onDismiss }:
           </p>
         </div>
       </div>
-      {pending !== null && pending.action !== "complete" ? <ConfirmPanel pending={pending} onConfirm={onConfirm} onDismiss={onDismiss} /> : null}
+      {pending !== null && pending.action !== "complete" ? <ConfirmPanel pending={pending} onConfirm={onConfirm} onDismiss={onDismiss} inSheet /> : null}
     </BottomSheet>
   );
 };
@@ -184,11 +190,27 @@ const MoreSheet = ({ row, open, onClose, pending, onAsk, onConfirm, onDismiss }:
 /** 客1組ぶんのカード。 */
 export const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refusal, onAsk, onConfirm, onDismiss }: CardProps) => {
   const [moreOpen, setMoreOpen] = useState(false);
+  const cardRef = useRef<HTMLLIElement>(null);
+  /** 確かめを「やめる」で閉じたあと、焦点を戻す先（押した操作のボタン）。焦点を body に落とさない */
+  const restoreRef = useRef<ArrivalAction | null>(null);
+  useEffect(() => {
+    const action = restoreRef.current;
+    if (pending !== null || action === null) return;
+    restoreRef.current = null;
+    cardRef.current?.querySelector<HTMLElement>(`[data-testid="btn-${action}"]`)?.focus();
+  }, [pending]);
+  const dismiss = () => {
+    if (pending === null) return;
+    restoreRef.current = pending.action;
+    // キャンセルの確かめをやめたら、シートは開いたまま行の並びへ戻る
+    if (pending.action !== "complete") setMoreOpen(true);
+    onDismiss();
+  };
   const askingComplete = pending?.action === "complete";
   const askingCancel = pending !== null && pending.action !== "complete";
   const who = ARRIVALS_TEXTS.who(row.nickname);
   return (
-    <li className={cardClassName(done, highlighted, askingComplete)} data-testid={`row-${row.reservationId}`}>
+    <li ref={cardRef} className={cardClassName(done, highlighted, askingComplete)} data-testid={`row-${row.reservationId}`}>
       <div className="store-arrival__top">
         <p className="store-arrival__party" data-testid="arrival-party">
           {row.party}
@@ -201,7 +223,7 @@ export const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refu
           </p>
         </div>
         {row.canCancel ? (
-          <button type="button" className="store-icon-btn" aria-label={`${who}のその他の操作`} aria-haspopup="dialog" aria-expanded={moreOpen || askingCancel} onClick={() => setMoreOpen(true)}>
+          <button type="button" className="store-icon-btn" aria-label={`${who}（${TERMS.reservationCode} ${codeInGroups(row.code)}）のその他の操作`} aria-haspopup="dialog" aria-expanded={moreOpen || askingCancel} onClick={() => setMoreOpen(true)}>
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
               <circle cx="12" cy="5" r="2" fill="currentColor" />
               <circle cx="12" cy="12" r="2" fill="currentColor" />
@@ -221,7 +243,7 @@ export const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refu
           {ARRIVALS_TEXTS.customerCancelled}
         </p>
       ) : null}
-      {pending !== null && pending.action === "complete" ? <ConfirmPanel pending={pending} onConfirm={onConfirm} onDismiss={onDismiss} /> : null}
+      {pending !== null && pending.action === "complete" ? <ConfirmPanel pending={pending} onConfirm={onConfirm} onDismiss={dismiss} /> : null}
       {row.canComplete && !askingComplete ? (
         <div className="store-arrival__actions">
           <button type="button" className="store-btn store-btn--primary store-btn--xl" data-testid="btn-complete" disabled={pending?.sending === true} onClick={() => onAsk("complete", row)}>
@@ -244,7 +266,7 @@ export const ArrivalCard = ({ row, done, highlighted, partyChange, pending, refu
             setMoreOpen(false);
             onConfirm();
           }}
-          onDismiss={onDismiss}
+          onDismiss={dismiss}
         />
       ) : null}
     </li>

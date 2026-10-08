@@ -25,6 +25,7 @@ import { PublishForm } from "./PublishForm";
 import { OfferPanel } from "./OfferPanel";
 import { SetupChecklist, missingSetupCount, nextSetupStep } from "./SetupChecklist";
 import { StatusBanner } from "./StatusBanner";
+import { StoreDock } from "./StoreDock";
 import { StoreNav } from "./StoreNav";
 
 /**
@@ -49,14 +50,14 @@ type HomeBodyProps = {
 const PendingDock = ({ home }: { home: StoreHomeView }) => {
   const next = nextSetupStep(home);
   return (
-    <div className="store-dock store-dock--column">
+    <StoreDock className="store-dock--column">
       {next ? (
         <a className="store-btn store-btn--primary store-btn--xl" href={next.href}>
           {next.label}
         </a>
       ) : null}
       <p className="store-dock__note">登録は「{TERMS.storeProfile}」の書類からもできます。分からないことは、上の帯の運営の連絡先へ。</p>
-    </div>
+    </StoreDock>
   );
 };
 
@@ -177,7 +178,7 @@ export const StoreHome = () => {
 
   // 読めなかった・ログインが切れたときも、見出しとタブは出す（空の main で止めない・横断-01）。
   return (
-    <main className="store-main store-main--home" aria-busy={state.status === "loading"}>
+    <main className="store-main" aria-busy={state.status === "loading"}>
       {/* 下のナビ（DOM では見出しの前・目には画面の下）。承認待ちの店は、店舗情報に済んでいないものの数を付ける */}
       <StoreNav active="home" profileAlert={home !== null && home.status === "pending" ? missingSetupCount(home) : 0} />
       {/* 上部は見出しと小さな札だけ（2026-09-25 監査の指摘 店-14・2026-10-08 本人選択「案C 片手の親指」） */}

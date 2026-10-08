@@ -216,7 +216,7 @@ export const WheelPicker = ({ testId, inputId, label, unit, min, max, value, onC
   const unset = isUnset(value);
 
   return (
-    <div className={unset ? "store-dial store-dial--unset" : "store-dial"}>
+    <div className="store-dial">
       <div className="store-dial__head">
         <label className="store-dial__label" htmlFor={inputId}>
           {label}

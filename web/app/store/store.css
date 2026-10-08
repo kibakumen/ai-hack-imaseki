@@ -141,7 +141,8 @@
   --shadow-card: var(--st-shadow);
   --shadow-raised: var(--st-shadow);
   --shadow-float: var(--st-shadow-3);
-  /* 下のナビと、その上の操作の帯の高さ（main の下をこの分あける） */
+  /* 下のナビと、その上の操作の帯の高さ（main の下をこの分あける）。帯の高さは中身で変わるので、StoreDock.tsx が
+     実際の高さを測って main に --st-dock-h を書く。ここの値は測る前（描き始め）の仮の値 */
   --st-nav-h: 4.5rem;
   --st-dock-h: 4.75rem;
   --st-safe-bottom: env(safe-area-inset-bottom, 0px);

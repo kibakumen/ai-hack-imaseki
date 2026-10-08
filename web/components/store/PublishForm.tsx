@@ -17,14 +17,15 @@
 // 2026-10-08 本人選択「案C 片手の親指」の論点3（空欄のダイヤル）で並べ直した（送るものと断りの出し方は変えていない）:
 //   - いちばん上に「客にはこう出ます」の1行（決めていない数は破線の枠に「—」）
 //   - 空欄のダイヤルは破線の枠に「—」と黄の「未選択」。よく使う数のチップ（1〜6）を1回押せば決まる
-//   - 「終了タイマー」と「公開する」は画面の下に貼り付く帯（親指の届く所）。公開のボタンは、決めていない数が残っていれば
-//     「あと N つ決めると公開できます」、決まれば「公開する（3組・4名まで）」と中身を復唱する。
+//   - 「終了タイマー」と「公開する」は画面の下に貼り付く帯（親指の届く所）。ボタンの上の文は、決めていない数が残っていれば
+//     「あと N つ決めると公開できます」、決まれば「3組・4名までで公開します」と中身を復唱する（ボタンの名前は「公開する」のまま）。
 //     ⚠️ 押せなくはしない——決めていなくても押せば、これまでどおり入口の断りが欄の下に出る
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
+import { StoreDock } from "./StoreDock";
 import { WheelPicker } from "./WheelPicker";
 import { SubmitButton } from "../ui/Submit";
 import { useSubmit } from "../ui/useSubmit";
@@ -122,11 +123,16 @@ const PublishPreview = ({ capacity, partyMax, until, couponNames }: { capacity: 
   );
 };
 
-/** 公開のボタンの文。決めていない数が残っていれば残りの数を言い、決まれば中身を復唱する */
-const publishLabelOf = (capacity: string, partyMax: string): string => {
+/**
+ * 公開のボタンの隣の文。決めていない数が残っていれば残りの数を言い、決まれば中身を復唱する。
+ * ボタンの名前は「公開する」のまま変えず、この文は aria-describedby で結ぶ（2026-10-08 のレビューの指摘。名前が
+ * 変わると読み上げとキーボードの利用者が同じボタンだと分からない）。
+ */
+const publishNoteOf = (capacity: string, partyMax: string): string => {
   const missing = [capacity, partyMax].filter((value) => value.trim() === "").length;
-  return missing > 0 ? `あと${missing}つ決めると公開できます` : `公開する（${capacity}組・${partyMax}名まで）`;
+  return missing > 0 ? `あと${missing}つ決めると公開できます` : `${capacity}組・${partyMax}名までで公開します`;
 };
+const PUBLISH_NOTE_ID = "publish-ready-note";
 
 /** よく使う数（案C の論点3: 1回押せば決まるチップ） */
 const QUICK_PICKS = [1, 2, 3, 4, 5, 6] as const;
@@ -186,9 +192,15 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
   const [until, setUntil] = useState(prefill.until ?? "");
   // 終了タイマーはいつも畳んでおく（入れなくても公開できる・店-05）。断られたら開く
   const [untilOpen, setUntilOpen] = useState(false);
-  // 帯の「終了タイマー」で開いたら、欄を画面の中へ寄せる（帯は画面の下、欄はフォームの途中にある）
+  /** 帯の「終了タイマー」で開いた（断られて開いたときは焦点を動かさない） */
+  const openedByToggle = useRef(false);
+  // 帯の「終了タイマー」で開いたら、欄を画面の中へ寄せて焦点を移す（帯は画面の下、欄はフォームの途中にある）
   useEffect(() => {
-    if (untilOpen) document.getElementById("publish-until-box")?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    if (!untilOpen || !openedByToggle.current) return;
+    openedByToggle.current = false;
+    const input = document.getElementById("publish-until");
+    input?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    input?.focus({ preventScroll: true });
   }, [untilOpen]);
   // 送っている間は「公開する」を止める（2026-09-25 監査の指摘 横断-03）
   const publish = useSubmit();
@@ -275,23 +287,29 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
       <CouponChoices coupons={coupons} selected={couponIds} onToggle={toggleCoupon} />
 
       {/* 画面の下に貼り付く帯（親指の届く所）。断りの文は帯の中のボタンの真上に出す（押した所から見える） */}
-      <div className="store-dock">
+      <StoreDock>
         <FormMessage failure={failure} fieldNames={FIELD_NAMES} links={PROFILE_LINKS} />
+        <p className="store-dock__note" id={PUBLISH_NOTE_ID}>
+          {publishNoteOf(capacity, partyMax)}
+        </p>
         <div className="store-dock__row">
           <button
             type="button"
             className="store-btn store-btn--tonal store-dock__side"
             aria-expanded={untilOpen}
             aria-controls="publish-until-box"
-            onClick={() => setUntilOpen((open) => !open)}
+            onClick={() => {
+              openedByToggle.current = !untilOpen;
+              setUntilOpen((open) => !open);
+            }}
           >
             {until === "" ? "終了タイマー" : `終了タイマー ${until}`}
           </button>
-          <SubmitButton type="submit" className="store-btn store-btn--primary store-dock__main" data-testid="btn-publish" busy={publish.busy}>
-            {publishLabelOf(capacity, partyMax)}
+          <SubmitButton type="submit" className="store-btn store-btn--primary store-dock__main" data-testid="btn-publish" aria-describedby={PUBLISH_NOTE_ID} busy={publish.busy}>
+            公開する
           </SubmitButton>
         </div>
-      </div>
+      </StoreDock>
     </form>
   );
 };

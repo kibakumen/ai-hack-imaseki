@@ -67,6 +67,17 @@ const renderHome = async (arrivals: () => Row[], routes: Record<string, any> = {
   await screen.findByTestId("arrivals");
 };
 
+/**
+ * 「⋮」を押してキャンセルのシートを開く（2026-10-08 案C: キャンセルの2つは「⋮」の奥）。閉じたシートの中は inert なので、
+ * 押す前に必ず開き、押す部品が inert の中に無いことを確かめる。
+ */
+const openMore = (card: HTMLElement) => {
+  fireEvent.click(within(card).getByRole("button", { name: /その他の操作/ }));
+  const sheet = within(card).getByRole("dialog", { name: /その他の操作/ });
+  expect(sheet.closest("[inert]")).toBeNull();
+  return sheet;
+};
+
 const homeCalls = () => api!.calls.filter((c) => c.path === "/api/store/home").length;
 
 describe("確かめの出し方（店-01）", () => {
@@ -97,9 +108,23 @@ describe("確かめの出し方（店-01）", () => {
     expect(api!.calls.filter((c) => c.path.endsWith("/complete"))).toHaveLength(1);
   });
 
+  // 2026-10-08 のレビューの指摘: 確かめを「やめる」で閉じると焦点が body に落ちていた
+  it("確かめを「やめる」で閉じると、押した操作のボタンへ焦点が戻る（完了済み・キャンセル）", async () => {
+    await renderHome(() => [row()]);
+    const card = screen.getByTestId("row-r1");
+    fireEvent.click(within(card).getByTestId("btn-complete"));
+    fireEvent.click(within(within(card).getByTestId("confirm-complete")).getByRole("button", { name: "やめる" }));
+    await waitFor(() => expect(document.activeElement).toBe(within(card).getByTestId("btn-complete")));
+    const sheet = openMore(card);
+    fireEvent.click(within(sheet).getByTestId("btn-store-cancel"));
+    fireEvent.click(within(within(card).getByTestId("confirm-store-cancel")).getByRole("button", { name: "やめる" }));
+    await waitFor(() => expect(document.activeElement).toBe(within(card).getByTestId("btn-store-cancel")));
+    expect(within(card).getByRole("dialog", { name: /その他の操作/ }).closest("[inert]")).toBeNull();
+  });
+
   it("取り消しの確かめは、客に知らせが行くことに加えて、残りの枠が戻らないことと、来ない客は期限で枠が戻ることを言う", async () => {
     await renderHome(() => [row()]);
-    fireEvent.click(within(screen.getByTestId("row-r1")).getByTestId("btn-store-cancel"));
+    fireEvent.click(within(openMore(screen.getByTestId("row-r1"))).getByTestId("btn-store-cancel"));
     const confirm = within(screen.getByTestId("row-r1")).getByTestId("confirm-store-cancel");
     expect(confirm.textContent).toMatch(/知らせ/);
     expect(confirm.textContent).toMatch(/枠は戻りません/);
@@ -278,7 +303,7 @@ describe("「来ない（枠を戻す）」", () => {
   it("21.8 確保中の行に「来ない」が在り、確かめに枠が戻ることと知らせが送られることを出し、確かめてから noShow を送る", async () => {
     await renderHome(() => [row()], { "POST /api/store/reservations/:id/cancel": () => ({ json: { ok: true } }) });
     const card = screen.getByTestId("row-r1");
-    fireEvent.click(within(card).getByTestId("btn-store-no-show"));
+    fireEvent.click(within(openMore(card)).getByTestId("btn-store-no-show"));
     const confirm = await screen.findByTestId("confirm-store-no-show");
     expect(confirm.textContent).toMatch(/枠.*戻/);
     expect(confirm.textContent).toMatch(/知らせ/);

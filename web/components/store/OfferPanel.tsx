@@ -47,6 +47,7 @@ import { OfferGlance } from "./OfferGlance";
 import { CapacityDial, PartyMaxDial } from "./OfferDials";
 import { CloseIntake, CouponToggles, type OfferPanelCoupon } from "./OfferPanelParts";
 import { OfferStopSheet } from "./OfferStopSheet";
+import { StoreDock } from "./StoreDock";
 import { OfferTrend, type TrendBucket } from "./OfferTrend";
 import { OfferUntilTimer } from "./OfferUntilTimer";
 import { useOfferTuning, type OfferTuning } from "./useOfferTuning";
@@ -83,11 +84,17 @@ const anyRefused = (tuning: OfferTuning): boolean => {
   return [add, reduce, partyMax, until, coupons].some((change) => change.failure !== null);
 };
 
-/** 「更新する」が全部通って送るものが無くなったら、数を変えるシートを閉じる */
-const useCloseAfterApply = (tuning: OfferTuning, close: () => void) => {
+/**
+ * 送り終えたときのシートの開け閉め。全部通って送るものが無くなったら閉じ、断られたら開き直す
+ * （断りの文は閉じたシートの中に出ると見えない・2026-10-08 のレビューの指摘）。受付を締めるも同じ。
+ */
+const useSheetAfterSend = (tuning: OfferTuning, setOpen: (open: boolean) => void) => {
   const wasSending = useRef(false);
   useEffect(() => {
-    if (wasSending.current && !tuning.sending && tuning.pendingCount === 0 && !anyRefused(tuning)) close();
+    if (wasSending.current && !tuning.sending) {
+      if (anyRefused(tuning)) setOpen(true);
+      else if (tuning.pendingCount === 0) setOpen(false);
+    }
     wasSending.current = tuning.sending;
   });
 };
@@ -123,7 +130,8 @@ const TuneFoot = ({ tuning, onClose }: { tuning: OfferTuning; onClose: () => voi
         {pendingCount === 0 ? "変えたところはありません" : `${pendingCount} 項目を変えます`}
       </p>
       <div className="store-tune__foot-buttons">
-        <button type="button" className="store-btn store-btn--text" onClick={onClose}>
+        {/* 送っている間は閉じない（断りの文を読めるように・送り終えたら閉じるか開き直す） */}
+        <button type="button" className="store-btn store-btn--text" disabled={sending} onClick={onClose}>
           閉じる
         </button>
         <SubmitButton
@@ -149,14 +157,17 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
   const [tuneOpen, setTuneOpen] = useState(false);
   /** 「公開を止める」の確かめを出している */
   const [askingStop, setAskingStop] = useState(false);
-  useCloseAfterApply(tuning, () => setTuneOpen(false));
+  useSheetAfterSend(tuning, setTuneOpen);
+  const closeTune = () => {
+    if (!tuning.sending) setTuneOpen(false);
+  };
 
   return (
     <section className="store-offer" data-testid="offer-card" aria-label="公開中のオファー">
       <OfferGlance offer={offer} arriving={arriving.length} />
 
       {/* 画面の下に貼り付く操作の帯（親指の届く所）。主な操作は「数を変える」、取り返せない「公開を止める」は縁だけの赤 */}
-      <div className="store-dock">
+      <StoreDock>
         <FormMessage failure={changes.stop.failure} />
         <div className="store-dock__row">
           <button type="button" className="store-btn store-btn--tonal store-dock__main" aria-haspopup="dialog" aria-expanded={tuneOpen} onClick={() => setTuneOpen(true)}>
@@ -167,9 +178,9 @@ export const OfferPanel = ({ offer, coupons, trend, arriving, onChanged }: Props
             公開を止める
           </button>
         </div>
-      </div>
+      </StoreDock>
 
-      <BottomSheet open={tuneOpen} onClose={() => setTuneOpen(false)} label="数を変える" keepMounted foot={<TuneFoot tuning={tuning} onClose={() => setTuneOpen(false)} />}>
+      <BottomSheet open={tuneOpen} onClose={closeTune} label="数を変える" keepMounted foot={<TuneFoot tuning={tuning} onClose={closeTune} />}>
         <TuneBody offer={offer} coupons={coupons} trend={trend} arrivingCount={arriving.length} tuning={tuning} />
       </BottomSheet>
 

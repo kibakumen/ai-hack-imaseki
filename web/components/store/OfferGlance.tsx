@@ -33,7 +33,7 @@ export const OfferGlance = ({ offer, arriving }: Props) => {
         </p>
         <span className="store-remain__of">/ 配信数 {offer.capacity}組</span>
       </div>
-      <div className="store-meter store-meter--offer" role="img" aria-label={`配信数 ${offer.capacity}組のうち、受け取り済み ${sold}組（向かっている ${arriving}組）`}>
+      <div className="store-meter" role="img" aria-label={`配信数 ${offer.capacity}組のうち、受け取り済み ${sold}組（向かっている ${arriving}組）`}>
         <i style={{ width: percent(settled, offer.capacity) }} />
         <i style={{ width: percent(Math.min(arriving, sold), offer.capacity) }} />
       </div>

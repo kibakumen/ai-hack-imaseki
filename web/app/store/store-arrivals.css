@@ -55,6 +55,11 @@
 }
 
 @media (min-width: 40rem) {
+  /* 幅の広い画面では横に送らずに並ぶので、「横に送ると次の組」は出さない */
+  .store-arrivals__hint {
+    display: none;
+  }
+
   .store-arrival-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
