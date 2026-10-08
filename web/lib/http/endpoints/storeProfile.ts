@@ -6,6 +6,7 @@
 // 統合のとき routes.ts の1行だけがぶつかる形にするため。
 
 import { readStoreProfile, saveStoreProfile } from "../../usecases/saveStoreProfile";
+import { readStoreStatus } from "../../usecases/storeStatus";
 import { storeProfileSchema } from "../../schemas/store";
 import { respond } from "../respond";
 import { defineRoute, type RouteDefinition } from "../defineRoute";
@@ -36,4 +37,22 @@ const putStoreProfileRoute = defineRoute({
   },
 });
 
-export const storeProfileRoutes: RouteDefinition[] = [getStoreProfileRoute, putStoreProfileRoute];
+/**
+ * 承認の状態だけ（2026-10-08 本人選択・AI提示）。店舗情報の画面が承認の状態を出すために、店のホーム
+ * （向かっている客の呼び名・電話番号まで入る）を丸ごと読んでいたのを、この軽い入口に分けた。
+ * 返すのは状態の1語だけで、客の情報・店の番号は返さない。店の番号はセッション（ctx.storeId）から取るので、
+ * ほかの店の状態は読めない。見分けと仮のパスワードの扱いは店のほかの入口と同じ（defineRoute の auth: "store"）。
+ */
+const getStoreStatusRoute = defineRoute({
+  method: "GET",
+  path: "/api/store/status",
+  auth: "store",
+  handler: async ({ deps, ctx }) => {
+    const status = await readStoreStatus(deps, ctx.storeId);
+    // 見分けの直後に店が消えた場合だけ null。店のデータは返さない。
+    if (!status) return unauthenticated();
+    return respond("GET /api/store/status", { ok: true, status });
+  },
+});
+
+export const storeProfileRoutes: RouteDefinition[] = [getStoreProfileRoute, putStoreProfileRoute, getStoreStatusRoute];

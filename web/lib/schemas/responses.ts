@@ -323,6 +323,8 @@ export const RESPONSES = {
   // 店
   "GET /api/store/home": storeHome,
   "GET /api/store/profile": object({ ok, profile: storeProfile }),
+  // 承認の状態だけ（店舗情報の画面・2026-10-08）。客の情報は載せない
+  "GET /api/store/status": object({ ok, status: storeStatus }),
   "PUT /api/store/profile": object({ ok, profile: storeProfile }),
   "GET /api/store/coupons": object({ ok, items: array(storeCoupon) }),
   "POST /api/store/coupons": object({ ok, coupon: storeCoupon }),
