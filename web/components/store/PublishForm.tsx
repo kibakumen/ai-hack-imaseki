@@ -13,8 +13,15 @@
 //     12時間で自動で終わる）ので、本人の指摘どおり**いつも畳んでおく**「終了タイマー」になった。
 //     ⚠️ 畳むのは見た目だけ——欄は DOM に残したまま隠す。入口が「何時まで」を断ったときは開く
 //   - クーポンは**チェックの付いたカードを横に並べる**
+//
+// 2026-10-08 本人選択「案C 片手の親指」の論点3（空欄のダイヤル）で並べ直した（送るものと断りの出し方は変えていない）:
+//   - いちばん上に「客にはこう出ます」の1行（決めていない数は破線の枠に「—」）
+//   - 空欄のダイヤルは破線の枠に「—」と黄の「未選択」。よく使う数のチップ（1〜6）を1回押せば決まる
+//   - 「終了タイマー」と「公開する」は画面の下に貼り付く帯（親指の届く所）。公開のボタンは、決めていない数が残っていれば
+//     「あと N つ決めると公開できます」、決まれば「公開する（3組・4名まで）」と中身を復唱する。
+//     ⚠️ 押せなくはしない——決めていなくても押せば、これまでどおり入口の断りが欄の下に出る
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { callApi, isFailure, type ApiFailure } from "../../lib/client/api";
 import { OFFER_CAPACITY_MAX, OFFER_CAPACITY_MIN, OFFER_PARTY_MAX_MAX, OFFER_PARTY_MAX_MIN } from "../../lib/schemas/limits";
 import { FieldMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
@@ -60,46 +67,69 @@ const untilRefused = (failure: ApiFailure | null): boolean =>
 const UntilField = ({
   value,
   open,
-  onToggle,
   onChange,
   failure,
 }: {
   value: string;
   open: boolean;
-  onToggle: () => void;
   onChange: (next: string) => void;
   /** 断りが返っていれば、欄が文を指す（横断-05） */
   failure: ApiFailure | null;
 }) => (
-  <div className="store-timer">
-    <div className="store-row">
-      <span className="store-note">{value === "" ? "終了タイマーなし（公開から12時間で自動で終わります）" : `終了タイマー ${value} に終わります`}</span>
-      <button type="button" className="store-btn store-btn--quiet" aria-expanded={open} aria-controls="publish-until-box" onClick={onToggle}>
-        {open ? "終了タイマーを閉じる" : value === "" ? "終了タイマーを設定" : "終了タイマーを変える"}
-      </button>
-    </div>
-    <div id="publish-until-box" className={open ? "store-collapse" : "store-collapse store-collapse--closed"}>
-      <div className="store-field">
-        <label htmlFor="publish-until">何時に終わるか（公開から12時間以内）</label>
-        <div className="store-inline">
-          <input
-            id="publish-until"
-            data-testid="field-until"
-            type="time"
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            {...fieldAria("until", failure, "publish-until")}
-          />
-          {value === "" ? null : (
-            <button type="button" className="store-btn store-btn--quiet" onClick={() => onChange("")}>
-              タイマーを外す
-            </button>
-          )}
-        </div>
+  <div id="publish-until-box" className={open ? "store-collapse store-timer" : "store-collapse store-collapse--closed store-timer"}>
+    <div className="store-field">
+      <label htmlFor="publish-until">何時に終わるか（公開から12時間以内）</label>
+      <div className="store-inline">
+        <input
+          id="publish-until"
+          data-testid="field-until"
+          type="time"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          {...fieldAria("until", failure, "publish-until")}
+        />
+        {value === "" ? null : (
+          <button type="button" className="store-btn store-btn--quiet" onClick={() => onChange("")}>
+            タイマーを外す
+          </button>
+        )}
       </div>
     </div>
   </div>
 );
+
+/** 「客にはこう出ます」——決めた数がその場で埋まる1行と、クーポン・終了の説明 */
+const PublishPreview = ({ capacity, partyMax, until, couponNames }: { capacity: string; partyMax: string; until: string; couponNames: string[] }) => {
+  const slot = (value: string, before: string | null, after: string) => (
+    <span className={value.trim() === "" ? "store-slot store-slot--empty" : "store-slot"}>
+      {before ? <span>{before}</span> : null}
+      <b>{value.trim() === "" ? "—" : value}</b>
+      <span>{after}</span>
+    </span>
+  );
+  return (
+    <div className="store-preview">
+      <p className="store-preview__title">客にはこう出ます</p>
+      <p className="store-preview__line">
+        {slot(capacity, "空き", "組")}
+        {slot(partyMax, null, "名まで")}
+      </p>
+      <p className="store-preview__foot">
+        {couponNames.length === 0 ? "クーポンなし" : `クーポン ${couponNames.length}枚（${couponNames.join("・")}）`}／
+        {until === "" ? "終了タイマーなし（公開から12時間で自動で終わります）" : `終了タイマー ${until} に終わります`}
+      </p>
+    </div>
+  );
+};
+
+/** 公開のボタンの文。決めていない数が残っていれば残りの数を言い、決まれば中身を復唱する */
+const publishLabelOf = (capacity: string, partyMax: string): string => {
+  const missing = [capacity, partyMax].filter((value) => value.trim() === "").length;
+  return missing > 0 ? `あと${missing}つ決めると公開できます` : `公開する（${capacity}組・${partyMax}名まで）`;
+};
+
+/** よく使う数（案C の論点3: 1回押せば決まるチップ） */
+const QUICK_PICKS = [1, 2, 3, 4, 5, 6] as const;
 
 /**
  * 見せるクーポンの選び方——**チェックボックスつきの札**（2026-09-22 の本人の指摘「クーポンカードは
@@ -156,6 +186,10 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
   const [until, setUntil] = useState(prefill.until ?? "");
   // 終了タイマーはいつも畳んでおく（入れなくても公開できる・店-05）。断られたら開く
   const [untilOpen, setUntilOpen] = useState(false);
+  // 帯の「終了タイマー」で開いたら、欄を画面の中へ寄せる（帯は画面の下、欄はフォームの途中にある）
+  useEffect(() => {
+    if (untilOpen) document.getElementById("publish-until-box")?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [untilOpen]);
   // 送っている間は「公開する」を止める（2026-09-25 監査の指摘 横断-03）
   const publish = useSubmit();
   const failure = publish.failure;
@@ -186,56 +220,78 @@ export const PublishForm = ({ coupons, prefill, onPublished }: Props) => {
     onPublished();
   };
 
+  const couponNames = coupons.filter((coupon) => couponIds.includes(coupon.id)).map((coupon) => coupon.name);
+
   return (
     <form
-      className="store-card store-card--accent"
+      className="store-publish"
       data-testid="form-publish"
       noValidate
       onSubmit={(event) => {
         void submit(event);
       }}
     >
-      <div className="store-card__head">
+      <div className="store-publish__head">
         <h2>オファーを公開する</h2>
         <span className="store-badge store-badge--off">停止中</span>
       </div>
+
+      <PublishPreview capacity={capacity} partyMax={partyMax} until={until} couponNames={couponNames} />
 
       <div className="store-dials">
         <WheelPicker
           testId="field-capacity"
           inputId="publish-capacity"
           label={CAPACITY_LABEL}
+          hint="何組まで受け取れるか"
           unit="組"
           min={OFFER_CAPACITY_MIN}
           max={OFFER_CAPACITY_MAX}
           value={capacity}
           onChange={setCapacity}
+          picks={QUICK_PICKS}
           aria={fieldAria("capacity", failure, "publish-capacity")}
         />
         <WheelPicker
           testId="field-partyMax"
           inputId="publish-party-max"
           label={PARTY_MAX_LABEL}
+          hint="1組あたりの人数の上限"
           unit="名"
           min={OFFER_PARTY_MAX_MIN}
           max={OFFER_PARTY_MAX_MAX}
           value={partyMax}
           onChange={setPartyMax}
+          picks={QUICK_PICKS}
           aria={fieldAria("partyMax", failure, "publish-party-max")}
         />
       </div>
       <FieldMessage inputId="publish-capacity" name="capacity" failure={failure} ctx={{ field: CAPACITY_LABEL, min: OFFER_CAPACITY_MIN, max: OFFER_CAPACITY_MAX }} />
       <FieldMessage inputId="publish-party-max" name="partyMax" failure={failure} ctx={{ field: PARTY_MAX_LABEL, min: OFFER_PARTY_MAX_MIN, max: OFFER_PARTY_MAX_MAX }} />
 
-      <UntilField value={until} open={untilOpen} onToggle={() => setUntilOpen((open) => !open)} onChange={setUntil} failure={failure} />
+      <UntilField value={until} open={untilOpen} onChange={setUntil} failure={failure} />
       <FieldMessage inputId="publish-until" name="until" failure={failure} ctx={{ field: "何時まで" }} />
 
       <CouponChoices coupons={coupons} selected={couponIds} onToggle={toggleCoupon} />
 
-      <SubmitButton type="submit" className="store-btn store-btn--primary" data-testid="btn-publish" busy={publish.busy}>
-        公開する
-      </SubmitButton>
-      <FormMessage failure={failure} fieldNames={FIELD_NAMES} links={PROFILE_LINKS} />
+      {/* 画面の下に貼り付く帯（親指の届く所）。断りの文は帯の中のボタンの真上に出す（押した所から見える） */}
+      <div className="store-dock">
+        <FormMessage failure={failure} fieldNames={FIELD_NAMES} links={PROFILE_LINKS} />
+        <div className="store-dock__row">
+          <button
+            type="button"
+            className="store-btn store-btn--tonal store-dock__side"
+            aria-expanded={untilOpen}
+            aria-controls="publish-until-box"
+            onClick={() => setUntilOpen((open) => !open)}
+          >
+            {until === "" ? "終了タイマー" : `終了タイマー ${until}`}
+          </button>
+          <SubmitButton type="submit" className="store-btn store-btn--primary store-dock__main" data-testid="btn-publish" busy={publish.busy}>
+            {publishLabelOf(capacity, partyMax)}
+          </SubmitButton>
+        </div>
+      </div>
     </form>
   );
 };

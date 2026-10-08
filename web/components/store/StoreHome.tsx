@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { callApi, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { ARRIVALS_REFRESH_MS } from "../../lib/schemas/limits";
+import { TERMS } from "../../lib/domain/texts";
 import { LoadView } from "../ui/LoadState";
 import { ArrivalsList } from "./ArrivalsList";
 import { EmailVerifyBanner } from "./EmailVerifyBanner";
@@ -22,7 +23,7 @@ import { useArrivalSignals, type ArrivalSignals } from "./useArrivalSignals";
 import { useWakeLock } from "./useWakeLock";
 import { PublishForm } from "./PublishForm";
 import { OfferPanel } from "./OfferPanel";
-import { SetupChecklist } from "./SetupChecklist";
+import { SetupChecklist, missingSetupCount, nextSetupStep } from "./SetupChecklist";
 import { StatusBanner } from "./StatusBanner";
 import { StoreNav } from "./StoreNav";
 
@@ -44,7 +45,22 @@ type HomeBodyProps = {
   updatedAt: number | null;
 };
 
-/** 取れたホームの中身（案内・状況の帯・向かっている客・公開の設定）。 */
+/** 承認待ちの店の下に1つだけ出す「次にやる1つ」と、その道の説明（2026-10-08 本人選択「案C 片手の親指」） */
+const PendingDock = ({ home }: { home: StoreHomeView }) => {
+  const next = nextSetupStep(home);
+  return (
+    <div className="store-dock store-dock--column">
+      {next ? (
+        <a className="store-btn store-btn--primary store-btn--xl" href={next.href}>
+          {next.label}
+        </a>
+      ) : null}
+      <p className="store-dock__note">登録は「{TERMS.storeProfile}」の書類からもできます。分からないことは、上の帯の運営の連絡先へ。</p>
+    </div>
+  );
+};
+
+/** 取れたホームの中身（案内・状況の帯・公開の設定・向かっている客）。 */
 const HomeBody = ({ home, onChanged, signals, updatedAt }: HomeBodyProps) => {
   // 仮のパスワードで入った店への案内（基準 14.14）。`app/store/password` の注が「店のホームが
   // ここへ案内する」と言いながら、この道が無かった（2026-09-22 に足した）。
@@ -60,35 +76,61 @@ const HomeBody = ({ home, onChanged, signals, updatedAt }: HomeBodyProps) => {
   }
   // 公開の操作を出すのは承認済みのときだけ（未承認・止められている間は入口も断る・基準 17.10）。
   const canPublish = home.status === "approved" && home.offer === null;
-  // 「公開を止める」の確かめに出す、向かっている組数（店-03）
-  const arriving = (home.arrivals ?? []).filter((row) => row.kind === "active").length;
+  // 「公開を止める」の確かめに出す、向かっている組（店-03）
+  const arriving = (home.arrivals ?? []).filter((row) => row.kind === "active");
+  const arrivals = (
+    <ArrivalsList
+      rows={home.arrivals ?? []}
+      onChanged={onChanged}
+      newIds={signals.newIds}
+      cancelledIds={signals.cancelledIds}
+      partyChanges={signals.partyChanges}
+      updatedAt={updatedAt}
+      onRefresh={onChanged}
+    />
+  );
+  // 並び（2026-10-08 本人選択「案C 片手の親指」）: 上半分は読むだけ（数字のカード・承認待ちの帯）、
+  // 向かっている客はその下＝画面の下の操作の帯のすぐ上（親指にいちばん近い所）。
+  // 承認済みの店に帯は出さない（承認の状態は店舗情報の画面へ。ホームでは見出しの横の小さな札だけ）。
   return (
     <>
-      <StatusBanner status={home.status} />
-
-      {/* メールアドレスの確認（2026-09-26 に枝 feat/email-verify から取り込んだ）。`false` のときだけ——項目が無い（鍵を入れていない）なら出ない。 */}
-      {home.emailVerified === false && <EmailVerifyBanner endpoint="POST /api/store/email/verify" />}
-
-      {home.status === "pending" && <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />}
+      {home.status === "approved" ? null : <StatusBanner status={home.status} />}
+      {home.status === "pending" ? (
+        <>
+          <SetupChecklist checklist={home.checklist} missingProfile={home.missingProfile} />
+          <div className="store-locked" aria-hidden="true">
+            <p>承認されると、ここに公開のフォームが出ます</p>
+            <div className="store-locked__ghost">
+              <i />
+              <i />
+            </div>
+          </div>
+          <PendingDock home={home} />
+        </>
+      ) : null}
 
       <SoundUnlock />
-      <ArrivalsList
-        rows={home.arrivals ?? []}
-        onChanged={onChanged}
-        newIds={signals.newIds}
-        cancelledIds={signals.cancelledIds}
-        partyChanges={signals.partyChanges}
-        updatedAt={updatedAt}
-        onRefresh={onChanged}
-      />
-
-      {canPublish && <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={onChanged} />}
 
       {/* `key` はオファーの番号——止めて新しく公開すると別のオファーになるので、ダイヤルと選択を新しいオファーの
           値から作り直す（同じオファーの取り直しとクーポンの選び直しでは残す・不具合-03） */}
       {home.offer ? <OfferPanel key={home.offer.id} offer={home.offer} coupons={home.coupons} trend={home.trend} arriving={arriving} onChanged={onChanged} /> : null}
+
+      {canPublish ? <PublishForm coupons={home.coupons} prefill={home.publishPrefill} onPublished={onChanged} /> : null}
+
+      {arrivals}
+
+      {/* メールアドレスの確認（2026-09-26 に枝 feat/email-verify から取り込んだ）。`false` のときだけ——項目が無い（鍵を入れていない）なら出ない。
+          上半分を数字のカードに空けるため、向かっている客の下に置く（2026-10-08） */}
+      {home.emailVerified === false && <EmailVerifyBanner endpoint="POST /api/store/email/verify" />}
     </>
   );
+};
+
+/** 見出しの横の小さな状態の札。承認済みは受け入れ検査の約束の `status-banner`（StatusBanner の札）をここに出す */
+const HeaderStatus = ({ home }: { home: StoreHomeView }) => {
+  if (home.mustChangePassword) return null;
+  if (home.status === "approved") return <StatusBanner status="approved" />;
+  return <span className={`store-badge store-badge--${home.status}`}>{home.status === "pending" ? "承認待ち" : "登録取り消し済み"}</span>;
 };
 
 export const StoreHome = () => {
@@ -131,13 +173,18 @@ export const StoreHome = () => {
     })();
   }, [pendingCard, reload]);
 
+  const home = state.status === "ready" ? state.data : null;
+
   // 読めなかった・ログインが切れたときも、見出しとタブは出す（空の main で止めない・横断-01）。
   return (
-    <main className="store-main" aria-busy={state.status === "loading"}>
-      {/* 上部は**タブだけ**にする（2026-09-25 監査の指摘 店-14・本人の第2回の指摘「上部の方に不要な情報が多い」）。
-          見出しは読み上げのために残し、目には出さない（タブの「オファー」と同じことを言うので） */}
-      <StoreNav active="home" />
-      <h1 className="store-sr-only">今日のオファー</h1>
+    <main className="store-main store-main--home" aria-busy={state.status === "loading"}>
+      {/* 下のナビ（DOM では見出しの前・目には画面の下）。承認待ちの店は、店舗情報に済んでいないものの数を付ける */}
+      <StoreNav active="home" profileAlert={home !== null && home.status === "pending" ? missingSetupCount(home) : 0} />
+      {/* 上部は見出しと小さな札だけ（2026-09-25 監査の指摘 店-14・2026-10-08 本人選択「案C 片手の親指」） */}
+      <header className="store-appbar">
+        <h1>オファー</h1>
+        {home !== null ? <HeaderStatus home={home} /> : null}
+      </header>
 
       <LoadView state={state} onRetry={refresh}>
         {(home) => <HomeBody home={home} onChanged={refresh} signals={signals} updatedAt={state.status === "ready" ? state.updatedAt : null} />}

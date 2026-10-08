@@ -4,6 +4,7 @@
 import type { Metadata } from "next";
 import { StoreNav } from "../../../components/store/StoreNav";
 import { ProfileForm } from "../../../components/store/ProfileForm";
+import { StoreMoreLinks } from "../../../components/store/StoreMoreLinks";
 import { TERMS } from "../../../lib/domain/texts";
 
 export const metadata: Metadata = { title: TERMS.storeProfile };
@@ -17,6 +18,8 @@ export default function StoreProfilePage() {
       <div className="store-head">
         <h1>{TERMS.storeProfile}</h1>
       </div>
+      {/* 承認の状態と、下のナビから外した書類・アカウント・ログアウトの道（2026-10-08 本人選択「案C 片手の親指」） */}
+      <StoreMoreLinks />
       <ProfileForm />
     </main>
   );

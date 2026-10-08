@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { EmailForm } from "../../../components/auth/EmailForm";
 import { StoreNav } from "../../../components/store/StoreNav";
 import { WithdrawPanel } from "../../../components/store/WithdrawPanel";
+import { TERMS } from "../../../lib/domain/texts";
 
 export const metadata: Metadata = { title: "アカウント" };
 
@@ -13,6 +14,9 @@ export default function StoreAccountPage() {
     <main className="store-main">
       <StoreNav active="account" />
       <div className="store-head">
+        <a className="store-back" href="/store/profile">
+          {TERMS.storeProfile}へ戻る
+        </a>
         <h1>アカウント</h1>
       </div>
       <EmailForm endpoint="/api/store/email" />

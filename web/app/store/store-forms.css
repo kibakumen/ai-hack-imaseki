@@ -33,7 +33,8 @@
 
 .store-coupon-card__face {
   align-items: center;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 18%, var(--color-background)), color-mix(in srgb, var(--color-accent) 6%, var(--color-background)));
+  /* 橙の文字（見出し）を載せるので薄く（案C の濃い橙で 4.5:1 を保つ・2026-10-08） */
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 10%, var(--color-background)), color-mix(in srgb, var(--color-accent) 4%, var(--color-background)));
   border: 1.5px dashed color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
   border-radius: 0.875rem;
   display: flex;
@@ -164,52 +165,4 @@
 .store-field > input {
   border-radius: 0.625rem;
   padding: 0.5rem 0.625rem;
-}
-
-/* ---------- 配信カード ---------- */
-
-.store-offer__head {
-  align-items: flex-start;
-  margin-top: 0.25rem;
-}
-
-.store-offer__title {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.625rem;
-}
-
-.store-offer__title > h2 {
-  margin: 0;
-}
-
-/* 「公開を止める」——いちばん上の右。席が埋まった瞬間に押す操作なので、探させない */
-.store-offer__stop .store-btn {
-  font-size: 0.9375rem;
-  padding: 0.625rem 1.125rem;
-}
-
-/* カードの中身——左が「数を変える」（主役・広い列）、右が「今日の動き」。狭い画面では縦に積む
-   （2026-09-22 3回目の指摘: 表示だけの札4枚を撤去し、今の値は「数を変える」の中で読む） */
-.store-offer__body {
-  align-items: start;
-  display: grid;
-  gap: 1rem;
-}
-
-@media (min-width: 52rem) {
-  .store-offer__body {
-    grid-template-columns: minmax(0, 1.6fr) minmax(14rem, 1fr);
-  }
-}
-
-.store-offer__aside {
-  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-background));
-  border: 1px solid var(--color-border);
-  border-radius: 1rem;
-  display: grid;
-  gap: 0.75rem;
-  min-width: 0;
-  padding: 0.75rem;
 }

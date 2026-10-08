@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 import { callApi, isFailure, type ApiFailure, type StoreHomeDto } from "../../lib/client/api";
 import { useLoad } from "../../lib/client/useLoad";
 import { LICENSE_MAX_MEGABYTES } from "../../lib/schemas/limits";
-import { DOCUMENTS_TEXTS, SUBMIT_TEXTS } from "../../lib/domain/texts";
+import { DOCUMENTS_TEXTS, SUBMIT_TEXTS, TERMS } from "../../lib/domain/texts";
 import { ContactEmail } from "../ui/ContactEmail";
 import { FieldKindMessage, FormMessage, fieldAria } from "../ui/InputRefusal";
 import { LoadView } from "../ui/LoadState";
@@ -108,6 +108,10 @@ export const DocumentsPanel = () => {
     <section className="store-stack">
       {/* 画面の見出し（横断-12）。タブ（StoreNav）はページがこの前に置く */}
       <div className="store-head">
+        {/* 下のナビから外したので、来た所（店舗情報）へ戻る道を置く（2026-10-08 本人選択「案C 片手の親指」） */}
+        <a className="store-back" href="/store/profile">
+          {TERMS.storeProfile}へ戻る
+        </a>
         <h1>書類</h1>
       </div>
 

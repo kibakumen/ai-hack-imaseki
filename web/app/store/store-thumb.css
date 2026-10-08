@@ -1,0 +1,590 @@
+/* store.css の続き（2026-10-08 本人選択「案C 片手の親指」の部品）。読み込む順は殻の layout.tsx の import の順で、いちばん後。
+   画面の上半分は読むだけ、操作は下半分（親指の届く範囲）に集める。変えるものは下からのシートで開き、主な操作は画面の下に貼り付ける。
+   色は store.css の --st-*（案C の配色・明暗の両方で文字と地の組は 4.5:1 以上）。動きは M3 の値
+   （入る＝emphasized-decelerate 400ms・出る＝emphasized-accelerate 200ms・小さな変化＝standard 200ms）。 */
+
+/* ---------- 画面の下に貼り付く操作の帯（下のナビのすぐ上） ---------- */
+
+.store-dock {
+  background: var(--st-bg);
+  border-top: 1px solid var(--st-outline-v);
+  bottom: calc(var(--st-nav-h) + var(--st-safe-bottom));
+  display: grid;
+  gap: 0.375rem;
+  inset-inline: 0;
+  padding: 0.625rem max(1rem, calc((100% - 40rem) / 2 + 1rem));
+  position: fixed;
+  z-index: 19;
+}
+
+.store-dock__row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.store-dock__row > .store-btn {
+  flex: 1 1 0;
+  font-size: 0.875rem;
+  min-height: 3.25rem;
+  min-width: 0;
+  padding-inline: 0.75rem;
+}
+
+.store-dock__row > .store-dock__main {
+  flex-grow: 1.4;
+}
+
+.store-dock__row > .store-dock__side {
+  flex: 0 0 auto;
+}
+
+.store-dock--column {
+  gap: 0.375rem;
+}
+
+.store-dock__note {
+  color: var(--st-var);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  margin: 0;
+}
+
+/* 未送信の変更がある印（「数を変える」の中） */
+.store-dock__count {
+  background: var(--st-on-pc);
+  border-radius: 999px;
+  color: var(--st-pc);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.125rem;
+  padding: 0 0.375rem;
+}
+
+.store-dock > .msg {
+  margin: 0;
+}
+
+/* ---------- 下からのシート ---------- */
+
+.store-sheet-layer {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 40;
+}
+
+.store-sheet__scrim {
+  background: var(--st-scrim);
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+  transition: opacity 250ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.store-sheet {
+  background: var(--st-cont);
+  border-radius: 1.75rem 1.75rem 0 0;
+  bottom: 0;
+  box-shadow: var(--st-shadow-3);
+  color: var(--st-on);
+  display: flex;
+  flex-direction: column;
+  inset-inline: 0;
+  margin-inline: auto;
+  max-height: 88dvh;
+  max-width: 40rem;
+  outline: none;
+  position: absolute;
+  transform: translateY(105%);
+  transition: transform 200ms cubic-bezier(0.3, 0, 0.8, 0.15), visibility 0s linear 200ms;
+  visibility: hidden;
+}
+
+.store-sheet-layer--open {
+  pointer-events: auto;
+}
+
+.store-sheet-layer--open .store-sheet__scrim {
+  opacity: 1;
+}
+
+.store-sheet-layer--open .store-sheet {
+  transform: none;
+  transition: transform 400ms cubic-bezier(0.05, 0.7, 0.1, 1), visibility 0s;
+  visibility: visible;
+}
+
+.store-sheet__handle {
+  background: var(--st-outline);
+  border-radius: 2px;
+  flex: none;
+  height: 4px;
+  margin: 0.875rem auto 0.375rem;
+  width: 2rem;
+}
+
+.store-sheet__scroll {
+  display: grid;
+  gap: 0.875rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.25rem 1.25rem 0.75rem;
+}
+
+.store-sheet__foot {
+  background: var(--st-cont);
+  border-top: 1px solid var(--st-outline-v);
+  display: grid;
+  flex: none;
+  gap: 0.375rem;
+  padding: 0.625rem 1.25rem calc(1.125rem + var(--st-safe-bottom));
+}
+
+.store-sheet__buttons {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.store-sheet__title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.875rem;
+}
+
+.store-sheet__sub {
+  color: var(--st-var);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  margin-top: -0.625rem;
+}
+
+.store-sheet__strong {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+}
+
+/* 止める確かめの「向かっている組は、そのまま来店します」 */
+.store-warn {
+  background: var(--st-bg);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.875rem;
+}
+
+.store-warn__lead {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.375rem;
+}
+
+.store-warn__list {
+  display: grid;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.store-warn__list > li {
+  align-items: center;
+  display: flex;
+  font-size: 0.875rem;
+  gap: 0.625rem;
+}
+
+.store-warn__list small {
+  color: var(--st-var);
+  display: block;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.store-party {
+  background: var(--st-pc);
+  border-radius: 0.625rem;
+  color: var(--st-on-pc);
+  display: grid;
+  flex: none;
+  font-weight: 800;
+  place-items: center;
+}
+
+.store-party--sm {
+  font-size: 1rem;
+  height: 2.25rem;
+  width: 2.25rem;
+}
+
+/* 「⋮」の奥のシートの行（キャンセル・来店なしでキャンセル）。赤い文字は取り返せない操作だけ */
+.store-rows {
+  border-radius: 1.125rem;
+  display: grid;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.store-row-action {
+  background: var(--st-bg);
+  display: grid;
+  padding: 0.25rem 0.5rem 0.625rem;
+}
+
+.store-row-action__button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.75rem;
+  color: var(--st-error);
+  font-size: 1rem;
+  font-weight: 700;
+  justify-content: flex-start;
+  min-height: var(--tap-min);
+  padding: 0 0.5rem;
+  text-align: start;
+  width: 100%;
+}
+
+@media (hover: hover) {
+  .store-row-action__button:hover:not(:disabled) {
+    background: var(--hover-soft-bg);
+    filter: none;
+  }
+}
+
+.store-row-action__note {
+  color: var(--st-var);
+  font-size: 0.75rem;
+  line-height: 1.0625rem;
+  padding-inline: 0.5rem;
+}
+
+/* ---------- 公開中のオファー：読むだけの「いまの数字」のカード ---------- */
+
+.store-offer {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.store-glance {
+  background: var(--st-cont);
+  border-radius: 1.25rem;
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+}
+
+.store-glance__head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.store-glance__since {
+  color: var(--st-var);
+  font-size: 0.75rem;
+}
+
+.store-remain {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.store-remain__main {
+  align-items: baseline;
+  display: inline-flex;
+  gap: 0.375rem;
+  margin: 0;
+}
+
+.store-remain__label,
+.store-remain__unit,
+.store-remain__of {
+  color: var(--st-var);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.store-remain__num {
+  font-size: 2.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 3rem;
+}
+
+.store-glance__legend {
+  color: var(--st-var);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  margin-top: -0.25rem;
+}
+
+.store-glance__full {
+  color: var(--st-on);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.store-facts {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  margin: 0;
+}
+
+.store-fact {
+  background: var(--st-bg);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.store-fact > dt {
+  color: var(--st-var);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+}
+
+.store-fact > dd {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  margin: 0;
+}
+
+.store-fact small {
+  color: var(--st-var);
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 0.9375rem;
+}
+
+.store-tags {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.store-tags__label,
+.store-tags__none {
+  color: var(--st-var);
+  font-size: 0.6875rem;
+}
+
+.store-tag {
+  align-items: center;
+  background: var(--st-bg);
+  border: 1px dashed var(--st-outline);
+  border-radius: 0.5rem;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-height: 1.625rem;
+  padding: 0 0.5625rem;
+}
+
+/* ---------- 右へすべらせて止める ---------- */
+
+.store-slide {
+  --store-slide-knob: 3.75rem;
+
+  align-items: center;
+  background: var(--st-errc);
+  border-radius: 999px;
+  color: var(--st-on-errc);
+  display: grid;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  height: 3.75rem;
+  overflow: hidden;
+  place-items: center;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+}
+
+.store-slide__fill {
+  background: color-mix(in srgb, var(--st-error) 30%, transparent);
+  border-radius: 999px;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+}
+
+.store-slide__text {
+  padding-left: 2.5rem;
+  position: relative;
+}
+
+/* つまみ（52×52）。CSS の inset と SlideToStop.tsx の KNOB_INSET_PX（4px）は同じ数 */
+.store-slide__knob {
+  background: var(--st-error);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: var(--st-shadow);
+  color: var(--st-on-error);
+  cursor: grab;
+  display: grid;
+  height: 3.25rem;
+  left: 4px;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+  position: absolute;
+  top: 4px;
+  touch-action: none;
+  width: 3.25rem;
+}
+
+.store-slide--snap .store-slide__knob,
+.store-slide--snap .store-slide__fill {
+  transition: transform 300ms cubic-bezier(0.2, 0, 0, 1), width 300ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ---------- 公開のフォーム（初めて公開する店・止めたあと） ---------- */
+
+.store-publish {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+}
+
+.store-publish__head {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.store-publish__head > h2 {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+/* 「客にはこう出ます」——決めた数がその場で埋まる */
+.store-preview {
+  background: var(--st-cont);
+  border-radius: 1.25rem;
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+}
+
+.store-preview__title {
+  color: var(--st-var);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.store-preview__line {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 1.25rem;
+  font-weight: 700;
+  gap: 0.375rem 0.625rem;
+}
+
+.store-slot {
+  align-items: baseline;
+  display: inline-flex;
+  gap: 0.125rem;
+}
+
+.store-slot > b {
+  background: var(--st-bg);
+  border-radius: 0.625rem;
+  display: inline-grid;
+  font-size: 1.375rem;
+  font-variant-numeric: tabular-nums;
+  height: 2.25rem;
+  min-width: 2.75rem;
+  padding: 0 0.375rem;
+  place-items: center;
+}
+
+.store-slot--empty > b {
+  background: transparent;
+  border: 2px dashed var(--st-outline);
+  color: var(--st-var);
+}
+
+.store-slot > span {
+  color: var(--st-var);
+  font-size: 0.875rem;
+}
+
+.store-preview__foot {
+  color: var(--st-var);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+/* ---------- 店舗情報の中の「そのほか」（書類・アカウント・ログアウト） ---------- */
+
+.store-more {
+  border-radius: 1rem;
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.store-more__row {
+  background: var(--st-cont);
+  color: var(--st-on);
+  display: grid;
+  gap: 0.0625rem;
+  min-height: 3.5rem;
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+}
+
+.store-more__label {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.store-more__note {
+  color: var(--st-var);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+@media (hover: hover) {
+  .store-more__row:hover {
+    background: var(--hover-soft-bg);
+  }
+}
+
+.store-more__logout {
+  margin-inline-start: 0;
+}
+
+/* ---------- 動きを減らす設定 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .store-sheet,
+  .store-sheet-layer--open .store-sheet,
+  .store-sheet__scrim,
+  .store-slide--snap .store-slide__knob,
+  .store-slide--snap .store-slide__fill,
+  .store-tab__ind {
+    transition-duration: 1ms;
+  }
+}

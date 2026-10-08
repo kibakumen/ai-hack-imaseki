@@ -1,175 +1,359 @@
 /* store.css の続き（向かっている客とボタン）。2026-09-25 監査の指摘 設計-16 で分けた。
-   読み込む順は殻の layout.tsx の import の順（元の1ファイルの並びのまま）。色は app/globals.css の変数だけで指す。 */
+   読み込む順は殻の layout.tsx の import の順（元の1ファイルの並びのまま）。
+   2026-10-08 本人選択「案C 片手の親指」で作り直した: 向かっている客は横に送るカードの列、カードの底いっぱいに
+   大きな「完了済みにする」、キャンセルの2つは「⋮」の奥のシート。色は store.css の --st-*（案C の配色）で指す。 */
 
-/* ---------- 向かっている客（いちばん上・横長・完了がすぐ押せる） ---------- */
+/* ---------- 向かっている客（操作の帯のすぐ上＝親指にいちばん近い所） ---------- */
 
 .store-arrivals {
   display: grid;
   gap: 0.5rem;
+  min-width: 0;
 }
 
-.store-arrivals > h2 {
-  font-size: 1rem;
-  margin: 0;
+.store-arrivals__count {
+  color: var(--st-primary);
 }
 
+.store-arrivals__hint {
+  margin-top: -0.25rem;
+}
+
+/* 横に送るカードの列（1枚ずつ止まる）。幅の広い画面では折り返して並べる */
 .store-arrival-grid {
-  display: grid;
-  gap: 0.5rem;
+  display: flex;
+  gap: 0.625rem;
   list-style: none;
-  margin: 0;
+  margin: 0 -1rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 0.125rem 1rem 0.25rem;
+  scroll-padding-inline: 1rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.store-arrival-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.store-arrival-grid > li {
+  flex: 0 0 88%;
+  scroll-snap-align: center;
+}
+
+.store-arrival-grid > li:only-child {
+  flex-basis: 100%;
+}
+
+/* 済んだぶん（畳んだ中）は縦に並べる */
+.store-arrival-grid--stack {
+  display: grid;
+  margin: 0.5rem 0 0;
+  overflow: visible;
   padding: 0;
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 40rem) {
   .store-arrival-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    margin: 0;
+    overflow: visible;
+    padding: 0;
   }
 }
 
+/* 1組のカード。⚠️ transform を持たせない——中の「⋮」のシート（position: fixed）がカードの中に閉じ込められる */
 .store-arrival {
-  align-items: center;
-  animation: store-pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
-  background: var(--color-background);
-  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
-  border-left: 0.375rem solid var(--color-accent);
-  border-radius: 1rem;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 12%, transparent);
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-  padding: 0.75rem;
+  /* backwards だけ（both にすると、終わったあとも動きが効いたままになり、カードが重なりの層を作って中のシートが次のカードの下に潜る） */
+  animation: store-arrive 400ms cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
+  background: var(--st-bg);
+  border: 1px solid var(--st-outline-v);
+  border-radius: 1.25rem;
+  box-shadow: var(--st-shadow);
+  display: grid;
+  gap: 0.625rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0.75rem 0.75rem 0.75rem 0.875rem;
+  transition: border-color 200ms cubic-bezier(0.2, 0, 0, 1), box-shadow 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* 1回目を押したあと（確かめの文に変わっている間）は橙の縁 */
+.store-arrival--asking {
+  border-color: var(--st-primary);
+  box-shadow: 0 0 0 2px var(--st-primary), var(--st-shadow);
 }
 
 .store-arrival--done {
-  background: var(--color-surface);
-  border-color: var(--color-border);
-  border-left-color: var(--color-border);
+  background: var(--st-cont);
   box-shadow: none;
-  color: var(--color-text-muted);
+  color: var(--st-var);
+}
+
+.store-arrival__top {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* 人数の札（大きく・呼び名から切り離して省かない・店-11） */
+.store-arrival__party {
+  align-items: baseline;
+  background: var(--st-pc);
+  border-radius: 1rem;
+  color: var(--st-on-pc);
+  display: flex;
+  flex: none;
+  font-size: 1.625rem;
+  font-weight: 800;
+  height: 3.5rem;
+  justify-content: center;
+  line-height: 3.5rem;
+  margin: 0;
+  min-width: 3.5rem;
+  padding: 0 0.375rem;
+  white-space: nowrap;
+}
+
+.store-arrival__party > small {
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-inline-start: 0.0625rem;
+}
+
+.store-arrival--done .store-arrival__party {
+  background: var(--st-end);
+  color: var(--st-on-end);
 }
 
 .store-arrival__main {
   display: grid;
-  gap: 0.125rem;
+  flex: 1;
   min-width: 0;
 }
 
 .store-arrival__name {
+  font-size: 1.0625rem;
   font-weight: 700;
+  line-height: 1.5rem;
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.store-arrival__meta {
-  color: var(--color-text-muted);
+.store-arrival__code {
+  color: var(--st-var);
   font-size: 0.75rem;
+  line-height: 1.125rem;
   margin: 0;
 }
 
-.store-arrival__side {
-  align-items: center;
+.store-arrival__code > b {
+  color: var(--st-on);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+/* 期限・遅れ・電話・クーポンの小さな札 */
+.store-arrival__chips {
   display: flex;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.store-arrival__meta,
+.store-arrival__late {
+  align-items: center;
+  border-radius: 0.375rem;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+  margin: 0;
+  min-height: 1.5rem;
+  padding: 0.125rem 0.5rem;
+}
+
+.store-arrival__meta {
+  background: var(--st-cont);
+  color: var(--st-var);
+}
+
+/* 遅れている組は黄の札（「HH:MM まで完了にできます」） */
+.store-arrival__late {
+  background: var(--st-full);
+  color: var(--st-on-full);
+}
+
+.store-arrival--done .store-arrival__meta {
+  background: var(--st-high);
+}
+
+/* 底いっぱいの「完了済みにする」。「⋮」（キャンセルの入口）とは上下の端に離す（横断-13 の 0.75rem 以上） */
+.store-arrival__actions {
+  display: grid;
   gap: 0.75rem;
 }
 
-.store-arrival__code {
-  color: var(--color-accent-strong);
-  font-family: ui-monospace, "SFMono-Regular", monospace;
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  margin: 0;
-}
-
-/* 「完了」と、その真下の「キャンセル」は離す（6px だったので押し損ねた・横断-13） */
-.store-arrival__actions {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-/* 「来店なしでキャンセル」の真下の補足（枠が戻るのはこちらだけ・2026-09-26 本人発案）。ボタンに寄せるため間隔を詰める */
-.store-arrival__note {
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
-  margin: -0.75rem 0 0;
-  max-width: 10rem;
+/* 「⋮」——その他の操作（48×48） */
+.store-icon-btn {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--st-var);
+  display: grid;
+  flex: none;
+  height: 3rem;
+  margin: -0.375rem -0.25rem -0.375rem 0;
+  padding: 0;
+  place-items: center;
+  position: relative;
+  width: 3rem;
 }
 
 .store-past {
-  border: 1px solid var(--color-border);
-  border-radius: 1rem;
-  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--st-outline);
+  border-radius: 1.25rem;
+  padding: 0.5rem 0.875rem;
 }
 
 .store-past > summary {
-  color: var(--color-text-muted);
+  color: var(--st-var);
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 700;
+  min-height: var(--tap-min);
+  padding-block: 0.625rem;
 }
 
-.store-past .store-arrival-grid {
-  margin-top: 0.5rem;
-}
-
-/* ---------- ボタン ---------- */
+/* ---------- ボタン（M3 の形・橙は押せるものだけ） ---------- */
 
 .store-btn {
-  border-radius: 0.75rem;
+  align-items: center;
+  border-radius: 999px;
   cursor: pointer;
-  font-weight: 700;
-  padding: 0.625rem 1rem;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  justify-content: center;
+  letter-spacing: 0.01em;
+  line-height: 1.25rem;
+  min-height: 3rem;
+  padding: 0 1.25rem;
+  position: relative;
+  text-align: center;
 }
 
+/* 主な操作（完了済みにする・更新する・公開する） */
 .store-btn--primary {
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-accent) 30%, transparent);
-  font-size: 0.9375rem;
+  background: var(--st-primary);
+  border-color: var(--st-primary);
+  color: var(--st-on-primary);
+}
+
+/* 次に強い操作（数を変える・終了タイマー） */
+.store-btn--tonal {
+  background: var(--st-pc);
+  border-color: var(--st-pc);
+  color: var(--st-on-pc);
+}
+
+/* 大きな押す面（カードの底・シートの底） */
+.store-btn--xl {
+  border-radius: 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  min-height: 3.5rem;
+  width: 100%;
 }
 
 .store-btn--quiet {
-  background: var(--color-surface);
-  border-color: var(--color-border);
-  color: var(--color-text);
+  background: var(--st-cont);
+  border-color: var(--st-outline-v);
+  color: var(--st-on);
   font-size: 0.8125rem;
-  font-weight: 600;
-  padding: 0.4375rem 0.75rem;
+  min-height: var(--tap-min);
+  padding: 0 1rem;
 }
 
-@media (hover: hover) {
-  .store-btn--quiet:hover:not(:disabled) {
-    background: var(--hover-soft-bg);
-    border-color: var(--hover-soft-border);
-    color: var(--hover-soft-text);
-    filter: none;
-  }
+/* 文字だけのボタン（やめる・閉じる・受付を締める） */
+.store-btn--text {
+  background: transparent;
+  border-color: transparent;
+  color: var(--st-on);
 }
 
+.store-btn--wide {
+  width: 100%;
+}
+
+/* 取り返せない操作——縁だけの赤（公開を止める） */
+.store-btn--outline-danger {
+  background: transparent;
+  border: 1.5px solid var(--st-error);
+  color: var(--st-error);
+}
+
+/* 取り返せない操作の入口（クーポンを消す・許可書を消す・退会） */
 .store-btn--danger {
-  background: color-mix(in srgb, var(--color-danger) 12%, var(--color-background));
-  border-color: color-mix(in srgb, var(--color-danger) 55%, var(--color-border));
-  color: var(--color-danger);
+  background: var(--st-errc);
+  border-color: var(--st-errc);
+  color: var(--st-on-errc);
 }
 
+/* 取り返せない操作の確定——赤い文字だけ（確かめて止める） */
+.store-btn--danger-text {
+  background: transparent;
+  border-color: transparent;
+  color: var(--st-error);
+  font-weight: 700;
+}
+
+/* 取り返せない操作の確定——赤い塗り（キャンセルする・来店なしでキャンセルする） */
+.store-btn--danger-fill {
+  background: var(--st-error);
+  border-color: var(--st-error);
+  color: var(--st-on-error);
+}
+
+/* 縁だけ（soft）・文字だけのボタンのホバーは、地に色を少し混ぜる（塗りのボタンは globals の filter のまま） */
 @media (hover: hover) {
-  .store-btn--danger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-danger) 20%, var(--color-background));
+  .store-btn--quiet:hover:not(:disabled),
+  .store-btn--text:hover:not(:disabled),
+  .store-btn--outline-danger:hover:not(:disabled),
+  .store-btn--danger-text:hover:not(:disabled),
+  .store-icon-btn:hover:not(:disabled) {
+    background: var(--hover-soft-bg);
     filter: none;
   }
 }
 
-/* 行の中に置く小さなボタン（受付を締める・終了タイマー） */
 .store-btn--small {
   font-size: 0.8125rem;
-  padding: 0.375rem 0.75rem;
+  min-height: var(--tap-min);
+  padding: 0 0.875rem;
 }
 
 /* `<a>` をボタンの形で出す */
-.store-btn--link {
-  display: inline-block;
+.store-btn--link,
+a.store-btn {
   text-decoration: none;
+}
+
+@keyframes store-arrive {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }

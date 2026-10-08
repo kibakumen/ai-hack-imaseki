@@ -1,25 +1,12 @@
 /* store.css の続き（数を変える札・折れ線グラフ）。2026-09-25 監査の指摘 設計-16 で分けた。
    読み込む順は殻の layout.tsx の import の順（元の1ファイルの並びのまま）。色は app/globals.css の変数だけで指す。 */
 
-/* ---------- 数を変える札（回して決めて、更新する1つで一括） ---------- */
+/* ---------- 数を変える（下からのシートの中・2026-10-08 本人選択「案C 片手の親指」） ---------- */
 
 .store-tune {
-  background: var(--color-background);
-  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
-  border-radius: 1rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.875rem;
   min-width: 0;
-  padding: 0.75rem;
-}
-
-/* いちばん上の行——左に「残り」の札（操作できない値はこれ1つだけ）、右に「受付を締める」（店-09） */
-.store-remaining-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: space-between;
 }
 
 /* 下げられる下限の注。ダイヤルの幅に収める */
@@ -27,66 +14,26 @@
   text-align: center;
 }
 
-.store-offer__full {
-  color: var(--color-accent-strong);
-  font-weight: 700;
-}
-
-/* 「残り」——橙の地に白抜き。店がいちばん見る数なので、いちばん濃く・大きく */
-.store-remaining {
-  align-items: baseline;
-  background: linear-gradient(150deg, var(--color-accent-strong), color-mix(in srgb, var(--color-accent-strong) 80%, var(--color-text)));
-  border-radius: 0.875rem;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--color-accent) 30%, transparent);
-  color: var(--color-accent-text);
-  display: inline-flex;
-  gap: 0.5rem;
-  padding: 0.5rem 0.875rem;
-}
-
-.store-remaining__label {
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.store-remaining__value {
-  align-items: baseline;
-  display: inline-flex;
-  font-family: ui-monospace, "SFMono-Regular", monospace;
-  font-size: 2rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 900;
-  gap: 0.25rem;
-  line-height: 1;
-}
-
-.store-remaining__unit {
-  font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-/* 配信数と何名までの2本は**いつも横並び**（本人の第2回の指摘・店-06）。スマホの幅（約290px）でも2列に収まる
-   よう、狭い画面ではダイヤルの幅を縮める。それまでは auto-fit の 9.5rem で、390px の幅では縦に積まれていた */
+/* 配信数と何名までの2本は**いつも横並び**（本人の第2回の指摘・店-06）。いちばんよく触る2つを親指の近くに並べる */
 .store-tune__dials {
   align-items: start;
   display: grid;
-  gap: 0.5rem;
+  gap: 0.625rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* ダイヤル1本ぶんの縦の並び。変えた本は地が橙の薄い色に、縁が点線に */
+/* ダイヤル1本ぶんの枠。変えた本は橙の縁（「今 8 → 6組」と一緒に） */
 .store-tune__dial {
   align-items: center;
-  border: 1.5px solid transparent;
-  border-radius: 1rem;
+  background: var(--st-bg);
+  border: 2px solid transparent;
+  border-radius: 1.125rem;
   display: grid;
   gap: 0.375rem;
   justify-items: center;
   min-width: 0;
-  padding: 0.5rem 0.25rem;
-  transition: background 140ms ease, border-color 140ms ease;
+  padding: 0.625rem 0.25rem 0.5rem;
+  transition: border-color 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 @media (max-width: 30rem) {
@@ -100,9 +47,7 @@
 }
 
 .store-tune__dial--changed {
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-background));
-  border-color: var(--color-accent);
-  border-style: dashed;
+  border-color: var(--st-primary);
 }
 
 /* 受け入れ検査が掴む `<form>`。`globals.css` の `form` が持つ縁・影・余白を全部外す。
@@ -121,29 +66,30 @@
 
 /* 終了タイマー——1行（今の終わりの時刻と、変える先）だけを出し、欄は「終了タイマーを変える」の裏に畳む（店-05・店-06） */
 .store-timer {
-  border: 1.5px solid transparent;
-  border-radius: 1rem;
+  background: var(--st-bg);
+  border: 2px solid transparent;
+  border-radius: 0.875rem;
   gap: 0.5rem;
-  padding: 0.375rem 0.5rem;
+  padding: 0.375rem 0.375rem 0.375rem 0.75rem;
 }
 
 .store-timer.store-tune__dial--changed {
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-background));
+  border-color: var(--st-primary);
 }
 
 .store-timer__now {
   align-items: baseline;
   display: flex;
   flex-wrap: wrap;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   gap: 0.375rem;
   margin: 0;
 }
 
 .store-tune__time {
-  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-color: var(--st-outline);
   border-radius: 0.75rem;
-  color: var(--color-accent-strong);
+  color: var(--st-on);
   font-family: ui-monospace, "SFMono-Regular", monospace;
   font-size: 1.375rem;
   font-weight: 800;
@@ -155,46 +101,49 @@
 /* 「今 5 組 → 8 組」 */
 .store-tune__delta {
   align-items: center;
-  color: var(--color-text-muted);
+  color: var(--st-var);
   display: flex;
   flex-wrap: wrap;
-  font-size: 0.8125rem;
-  gap: 0.375rem;
+  font-size: 0.75rem;
+  gap: 0.25rem;
   justify-content: center;
   margin: 0;
 }
 
+.store-tune__delta--changed {
+  color: var(--st-on);
+  font-weight: 700;
+}
+
 .store-tune__delta--changed strong {
-  color: var(--color-accent-strong);
-  font-size: 1rem;
+  font-size: 0.875rem;
 }
 
 .store-tune__arrow {
-  color: var(--color-accent-strong);
   font-weight: 800;
 }
 
-/* 見せるクーポン——登録してある全部を横並びの札に。選び直した間は縁が橙の点線（ダイヤルと同じ印） */
+/* 見せるクーポン——登録してある全部を横並びの札（filter chip）に。選び直した間は橙の縁 */
 .store-tune__coupons {
-  border: 1.5px solid transparent;
+  border: 2px solid transparent;
   border-radius: 1rem;
   display: grid;
-  gap: 0.375rem;
+  gap: 0.5rem;
   padding: 0.375rem 0.5rem;
-  transition: background 140ms ease, border-color 140ms ease;
+  transition: border-color 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* 公開中のカードの札は**横いっぱいにしない**——名前を隠さない幅で折り返して並べる（本人の第2回の指摘・店-06） */
+/* 札は**横いっぱいにしない**——名前を隠さない幅で折り返して並べる（本人の第2回の指摘・店-06） */
 .store-coupons--wrap {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
+  gap: 0.5rem;
 }
 
 .store-coupons--wrap .store-coupon {
   flex: 0 1 auto;
   max-width: 100%;
-  padding: 0.375rem 0.625rem;
+  padding: 0.375rem 0.75rem 0.375rem 0.5rem;
   width: auto;
 }
 
@@ -214,41 +163,49 @@
   justify-content: space-between;
 }
 
-.store-tune__foot {
+/* 「受付を締める」の行（説明と文字だけのボタン） */
+.store-link-row {
   align-items: center;
-  border-top: 1px dashed color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.5rem;
   justify-content: space-between;
-  padding-top: 0.75rem;
 }
 
-/* 変えたところがある間だけ、画面の下に貼り付く——スマホで下までスクロールしなくても押せる（本人の第2回の指摘
-   「開いたら更新ボタンが押せるほどコンパクトに」・店-06）。カードの外へは出ない（sticky は親の中で止まる） */
-.store-tune__foot--sticky {
-  background: var(--color-background);
-  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
-  border-radius: 1rem;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-text) 18%, transparent);
-  padding: 0.625rem 0.75rem;
-  position: sticky;
-  z-index: 5;
+.store-link-row > .store-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* シートの底——変えた数と「閉じる」「◯項目を更新する」。スクロールしなくても押せる（店-06） */
+.store-tune__foot {
+  display: grid;
+  gap: 0.375rem;
 }
 
 .store-tune__pending {
-  color: var(--color-accent-strong);
-  font-size: 0.875rem;
-  font-weight: 800;
+  color: var(--st-var);
+  font-size: 0.75rem;
+  line-height: 1rem;
   margin: 0;
+  text-align: center;
+}
+
+.store-tune__pending--on {
+  color: var(--st-on);
+  font-weight: 700;
+}
+
+.store-tune__foot-buttons {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
 .store-tune__apply {
-  flex: 1 1 10rem;
-  font-size: 1.0625rem;
-  max-width: 20rem;
-  padding: 0.75rem 1.25rem;
+  border-radius: 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  min-height: 3.5rem;
 }
 
 /* ---------- 折れ線グラフ ---------- */

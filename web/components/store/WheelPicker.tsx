@@ -183,18 +183,50 @@ type Props = {
   onChange: (next: string) => void;
   /** 裏の欄に付ける断りとの結びつき（components/ui/InputRefusal の fieldAria・横断-05） */
   aria?: FieldAria;
+  /** ラベルの右に添える短い説明（何組まで受け取れるか など） */
+  hint?: string;
+  /** よく使う数のチップ（1回押せば決まる・2026-10-08 本人選択「案C 片手の親指」の論点3） */
+  picks?: readonly number[];
 };
 
-/** ラベル ＋ ダイヤル ＋ 裏の入力欄。公開のフォームが使う。 */
-export const WheelPicker = ({ testId, inputId, label, unit, min, max, value, onChange, aria = {} }: Props) => {
+/**
+ * よく使う数のチップ。押すとその数に決まる（打った値と同じ流れ＝onChange へ入る）。
+ * ダイヤルは読み上げから外してあるが、チップは押せる部品なので読み上げとキーボードにも答える。
+ */
+const PickChips = ({ picks, value, label, unit, onChange }: { picks: readonly number[]; value: string; label: string; unit: string; onChange: (next: string) => void }) => (
+  <div className="store-picks" role="group" aria-label={`${label}をすぐ選ぶ`}>
+    {picks.map((pick) => (
+      <button
+        key={pick}
+        type="button"
+        className="store-pick"
+        aria-pressed={value.trim() === String(pick)}
+        aria-label={`${label}を ${pick}${unit}にする`}
+        onClick={() => onChange(String(pick))}
+      >
+        {pick}
+      </button>
+    ))}
+  </div>
+);
+
+/** ラベル ＋ ダイヤル ＋ 裏の入力欄（＋よく使う数のチップ）。公開のフォームが使う。 */
+export const WheelPicker = ({ testId, inputId, label, unit, min, max, value, onChange, aria = {}, hint, picks }: Props) => {
   const handleInput = (event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value);
+  const unset = isUnset(value);
 
   return (
-    <div className="store-dial">
-      <label className="store-dial__label" htmlFor={inputId}>
-        {label}
-      </label>
+    <div className={unset ? "store-dial store-dial--unset" : "store-dial"}>
+      <div className="store-dial__head">
+        <label className="store-dial__label" htmlFor={inputId}>
+          {label}
+        </label>
+        {hint ? <span className="store-note">{hint}</span> : null}
+      </div>
       <Wheel min={min} max={max} value={value} onChange={onChange} unit={unit} />
+      {/* 空欄は黄の「未選択」で、数を押せば決まることを言う（案C の論点3） */}
+      {unset ? <p className="store-dial__unset">未選択・数を押すと決まります</p> : null}
+      {picks ? <PickChips picks={picks} value={value} label={label} unit={unit} onChange={onChange} /> : null}
       <input
         id={inputId}
         data-testid={testId}
