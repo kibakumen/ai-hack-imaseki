@@ -98,7 +98,7 @@ export default function PrivacyPage() {
     <main className="privacy">
       <h1>送信先と個人情報の扱い</h1>
       <p className="privacy__lead">
-        イマセキは、大会の審査期間中のデモとして動かしています。電話番号は任意で、入れなくても使えます。
+        イマセキは、今は試験的に運用しています。電話番号は任意で、入れなくても使えます。
       </p>
 
       <section aria-labelledby="privacy-destinations-head">

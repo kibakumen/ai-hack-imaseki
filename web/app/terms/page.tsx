@@ -22,7 +22,7 @@ export default function TermsPage() {
     <main className="customer-terms">
       <h1>利用規約</h1>
       <p className="customer-terms__lead">
-        イマセキは、近くのお店の空いている席を見つけて、その場で確保できるサービスです。大会の審査期間中のデモとして動かしています。
+        イマセキは、近くのお店の空いている席を見つけて、その場で確保できるサービスです。今は試験的に運用しています。
       </p>
 
       <GoogleMapsTerms />

@@ -466,7 +466,7 @@ export type HumanCheckAction = (typeof HUMAN_CHECK_ACTIONS)[keyof typeof HUMAN_C
  *    STORE_TERMS_AGREEMENT）も同じ値に上げる（schemas/storeTermsVersion.test.ts が見張る）。
  * ⚠️ すでに登録した店に新しい版へ同意し直してもらう仕組みは無い（AI判断・今は請求しないので、版を上げる予定が無い）。
  */
-export const STORE_TERMS_VERSION = "2026-09-26";
+export const STORE_TERMS_VERSION = "2026-10-08";
 
 // メールアドレスの確認（2026-09-22 に枝 feat/email-verify で足し、2026-09-26 に取り込んだ・要件14の基準 14.23〜14.28。値はどれも AI判断）
 /** 確認のリンクに載せる乱数の長さ（16バイト→base64url 22字。セッションの値と同じ） */
